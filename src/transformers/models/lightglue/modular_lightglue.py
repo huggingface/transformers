@@ -31,7 +31,7 @@ from ..auto.modeling_auto import AutoModelForKeypointDetection
 from ..clip.modeling_clip import CLIPMLP
 from ..cohere.modeling_cohere import apply_rotary_pos_emb
 from ..llama.modeling_llama import LlamaAttention, eager_attention_forward
-from ..superglue.image_processing_superglue import SuperGlueImageProcessor
+from ..superglue.image_processing_superglue import SuperGlueImageProcessor, validate_and_format_image_pairs
 from ..superpoint import SuperPointConfig
 
 
@@ -408,7 +408,7 @@ class LightGlueTransformerLayer(nn.Module):
             all_hidden_states = all_hidden_states + (descriptors,)
 
         batch_size, num_keypoints, descriptor_dim = descriptors.shape
-        
+
         # Self attention block
         attention_output, self_attentions = self.self_attention(
             descriptors,
