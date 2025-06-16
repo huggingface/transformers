@@ -81,7 +81,7 @@ rendered properly in your Markdown viewer.
 
 ## B
 
-### backbone
+### 백본 (backbone)
 
 백본(backbone)은 원시(hidden) 은닉 상태(hidden state) 또는 특징(feature)을 출력하는 네트워크(임베딩과 레이어)입니다. 일반적으로 이 백본은 해당 특징을 입력으로 받아 예측을 수행하는 [헤드](#head)와 연결됩니다. 예를 들어, [`ViTModel`]은 특정 헤드가 없는 백본입니다. 다른 모델들도[`VitModel`]을 백본으로 사용할 수 있으며, [DPT](model_doc/dpt)등이 그 예시입니다.
 
