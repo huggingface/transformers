@@ -475,7 +475,6 @@ class DynamicCache(Cache):
         self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
-
         # `_distributed_cache_data` was originally added for compatibility with `torch.distributed` (DDP). See #36121
         # and #36373 for more information. In a nutshell, it is `map(gather_map, zip(*caches))`, i.e. each item in the
         # iterable contains the key and value states for a layer gathered across replicas by torch.distributed
@@ -695,7 +694,7 @@ def _flatten_dynamic_cache_for_fx(cache, spec):
         "key_cache": getattr(cache, "key_cache"),
         "value_cache": getattr(cache, "value_cache"),
     }
-    return torch.utils._pytree.tree_flatten(dictionary)[0]
+    return torch.fx._pytree._dict_flatten_spec(dictionary, spec)
 
 
 if is_torch_greater_or_equal("2.3"):
