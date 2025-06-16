@@ -28,7 +28,6 @@ from ..utils import (
     is_torch_available,
     logging,
 )
-from ..modeling_utils import VLMS
 
 
 if is_torch_available():
@@ -43,6 +42,26 @@ MIN_PEFT_VERSION = "0.5.0"
 
 
 logger = logging.get_logger(__name__)
+
+
+# DO NOT MODIFY, KEPT FOR BC ONLY
+VLMS = [
+    "aria",
+    "ayavision",
+    "emu3",
+    "fuyu",
+    "gotocr2",
+    "gemma3",
+    "internvl",
+    "llava",  # all llava prefixed models fall under this check
+    "mistral3",
+    "mllama",
+    "paligemma",
+    "qwen2vl",
+    "qwen2_5_vl",
+    "videollava",
+    "vipllava",
+]
 
 
 class PeftAdapterMixin:
