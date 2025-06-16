@@ -18,7 +18,7 @@ from typing import Callable, Optional, Tuple
 import torch
 
 from ...cache_utils import Cache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -86,8 +86,6 @@ class SmolLM3Config(PretrainedConfig):
             The id of the beginning of sentence token.
         eos_token_id (`int`, *optional*, defaults to 128001):
             The id of the end of sentence token.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether the model's input and output word embeddings should be tied.
         rope_theta (`float`, *optional*, defaults to 2000000.0):
             The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
@@ -196,7 +194,6 @@ class SmolLM3Config(PretrainedConfig):
         pad_token_id=128004,
         bos_token_id=128000,
         eos_token_id=128001,
-        tie_word_embeddings=True,
         rope_theta=2000000.0,
         rope_scaling=None,
         use_sliding_window=False,
@@ -210,6 +207,12 @@ class SmolLM3Config(PretrainedConfig):
         mlp_bias=False,
         **kwargs,
     ):
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            **kwargs,
+        )
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -255,6 +258,7 @@ class SmolLM3Config(PretrainedConfig):
                     layer_types.append("full_attention")
 
         self.layer_types = layer_types
+        layer_type_validation(self.layer_types)
 
         # Validate the correctness of rotary position embeddings parameters
         # BC: if there is a 'type' field, move it to 'rope_type'.
@@ -262,26 +266,13 @@ class SmolLM3Config(PretrainedConfig):
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
-
 
 class SmolLM3Attention(LlamaAttention):
     def __init__(self, config: SmolLM3Config, layer_idx: int):
         super().__init__(config, layer_idx)
 
         self.use_rope = config.no_rope_layers[layer_idx]
-
-        self.sliding_window = (
-            config.sliding_window
-            if (config.use_sliding_window and config.sliding_window is not None and not self.use_rope)
-            else None
-        )
+        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 
     def forward(
         self,

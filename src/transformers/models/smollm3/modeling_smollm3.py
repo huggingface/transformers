@@ -147,12 +147,7 @@ class SmolLM3Attention(nn.Module):
         )
 
         self.use_rope = config.no_rope_layers[layer_idx]
-
-        self.sliding_window = (
-            config.sliding_window
-            if (config.use_sliding_window and config.sliding_window is not None and not self.use_rope)
-            else None
-        )
+        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 
     def forward(
         self,
