@@ -89,7 +89,7 @@ rendered properly in your Markdown viewer.
 
 ### 인과적 언어 모델링 (causal language modeling)
 
-모델이 텍스트를 순서대로 읽으며 다음 단어를 예측해야 하는 사전 학습(pretraining)과제입니다. 일반적으로 문장을 전체로 읽되, 모델 내부에서 특징 시점 이후의 토큰을 마스킹(masking)하여 다음 단어를 예측하게 됩니다.
+모델이 텍스트를 순서대로 읽으며 다음 단어를 예측해야 하는 사전 학습(pretraining) 작업입니다. 일반적으로 문장을 전체로 읽되, 모델 내부에서 특징 시점 이후의 토큰을 마스킹(masking)하여 다음 단어를 예측하게 됩니다.
 
 ### 채널 (channel)
 
