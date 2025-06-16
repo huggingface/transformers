@@ -75,7 +75,7 @@ rendered properly in your Markdown viewer.
 
 [인코더 모델](#encoder-models)과 [마스킹된 언어 모델링](#masked-language-modeling-mlm)을 참고하세요.
 
-### autoregressive models
+### 자기회귀 모델 (autoregressive models)
 
 [인과적 언어 모델링](#causal-language-modeling)과 [디코더 모델](#decoder-models)을 참고하세요.
 
