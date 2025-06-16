@@ -188,7 +188,7 @@ class FuyuModel(FuyuPreTrainedModel):
         past_key_values_length = 0
 
         if past_key_values is not None:
-            past_key_values_length = past_key_values[0][0].shape[2]
+            past_key_values_length = past_key_values.get_seq_length()
             seq_length_with_past = seq_length_with_past + past_key_values_length
 
         if position_ids is None:
@@ -383,15 +383,6 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
             model_inputs["image_patches"] = None
 
         return model_inputs
-
-    @staticmethod
-    def _reorder_cache(past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
 
 
 __all__ = ["FuyuForCausalLM", "FuyuPreTrainedModel", "FuyuModel"]

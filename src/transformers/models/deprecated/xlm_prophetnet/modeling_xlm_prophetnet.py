@@ -596,7 +596,7 @@ class XLMProphetNetPositionalEmbeddings(nn.Embedding):
             if past_key_values is not None:
                 # position_ids is the same for every token when decoding a single step
                 # Without the int() cast, it doesn't work in some cases when exporting to ONNX
-                prev_num_input_ids = past_key_values[0][0].shape[2]
+                prev_num_input_ids = past_key_values.get_seq_length()
                 num_input_ids = inputs_shape[1] + prev_num_input_ids
                 position_ids = torch.ones((1, 1), dtype=torch.long, device=device) * (
                     int(self.padding_idx + num_input_ids)

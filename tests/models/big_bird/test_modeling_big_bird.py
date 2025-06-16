@@ -284,6 +284,7 @@ class BigBirdModelTester:
             attention_mask=next_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
+            use_cache=False,
             output_hidden_states=True,
         )["hidden_states"][0]
         output_from_past = model(
@@ -292,6 +293,7 @@ class BigBirdModelTester:
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
+            use_cache=True,
             output_hidden_states=True,
         )["hidden_states"][0]
 

@@ -794,7 +794,7 @@ class ZambaPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = False
     _supports_sdpa = False
-    _supports_cache_class = True  # Note: only supports ZambaHybridDynamicCache
+    # Note: only supports ZambaHybridDynamicCache
     _is_stateful = True
 
     def _init_weights(self, module):

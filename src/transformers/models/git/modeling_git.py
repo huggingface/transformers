@@ -497,8 +497,6 @@ class GitPreTrainedModel(PreTrainedModel):
     config_class = GitConfig
     base_model_prefix = "git"
     supports_gradient_checkpointing = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -1151,7 +1149,7 @@ class GitModel(GitPreTrainedModel):
         past_key_values_length = 0
         if past_key_values is not None:
             past_key_values_length = (
-                past_key_values[0][0].shape[2]
+                past_key_values.get_seq_length()
                 if not isinstance(past_key_values, Cache)
                 else past_key_values.get_seq_length()
             )
@@ -1507,14 +1505,6 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
             "past_key_values": past_key_values,
             "use_cache": use_cache,
         }
-
-    def _reorder_cache(self, past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
 
 
 __all__ = ["GitForCausalLM", "GitModel", "GitPreTrainedModel", "GitVisionModel"]
