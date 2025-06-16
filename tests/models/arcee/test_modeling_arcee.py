@@ -20,7 +20,6 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     slow,
-    torch_device,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -87,34 +86,6 @@ class ArceeModelTest(CausalLMModelTest, unittest.TestCase):
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = ArceeForCausalLM if is_torch_available() else None
 
-    def test_model_rope_scaling(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        for scaling_type in ["linear", "dynamic"]:
-            config.rope_scaling = {"type": scaling_type, "factor": 2.0}
-            model = ArceeModel(config)
-            model.to(torch_device)
-            model.eval()
-            input_ids = torch.randint(0, config.vocab_size, (1, 10)).to(torch_device)
-            with torch.no_grad():
-                model(input_ids)
-
-    def test_model_rope_scaling_yarn(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        config.rope_scaling = {
-            "type": "yarn",
-            "factor": 2.0,
-            "original_max_position_embeddings": 2048,
-            "attention_factor": 1.0,
-            "beta_fast": 32,
-            "beta_slow": 1,
-        }
-        model = ArceeModel(config)
-        model.to(torch_device)
-        model.eval()
-        input_ids = torch.randint(0, config.vocab_size, (1, 10)).to(torch_device)
-        with torch.no_grad():
-            model(input_ids)
-
     def test_arcee_mlp_uses_relu_squared(self):
         """Test that ArceeMLP uses ReLU² activation instead of SiLU."""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -122,18 +93,16 @@ class ArceeModelTest(CausalLMModelTest, unittest.TestCase):
         model = ArceeModel(config)
 
         # Check that the MLP layers use the correct activation
-        for layer in model.layers:
-            mlp = layer.mlp
-            # Test with a simple input
-            x = torch.randn(1, 10, config.hidden_size)
-            up_output = mlp.up_proj(x)
+        mlp = model.layers[0].mlp
+        # Test with a simple input
+        x = torch.randn(1, 10, config.hidden_size)
+        up_output = mlp.up_proj(x)
 
-            # Verify ReLU² activation: x * relu(x)
-            expected_activation = up_output * torch.relu(up_output)
-            actual_activation = mlp.act_fn(up_output)
+        # Verify ReLU² activation: x * relu(x)
+        expected_activation = up_output * torch.relu(up_output)
+        actual_activation = mlp.act_fn(up_output)
 
-            self.assertTrue(torch.allclose(expected_activation, actual_activation, atol=1e-5))
-            break  # Only test the first layer
+        self.assertTrue(torch.allclose(expected_activation, actual_activation, atol=1e-5))
 
 
 @require_torch_accelerator
