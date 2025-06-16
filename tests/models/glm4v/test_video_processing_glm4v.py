@@ -287,3 +287,44 @@ class Glm4vVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
             ]
             expected_output_video_shape = self.video_processor_tester.expected_output_video_shape(video_inputs)
             self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)
+
+    def test_call_sample_frames(self):
+        for video_processing_class in self.video_processor_list:
+            video_processor_dict = self.video_processor_dict.copy()
+            video_processing = video_processing_class(**video_processor_dict)
+
+            prev_num_frames = self.video_processor_tester.num_frames
+            self.video_processor_tester.num_frames = 8
+            prev_min_resolution = getattr(self.video_processor_tester, "min_resolution", None)
+            prev_max_resolution = getattr(self.video_processor_tester, "max_resolution", None)
+            self.video_processor_tester.min_resolution = 56
+            self.video_processor_tester.max_resolution = 112
+
+            video_inputs = self.video_processor_tester.prepare_video_inputs(
+                equal_resolution=False,
+                return_tensors="torch",
+            )
+
+            metadata = [[{"total_num_frames": 8, "fps": 4}]]
+            batched_metadata = metadata * len(video_inputs)
+
+            encoded_videos = video_processing(video_inputs[0], return_tensors="pt", video_metadata=metadata)[
+                self.input_name
+            ]
+            encoded_videos_batched = video_processing(
+                video_inputs, return_tensors="pt", video_metadata=batched_metadata
+            )[self.input_name]
+
+            self.assertIsNotNone(encoded_videos)
+            self.assertIsNotNone(encoded_videos_batched)
+            self.assertEqual(len(encoded_videos.shape), 2)
+            self.assertEqual(len(encoded_videos_batched.shape), 2)
+
+            with self.assertRaises(ValueError):
+                video_processing(video_inputs[0], return_tensors="pt")[self.input_name]
+
+            self.video_processor_tester.num_frames = prev_num_frames
+            if prev_min_resolution is not None:
+                self.video_processor_tester.min_resolution = prev_min_resolution
+            if prev_max_resolution is not None:
+                self.video_processor_tester.max_resolution = prev_max_resolution
