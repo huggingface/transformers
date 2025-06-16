@@ -116,7 +116,6 @@ def _generate_supported_model_class_names(
 
 _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "altclip",
-    "arcee",
     "albert",
     "bart",
     "bert",
