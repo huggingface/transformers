@@ -737,8 +737,6 @@ class DecisionTransformerOutput(ModelOutput):
         Model action predictions
     return_preds (`torch.FloatTensor` of shape `(batch_size, sequence_length, 1)`):
         Predicted returns for each state
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the model.
     """
 
     state_preds: Optional[torch.FloatTensor] = None

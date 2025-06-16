@@ -1793,10 +1793,6 @@ class BigBirdForQuestionAnsweringModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Total span extraction loss is the sum of a Cross-Entropy for the start and end positions.
-    start_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-        Span-start scores (before SoftMax).
-    end_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-        Span-end scores (before SoftMax).
     pooler_output (`torch.FloatTensor` of shape `(batch_size, 1)`):
         pooler output from BigBigModel
     """

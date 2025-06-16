@@ -113,8 +113,6 @@ class SeamlessM4Tv2GenerationOutput(ModelOutput):
 )
 class SeamlessM4Tv2TextToUnitDecoderOutput(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the model.
     padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
         Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
         for *masked*
@@ -143,8 +141,6 @@ class SeamlessM4Tv2TextToUnitOutput(ModelOutput):
     padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
         Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
         for *masked*
-    encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-        Sequence of hidden-states at the output of the last layer of the encoder of the model.
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss.
     """

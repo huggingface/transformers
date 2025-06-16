@@ -42,8 +42,6 @@ from .configuration_maskformer_swin import MaskFormerSwinConfig
 )
 class MaskFormerSwinModelOutputWithPooling(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the model.
     pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
         Last layer hidden-state after a mean pooling operation.
     hidden_states_spatial_dimensions (`tuple(tuple(int, int))`, *optional*):
@@ -67,8 +65,6 @@ class MaskFormerSwinModelOutputWithPooling(ModelOutput):
 )
 class MaskFormerSwinBaseModelOutput(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the model.
     hidden_states_spatial_dimensions (`tuple(tuple(int, int))`, *optional*):
         A tuple containing the spatial dimension of each `hidden_state` needed to reshape the `hidden_states` to
         `batch, channels, height, width`. Due to padding, their spatial size cannot inferred before the `forward`

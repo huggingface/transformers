@@ -72,7 +72,8 @@ _re_args = re.compile(r"^\s*(Args?|Arguments?|Attributes?|Params?|Parameters?):\
 _re_parse_arg = re.compile(r"^(\s*)(\S+)\s+\((.+)\)(?:\:|$)")
 # Re pattern that parses the end of a description of an arg (catches the default in *optional*, defaults to xxx).
 _re_parse_description = re.compile(r"\*optional\*, defaults to (.*)$")
-
+# Args that are always overridden in the docstring, for clarity we don't want to remove them from the docstring
+ALWAYS_OVERRIDE = ["labels"]
 
 # This is a temporary list of objects to ignore while we progressively fix them. Do not add anything here, fix the
 # docstrings instead. If formatting should be ignored for the docstring, you can put a comment # no-format on the
@@ -1105,6 +1106,7 @@ def generate_new_docstring_for_signature(
     """
     # Extract and clean signature
     missing_docstring_args = []
+    docstring_args_ro_remove = []
     fill_docstring_args = []
 
     # Parse docstring if present
@@ -1141,6 +1143,38 @@ def generate_new_docstring_for_signature(
     if "self" in args_in_signature:
         args_in_signature.remove("self")
 
+    # Remove args that are the same as the ones in the source args doc
+    for arg in args_docstring_dict:
+        if arg in get_args_doc_from_source(source_args_doc) and arg not in ALWAYS_OVERRIDE:
+            source_arg_doc = get_args_doc_from_source(source_args_doc)[arg]
+            if source_arg_doc["description"].strip("\n ") == args_docstring_dict[arg]["description"].strip("\n "):
+                print("arg:", arg)
+                print("source_arg_doc:")
+                for key, value in source_arg_doc.items():
+                    value = value.strip("\n ") if isinstance(value, str) else value
+                    print(f"{key}: {value}")
+                print("args_docstring_dict:")
+                for key, value in args_docstring_dict[arg].items():
+                    value = value.strip("\n ") if isinstance(value, str) else value
+                    print(f"{key}: {value}")
+                if source_arg_doc.get("shape") is not None and args_docstring_dict[arg].get("shape") is not None:
+                    if source_arg_doc.get("shape").strip("\n ") == args_docstring_dict[arg].get("shape").strip("\n "):
+                        docstring_args_ro_remove.append(arg)
+                elif (
+                    source_arg_doc.get("additional_info") is not None
+                    and args_docstring_dict[arg].get("additional_info") is not None
+                ):
+                    if source_arg_doc.get("additional_info").strip("\n ") == args_docstring_dict[arg].get(
+                        "additional_info"
+                    ).strip("\n "):
+                        docstring_args_ro_remove.append(arg)
+                else:
+                    docstring_args_ro_remove.append(arg)
+                print("--------------------------------")
+    args_docstring_dict = {
+        arg: args_docstring_dict[arg] for arg in args_docstring_dict if arg not in docstring_args_ro_remove
+    }
+
     # Fill missing args
     for arg in args_in_signature:
         if (
@@ -1157,6 +1191,7 @@ def generate_new_docstring_for_signature(
                 "default": None,
                 "additional_info": None,
             }
+
     # Handle docstring of inherited args (for dataclasses)
     ordered_args_docstring_dict = OrderedDict(
         (arg, args_docstring_dict[arg]) for arg in args_docstring_dict if arg not in args_in_signature
@@ -1188,7 +1223,16 @@ def generate_new_docstring_for_signature(
         if close_docstring:
             new_docstring += '"""'
         new_docstring = set_min_indent(new_docstring, output_docstring_indent)
-    return new_docstring, sig_end_line, docstring_end, missing_docstring_args, fill_docstring_args
+    if docstring_args_ro_remove:
+        print("docstring_args_ro_remove", docstring_args_ro_remove)
+    return (
+        new_docstring,
+        sig_end_line,
+        docstring_end,
+        missing_docstring_args,
+        fill_docstring_args,
+        docstring_args_ro_remove,
+    )
 
 
 def generate_new_docstring_for_function(lines, current_line_end, custom_args_dict):
@@ -1226,26 +1270,29 @@ def generate_new_docstring_for_class(lines, current_line_end, custom_args_dict):
             found_model_output = True
             init_method_line = current_line_end
         else:
-            return "", None, None, None, [], []
+            return "", None, None, None, [], [], []
     if not found_model_output:
         init_method_sig_line_end = _find_sig_line(lines, init_method_line)
     else:
         init_method_sig_line_end = init_method_line + 1
     docstring_line = init_method_sig_line_end if '"""' in lines[init_method_sig_line_end] else None
-    new_docstring, _, init_method_docstring_end, missing_docstring_args, fill_docstring_args = (
-        generate_new_docstring_for_signature(
-            lines,
-            init_method_line,
-            init_method_sig_line_end,
-            docstring_line,
-            arg_indent="",
-            custom_args_dict=custom_args_dict,
-            output_docstring_indent=4 if found_model_output else 8,
-            source_args_doc=[ModelArgs, ImageProcessorArgs] if not found_model_output else [ModelOutputArgs],
-        )
+    (
+        new_docstring,
+        _,
+        init_method_docstring_end,
+        missing_docstring_args,
+        fill_docstring_args,
+        docstring_args_ro_remove,
+    ) = generate_new_docstring_for_signature(
+        lines,
+        init_method_line,
+        init_method_sig_line_end,
+        docstring_line,
+        arg_indent="",
+        custom_args_dict=custom_args_dict,
+        output_docstring_indent=4 if found_model_output else 8,
+        source_args_doc=[ModelArgs, ImageProcessorArgs] if not found_model_output else [ModelOutputArgs],
     )
-    if missing_docstring_args:
-        print("missing_docstring_args", missing_docstring_args)
     return (
         new_docstring,
         init_method_line,
@@ -1253,6 +1300,7 @@ def generate_new_docstring_for_class(lines, current_line_end, custom_args_dict):
         init_method_docstring_end,
         missing_docstring_args,
         fill_docstring_args,
+        docstring_args_ro_remove,
     )
 
 
@@ -1301,8 +1349,9 @@ def update_file_with_new_docstrings(
     current_line_end = line_ends_candidates[0]
     index = 1
     missing_docstring_args_warnings = []
-
     fill_docstring_args_warnings = []
+    docstring_args_ro_remove_warnings = []
+
     while index <= len(line_starts_candidates):
         custom_args_dict = {}
         auto_docstring_signature_content = "".join(lines[current_line_start:current_line_end])
@@ -1316,9 +1365,14 @@ def update_file_with_new_docstrings(
         found_init_method = False
         # Function
         if "    def" in lines[current_line_end]:
-            new_docstring, sig_line_end, docstring_end, missing_docstring_args, fill_docstring_args = (
-                generate_new_docstring_for_function(lines, current_line_end, custom_args_dict)
-            )
+            (
+                new_docstring,
+                sig_line_end,
+                docstring_end,
+                missing_docstring_args,
+                fill_docstring_args,
+                docstring_args_ro_remove,
+            ) = generate_new_docstring_for_function(lines, current_line_end, custom_args_dict)
         # Class
         elif "class " in lines[current_line_end]:
             (
@@ -1328,6 +1382,7 @@ def update_file_with_new_docstrings(
                 init_method_docstring_end,
                 missing_docstring_args,
                 fill_docstring_args,
+                docstring_args_ro_remove,
             ) = generate_new_docstring_for_class(lines, current_line_end, custom_args_dict)
             found_init_method = init_method_line is not None
         # Add warnings if needed
@@ -1337,7 +1392,9 @@ def update_file_with_new_docstrings(
         if fill_docstring_args:
             for arg in fill_docstring_args:
                 fill_docstring_args_warnings.append(f"    - {arg} line {current_line_end}")
-
+        if docstring_args_ro_remove:
+            for arg in docstring_args_ro_remove:
+                docstring_args_ro_remove_warnings.append(f"    - {arg} line {current_line_end}")
         # Write new lines
         if index >= len(line_ends_candidates) or line_ends_candidates[index] > current_line_end:
             if "    def" in lines[current_line_end]:
@@ -1369,9 +1426,19 @@ def update_file_with_new_docstrings(
         with open(candidate_file, "w", encoding="utf-8") as f:
             f.write(content_base_file_new)
 
-    return missing_docstring_args_warnings, fill_docstring_args_warnings
+    return (
+        missing_docstring_args_warnings,
+        fill_docstring_args_warnings,
+        docstring_args_ro_remove_warnings,
+    )
 
 
+# TODO (Yoni): The functions in check_auto_docstrings rely on direct code parsing, which is prone to
+# failure on edge cases and not robust to code changes. While this approach is significantly faster
+# than using inspect (like in check_docstrings) and allows parsing any object including non-public
+# ones, it may need to be refactored in the future to use a more robust parsing method. Note that
+# we still need auto_docstring for some non-public objects since their docstrings are included in the
+# docs of public objects (e.g. ModelOutput classes).
 def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
     """
     Check docstrings of all public objects that are decorated with `@auto_docstrings`.
@@ -1389,8 +1456,10 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
         with open(candidate_file, "r", encoding="utf-8") as f:
             lines = f.read().split("\n")
         line_starts_candidates, line_ends_candidates = get_auto_docstring_candidate_lines(lines)
-        missing_docstring_args_warnings, fill_docstring_args_warnings = update_file_with_new_docstrings(
-            candidate_file, lines, line_starts_candidates, line_ends_candidates, overwrite=overwrite
+        missing_docstring_args_warnings, fill_docstring_args_warnings, docstring_args_ro_remove_warnings = (
+            update_file_with_new_docstrings(
+                candidate_file, lines, line_starts_candidates, line_ends_candidates, overwrite=overwrite
+            )
         )
         if missing_docstring_args_warnings:
             if not overwrite:
@@ -1399,6 +1468,14 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
                 )
             print(f"🚨 Missing docstring for the following arguments in {candidate_file}:")
             for warning in missing_docstring_args_warnings:
+                print(warning)
+        if docstring_args_ro_remove_warnings:
+            if not overwrite:
+                print(
+                    "Some docstrings are redundant with the ones in `args_doc.py` and will be removed. Run `make fix-copies` or `python utils/check_docstrings.py --fix_and_overwrite` to remove the redundant docstrings."
+                )
+            print(f"🚨 Redundant docstring for the following arguments in {candidate_file}:")
+            for warning in docstring_args_ro_remove_warnings:
                 print(warning)
         if fill_docstring_args_warnings:
             print(f"🚨 Docstring needs to be filled for the following arguments in {candidate_file}:")

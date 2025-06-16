@@ -68,8 +68,6 @@ class BaseModelOutputWithIntermediateActivations(ModelOutput):
 )
 class BaseModelOutputWithPoolingAndIntermediateActivations(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the model.
     pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
         Last layer hidden-state of the first token of the sequence (classification token) after further processing
         through the layers used for the auxiliary pretraining task. E.g. for BERT-family of models, this returns

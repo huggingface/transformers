@@ -68,8 +68,6 @@ class VitsModelOutput(ModelOutput):
 )
 class VitsTextEncoderOutput(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the model.
     prior_means (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
         The predicted mean values of the prior distribution for the latent text variables.
     prior_log_variances (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):

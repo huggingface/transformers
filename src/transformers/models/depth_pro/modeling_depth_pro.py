@@ -61,8 +61,6 @@ class DepthProDepthEstimatorOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Classification (or regression if config.num_labels==1) loss.
-    predicted_depth (`torch.FloatTensor` of shape `(batch_size, height, width)`):
-        Predicted depth for each pixel.
     field_of_view (`torch.FloatTensor` of shape `(batch_size,)`, *optional*, returned when `use_fov_model` is provided):
         Field of View Scaler.
     """

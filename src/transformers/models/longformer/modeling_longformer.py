@@ -41,8 +41,6 @@ logger = logging.get_logger(__name__)
 )
 class LongformerBaseModelOutput(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the model.
     attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
         Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x +
         attention_window + 1)`, where `x` is the number of tokens with global attention mask.
@@ -81,8 +79,6 @@ class LongformerBaseModelOutput(ModelOutput):
 )
 class LongformerBaseModelOutputWithPooling(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the model.
     pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
         Last layer hidden-state of the first token of the sequence (classification token) further processed by a
         Linear layer and a Tanh activation function. The Linear layer weights are trained from the next sentence
@@ -171,10 +167,6 @@ class LongformerQuestionAnsweringModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Total span extraction loss is the sum of a Cross-Entropy for the start and end positions.
-    start_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-        Span-start scores (before SoftMax).
-    end_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-        Span-end scores (before SoftMax).
     attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
         Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x +
         attention_window + 1)`, where `x` is the number of tokens with global attention mask.

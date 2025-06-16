@@ -63,8 +63,6 @@ class BlipForConditionalGenerationModelOutput(ModelOutput):
         Prediction scores of the language modeling head of the text decoder model.
     image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*):
         The image embeddings obtained after applying the Vision Transformer model to the input image.
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-        Sequence of hidden-states at the output of the last layer of the model.
     hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
         Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
         one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
@@ -108,8 +106,6 @@ class BlipTextVisionModelOutput(ModelOutput):
         Language modeling loss from the text decoder.
     image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
         The image embeddings obtained by applying the projection layer to the pooler_output.
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the model.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -135,8 +131,6 @@ class BlipImageTextMatchingModelOutput(ModelOutput):
         Language modeling loss from the text decoder.
     image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
         The image embeddings obtained by applying the projection layer to the pooler_output.
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the model.
     vision_pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*):
         Last layer hidden-state of the vision of the vision-only branch of the model.
     question_embeds (`torch.FloatTensor`):

@@ -43,8 +43,6 @@ logger = logging.get_logger(__name__)
 )
 class ViTMAEModelOutput(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the model.
     mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
         Tensor indicating which patches are masked (1) and which are not (0).
     ids_restore (`torch.LongTensor` of shape `(batch_size, sequence_length)`):

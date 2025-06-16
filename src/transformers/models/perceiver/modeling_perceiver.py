@@ -54,8 +54,6 @@ class PerceiverModelOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
         Classification (or regression if config.num_labels==1) scores (before SoftMax).
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the model.
     """
 
     logits: Optional[torch.FloatTensor] = None

@@ -36,8 +36,6 @@ logger = logging.get_logger(__name__)
 )
 class VJEPA2WithMaskedInputPredictorOutput(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the model.
     masked_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*, returned when `context_mask` is provided which is applied on VJEPA2Encoder outputs):
         The masked hidden state of the model.
     target_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*, returned when `target_mask` is provided which is applied on VJEPA2Encoder outputs):
@@ -60,8 +58,6 @@ class VJEPA2WithMaskedInputPredictorOutput(ModelOutput):
 )
 class VJEPA2WithMaskedInputModelOutput(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the model.
     masked_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*, returned when `context_mask` is provided which is applied on VJEPA2Encoder outputs):
         The masked hidden state of the model.
     predictor_output (`VJEPA2WithMaskedInputPredictorOutput`, *optional*):

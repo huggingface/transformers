@@ -44,10 +44,6 @@ class FastSpeech2ConformerModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Spectrogram generation loss.
-    spectrogram (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_bins)`):
-        The predicted spectrogram.
-    encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-        Sequence of hidden-states at the output of the last layer of the encoder of the model.
     duration_outputs (`torch.LongTensor` of shape `(batch_size, max_text_length + 1)`, *optional*):
         Outputs of the duration predictor.
     pitch_outputs (`torch.FloatTensor` of shape `(batch_size, max_text_length + 1, 1)`, *optional*):
@@ -78,10 +74,6 @@ class FastSpeech2ConformerWithHifiGanOutput(FastSpeech2ConformerModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Spectrogram generation loss.
-    spectrogram (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_bins)`):
-        The predicted spectrogram.
-    encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-        Sequence of hidden-states at the output of the last layer of the encoder of the model.
     duration_outputs (`torch.LongTensor` of shape `(batch_size, max_text_length + 1)`, *optional*):
         Outputs of the duration predictor.
     pitch_outputs (`torch.FloatTensor` of shape `(batch_size, max_text_length + 1, 1)`, *optional*):

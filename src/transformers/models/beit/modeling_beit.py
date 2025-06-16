@@ -43,15 +43,6 @@ from .configuration_beit import BeitConfig
 
 logger = logging.get_logger(__name__)
 
-# General docstring
-
-# Base docstring
-_EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
-
-# Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "microsoft/beit-base-patch16-224"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
-
 
 @dataclass
 @auto_docstring(
@@ -61,8 +52,6 @@ _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 )
 class BeitModelOutputWithPooling(BaseModelOutputWithPooling):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the model.
     pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
         Average of the last layer hidden states of the patch tokens (excluding the *[CLS]* token) if
         *config.use_mean_pooling* is set to True. If set to False, then the final hidden state of the *[CLS]* token

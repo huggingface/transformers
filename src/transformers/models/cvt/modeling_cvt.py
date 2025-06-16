@@ -40,8 +40,6 @@ logger = logging.get_logger(__name__)
 )
 class BaseModelOutputWithCLSToken(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the model.
     cls_token_value (`torch.FloatTensor` of shape `(batch_size, 1, hidden_size)`):
         Classification token at the output of the last layer of the model.
     """

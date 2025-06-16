@@ -452,8 +452,6 @@ class DFineModelOutput(ModelOutput):
         Stacked intermediate predicted corners (predicted corners of each layer of the decoder).
     initial_reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
         Initial reference points used for the first decoder layer.
-    encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-        Sequence of hidden-states at the output of the last layer of the encoder of the model.
     init_reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
         Initial reference points sent through the Transformer decoder.
     enc_topk_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
@@ -529,8 +527,6 @@ class DFineObjectDetectionOutput(ModelOutput):
         Stacked intermediate predicted corners (predicted corners of each layer of the decoder).
     initial_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
         Stacked initial reference points (initial reference points of each layer of the decoder).
-    encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-        Sequence of hidden-states at the output of the last layer of the encoder of the model.
     init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
         Initial reference points sent through the Transformer decoder.
     enc_topk_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
@@ -986,8 +982,6 @@ class DFineIntegral(nn.Module):
 )
 class DFineDecoderOutput(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the model.
     intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
         Stacked intermediate hidden states (output of each layer of the decoder).
     intermediate_logits (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, config.num_labels)`):

@@ -106,8 +106,6 @@ class AutoformerModelOutput(ModelOutput):
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
         blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
-    encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-        Sequence of hidden-states at the output of the last layer of the encoder of the model.
     loc (`torch.FloatTensor` of shape `(batch_size,)` or `(batch_size, input_size)`, *optional*):
         Shift values of each time series' context window which is used to give the model inputs of the same
         magnitude and then used to shift back to the original magnitude.

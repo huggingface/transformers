@@ -43,8 +43,6 @@ class ZoeDepthDepthEstimatorOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Classification (or regression if config.num_labels==1) loss.
-    predicted_depth (`torch.FloatTensor` of shape `(batch_size, height, width)`):
-        Predicted depth for each pixel.
     domain_logits (`torch.FloatTensor` of shape `(batch_size, num_domains)`):
         Logits for each domain (e.g. NYU and KITTI) in case multiple metric heads are used.
     """

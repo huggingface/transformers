@@ -78,8 +78,6 @@ class Mask2FormerPixelDecoderOutput(ModelOutput):
 )
 class Mask2FormerMaskedAttentionDecoderOutput(BaseModelOutputWithCrossAttentions):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the model.
     hidden_states (`tuple(torch.FloatTensor)`, *optional*):
         Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
         shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
