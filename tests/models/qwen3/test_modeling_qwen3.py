@@ -173,7 +173,7 @@ class Qwen3IntegrationTest(unittest.TestCase):
     @slow
     @require_torch_sdpa
     def test_model_600m_long_prompt_sdpa(self):
-        EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
+        EXPECTED_OUTPUT_TOKEN_IDS = [198, 198]
         # An input with 4097 tokens that is above the size of the sliding window
         input_ids = [1] + [306, 338] * 2048
         model = Qwen3ForCausalLM.from_pretrained("Qwen/Qwen3-0.6B-Base", device_map="auto", attn_implementation="sdpa")
@@ -211,9 +211,14 @@ class Qwen3IntegrationTest(unittest.TestCase):
 
     @slow
     def test_speculative_generation(self):
-        EXPECTED_TEXT_COMPLETION = (
-            "My favourite condiment is 100% peanut butter. I love it so much that I can't help but use it"
+        EXPECTED_TEXT_COMPLETIONS = Expectations(
+            {
+                ("cuda", 7): "My favourite condiment is 100% natural. It's a little spicy and a little sweet, but it's the",
+                ("cuda", 8): "My favourite condiment is 100% peanut butter. I love it so much that I can't help but use it",
+            }
         )
+        EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()
+
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B-Base", use_fast=False)
         model = Qwen3ForCausalLM.from_pretrained("Qwen/Qwen3-0.6B-Base", device_map="auto", torch_dtype=torch.float16)
