@@ -129,8 +129,6 @@ class SmolLM3Config(PretrainedConfig):
             Whether to use sliding window attention.
         sliding_window (`int`, *optional*):
             Sliding window attention (SWA) window size. If not specified, will default to `None`.
-        max_window_layers (`int`, *optional*, defaults to 28):
-            The number of layers that use SWA (Sliding Window Attention). The bottom layers use SWA while the top use full attention.
         no_rope_layers (`List[int]`, *optional*):
             List with at least the same length as the number of layers in the model.
             A `1` at an index position indicates that the corresponding layer will use RoPE,
@@ -198,7 +196,6 @@ class SmolLM3Config(PretrainedConfig):
         rope_scaling=None,
         use_sliding_window=False,
         sliding_window=None,
-        max_window_layers=28,
         no_rope_layers=None,
         no_rope_layer_interval=4,
         layer_types=None,
@@ -221,7 +218,6 @@ class SmolLM3Config(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.use_sliding_window = use_sliding_window
         self.sliding_window = sliding_window
-        self.max_window_layers = max_window_layers
 
         # for backward compatibility
         if num_key_value_heads is None:
@@ -272,7 +268,11 @@ class SmolLM3Attention(LlamaAttention):
         super().__init__(config, layer_idx)
 
         self.use_rope = config.no_rope_layers[layer_idx]
-        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
+        self.sliding_window = (
+            config.sliding_window
+            if config.use_sliding_window and config.layer_types[layer_idx] == "sliding_attention"
+            else None
+        )
 
     def forward(
         self,
