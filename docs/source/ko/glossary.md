@@ -71,7 +71,7 @@ rendered properly in your Markdown viewer.
 [[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]
 ```
 
-### autoencoding models
+### 오토인코딩 모델 (autoencoding models)
 
 [인코더 모델](#encoder-models)과 [마스킹된 언어 모델링](#masked-language-modeling-mlm)을 참고하세요.
 
