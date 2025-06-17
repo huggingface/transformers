@@ -61,6 +61,17 @@ rename_mapping = {
     "mlp.wi_fused": "mlp.gate_up_proj",
 }
 
+# Transpose reshape based on dense general layer before
+transpose_reshape_namings = [
+    "q_proj",
+    "k_proj",
+    "v_proj",
+    "o_proj",
+    "wi_fused",
+    "wo",
+    "logits_dense",
+]
+
 
 def get_generation_config(config):
     model_generation_config = GenerationConfig.from_model_config(config)
@@ -86,9 +97,14 @@ def reshape_or_transpose(tensor, target_tensor, key):
 
     # Direct reshape
     try:
-        if "o_proj" in key:
-            reshaped = tensor.reshape(target_shape[1], target_shape[0]).T
-        elif "cross_attention" in key:
+        # Dense general all need a transpose even if it is the same shape
+        transpose_reshape = False
+        for name in transpose_reshape_namings:
+            if name in key:
+                transpose_reshape = True
+                break
+
+        if transpose_reshape:
             reshaped = tensor.reshape(target_shape[1], target_shape[0]).T
         elif tensor.shape[0] != target_shape[0] and tensor.shape[-1] != target_shape[-1]:
             reshaped = tensor.permute(1, 2, 0).view(target_shape)
