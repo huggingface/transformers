@@ -258,7 +258,7 @@ class TokenClassificationPipeline(ChunkPipeline):
 
         _inputs, is_split_into_words, offset_mapping = self._args_parser(inputs, **kwargs)
         kwargs["is_split_into_words"] = is_split_into_words
-        if is_split_into_words and not any(isinstance(input, list) for input in inputs):
+        if is_split_into_words and not all(isinstance(input, list) for input in inputs):
             return super().__call__([inputs], **kwargs)
         if offset_mapping:
             kwargs["offset_mapping"] = offset_mapping
