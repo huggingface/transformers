@@ -63,7 +63,7 @@ python -m fms_mo.run_quant \
 --output_dir <"path_to_save_new_model">
 ```
 
-## Padding-Free Training
+## Notes
 
 Bamba supports padding-free training, a powerful optimization technique where distinct training examples can be concatenated together while still processing inputs as separate batches. When examples have varying lengths, padding-free training provides significant speed ups and memory savings by avoiding unnecessary compute and memory overhead from padding tokens. Performance gains of up to [~2x are commonly seen](https://github.com/huggingface/transformers/pull/35861#issue-2807873129).
 
