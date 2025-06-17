@@ -65,9 +65,9 @@ python -m fms_mo.run_quant \
 
 ## Notes
 
-Bamba supports padding-free training, a powerful optimization technique where distinct training examples can be concatenated together while still processing inputs as separate batches. When examples have varying lengths, padding-free training provides significant speed ups and memory savings by avoiding unnecessary compute and memory overhead from padding tokens. Performance gains of up to [~2x are commonly seen](https://github.com/huggingface/transformers/pull/35861#issue-2807873129).
+- Bamba supports padding-free training which concatenates distinct training examples while still processing inputs as separate batches. It can significantly accelerate inference by [~2x](https://github.com/huggingface/transformers/pull/35861#issue-2807873129) (depending on model and data distribution) and reduce memory-usage if there are examples of varying lengths by avoiding unnecessary compute and memory overhead from padding tokens.
 
-Using padding-free training with Bamba requires the `flash-attn`, `mamba-ssm`, and `causal-conv1d` packages, and the following arguments must be passed to the model in addition to `input_ids` and `labels`:
+   Padding-free training requires the `flash-attn`, `mamba-ssm`, and `causal-conv1d` packages and the following arguments must be passed to the model in addition to `input_ids` and `labels`.
 
 - `position_ids: torch.LongTensor`: the position index of each token in each sequence.
 - `seq_idx: torch.IntTensor`: the index of each sequence in the batch.
