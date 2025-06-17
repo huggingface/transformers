@@ -15,9 +15,9 @@ rendered properly in your Markdown viewer.
 -->
 
 <div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-           <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
+   <div class="flex flex-wrap space-x-1">
+          <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+   </div>
 </div>
 
 # RoCBert
@@ -27,11 +27,6 @@ rendered properly in your Markdown viewer.
 You can find all the original RoCBert checkpoints under the [weiweishi](https://huggingface.co/weiweishi) profile.
 
 > [!TIP]
-<<<<<<< HEAD
-=======
-> This model was contributed by [weiweishi](https://huggingface.co/weiweishi).
->
->>>>>>> ce1aabd56b (Fixed Problems)
 > Click on the RoCBert models in the right sidebar for more examples of how to apply RoCBert to different Chinese language tasks.
 
 <hfoptions id="usage">
@@ -42,10 +37,10 @@ import torch
 from transformers import pipeline
 
 pipeline = pipeline(
-    task="fill-mask",
-    model="weiweishi/roc-bert-base-zh",
-    torch_dtype=torch.float16,
-    device=0
+   task="fill-mask",
+   model="weiweishi/roc-bert-base-zh",
+   torch_dtype=torch.float16,
+   device=0
 )
 pipeline("這家餐廳的拉麵是我[MASK]過的最好的拉麵之")
 ```
@@ -58,19 +53,19 @@ import torch
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained(
-    "weiweishi/roc-bert-base-zh",
+   "weiweishi/roc-bert-base-zh",
 )
 model = AutoModelForMaskedLM.from_pretrained(
-    "weiweishi/roc-bert-base-zh",
-    torch_dtype=torch.float16,
-    device_map="auto",
+   "weiweishi/roc-bert-base-zh",
+   torch_dtype=torch.float16,
+   device_map="auto",
 )
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 inputs = tokenizer("這家餐廳的拉麵是我[MASK]過的最好的拉麵之", return_tensors="pt").to("cuda")
 
 with torch.no_grad():
-    outputs = model(**inputs)
-    predictions = outputs.logits
+   outputs = model(**inputs)
+   predictions = outputs.logits
 
 masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]
 predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
