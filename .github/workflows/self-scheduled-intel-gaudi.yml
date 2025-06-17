@@ -159,7 +159,8 @@ jobs:
           echo "machine_type=$machine_type" >> $GITHUB_ENV
 
       - name: Run all pipeline tests on Intel Gaudi
-        run: python3 -m pytest -n 1 -v --dist=loadfile --make-reports=${{ env.machine_type }}_run_pipelines_gpu_test_reports tests/pipelines -m "not not_device_test"
+        run: |
+          python3 -m pytest -v --make-reports=${{ env.machine_type }}_run_pipelines_gpu_test_reports tests/pipelines -m "not not_device_test"
 
       - name: Failure short reports
         if: ${{ failure() }}
@@ -299,7 +300,7 @@ jobs:
           fi
           echo "machine_type=$machine_type" >> $GITHUB_ENV
 
-      - name: Run all tests on intel Gaudi
+      - name: Run all deepspeed tests on intel Gaudi
         run: |
           python3 -m pytest -v --make-reports=${{ env.machine_type }}_run_deepspeed_gpu_test_reports tests/deepspeed -m "not not_device_test"
 
