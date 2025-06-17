@@ -460,6 +460,9 @@ class Glm4vVisionEmbeddings(nn.Module):
         # Move coordinates to correct device
         h_coords, w_coords = h_coords.to(device), w_coords.to(device)
 
+        # Move coordinates to correct device
+        h_coords, w_coords = h_coords.to(device), w_coords.to(device)
+
         # Handle empty sequence case
         if total_seq == 0:
             adapted_pos_embed = torch.empty(0, hidden_size, device=device, dtype=pos_embed_weight.dtype)
@@ -474,16 +477,23 @@ class Glm4vVisionEmbeddings(nn.Module):
             orig_size_sq = pos_embed_weight.shape[0]
             orig_size = int(orig_size_sq**0.5)
             pos_embed_2d = (
-                pos_embed_weight.view(orig_size, orig_size, hidden_size).permute(2, 0, 1).unsqueeze(0).float()
+                pos_embed_weight.view(orig_size, orig_size, hidden_size)
+                .permute(2, 0, 1)
+                .unsqueeze(0)
+                .to(device=device, dtype=torch.float32)
             )
 
             # Calculate target dimensions for each patch
-            target_h = torch.cat([image_shapes[i, 1].repeat(lengths[i]) for i in range(len(lengths))]).float()
-            target_w = torch.cat([image_shapes[i, 2].repeat(lengths[i]) for i in range(len(lengths))]).float()
+            target_h = torch.cat([image_shapes[i, 1].repeat(lengths[i]) for i in range(len(lengths))]).to(
+                device=device, dtype=torch.float32
+            )
+            target_w = torch.cat([image_shapes[i, 2].repeat(lengths[i]) for i in range(len(lengths))]).to(
+                device=device, dtype=torch.float32
+            )
 
             # Normalize coordinates to [-1, 1] range for grid_sample
-            h_coords = h_coords.to(dtype=torch.float32)
-            w_coords = w_coords.to(dtype=torch.float32)
+            h_coords = h_coords.to(device=device, dtype=torch.float32)
+            w_coords = w_coords.to(device=device, dtype=torch.float32)
             norm_w = ((w_coords + 0.5) / target_w) * 2 - 1
             norm_h = ((h_coords + 0.5) / target_h) * 2 - 1
 

@@ -60,7 +60,7 @@ class Glm4vVisionText2TextModelTester:
         seq_length=7,
         num_channels=3,
         ignore_index=-100,
-        image_size=14,
+        image_size=112,
         vision_start_token_id=3,
         image_token_id=4,
         video_token_id=5,
@@ -86,7 +86,7 @@ class Glm4vVisionText2TextModelTester:
         vision_config={
             "depth": 2,
             "embed_dim": 32,
-            "hidden_act": "quick_gelu",
+            "hidden_act": "silu",
             "hidden_size": 32,
             "mlp_ratio": 4,
             "num_heads": 4,

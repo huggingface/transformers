@@ -187,6 +187,12 @@ class Glm4vVisionEmbeddings(nn.Module):
         total_seq = h_coords.shape[0]
         device = pos_embed_weight.device
 
+        # Move coordinates to correct device
+        h_coords, w_coords = h_coords.to(device), w_coords.to(device)
+
+        # Move coordinates to correct device
+        h_coords, w_coords = h_coords.to(device), w_coords.to(device)
+
         # Handle empty sequence case
         if total_seq == 0:
             adapted_pos_embed = torch.empty(0, hidden_size, device=device, dtype=pos_embed_weight.dtype)
