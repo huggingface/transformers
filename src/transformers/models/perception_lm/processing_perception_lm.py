@@ -39,24 +39,24 @@ class PerceptionLMProcessorKwargs(ProcessingKwargs, total=False):
 
 class PerceptionLMProcessor(ProcessorMixin):
     r"""
-    Constructs a PerceptionLM processor which wraps a PerceptionLM image processor and a LLaMa tokenizer into a single processor.
+    Constructs a PerceptionLM processor which wraps a PerceptionLM image processor, a PerceptionLM video processor, and a tokenizer into a single processor.
 
-    [`PerceptionLMProcessor`] offers all the functionalities of [`PerceptionLMImageProcessor`] and [`PerceptionLMTokenizerFast`]. See the
+    [`PerceptionLMProcessor`] offers all the functionalities of [`PerceptionLMImageProcessorFast`], [`PerceptionLMVideoProcessor`], and the tokenizer (e.g. [`LlamaTokenizerFast`]). See the
     [`~PerceptionLMProcessor.__call__`] and [`~PerceptionLMProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`PerceptionLMImageProcessor`], *optional*):
-            The image processor is a required input.
         video_processor ([`PerceptionLMVideoProcessor`], *optional*):
-            The video processor is a required input.
-        tokenizer ([`PerceptionLMTokenizerFast`], *optional*):
-            The tokenizer is a required input.
+            The video processor to process video inputs.
+        image_processor ([`PerceptionLMImageProcessorFast`], *optional*):
+            The image processor to process image inputs.
+        tokenizer ([`LlamaTokenizerFast`] or similar, *optional*):
+            The tokenizer to process text inputs.
         patch_size (`int`, *optional*):
             Patch size from the vision tower.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-        pooling_ratio (`int`, *optional*):
-            Pooling ratio for vision tokens. If not 1, we do 2D adaptive pooling over projected vision tokens.
+        chat_template (`str`, *optional*):
+            A Jinja template which will be used to convert lists of messages in a chat into a tokenizable string.
+        pooling_ratio (`int`, *optional*, defaults to 2):
+            Pooling ratio for vision tokens. If not 1, 2D adaptive pooling is applied over projected vision tokens.
     """
 
     attributes = ["video_processor", "image_processor", "tokenizer"]
