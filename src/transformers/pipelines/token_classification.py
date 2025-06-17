@@ -135,8 +135,11 @@ class TokenClassificationPipeline(ChunkPipeline):
 
     default_input_names = "sequences"
 
-    def __init__(self, args_parser=TokenClassificationArgumentHandler(), *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        self._args_parser = TokenClassificationArgumentHandler()
+
         self.check_model_type(
             TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES
             if self.framework == "tf"
@@ -144,7 +147,6 @@ class TokenClassificationPipeline(ChunkPipeline):
         )
 
         self._basic_tokenizer = BasicTokenizer(do_lower_case=False)
-        self._args_parser = args_parser
 
     def _sanitize_parameters(
         self,
