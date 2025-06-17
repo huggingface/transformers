@@ -319,7 +319,7 @@ class MegaMultiDimensionDampedEma(nn.Module):
     """
     Mega's Exponential Moving Average layer, largely left unmodified from the original repo with the exception of
     variable names and moving away from the stateful representation of incremental decoding state. See
-    "https://arxiv.org/abs/2209.10655" for more details.
+    "https://huggingface.co/papers/2209.10655" for more details.
     """
 
     def __init__(self, config: MegaConfig):
@@ -463,7 +463,7 @@ class MegaMultiDimensionDampedEma(nn.Module):
             prev_state (`torch.Tensor` of shape `(batch_size, config.ndim)`, *optional*):
                 The hidden state returned from the previous timestep during incremental decoding.
             use_cache (`bool`, default `False`):
-                Whether to perfom incremental decoding; uses `prev_state` as the prior timestep, and returns the
+                Whether to perform incremental decoding; uses `prev_state` as the prior timestep, and returns the
                 updated EMA hidden state for use in the next step
 
         Returns:
@@ -652,7 +652,7 @@ class MegaGatedCrossAttention(nn.Module):
             output_attentions (`bool`, defaults to `False`):
                 Whether or not to return the cross-attention weights.
             use_cache (`bool`, defaults to `False`):
-                Whether to perfom incremental decoding; uses `prev_state` as the prior timestep, and returns the
+                Whether to perform incremental decoding; uses `prev_state` as the prior timestep, and returns the
                 updated EMA hidden state for use in the next step
 
         Returns:
@@ -784,7 +784,7 @@ class MegaGatedCrossAttention(nn.Module):
 
 class MegaMovingAverageGatedAttention(nn.Module):
     """
-    Pure PyTorch implementation of Mega block; see https://arxiv.org/abs/2209.10655 and original fairseq implementation
+    Pure PyTorch implementation of Mega block; see https://huggingface.co/papers/2209.10655 and original fairseq implementation
     at https://github.com/facebookresearch/mega (copyright Meta Research, licensed under MIT License)
 
     Differences from original implementation include hidden state refactor and fixed inconsistency with additive /
@@ -936,7 +936,7 @@ class MegaMovingAverageGatedAttention(nn.Module):
             output_attentions (`bool`, default `False`):
                 Whether to return self-attention weights
             use_cache (`bool`, default `False`):
-                Whether to perfom incremental decoding; uses `past_key_values` as prior state, and returns the updated
+                Whether to perform incremental decoding; uses `past_key_values` as prior state, and returns the updated
                 states for use in the next step
 
         Returns:
@@ -1214,7 +1214,7 @@ class MegaBlock(nn.Module):
             output_attentions (`bool`, default `False`):
                 Whether to return self-attention weights
             use_cache (`bool`, default `False`):
-                Whether to perfom incremental decoding; uses `past_key_value` as prior state, and returns the updated
+                Whether to perform incremental decoding; uses `past_key_value` as prior state, and returns the updated
                 states for use in the next step
 
         Returns:
@@ -1457,7 +1457,7 @@ class MegaModel(MegaPreTrainedModel):
     `is_decoder=True` and `bidirectional=False` argument as well as `add_cross_attention` set to `True`; an
     `encoder_hidden_states` is then expected as an input to the forward pass.
 
-    .. _*Mega: Moving Average Equipped Gated Attention*: https://arxiv.org/abs/2209.10655
+    .. _*Mega: Moving Average Equipped Gated Attention*: https://huggingface.co/papers/2209.10655
 
     """
 
@@ -1684,7 +1684,7 @@ class MegaForCausalLM(MegaPreTrainedModel):
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        past_key_values: Tuple[Tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,

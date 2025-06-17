@@ -326,7 +326,7 @@ class TFMistralAttention(keras.layers.Layer):
         )
 
         if past_key_value is not None:
-            # resue k, v, self_attention
+            # reuse k, v, self_attention
             key_states = tf.concat([past_key_value[0], key_states], axis=2)
             value_states = tf.concat([past_key_value[1], value_states], axis=2)
 
@@ -713,7 +713,7 @@ MISTRAL_INPUTS_DOCSTRING = r"""
             `past_key_values`).
 
             If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+            and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
             information on the default strategy.
 
             - 1 indicates the head is **not masked**,

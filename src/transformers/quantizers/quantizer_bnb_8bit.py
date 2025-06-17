@@ -69,10 +69,23 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             raise ImportError(
                 f"Using `bitsandbytes` 8-bit quantization requires Accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
             )
-        if not is_bitsandbytes_available():
+        if not is_bitsandbytes_available(check_library_only=True):
             raise ImportError(
                 "Using `bitsandbytes` 8-bit quantization requires the latest version of bitsandbytes: `pip install -U bitsandbytes`"
             )
+        if not is_torch_available():
+            raise ImportError(
+                "The bitsandbytes library requires PyTorch but it was not found in your environment. "
+                "You can install it with `pip install torch`."
+            )
+        # `bitsandbytes` versions older than 0.43.1 eagerly require CUDA at import time,
+        # so those versions of the library are practically only available when CUDA is too.
+        if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.1"):
+            if not torch.cuda.is_available():
+                raise ImportError(
+                    "The installed version of bitsandbytes (<0.43.1) requires CUDA, but CUDA is not available. "
+                    "You may need to install PyTorch with CUDA support or upgrade bitsandbytes to >=0.43.1."
+                )
 
         from ..integrations import validate_bnb_backend_availability
         from ..utils import is_bitsandbytes_multi_backend_available
@@ -136,7 +149,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             if torch.cuda.is_available():
                 device_map = {"": torch.cuda.current_device()}
             elif is_torch_xpu_available():
-                device_map = {"": f"xpu:{torch.xpu.current_device()}"}
+                device_map = {"": torch.xpu.current_device()}
             else:
                 device_map = {"": "cpu"}
             logger.info(

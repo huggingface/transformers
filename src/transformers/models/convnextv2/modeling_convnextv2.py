@@ -29,29 +29,12 @@ from ...modeling_outputs import (
     ImageClassifierOutputWithNoAttention,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import auto_docstring, logging
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_convnextv2 import ConvNextV2Config
 
 
 logger = logging.get_logger(__name__)
-
-# General docstring
-_CONFIG_FOR_DOC = "ConvNextV2Config"
-
-# Base docstring
-_CHECKPOINT_FOR_DOC = "facebook/convnextv2-tiny-1k-224"
-_EXPECTED_OUTPUT_SHAPE = [1, 768, 7, 7]
-
-# Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "facebook/convnextv2-tiny-1k-224"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
@@ -100,7 +83,7 @@ class ConvNextV2GRN(nn.Module):
 
     def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
         # Compute and normalize global spatial feature maps
-        global_features = torch.linalg.norm(hidden_states, ord=2, dim=(1, 2), keepdim=True)
+        global_features = torch.linalg.vector_norm(hidden_states, ord=2, dim=(1, 2), keepdim=True)
         norm_features = global_features / (global_features.mean(dim=-1, keepdim=True) + 1e-6)
         hidden_states = self.weight * (hidden_states * norm_features) + self.bias + hidden_states
 
@@ -245,7 +228,8 @@ class ConvNextV2Encoder(nn.Module):
         super().__init__()
         self.stages = nn.ModuleList()
         drop_path_rates = [
-            x.tolist() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths)).split(config.depths)
+            x.tolist()
+            for x in torch.linspace(0, config.drop_path_rate, sum(config.depths), device="cpu").split(config.depths)
         ]
         prev_chs = config.hidden_sizes[0]
         for i in range(config.num_stages):
@@ -287,12 +271,8 @@ class ConvNextV2Encoder(nn.Module):
         )
 
 
+@auto_docstring
 class ConvNextV2PreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = ConvNextV2Config
     base_model_prefix = "convnextv2"
     main_input_name = "pixel_values"
@@ -314,34 +294,7 @@ class ConvNextV2PreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-CONVNEXTV2_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`ConvNextV2Config`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-CONVNEXTV2_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`ConvNextImageProcessor`]. See
-            [`ConvNextImageProcessor.__call__`] for details.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare ConvNextV2 model outputting raw features without any specific head on top.",
-    CONVNEXTV2_START_DOCSTRING,
-)
+@auto_docstring
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextModel with CONVNEXT->CONVNEXTV2, ConvNext->ConvNextV2
 class ConvNextV2Model(ConvNextV2PreTrainedModel):
     def __init__(self, config):
@@ -357,14 +310,7 @@ class ConvNextV2Model(ConvNextV2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(CONVNEXTV2_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPoolingAndNoAttention,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -402,12 +348,11 @@ class ConvNextV2Model(ConvNextV2PreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     ConvNextV2 Model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
     ImageNet.
-    """,
-    CONVNEXTV2_START_DOCSTRING,
+    """
 )
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextForImageClassification with CONVNEXT->CONVNEXTV2,ConvNext->ConvNextV2,convnext->convnextv2
 class ConvNextV2ForImageClassification(ConvNextV2PreTrainedModel):
@@ -425,13 +370,7 @@ class ConvNextV2ForImageClassification(ConvNextV2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(CONVNEXTV2_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ImageClassifierOutputWithNoAttention,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -486,11 +425,10 @@ class ConvNextV2ForImageClassification(ConvNextV2PreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     ConvNeXT V2 backbone, to be used with frameworks like DETR and MaskFormer.
-    """,
-    CONVNEXTV2_START_DOCSTRING,
+    """
 )
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextBackbone with CONVNEXT->CONVNEXTV2,ConvNext->ConvNextV2,facebook/convnext-tiny-224->facebook/convnextv2-tiny-1k-224
 class ConvNextV2Backbone(ConvNextV2PreTrainedModel, BackboneMixin):
@@ -511,17 +449,14 @@ class ConvNextV2Backbone(ConvNextV2PreTrainedModel, BackboneMixin):
         # initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(CONVNEXTV2_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> BackboneOutput:
-        """
-        Returns:
-
+        r"""
         Examples:
 
         ```python

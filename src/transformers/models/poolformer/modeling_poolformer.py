@@ -25,22 +25,11 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithNoAttention, ImageClassifierOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import auto_docstring, logging
 from .configuration_poolformer import PoolFormerConfig
 
 
 logger = logging.get_logger(__name__)
-
-# General docstring
-_CONFIG_FOR_DOC = "PoolFormerConfig"
-
-# Base docstring
-_CHECKPOINT_FOR_DOC = "sail/poolformer_s12"
-_EXPECTED_OUTPUT_SHAPE = [1, 512, 7, 7]
-
-# Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "sail/poolformer_s12"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
@@ -194,7 +183,7 @@ class PoolFormerEncoder(nn.Module):
         super().__init__()
         self.config = config
         # stochastic depth decay rule
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths), device="cpu")]
 
         # patch embeddings
         embeddings = []
@@ -255,12 +244,8 @@ class PoolFormerEncoder(nn.Module):
         return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
 
 
+@auto_docstring
 class PoolFormerPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = PoolFormerConfig
     base_model_prefix = "poolformer"
     main_input_name = "pixel_values"
@@ -281,29 +266,7 @@ class PoolFormerPreTrainedModel(PreTrainedModel):
                 module.layer_scale_2.data.fill_(self.config.layer_scale_init_value)
 
 
-POOLFORMER_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`PoolFormerConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-POOLFORMER_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`PoolFormerImageProcessor.__call__`] for details.
-"""
-
-
-@add_start_docstrings(
-    "The bare PoolFormer Model transformer outputting raw hidden-states without any specific head on top.",
-    POOLFORMER_START_DOCSTRING,
-)
+@auto_docstring
 class PoolFormerModel(PoolFormerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -317,14 +280,7 @@ class PoolFormerModel(PoolFormerPreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    @add_start_docstrings_to_model_forward(POOLFORMER_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithNoAttention,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -365,11 +321,10 @@ class PoolFormerFinalPooler(nn.Module):
         return output
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     PoolFormer Model transformer with an image classification head on top
-    """,
-    POOLFORMER_START_DOCSTRING,
+    """
 )
 class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
     def __init__(self, config):
@@ -387,13 +342,7 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(POOLFORMER_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ImageClassifierOutputWithNoAttention,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,

@@ -102,25 +102,25 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
 
     if model_id == "liuhaotian/llava-v1.6-mistral-7b":
         text_model_id = "mistralai/Mistral-7B-Instruct-v0.2"
-        image_token_index = 32000
+        image_token_id = 32000
     elif model_id == "liuhaotian/llava-v1.6-vicuna-7b":
         text_model_id = "lmsys/vicuna-7b-v1.5"
-        image_token_index = 32000
+        image_token_id = 32000
     elif model_id == "liuhaotian/llava-v1.6-vicuna-13b":
         text_model_id = "lmsys/vicuna-13b-v1.5"
-        image_token_index = 32000
+        image_token_id = 32000
     elif model_id == "liuhaotian/llava-v1.6-34b":
         text_model_id = "NousResearch/Nous-Hermes-2-Yi-34B"
-        image_token_index = 64000
+        image_token_id = 64000
     elif model_id == "lmms-lab/llama3-llava-next-8b":
         text_model_id = "meta-llama/Meta-Llama-3-8B-Instruct"
-        image_token_index = 128256
+        image_token_id = 128256
     elif model_id == "lmms-lab/llava-next-72b":
         text_model_id = "Qwen/Qwen1.5-72B-Chat"
-        image_token_index = 151646
+        image_token_id = 151646
     elif model_id == "lmms-lab/llava-next-110b":
         text_model_id = "Qwen/Qwen1.5-110B-Chat"
-        image_token_index = 151646
+        image_token_id = 151646
 
     vision_model_id = data["mm_vision_tower"]
 
@@ -142,7 +142,7 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
         text_config=text_config.to_dict(),
         image_grid_pinpoints=image_processor.image_grid_pinpoints,
         use_image_newline_parameter=True,
-        image_token_index=image_token_index,
+        image_token_id=image_token_id,
     )
 
     with init_empty_weights():
@@ -225,8 +225,8 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     if model_id == "liuhaotian/llava-v1.6-mistral-7b":
         filepath = hf_hub_download(repo_id="nielsr/test-image", filename="llava_1_6_input_ids.pt", repo_type="dataset")
         original_input_ids = torch.load(filepath, map_location="cpu", weights_only=True)
-        # replace -200 by image_token_index (since we use token ID = 32000 for the image token)
-        original_input_ids[original_input_ids == -200] = image_token_index
+        # replace -200 by image_token_id (since we use token ID = 32000 for the image token)
+        original_input_ids[original_input_ids == -200] = image_token_id
         assert original_input_ids[0].tolist() == inputs.input_ids[0].tolist()
 
     elif model_id == "liuhaotian/llava-v1.6-34b":
@@ -234,8 +234,8 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
             repo_id="nielsr/test-image", filename="llava_1_6_34b_input_ids.pt", repo_type="dataset"
         )
         original_input_ids = torch.load(filepath, map_location="cpu", weights_only=True)
-        # replace -200 by image_token_index
-        original_input_ids[original_input_ids == -200] = image_token_index
+        # replace -200 by image_token_id
+        original_input_ids[original_input_ids == -200] = image_token_id
 
         assert original_input_ids[0].tolist() == inputs.input_ids[0].tolist()
 

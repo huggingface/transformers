@@ -32,30 +32,12 @@ from ...modeling_outputs import (
     ModelOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-    torch_int,
-)
+from ...utils import auto_docstring, logging, torch_int
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_hiera import HieraConfig
 
 
 logger = logging.get_logger(__name__)
-
-# General docstring
-_CONFIG_FOR_DOC = "HieraConfig"
-
-# Base docstring
-_CHECKPOINT_FOR_DOC = "facebook/hiera-tiny-224-hf"
-_EXPECTED_OUTPUT_SHAPE = [1, 49, 768]
-
-# Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "facebook/hiera-tiny-224-in1k-hf"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 @dataclass
@@ -639,9 +621,9 @@ class HieraEncoder(nn.Module):
         super().__init__()
         total_depth = sum(config.depths)
         # stochastic depth decay rule
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, total_depth)]
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, total_depth, device="cpu")]
         # query strides rule
-        cumulative_depths = torch.tensor(config.depths).cumsum(0).tolist()
+        cumulative_depths = torch.tensor(config.depths, device="cpu").cumsum(0).tolist()
         query_pool_layer = cumulative_depths[: config.num_query_pool]
         query_strides = [math.prod(config.query_stride) if i in query_pool_layer else 1 for i in range(total_depth)]
 
@@ -837,12 +819,8 @@ def unroll(
     return hidden_states
 
 
+@auto_docstring
 class HieraPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = HieraConfig
     base_model_prefix = "hiera"
     main_input_name = "pixel_values"
@@ -869,42 +847,6 @@ class HieraPreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.weight, self.config.layer_norm_init)
 
 
-HIERA_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`HieraConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-HIERA_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`BitImageProcessor.__call__`]
-            for details.
-
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        interpolate_pos_encoding (`bool`, *optional*):
-            Whether to interpolate the pre-trained position encodings.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
 class HieraPooler(nn.Module):
     def __init__(self, config: HieraConfig):
         super().__init__()
@@ -920,18 +862,15 @@ class HieraPooler(nn.Module):
         return pooled_output
 
 
-@add_start_docstrings(
-    "The bare Hiera Model transformer outputting raw hidden-states without any specific head on top.",
-    HIERA_START_DOCSTRING,
-    """
-        add_pooling_layer (`bool`, *optional*, defaults to `True`):
-                Whether or not to apply pooling layer.
-        is_mae (`bool`, *optional*, defaults to `False`):
-                Whether or not to run the model on MAE mode.
-    """,
-)
+@auto_docstring
 class HieraModel(HieraPreTrainedModel):
     def __init__(self, config: HieraConfig, add_pooling_layer: bool = True, is_mae: bool = False):
+        r"""
+        add_pooling_layer (`bool`, *optional*, defaults to `True`):
+            Whether or not to apply pooling layer.
+        is_mae (`bool`, *optional*, defaults to `False`):
+            Whether or not to run the model on MAE mode.
+        """
         super().__init__(config)
         self.num_features = int(config.embed_dim * config.embed_dim_multiplier ** (len(config.depths) - 1))
 
@@ -956,14 +895,7 @@ class HieraModel(HieraPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(HIERA_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=HieraModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -975,9 +907,8 @@ class HieraModel(HieraPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
-        noise (`torch.FloatTensor` of shape `(batch_size, num_mask_units)`, *optional*) which is
-                mainly used for testing purposes to control randomness and maintain the reproducibility
-                when is_mae is set to True.
+        noise (`torch.FloatTensor` of shape `(batch_size, num_mask_units)`, *optional*):
+            Mainly used for testing purposes to control randomness and maintain the reproducibility
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1208,8 +1139,9 @@ class HieraMultiScaleHead(nn.Module):
         return hidden_states
 
 
-@add_start_docstrings(
-    """The Hiera Model transformer with the decoder on top for self-supervised pre-training.
+@auto_docstring(
+    custom_intro="""
+    The Hiera Model transformer with the decoder on top for self-supervised pre-training.
 
     <Tip>
 
@@ -1217,8 +1149,7 @@ class HieraMultiScaleHead(nn.Module):
     directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
 
     </Tip>
-    """,
-    HIERA_START_DOCSTRING,
+    """
 )
 class HieraForPreTraining(HieraPreTrainedModel):
     def __init__(self, config: HieraConfig) -> None:
@@ -1261,8 +1192,7 @@ class HieraForPreTraining(HieraPreTrainedModel):
 
         return loss
 
-    @add_start_docstrings_to_model_forward(HIERA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=HieraForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -1274,11 +1204,8 @@ class HieraForPreTraining(HieraPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, HieraForPreTrainingOutput]:
         r"""
-        noise (`torch.FloatTensor` of shape `(batch_size, num_mask_units)`, *optional*) which is
-                mainly used for testing purposes to control randomness and maintain the reproducibility
-                when is_mae is set to True.
-
-        Returns:
+        noise (`torch.FloatTensor` of shape `(batch_size, num_mask_units)`, *optional*):
+            Mainly used for testing purposes to control randomness and maintain the reproducibility
 
         Examples:
         ```python
@@ -1356,8 +1283,8 @@ class HieraForPreTraining(HieraPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     Hiera Model transformer with an image classification head on top (a linear layer on top of the final hidden state with
     average pooling) e.g. for ImageNet.
 
@@ -1368,8 +1295,7 @@ class HieraForPreTraining(HieraPreTrainedModel):
         position embeddings to the higher resolution.
 
     </Tip>
-    """,
-    HIERA_START_DOCSTRING,
+    """
 )
 class HieraForImageClassification(HieraPreTrainedModel):
     def __init__(self, config: HieraConfig) -> None:
@@ -1386,13 +1312,7 @@ class HieraForImageClassification(HieraPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(HIERA_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=HieraForImageClassificationOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values,
@@ -1466,11 +1386,10 @@ class HieraForImageClassification(HieraPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     Hiera backbone, to be used with frameworks like DETR and MaskFormer.
-    """,
-    HIERA_START_DOCSTRING,
+    """
 )
 class HieraBackbone(HieraPreTrainedModel, BackboneMixin):
     def __init__(self, config: HieraConfig):

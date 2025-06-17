@@ -11,17 +11,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import unittest
 
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, GenerationConfig, QuarkConfig
 from transformers.testing_utils import (
+    cleanup,
     is_torch_available,
     require_accelerate,
     require_quark,
     require_torch_gpu,
     require_torch_multi_gpu,
     slow,
+    torch_device,
 )
 from transformers.utils.import_utils import is_quark_available
 
@@ -33,6 +34,7 @@ if is_quark_available():
     from quark.torch.export.nn.modules.qparamslinear import QParamsLinear
 
 
+@require_quark
 class QuarkConfigTest(unittest.TestCase):
     def test_commmon_args(self):
         config = AutoConfig.from_pretrained("amd/Llama-3.1-8B-Instruct-w-int8-a-int8-sym-test")
@@ -53,6 +55,7 @@ class QuarkTest(unittest.TestCase):
     EXPECTED_OUTPUTS.add("Today I am in Paris and I am enjoying the city of light. I am not just any ordinary Paris")
     EXPECTED_OUTPUTS.add("Today I am in Paris and I am enjoying my day off! The sun is shining, the birds are")
     EXPECTED_OUTPUTS.add("Today I am in Paris and I'm here to tell you about it. It's a beautiful day,")
+    EXPECTED_OUTPUTS.add("Today I am in Paris and I am not in Paris at all! I am not in Paris, but")
 
     EXPECTED_RELATIVE_DIFFERENCE = 1.66
     device_map = None
@@ -75,6 +78,13 @@ class QuarkTest(unittest.TestCase):
             device_map=cls.device_map,
         )
 
+    def tearDown(self):
+        r"""
+        TearDown function needs to be called at the end of each test to free the accelerator memory and cache, also to
+        avoid unexpected behaviors. Please see: https://discuss.pytorch.org/t/how-can-we-release-gpu-memory-cache/14530/27
+        """
+        cleanup(torch_device, gc_collect=True)
+
     def test_memory_footprint(self):
         mem_quantized = self.quantized_model.get_memory_footprint()
 
@@ -95,7 +105,7 @@ class QuarkTest(unittest.TestCase):
 
     def test_original_dtype(self):
         r"""
-        A simple test to check if the model succesfully stores the original dtype
+        A simple test to check if the model successfully stores the original dtype
         """
         self.assertTrue(hasattr(self.quantized_model.config, "_pre_quantization_dtype"))
         self.assertFalse(hasattr(self.model_fp16.config, "_pre_quantization_dtype"))

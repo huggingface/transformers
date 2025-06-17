@@ -14,6 +14,7 @@
 
 import importlib
 import inspect
+import re
 import warnings
 from typing import Any, Dict, List, Optional, Union
 
@@ -43,6 +44,26 @@ MIN_PEFT_VERSION = "0.5.0"
 logger = logging.get_logger(__name__)
 
 
+# DO NOT MODIFY, KEPT FOR BC ONLY
+VLMS = [
+    "aria",
+    "ayavision",
+    "emu3",
+    "fuyu",
+    "gotocr2",
+    "gemma3",
+    "internvl",
+    "llava",  # all llava prefixed models fall under this check
+    "mistral3",
+    "mllama",
+    "paligemma",
+    "qwen2vl",
+    "qwen2_5_vl",
+    "videollava",
+    "vipllava",
+]
+
+
 class PeftAdapterMixin:
     """
     A class containing all functions for loading and using adapters weights that are supported in PEFT library. For
@@ -53,7 +74,7 @@ class PeftAdapterMixin:
     that anyone can load, train and run with this mixin class:
     - Low Rank Adapters (LoRA): https://huggingface.co/docs/peft/conceptual_guides/lora
     - IA3: https://huggingface.co/docs/peft/conceptual_guides/ia3
-    - AdaLora: https://arxiv.org/abs/2303.10512
+    - AdaLora: https://huggingface.co/papers/2303.10512
 
     Other PEFT models such as prompt tuning, prompt learning are out of scope as these adapters are not "injectable"
     into a torch module. For using these methods, please refer to the usage guide of PEFT library.
@@ -79,7 +100,7 @@ class PeftAdapterMixin:
         max_memory: Optional[str] = None,
         offload_folder: Optional[str] = None,
         offload_index: Optional[int] = None,
-        peft_config: Dict[str, Any] = None,
+        peft_config: Optional[Dict[str, Any]] = None,
         adapter_state_dict: Optional[Dict[str, "torch.Tensor"]] = None,
         low_cpu_mem_usage: bool = False,
         is_trainable: bool = False,
@@ -149,6 +170,9 @@ class PeftAdapterMixin:
 
         # peft only supports low_cpu_mem_usage starting from v0.13.0
         peft_load_kwargs = {}
+        key_mapping = adapter_kwargs.pop("key_mapping", None) if adapter_kwargs is not None else None
+        if key_mapping is None and any(allowed_name in self.__class__.__name__.lower() for allowed_name in VLMS):
+            key_mapping = self._checkpoint_conversion_mapping
         if low_cpu_mem_usage:
             min_version_lcmu = "0.13.0"
             if version.parse(importlib.metadata.version("peft")) >= version.parse(min_version_lcmu):
@@ -233,6 +257,13 @@ class PeftAdapterMixin:
                 new_key = key[len(prefix) :]
             else:
                 new_key = key
+
+            if key_mapping:
+                for pattern, replacement in key_mapping.items():
+                    new_key, n_replace = re.subn(pattern, replacement, new_key)
+                    # Early exit of the loop
+                    if n_replace > 0:
+                        break
             processed_adapter_state_dict[new_key] = value
 
         # Load state dict
@@ -350,7 +381,7 @@ class PeftAdapterMixin:
 
         for _, module in self.named_modules():
             if isinstance(module, (BaseTunerLayer, ModulesToSaveWrapper)):
-                # For backward compatbility with previous PEFT versions
+                # For backward compatibility with previous PEFT versions
                 if hasattr(module, "set_adapter"):
                     module.set_adapter(adapter_name)
                 else:

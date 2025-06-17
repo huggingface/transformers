@@ -37,8 +37,9 @@ STOPPING_CRITERIA_INPUTS_DOCSTRING = r"""
             Additional stopping criteria specific kwargs.
 
     Return:
-        `torch.BoolTensor`. (`torch.BoolTensor` of shape `(batch_size, 1)`), where `True` indicates we stop generation
-            for a particular row, `True` indicates we should continue.
+        `torch.BoolTensor`. (`torch.BoolTensor` of shape `(batch_size, 1)`):
+            `True` indicates we stop generation for a particular row.
+            `False` indicates we should continue.
 
 """
 
@@ -73,7 +74,7 @@ class MaxLengthCriteria(StoppingCriteria):
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
-        cur_len = input_ids.shape[-1]
+        cur_len = input_ids.shape[1]
         is_done = cur_len >= self.max_length
         if self.max_position_embeddings is not None and not is_done and cur_len >= self.max_position_embeddings:
             logger.warning_once(
