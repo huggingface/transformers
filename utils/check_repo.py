@@ -512,7 +512,7 @@ def get_models(module: types.ModuleType, include_pretrained: bool = False) -> li
             Whether or not to include the `PreTrainedModel` subclass (like `BertPreTrainedModel`) or not.
 
     Returns:
-        list[tuple[str, type]]: List of models as tuples (class name, actual class).
+        List[Tuple[str, type]]: List of models as tuples (class name, actual class).
     """
     models = []
     model_classes = (transformers.PreTrainedModel, transformers.TFPreTrainedModel, transformers.FlaxPreTrainedModel)
@@ -568,7 +568,7 @@ def get_model_test_files() -> list[str]:
     Get the model test files.
 
     Returns:
-        `list[str]`: The list of test files. The returned files will NOT contain the `tests` (i.e. `PATH_TO_TESTS`
+        `List[str]`: The list of test files. The returned files will NOT contain the `tests` (i.e. `PATH_TO_TESTS`
         defined in this script). They will be considered as paths relative to `tests`. A caller has to use
         `os.path.join(PATH_TO_TESTS, ...)` to access the files.
     """
@@ -613,7 +613,7 @@ def find_tested_models(test_file: str) -> list[str]:
         test_file (`str`): The path to the test file to check
 
     Returns:
-        `list[str]`: The list of models tested in that file.
+        `List[str]`: The list of models tested in that file.
     """
     with open(os.path.join(PATH_TO_TESTS, test_file), "r", encoding="utf-8", newline="\n") as f:
         content = f.read()
@@ -647,7 +647,7 @@ def check_models_are_tested(module: types.ModuleType, test_file: str) -> list[st
         test_file (`str`): The path to the file where the module is tested.
 
     Returns:
-        `list[str]`: The list of error messages corresponding to models not tested.
+        `List[str]`: The list of error messages corresponding to models not tested.
     """
     # XxxPreTrainedModel are not tested
     defined_models = get_models(module)
@@ -731,11 +731,11 @@ def check_models_are_auto_configured(module: types.ModuleType, all_auto_models: 
     Args:
         module (`types.ModuleType`):
             The module in which we get the models.
-        all_auto_models (`list[str]`):
+        all_auto_models (`List[str]`):
             The list of all models in an auto class (as obtained with `get_all_auto_configured_models()`).
 
     Returns:
-        `list[str]`: The list of error messages corresponding to models not tested.
+        `List[str]`: The list of error messages corresponding to models not tested.
     """
     defined_models = get_models(module)
     failures = []
@@ -923,7 +923,7 @@ def check_decorator_order(filename: str) -> list[int]:
         filename (`str`): The path to a test file to check.
 
     Returns:
-        `list[int]`: The list of failures as a list of indices where there are problems.
+        `List[int]`: The list of failures as a list of indices where there are problems.
     """
     with open(filename, "r", encoding="utf-8", newline="\n") as f:
         lines = f.readlines()
@@ -962,8 +962,8 @@ def find_all_documented_objects() -> list[str]:
     Parse the content of all doc files to detect which classes and functions it documents.
 
     Returns:
-        `list[str]`: The list of all object names being documented.
-        `dict[str, list[str]]`: A dictionary mapping the object name (full import path, e.g.
+        `List[str]`: The list of all object names being documented.
+        `Dict[str, List[str]]`: A dictionary mapping the object name (full import path, e.g.
             `integrations.PeftAdapterMixin`) to its documented methods
     """
     documented_obj = []

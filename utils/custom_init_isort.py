@@ -79,7 +79,7 @@ def split_code_in_indented_blocks(
         can thus be retrieved by joining the result.
 
     Returns:
-        `list[str]`: The list of blocks.
+        `List[str]`: The list of blocks.
     """
     # Let's split the code into lines and move to start_index.
     index = 0
@@ -146,14 +146,14 @@ def sort_objects(objects: list[Any], key: Optional[Callable[[Any], str]] = None)
     last).
 
     Args:
-        objects (`list[Any]`):
+        objects (`List[Any]`):
             The list of objects to sort.
         key (`Callable[[Any], str]`, *optional*):
             A function taking an object as input and returning a string, used to sort them by alphabetical order.
             If not provided, will default to noop (so a `key` must be provided if the `objects` are not of type string).
 
     Returns:
-        `list[Any]`: The sorted list with the same elements as in the inputs
+        `List[Any]`: The sorted list with the same elements as in the inputs
     """
 
     # If no key is provided, we use a noop.

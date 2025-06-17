@@ -258,7 +258,7 @@ def find_block_end(lines: list[str], start_index: int, indent: int) -> int:
     Find the end of the class/func block starting at `start_index` in a source code (defined by `lines`).
 
     Args:
-        lines (`list[str]`):
+        lines (`List[str]`):
             The source code, represented by a list of lines.
         start_index (`int`):
             The starting index of the target class/func block.
@@ -292,7 +292,7 @@ def split_code_into_blocks(
     block are also included as (dummy) blocks.
 
     Args:
-        lines (`list[str]`):
+        lines (`List[str]`):
             The source code, represented by a list of lines.
         start_index (`int`):
             The starting index of the target class/func block.
@@ -305,7 +305,7 @@ def split_code_into_blocks(
             etc.) until an empty line is encountered.
 
     Returns:
-        `list[tuple[str, int, int]]`: A list of elements with the form `(block_name, start_index, end_index)`.
+        `List[Tuple[str, int, int]]`: A list of elements with the form `(block_name, start_index, end_index)`.
     """
     splits = []
     # `indent - 4` is the indent level of the target class/func header
@@ -406,7 +406,7 @@ def find_code_in_transformers(
             the file that defines the object.
 
     Returns:
-        `Union[str, tuple[list[str], int, int]]`: If `return_indices=False`, only the source code of the object will be
+        `Union[str, Tuple[List[str], int, int]]`: If `return_indices=False`, only the source code of the object will be
         returned. Otherwise, it also returns the whole lines of the file where the object specified by `object_name` is
         defined, together the start/end indices of the block in the file that defines the object.
     """
@@ -505,11 +505,11 @@ def find_code_and_splits(object_name: str, base_path: str, buffer: Optional[dict
             The buffer used to store the previous results in order to speed up the process.
 
     Returns:
-        lines (`list[str]`):
+        lines (`List[str]`):
             The lines of the whole file where the object is defined.
         code (`str`):
             The object's code.
-        code_splits (`list[tuple[str, int, int]]`):
+        code_splits (`List[Tuple[str, int, int]]`):
             `code` splitted into blocks. See `split_code_into_blocks`.
     """
     if buffer is None:
@@ -653,7 +653,7 @@ def is_copy_consistent(
             The buffer used to store the previous results in order to speed up the process.
 
     Returns:
-        `Optional[list[tuple[str, int]]]`: If `overwrite=False`, returns the list of differences as tuples `(str, int)`
+        `Optional[List[Tuple[str, int]]]`: If `overwrite=False`, returns the list of differences as tuples `(str, int)`
         with the name of the object having a diff and the line number where there is the first diff.
     """
     base_path = TRANSFORMERS_PATH if not filename.startswith("tests") else MODEL_TEST_PATH
@@ -948,7 +948,7 @@ def convert_to_localized_md(model_list: str, localized_model_list: str, format_s
             `LOCALIZED_READMES` for examples).
 
     Returns:
-        `tuple[bool, str]`: A tuple where the first value indicates if the READMEs match or not, and the second value
+        `Tuple[bool, str]`: A tuple where the first value indicates if the READMEs match or not, and the second value
         is the correct localized README.
     """
 

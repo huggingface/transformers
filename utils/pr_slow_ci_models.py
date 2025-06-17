@@ -47,11 +47,11 @@ def get_new_python_files_between_commits(base_commit: str, commits: list[str]) -
             A git repository (for instance the Transformers repo).
         base_commit (`str`):
             The commit reference of where to compare for the diff. This is the current commit, not the branching point!
-        commits (`list[str]`):
+        commits (`List[str]`):
             The list of commits with which to compare the repo at `base_commit` (so the branching point).
 
     Returns:
-        `list[str]`: The list of python files added between a base commit and one or several commits.
+        `List[str]`: The list of python files added between a base commit and one or several commits.
     """
     code_diff = []
     for commit in commits:
@@ -68,7 +68,7 @@ def get_new_python_files(diff_with_last_commit=False) -> list[str]:
     Return a list of python files that have been added between the current head and the main branch.
 
     Returns:
-        `list[str]`: The list of python files added.
+        `List[str]`: The list of python files added.
     """
     repo = Repo(PATH_TO_REPO)
 

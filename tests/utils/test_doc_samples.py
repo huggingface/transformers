@@ -45,8 +45,8 @@ class TestCodeExamples(unittest.TestCase):
         Args:
             directory (`Path`): Directory containing the files
             identifier (`str`): Will parse files containing this
-            ignore_files (`list[str]`): List of files to skip
-            n_identifier (`str` or `list[str]`): Will not parse files containing this/these identifiers.
+            ignore_files (`List[str]`): List of files to skip
+            n_identifier (`str` or `List[str]`): Will not parse files containing this/these identifiers.
             only_modules (`bool`): Whether to only analyze modules
         """
         files = [file for file in os.listdir(directory) if os.path.isfile(os.path.join(directory, file))]

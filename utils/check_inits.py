@@ -98,7 +98,7 @@ def parse_init(init_file) -> Optional[tuple[dict[str, list[str]], dict[str, list
         init_file (`str`): Path to the init file to inspect.
 
     Returns:
-        `Optional[tuple[dict[str, list[str]], dict[str, list[str]]]]`: A tuple of two dictionaries mapping backends to list of
+        `Optional[Tuple[Dict[str, List[str]], Dict[str, List[str]]]]`: A tuple of two dictionaries mapping backends to list of
         imported objects, one for the `_import_structure` part of the init and one for the `TYPE_CHECKING` part of the
         init. Returns `None` if the init is not a custom init.
     """
@@ -237,15 +237,15 @@ def analyze_results(import_dict_objects: dict[str, list[str]], type_hint_objects
     Analyze the differences between _import_structure objects and TYPE_CHECKING objects found in an init.
 
     Args:
-        import_dict_objects (`dict[str, list[str]]`):
+        import_dict_objects (`Dict[str, List[str]]`):
             A dictionary mapping backend names (`"none"` for the objects independent of any specific backend) to
             list of imported objects.
-        type_hint_objects (`dict[str, list[str]]`):
+        type_hint_objects (`Dict[str, List[str]]`):
             A dictionary mapping backend names (`"none"` for the objects independent of any specific backend) to
             list of imported objects.
 
     Returns:
-        `list[str]`: The list of errors corresponding to mismatches.
+        `List[str]`: The list of errors corresponding to mismatches.
     """
 
     def find_duplicates(seq):

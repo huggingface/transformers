@@ -483,7 +483,7 @@ def find_all_dependencies(
     BFS traversal algorithm. It can either start from `start_entity`, or `initial_dependencies`.
 
     Args:
-        dependency_mapping (`dict[str, set]`):
+        dependency_mapping (`Dict[str, set]`):
             A mapping from entities (usually function/assignment names), to immediate dependencies. That is, for function names,
             a mapping {"foo": {"bar", "test"}} would indicate that functions `bar` and `test` are immediately called
             in `foo`'s definition.
