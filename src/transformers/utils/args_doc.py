@@ -1847,36 +1847,7 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
                             f"{param_name} ({param_type}{shape_string}{optional_string}{param_default}):{description}",
                             indent_level + 8,
                         )
-            # for attr_name, attr_value in cls.__dict__.items():
-            #     if not callable(attr_value) and not attr_name.startswith("__"):
-            #         if attr_value.__class__.__name__ == "property":
-            #             attr_type = "property"
-            #         else:
-            #             attr_type = type(attr_value).__name__
-            #         if name and "Config" in name:
-            #             raise ValueError("Config should have explicit docstring")
-            #         print("attr_name", attr_name)
-            #         print("attr_value", attr_value)
-            #         print("attr_type", attr_type)
-
-        # TODO: Add support for Attributes section in docs
-        # attr_docs = ""
-        # # Get all attributes and methods of the clas
-        # for attr_name, attr_value in cls.__dict__.items():
-        #     if not callable(attr_value) and not attr_name.startswith("__"):
-        #         if attr_value.__class__.__name__ == "property":
-        #             attr_type = "property"
-        #         else:
-        #             attr_type = type(attr_value).__name__
-        #         if name and "Config" in name:
-        #             raise ValueError("Config should have explicit docstring")
-        #         indented_doc = getattr(ClassAttrs, attr_name, None)
-        #         if indented_doc is not None:
-        #             attr_docs += set_min_indent(f"{attr_name} (`{attr_type}`): {indented_doc}", 0)
-
-        # if len(attr_docs.replace(" ", "")):
-        #     docstring += set_min_indent("\nAttributes:\n", indent_level)
-        #     docstring += set_min_indent(attr_docs, indent_level + 4)
+        # TODO (Yoni): Add support for Attributes section in docs
 
     else:
         print(
