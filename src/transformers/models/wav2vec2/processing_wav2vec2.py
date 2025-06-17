@@ -94,8 +94,8 @@ class Wav2Vec2Processor(ProcessorMixin):
 
         [`~Wav2Vec2FeatureExtractor.__call__`] and PreTrainedTokenizer’s [`~PreTrainedTokenizer.__call__`] for more information.
 
-        This method returns the results of each call() method.  If both are invoked, the output will be a dictionary
-        containing the results of both calls.
+        Returns:
+            This method returns the results of each `call` method. If both are used, the output is a dictionary containing the results of both.
         """
         if "raw_speech" in kwargs:
             warnings.warn("Using `raw_speech` as a keyword argument is deprecated. Use `audio` instead.")
