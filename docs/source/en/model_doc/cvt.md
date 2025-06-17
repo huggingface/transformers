@@ -87,8 +87,7 @@ print(f"The predicted class label is: {predicted_class_label}")
 
 ## Notes
 
-- CvT models integrate convolutions into the Vision Transformer architecture, aiming to combine the strengths of both CNNs and Transformers. This can lead to improved performance and efficiency on vision tasks.
-- Use [`AutoImageProcessor`] for preprocessing images for CvT models. This typically includes resizing, rescaling, and normalizing the input images to match the model's training configuration.
+- The CvT models are regular Vision Transformers, but trained with convolutions. They outperform the original model (ViT) when fine-tuned on ImageNet-1K and CIFAR-100.
 - The original ViT demo notebooks, such as those found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/VisionTransformer), can often be adapted for CvT. You would typically replace ViT-specific classes like `ViTFeatureExtractor` with `AutoImageProcessor` and `ViTForImageClassification` with `CvtForImageClassification` or `AutoModelForImageClassification` using a CvT checkpoint.
 - CvT checkpoints available on the Hugging Face Hub are often pre-trained on large-scale datasets like ImageNet-22k and may also be fine-tuned on datasets like ImageNet-1k.
 
