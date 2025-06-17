@@ -41,7 +41,6 @@ logger = logging.get_logger(__name__)
     """
 )
 class Swin2SREncoderOutput(ModelOutput):
-
     last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None

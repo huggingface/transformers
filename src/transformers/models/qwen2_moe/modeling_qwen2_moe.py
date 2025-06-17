@@ -1409,7 +1409,6 @@ class Qwen2MoeForQuestionAnswering(Qwen2MoePreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         **kwargs,
     ) -> QuestionAnsweringModelOutput:
-
         outputs: MoeModelOutputWithPast = self.model(
             input_ids,
             attention_mask=attention_mask,
