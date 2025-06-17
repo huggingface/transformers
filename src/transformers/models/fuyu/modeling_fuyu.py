@@ -284,12 +284,12 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         image_patches (`torch.FloatTensor` of shape `(batch_size, num_total_patches, patch_size_ x patch_size x num_channels)`, *optional*):
             Image patches to be used as continuous embeddings. The patches are flattened and then projected to the
             hidden size of the model.
+        image_patches_indices (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Tensor of indices of the image patches in the input_ids tensor.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.text_config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.text_config.vocab_size]`.
-        image_patches_indices (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Tensor of indices of the image patches in the input_ids tensor.
 
         Examples:
 
