@@ -14,6 +14,7 @@
 
 import importlib
 import inspect
+import re
 import warnings
 from typing import Any, Dict, List, Optional, Union
 
@@ -41,6 +42,26 @@ MIN_PEFT_VERSION = "0.5.0"
 
 
 logger = logging.get_logger(__name__)
+
+
+# DO NOT MODIFY, KEPT FOR BC ONLY
+VLMS = [
+    "aria",
+    "ayavision",
+    "emu3",
+    "fuyu",
+    "gotocr2",
+    "gemma3",
+    "internvl",
+    "llava",  # all llava prefixed models fall under this check
+    "mistral3",
+    "mllama",
+    "paligemma",
+    "qwen2vl",
+    "qwen2_5_vl",
+    "videollava",
+    "vipllava",
+]
 
 
 class PeftAdapterMixin:
@@ -149,6 +170,9 @@ class PeftAdapterMixin:
 
         # peft only supports low_cpu_mem_usage starting from v0.13.0
         peft_load_kwargs = {}
+        key_mapping = adapter_kwargs.pop("key_mapping", None) if adapter_kwargs is not None else None
+        if key_mapping is None and any(allowed_name in self.__class__.__name__.lower() for allowed_name in VLMS):
+            key_mapping = self._checkpoint_conversion_mapping
         if low_cpu_mem_usage:
             min_version_lcmu = "0.13.0"
             if version.parse(importlib.metadata.version("peft")) >= version.parse(min_version_lcmu):
@@ -233,6 +257,13 @@ class PeftAdapterMixin:
                 new_key = key[len(prefix) :]
             else:
                 new_key = key
+
+            if key_mapping:
+                for pattern, replacement in key_mapping.items():
+                    new_key, n_replace = re.subn(pattern, replacement, new_key)
+                    # Early exit of the loop
+                    if n_replace > 0:
+                        break
             processed_adapter_state_dict[new_key] = value
 
         # Load state dict
