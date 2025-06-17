@@ -69,18 +69,6 @@ jobs:
       report_repo_id: hf-internal-testing/transformers_daily_ci
     secrets: inherit
 
-  tf-pipeline:
-    name: TF pipeline CI
-    uses: ./.github/workflows/self-scheduled.yml
-    with:
-      job: run_pipelines_tf_gpu
-      slack_report_channel: "#transformers-ci-daily-pipeline-tf"
-      runner: daily-ci
-      docker: huggingface/transformers-tensorflow-gpu
-      ci_event: Daily CI
-      report_repo_id: hf-internal-testing/transformers_daily_ci
-    secrets: inherit
-
   example-ci:
     name: Example CI
     uses: ./.github/workflows/self-scheduled.yml

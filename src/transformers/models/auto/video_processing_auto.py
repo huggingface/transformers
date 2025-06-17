@@ -56,6 +56,7 @@ else:
             ("qwen2_vl", "Qwen2VLVideoProcessor"),
             ("smolvlm", "SmolVLMVideoProcessor"),
             ("video_llava", "VideoLlavaVideoProcessor"),
+            ("vjepa2", "VJEPA2VideoProcessor"),
         ]
     )
 
@@ -205,7 +206,7 @@ class AutoVideoProcessor:
     """
 
     def __init__(self):
-        raise EnvironmentError(
+        raise OSError(
             "AutoVideoProcessor is designed to be instantiated "
             "using the `AutoVideoProcessor.from_pretrained(pretrained_model_name_or_path)` method."
         )
@@ -305,15 +306,15 @@ class AutoVideoProcessor:
         if "AutoVideoProcessor" in config_dict.get("auto_map", {}):
             video_processor_auto_map = config_dict["auto_map"]["AutoVideoProcessor"]
 
-        # If we still don't have the video processor class, check if we're loading from a previous feature extractor config
+        # If we still don't have the video processor class, check if we're loading from a previous image processor config
         # and if so, infer the video processor class from there.
         if video_processor_class is None and video_processor_auto_map is None:
-            feature_extractor_class = config_dict.pop("feature_extractor_type", None)
-            if feature_extractor_class is not None:
-                video_processor_class = feature_extractor_class.replace("FeatureExtractor", "VideoProcessor")
-            if "AutoFeatureExtractor" in config_dict.get("auto_map", {}):
-                feature_extractor_auto_map = config_dict["auto_map"]["AutoFeatureExtractor"]
-                video_processor_auto_map = feature_extractor_auto_map.replace("FeatureExtractor", "VideoProcessor")
+            image_processor_class = config_dict.pop("image_processor_type", None)
+            if image_processor_class is not None:
+                video_processor_class = image_processor_class.replace("ImageProcessor", "VideoProcessor")
+            if "AutoImageProcessor" in config_dict.get("auto_map", {}):
+                image_processor_auto_map = config_dict["auto_map"]["AutoImageProcessor"]
+                video_processor_auto_map = image_processor_auto_map.replace("ImageProcessor", "VideoProcessor")
 
         # If we don't find the video processor class in the video processor config, let's try the model config.
         if video_processor_class is None and video_processor_auto_map is None:

@@ -15,7 +15,7 @@
 
 import enum
 from collections.abc import Iterable  # pylint: disable=g-importing-member
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, overload
 
 from ..generation import GenerationConfig
 from ..processing_utils import ProcessingKwargs, Unpack
@@ -251,6 +251,22 @@ class ImageTextToTextPipeline(Pipeline):
             generate_kwargs["eos_token_id"] = stop_sequence_ids[0]
         return preprocess_params, forward_kwargs, postprocess_params
 
+    @overload
+    def __call__(
+        self,
+        image: Optional[Union[str, "Image.Image"]] = None,
+        text: Optional[str] = None,
+        **kwargs: Any,
+    ) -> List[Dict[str, Any]]: ...
+
+    @overload
+    def __call__(
+        self,
+        image: Optional[Union[List[str], List["Image.Image"]]] = None,
+        text: Optional[List[str]] = None,
+        **kwargs: Any,
+    ) -> List[List[Dict[str, Any]]]: ...
+
     def __call__(
         self,
         images: Optional[
@@ -266,7 +282,7 @@ class ImageTextToTextPipeline(Pipeline):
         ] = None,
         text: Optional[Union[str, List[str], List[dict]]] = None,
         **kwargs,
-    ):
+    ) -> Union[List[Dict[str, Any]], List[List[Dict[str, Any]]]]:
         """
         Generate a text given text and the image(s) passed as inputs.
 
