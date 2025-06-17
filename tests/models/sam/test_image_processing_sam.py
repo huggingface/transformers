@@ -98,9 +98,7 @@ class SamImageProcessingTester:
     def expected_output_image_shape(self, images):
         return self.num_channels, self.pad_size["height"], self.pad_size["width"]
 
-    def prepare_image_inputs(
-        self, equal_resolution=False, numpify=False, torchify=False
-    ):
+    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         return prepare_image_inputs(
             batch_size=self.batch_size,
             num_channels=self.num_channels,
@@ -116,9 +114,7 @@ class SamImageProcessingTester:
 @require_vision
 class SamImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = SamImageProcessor if is_vision_available() else None
-    fast_image_processing_class = (
-        SamImageProcessorFast if is_torchvision_available() else None
-    )
+    fast_image_processing_class = SamImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
@@ -145,9 +141,7 @@ class SamImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_image_processor_from_dict_with_kwargs(self):
         for image_processing_class in self.image_processor_list:
-            image_processor = image_processing_class.from_dict(
-                self.image_processor_dict
-            )
+            image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"longest_edge": 1024})
             self.assertEqual(image_processor.pad_size, {"height": 1024, "width": 1024})
             self.assertEqual(image_processor.do_normalize, True)
