@@ -13,44 +13,33 @@
 # limitations under the License.
 """PyTorch PerceptionLM model."""
 
-from dataclasses import dataclass
+import math
 from typing import List, Optional, Tuple, Union
 
-import math
-
 import timm
-
 import torch
+import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-import torch.nn.functional as F
 
 from transformers.generation.utils import GenerationMixin
+
+# from ...generation import GenerationMixin
+from ...modeling_utils import PreTrainedModel
+from ...utils import (
+    auto_docstring,
+    logging,
+)
+from ..auto import AutoModel
+from ..llava.modeling_llava import (
+    LlavaCausalLMOutputWithPast as PerceptionLMCausalLMOutputWithPast,
+)
 from ..llava.modeling_llava import (
     LlavaModel,
     LlavaPreTrainedModel,
-    LlavaCausalLMOutputWithPast as PerceptionLMCausalLMOutputWithPast,
 )
-from transformers.configuration_utils import PretrainedConfig
-from ..auto import CONFIG_MAPPING, AutoConfig
-
-
-from ...activations import ACT2FN
-
-# from ...generation import GenerationMixin
-from ...modeling_outputs import ModelOutput
-from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    auto_docstring,
-)
-
-from ..auto import AutoModelForCausalLM
-from ..auto import AutoModel
-
 from .configuration_perception_lm import PerceptionEncoderConfig, PerceptionLMConfig
+
 
 logger = logging.get_logger(__name__)
 
@@ -344,10 +333,10 @@ class PerceptionLMForConditionalGeneration(
 
     def get_output_embeddings(self):
         return self.lm_head
-    
+
     def set_decoder(self, decoder):
         self.model = decoder
-    
+
     def get_decoder(self):
         return self.model
 

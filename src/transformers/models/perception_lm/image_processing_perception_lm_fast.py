@@ -12,11 +12,11 @@
 # limitations under the License.
 """Fast Image processor class for PerceptionLM."""
 
+import math
+from functools import reduce
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
-import math
-from functools import reduce
 
 from ...image_processing_utils import (
     BatchFeature,
@@ -24,9 +24,15 @@ from ...image_processing_utils import (
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
+    get_image_size,
     group_images_by_shape,
     reorder_images,
-    get_image_size,
+)
+from ...image_utils import (
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
+    ChannelDimension,
+    PILImageResampling,
 )
 from ...processing_utils import Unpack
 from ...utils import (
@@ -35,12 +41,7 @@ from ...utils import (
     is_torch_available,
     is_torchvision_available,
 )
-from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
-    ChannelDimension,
-    PILImageResampling,
-)
+
 
 if is_torch_available():
     import torch
@@ -212,7 +213,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
         """
         tgt_ar = img_width / img_height
         asp_dict = self._find_supported_aspect_ratios()
-        cl_d, cl_p = 1e23, None
+        cl_p = None
         if tgt_ar >= 1:
             cl_p = min(
                 [k for k in asp_dict.keys() if k <= tgt_ar],

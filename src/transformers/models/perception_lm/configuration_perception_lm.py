@@ -13,10 +13,11 @@
 # limitations under the License.
 """PerceptionLM model configuration"""
 
+
 from transformers.configuration_utils import PretrainedConfig
+
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
-from typing import Tuple
 
 
 logger = logging.get_logger(__name__)
