@@ -32,6 +32,7 @@ from transformers.testing_utils import (
     require_accelerate,
     require_fsdp,
     require_torch_accelerator,
+    require_torch_gpu,
     require_torch_multi_accelerator,
     run_first,
     slow,
@@ -358,6 +359,8 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             raise AssertionError("CPU offloading failed with FSDP!")
 
     @require_torch_multi_accelerator
+    @require_torch_gpu
+    @run_first
     @slow
     @require_fsdp_v2_version
     @require_accelerate_fsdp2
@@ -405,6 +408,8 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
                 self.assertAlmostEqual(log["learning_rate"], log1["learning_rate"], delta=1e-5)
 
     @require_torch_multi_accelerator
+    @require_torch_gpu
+    @run_first
     @slow
     @require_fsdp
     @require_fsdp_v2_version

@@ -3019,6 +3019,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     # the test slower.
     @require_torch_non_multi_accelerator
     @run_test_using_subprocess
+    @run_first
     @slow
     def test_can_resume_training_lm(self):
         # Check if it works for a simple language modeling example
@@ -3474,7 +3475,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 )
 
     @slow
-    @run_first
     def test_trainer_eval_mrpc(self):
         MODEL_ID = "google-bert/bert-base-cased-finetuned-mrpc"
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
@@ -3491,7 +3491,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertLess(result["eval_loss"], 0.2)
 
     @slow
-    @run_first
     def test_trainer_eval_multiple(self):
         MODEL_ID = "openai-community/gpt2"
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
@@ -4082,6 +4081,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertListEqual(trainer.optimizer.param_groups[1]["params"], no_wd_params)
 
     @slow
+    @run_first
     @require_non_hpu
     @require_torch_multi_accelerator
     def test_end_to_end_example(self):
