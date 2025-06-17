@@ -77,7 +77,7 @@ python -m fms_mo.run_quant \
      - `max_length_q: int`: the longest query length in the batch.
      - `max_length_k: int`: the longest key length in the batch.
 
-The `attention_mask` inputs should not be provided. The [`DataCollatorWithFlattening`] can be used to programmatically generate the above set of additional arguments using `return_seq_idx=True` and `return_flash_attn_kwargs=True`. See [this blog post](https://huggingface.co/blog/packing-with-FA2) for additional information.
+   The `attention_mask` inputs should not be provided. The [`DataCollatorWithFlattening`] programmatically generates the set of additional arguments above using `return_seq_idx=True` and `return_flash_attn_kwargs=True`. See the [Improving Hugging Face Training Efficiency Through Packing with Flash Attention](https://huggingface.co/blog/packing-with-FA2) blog post for additional information.
 
 ```python
 from transformers import DataCollatorWithFlattening
