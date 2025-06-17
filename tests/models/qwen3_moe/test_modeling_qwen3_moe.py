@@ -145,10 +145,22 @@ class Qwen3MoeModelTest(CausalLMModelTest, unittest.TestCase):
 
 @require_torch
 class Qwen3MoeIntegrationTest(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.model = None
+
+    @classmethod
+    def get_model(cls):
+        if cls.model is None:
+            cls.model = Qwen3MoeForCausalLM.from_pretrained("Qwen/Qwen3-30B-A3B-Base", device_map="auto", load_in_4bit=True)
+
+        return cls.model
+
     @slow
     def test_model_15b_a2b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = Qwen3MoeForCausalLM.from_pretrained("Qwen/Qwen3-30B-A3B-Base", device_map="auto")
+        model = self.get_model()
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         with torch.no_grad():
             out = model(input_ids).logits.float().cpu()
@@ -170,7 +182,7 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
         )
         prompt = "To be or not to"
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-30B-A3B-Base", use_fast=False)
-        model = Qwen3MoeForCausalLM.from_pretrained("Qwen/Qwen3-30B-A3B-Base", device_map="auto")
+        model = self.get_model()
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
         # greedy generation outputs
@@ -218,11 +230,7 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
         EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
         # An input with 4097 tokens that is above the size of the sliding window
         input_ids = [1] + [306, 338] * 2048
-        model = Qwen3MoeForCausalLM.from_pretrained(
-            "Qwen/Qwen3-30B-A3B-Base",
-            device_map="auto",
-            attn_implementation="sdpa",
-        )
+        model = self.get_model()
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
@@ -259,12 +267,8 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
         )
         prompt = "To be or not to"
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-30B-A3B-Base", use_fast=False)
-        model = Qwen3MoeForCausalLM.from_pretrained(
-            "Qwen/Qwen3-30B-A3B-Base", device_map="auto", torch_dtype=torch.float16
-        )
-        assistant_model = Qwen3MoeForCausalLM.from_pretrained(
-            "Qwen/Qwen3-30B-A3B-Base", device_map="auto", torch_dtype=torch.float16
-        )
+        model = self.get_model()
+        assistant_model = model
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
         # greedy generation outputs
