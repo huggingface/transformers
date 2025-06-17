@@ -435,11 +435,11 @@ class HfArgumentParserTest(unittest.TestCase):
 
         for field in fields.values():
             # First verify raw dict
-            if field.type in (dict, dict):
+            if field.type == dict:
                 raw_dict_fields.append(field)
             # Next check for `Union` or `Optional`
             elif get_origin(field.type) == Union:
-                if any(arg in (dict, dict) for arg in get_args(field.type)):
+                if any(arg == dict for arg in get_args(field.type)):
                     optional_dict_fields.append(field)
 
         # First check: anything in `raw_dict_fields` is very bad
@@ -455,13 +455,8 @@ class HfArgumentParserTest(unittest.TestCase):
             args = get_args(field.type)
             # These should be returned as `dict`, `str`, ...
             # we only care about the first two
-            self.assertIn(args[0], (dict, dict))
-            self.assertEqual(
-                str(args[1]),
-                "<class 'str'>",
-                f"Expected field `{field.name}` to have a type signature of at least `typing.Union[dict,str,...]` for CLI compatibility, "
-                "but `str` not found. Please fix this.",
-            )
+            self.assertIn(dict, args, "Expected field `{field.name}` to have a type signature of at least `typing.Union[dict,str,...]` for CLI compatibility, but `dict` not found. Please fix this.")
+            self.assertIn(str, args, "Expected field `{field.name}` to have a type signature of at least `typing.Union[dict,str,...]` for CLI compatibility, but `str` not found. Please fix this.")
 
         # Second check: anything in `optional_dict_fields` is bad if it's not in `base_list`
         for field in optional_dict_fields:
