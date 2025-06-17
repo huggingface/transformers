@@ -165,11 +165,10 @@ class T5GemmaConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`T5GemmaModel`]. It is used to instantiate an T5Gemma
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to a hypothetical balanced Gemma2 encoder-decoder model.
-    For example, to create a balanced encoder-decoder model from two "google/gemma2-2b" configurations:
+    e.g. [google/t5gemma-placeholder](https://huggingface.co/google/t5gemma-placeholder)
     ```python
-    >>> from transformers import Gemma2Config, T5GemmaConfig, T5GemmaModel
-    >>> base_config = Gemma2Config.from_pretrained("google/gemma2-2b")
-    >>> t5gemma_config = T5GemmaConfig(encoder=base_config, decoder=base_config)
+    >>> from transformers import T5GemmaConfig, T5GemmaModel
+    >>> t5gemma_config = T5GemmaConfig.from_pretrained("google/t5gemma-placeholder")
     >>> model = T5GemmaModel(t5gemma_config)
     ```
     Configuration objects inherit from [PretrainedConfig] and can be used to control the model outputs. Read the
