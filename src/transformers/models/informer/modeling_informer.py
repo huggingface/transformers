@@ -1461,8 +1461,12 @@ class InformerModel(InformerPreTrainedModel):
         )
 
         # static features
-        squeezed_loc = loc.squeeze(1)
-        squeezed_scale = scale.squeeze(1)
+        if loc.ndim == 3:
+            squeezed_loc = loc.squeeze(1)
+            squeezed_scale = scale.squeeze(1)
+        else:
+            squeezed_loc = loc
+            squeezed_scale = scale
         log_abs_loc = squeezed_loc.abs().log1p()
         log_scale = squeezed_scale.log()
         static_feat = torch.cat((log_abs_loc, log_scale), dim=1)
