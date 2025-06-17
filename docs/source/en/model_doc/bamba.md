@@ -69,13 +69,13 @@ python -m fms_mo.run_quant \
 
    Padding-free training requires the `flash-attn`, `mamba-ssm`, and `causal-conv1d` packages and the following arguments must be passed to the model in addition to `input_ids` and `labels`.
 
-- `position_ids: torch.LongTensor`: the position index of each token in each sequence.
-- `seq_idx: torch.IntTensor`: the index of each sequence in the batch.
-- Each of the [`FlashAttentionKwargs`]
-  - `cu_seq_lens_q: torch.LongTensor`: The cumulative sequence lengths of all queries.
-  - `cu_seq_lens_k: torch.LongTensor`: The cumulative sequence lengths of all keys.
-  - `max_length_q: int`: the longest query length in the batch.
-  - `max_length_k: int`: the longest key length in the batch.
+   - `position_ids: torch.LongTensor`: the position index of each token in each sequence.
+   - `seq_idx: torch.IntTensor`: the index of each sequence in the batch.
+   - Each of the [`FlashAttentionKwargs`]
+     - `cu_seq_lens_q: torch.LongTensor`: the cumulative sequence lengths of all queries.
+     - `cu_seq_lens_k: torch.LongTensor`: the cumulative sequence lengths of all keys.
+     - `max_length_q: int`: the longest query length in the batch.
+     - `max_length_k: int`: the longest key length in the batch.
 
 The `attention_mask` inputs should not be provided. The [`DataCollatorWithFlattening`] can be used to programmatically generate the above set of additional arguments using `return_seq_idx=True` and `return_flash_attn_kwargs=True`. See [this blog post](https://huggingface.co/blog/packing-with-FA2) for additional information.
 
