@@ -504,9 +504,7 @@ class ModernBertMLP(nn.Module):
 
 
 class ModernBertRotaryEmbedding(GemmaRotaryEmbedding):
-    def __init__(self, config: ModernBertConfig, dim: int, base: float, device: Optional[torch.device] = None):
-        super().__init__(self, config=config, device=device)
-        inv_freq, self.attention_scaling = self.rope_init_fn(None, device, dim=dim, base=base)
+    pass
 
 
 def eager_attention_forward(

@@ -889,7 +889,10 @@ class WhisperDecoder(WhisperPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+            if self.config.is_encoder_decoder:
+                past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+            else:
+                past_key_values = DynamicCache()
 
         past_key_values_length = 0
         if cache_position is not None:

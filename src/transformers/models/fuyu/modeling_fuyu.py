@@ -41,6 +41,7 @@ class FuyuPreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = True
     _supports_sdpa = True
     _supports_flex_attn = True
+    _supports_cache_class = True
     _no_split_modules = []
     _skip_keys_device_placement = "past_key_values"
 
@@ -184,15 +185,9 @@ class FuyuModel(FuyuPreTrainedModel):
         else:
             raise ValueError("You have to specify either input_is or inputs_embeds")
 
-        seq_length_with_past = seq_length
-        past_key_values_length = 0
-
-        if past_key_values is not None:
-            past_key_values_length = past_key_values[0][0].shape[2]
-            seq_length_with_past = seq_length_with_past + past_key_values_length
-
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
+            past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
             position_ids = torch.arange(
                 past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
             )
@@ -200,7 +195,8 @@ class FuyuModel(FuyuPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
-            if image_patches is not None and past_key_values is None:
+
+            if image_patches is not None:
                 patch_embeddings = self.get_image_features(image_patches)
                 patch_embeddings = torch.cat(patch_embeddings, dim=0)
 
