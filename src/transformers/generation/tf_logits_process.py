@@ -242,7 +242,7 @@ class TFRepetitionPenaltyLogitsProcessor(TFLogitsProcessor):
     Args:
         repetition_penalty (`float`):
             The parameter for repetition penalty. 1.0 means no penalty. See [this
-            paper](https://arxiv.org/pdf/1909.05858.pdf) for more details.
+            paper](https://huggingface.co/papers/1909.05858) for more details.
     """
 
     def __init__(self, penalty: float):
