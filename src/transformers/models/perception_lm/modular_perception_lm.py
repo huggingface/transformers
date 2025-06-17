@@ -251,9 +251,11 @@ class PerceptionLMModel(LlavaModel):
             raise ValueError(
                 "You must specify exactly one of input_ids or inputs_embeds"
             )
-        if pixel_values is not None and inputs_embeds is not None:
+        if (
+            pixel_values is not None or pixel_values_videos is not None
+        ) and inputs_embeds is not None:
             raise ValueError(
-                "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
+                "You cannot specify both (pixel_values or pixel_values_videos) and inputs_embeds at the same time, and must specify either one"
             )
 
         if inputs_embeds is None:
@@ -326,6 +328,12 @@ class PerceptionLMForConditionalGeneration(
 
     def get_output_embeddings(self):
         return self.lm_head
+    
+    def set_decoder(self, decoder):
+        self.model = decoder
+    
+    def get_decoder(self):
+        return self.model
 
     def prepare_inputs_for_generation(
         self,

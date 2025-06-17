@@ -16,33 +16,33 @@ rendered properly in your Markdown viewer.
 
 # PerceptionLM
 
-# PerceptionLM
-
-# PerceptionLM
-
-# PerceptionLM
-
-# PerceptionLM
-
-# PerceptionLM
-
-# PerceptionLM
-
 ## Overview
 
-The PerceptionLM model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The PerceptionLM model was proposed in [PerceptionLM: Open-Access Data and Models for Detailed Visual Understanding](https://ai.meta.com/research/publications/perceptionlm-open-access-data-and-models-for-detailed-visual-understanding/) by Jang Hyun Cho et al. It's a fully open, reproducible model for transparent research in image and video understanding. PLM consists of
+a vision encoder with a small scale (<8B parameters) LLM decoder.
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+*Vision-language models are integral to computer vision research, yet many high-performing models
+remain closed-source, obscuring their data, design and training recipe. The research community
+has responded by using distillation from black-box models to label training data, achieving strong
+benchmark results, at the cost of measurable scientific progress. However, without knowing the details
+of the teacher model and its data sources, scientific progress remains difficult to measure. In this
+paper, we study building a Perception Language Model (PLM) in a fully open and reproducible
+framework for transparent research in image and video understanding. We analyze standard training
+pipelines without distillation from proprietary models and explore large-scale synthetic data to identify
+critical data gaps, particularly in detailed video understanding. To bridge these gaps, we release 2.8M
+human-labeled instances of fine-grained video question-answer pairs and spatio-temporally grounded
+video captions. Additionally, we introduce PLM–VideoBench, a suite for evaluating challenging video
+understanding tasks focusing on the ability to reason about “what”, “where”, “when”, and “how” of a
+video. We make our work fully reproducible by providing data, training recipes, code & models.*
 
 Tips:
 
 <INSERT TIPS ABOUT MODEL HERE>
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [shumingh](https://huggingface.co/shumingh).
+The original code can be found [here](https://github.com/facebookresearch/perception_models).
 
 
 ## PerceptionLMConfig
