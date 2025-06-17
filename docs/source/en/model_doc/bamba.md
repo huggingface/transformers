@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 # Bamba
 
-[Bamba](https://huggingface.co/ibm-ai-platform/Bamba-9B-v1) is a 9B parameter decoder-only language model that's built on the cutting-edge [Mamba-2](https://github.com/state-spaces/mamba) architecture. Think of it as a next-generation language model that combines the efficiency of state-space models with the power of attention mechanisms. What makes Bamba special is its two-stage training approach - it starts with a solid foundation on 2 trillion tokens from the Dolma v1.7 dataset, then gets fine-tuned on an additional 200 billion carefully curated high-quality tokens to really make it shine.
+[Bamba](https://huggingface.co/blog/bamba) is a 9B parameter decoder-only language model built on the [Mamba-2](./mamba2) architecture. It is pretrained in two stages - it starts by training on 2T tokens from the [Dolma v1.7](https://huggingface.co/datasets/allenai/dolma) dataset and then trained on an additional 200B tokens from [FineWeb](https://huggingface.co/datasets/HuggingFaceFW/fineweb) and [Cosmopedia](https://huggingface.co/datasets/HuggingFaceTB/cosmopedia).
 
 You can find all the original Bamba checkpoints under the [foundation-model-stack](https://github.com/foundation-model-stack/bamba) collection and the [ibm-ai-platform](https://huggingface.co/ibm-ai-platform/Bamba-9B-v1) collection.
 
