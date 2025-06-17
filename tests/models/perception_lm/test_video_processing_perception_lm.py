@@ -123,5 +123,5 @@ class PerceptionLMVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCas
         self.assertEqual(video_processor.crop_size, {"height": 18, "width": 18})
 
         video_processor = self.fast_video_processing_class.from_dict(self.video_processor_dict, size=42, crop_size=84)
-        self.assertEqual(video_processor.size, {'height': 42, 'width': 42})
+        self.assertEqual(video_processor.size, {"height": 42, "width": 42})
         self.assertEqual(video_processor.crop_size, {"height": 84, "width": 84})

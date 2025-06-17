@@ -36,6 +36,7 @@ if is_torch_available():
 
 TEST_MODEL_PATH = "shumingh/plm_1b_hf"
 
+
 @require_vision
 class PerceptionLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = PerceptionLMProcessor
@@ -49,15 +50,10 @@ class PerceptionLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         video_processor = PerceptionLMVideoProcessor()
         tokenizer = AutoTokenizer.from_pretrained(TEST_MODEL_PATH)
-        tokenizer.add_special_tokens(
-            {"additional_special_tokens": ["<|image|>", "<|video|>"]}
-        )
+        tokenizer.add_special_tokens({"additional_special_tokens": ["<|image|>", "<|video|>"]})
         processor_kwargs = cls.prepare_processor_dict()
         processor = PerceptionLMProcessor(
-            image_processor=image_processor,
-            video_processor=video_processor,
-            tokenizer=tokenizer,
-            **processor_kwargs
+            image_processor=image_processor, video_processor=video_processor, tokenizer=tokenizer, **processor_kwargs
         )
         processor.save_pretrained(cls.tmpdirname)
         cls.image_token_id = processor.image_token_id
@@ -90,9 +86,7 @@ class PerceptionLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # they have to be saved as separate file and loaded back from that file
         # so we check if the same template is loaded
         processor_dict = self.prepare_processor_dict()
-        self.assertTrue(
-            processor_loaded.chat_template == processor_dict.get("chat_template", None)
-        )
+        self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
 
     def test_image_token_filling(self):
         processor = self.processor_class.from_pretrained(self.tmpdirname)

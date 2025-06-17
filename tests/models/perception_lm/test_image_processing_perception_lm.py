@@ -32,6 +32,7 @@ if is_vision_available():
     if is_torchvision_available():
         from transformers import PerceptionLMImageProcessorFast
 
+
 class PerceptionLMImageProcessingTester:
     def __init__(
         self,
@@ -49,8 +50,8 @@ class PerceptionLMImageProcessingTester:
         do_convert_rgb=True,
         max_num_tiles=4,
         vision_input_type="thumb+tile",
-        resample=Image.Resampling.BICUBIC, # dummy value
-        size = {"shortest_edge": 20}, # dummy value
+        resample=Image.Resampling.BICUBIC,  # dummy value
+        size={"shortest_edge": 20},  # dummy value
     ):
         super().__init__()
         self.parent = parent
@@ -134,7 +135,9 @@ class PerceptionLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCas
             self.assertEqual(image_processor.max_num_tiles, 4)
             self.assertEqual(image_processor.vision_input_type, "thumb+tile")
 
-            image_processor = image_processing_class.from_dict(self.image_processor_dict, tile_size=42, max_num_tiles=9)
+            image_processor = image_processing_class.from_dict(
+                self.image_processor_dict, tile_size=42, max_num_tiles=9
+            )
             self.assertEqual(image_processor.tile_size, 42)
             self.assertEqual(image_processor.max_num_tiles, 9)
             self.assertEqual(image_processor.vision_input_type, "thumb+tile")
@@ -197,9 +200,7 @@ class PerceptionLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCas
             expected_output_image_shape = (7, 5, 3, 16, 16)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
-    @unittest.skip(
-        reason="PerceptionLMImageProcessor doesn't treat 4 channel PIL and numpy consistently yet"
-    )
+    @unittest.skip(reason="PerceptionLMImageProcessor doesn't treat 4 channel PIL and numpy consistently yet")
     def test_call_numpy_4_channels(self):
         pass
 
