@@ -3739,6 +3739,14 @@ class Trainer:
         model.train()
         if hasattr(self.optimizer, "train") and callable(self.optimizer.train):
             self.optimizer.train()
+        
+        # tracking attributes for compute_loss
+        if not hasattr(self, "_accumulated_steps"):
+            self._accumulated_steps = 0
+        if not hasattr(self, "_loss_accumulator"):
+            self._loss_accumulator = 0.0
+        if not hasattr(self, "_batch_counter"):
+            self._batch_counter = 0
 
         inputs = self._prepare_inputs(inputs)
         if is_sagemaker_mp_enabled():
@@ -3770,33 +3778,61 @@ class Trainer:
             else:
                 torch.cuda.empty_cache()
 
+        # logic for accumulating loss
+        self._accumulated_steps += 1
+        self._loss_accumulator += loss
+        self._batch_counter += 1
+
         kwargs = {}
 
         # For LOMO optimizers you need to explicitly use the learnign rate
         if self.args.optim in [OptimizerNames.LOMO, OptimizerNames.ADALOMO]:
             kwargs["learning_rate"] = self._get_learning_rate()
 
-        if self.args.n_gpu > 1:
-            loss = loss.mean()  # mean() to average on multi-gpu parallel training
+        # Deciding whether to perform optimizer step
+        is_final_step = (
+            self.control.should_training_stop
+            or (self._current_flos >= self.args.max_steps if self.args.max_steps > 0 else False)
+        )
+        should_step = (
+            self._accumulated_steps == self.args.gradient_accumulation_steps
+            or is_final_step
+        )
 
-        if self.use_apex:
-            from apex import amp
+        if should_step:
+            avg_loss = self._loss_accumulator / self._accumulated_steps
 
-            with amp.scale_loss(loss, self.optimizer) as scaled_loss:
-                scaled_loss.backward()
-        else:
-            # Finally we need to normalize the loss for reporting if GA loss bug is not fixed during compute loss
-            if (not self.model_accepts_loss_kwargs or num_items_in_batch is None) and self.compute_loss_func is None:
-                loss = loss / self.args.gradient_accumulation_steps
+            if self.args.n_gpu > 1:
+                avg_loss = avg_loss.mean()  # mean() to average on multi-gpu parallel training
 
-            # Turning off loss scaling w.r.t. gradient accumulation when DeepSpeed is enabled
-            # https://github.com/huggingface/transformers/pull/35808
-            if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
-                kwargs["scale_wrt_gas"] = False
+            if self.use_apex:
+                from apex import amp
+                with amp.scale_loss(avg_loss, self.optimizer) as scaled_loss:
+                    scaled_loss.backward()
+            else:
+                # Finally we need to normalize the loss for reporting if GA loss bug is not fixed during compute loss
+                # if (not self.model_accepts_loss_kwargs or num_items_in_batch is None) and self.compute_loss_func is None:
+                #     loss = loss / self.args.gradient_accumulation_steps
 
-            self.accelerator.backward(loss, **kwargs)
+                # Turning off loss scaling w.r.t. gradient accumulation when DeepSpeed is enabled
+                # https://github.com/huggingface/transformers/pull/35808
+                if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
+                    kwargs["scale_wrt_gas"] = False
+                self.accelerator.backward(avg_loss, **kwargs)
 
-            return loss.detach()
+            self.optimizer.step()
+            self.lr_scheduler.step()
+            self.optimizer.zero_grad()
+
+            self.state.global_step += 1
+            self.log({"loss": avg_loss.item()})
+
+            self._accumulated_steps = 0
+            self._loss_accumulator = 0.0
+
+            return avg_loss.detach()
+        
+        return loss.detach()
 
     def compute_loss(
         self,
