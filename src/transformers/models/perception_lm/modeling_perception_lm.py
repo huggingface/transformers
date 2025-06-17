@@ -29,8 +29,9 @@ from torch import nn
 
 from transformers.generation.utils import GenerationMixin
 
-# from ...generation import GenerationMixin
 from ...modeling_outputs import ModelOutput
+
+# from ...generation import GenerationMixin
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, can_return_tuple
 from ..auto import AutoModel
