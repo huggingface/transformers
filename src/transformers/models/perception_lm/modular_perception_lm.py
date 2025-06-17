@@ -82,9 +82,7 @@ class AdaptiveAvgPooling(nn.Module):
         b, num_tokens, c = hidden_states.shape
         h = int(math.sqrt(num_tokens))
         if h * h != num_tokens:
-            raise ValueError(
-                f"num_tokens {num_tokens} is expected to be a square number"
-            )
+            raise ValueError(f"num_tokens {num_tokens} is expected to be a square number")
 
         shape = (h // self.pooling_ratio, h // self.pooling_ratio)
         hidden_states = hidden_states.permute(0, 2, 1).reshape(b, -1, h, h)
@@ -115,9 +113,7 @@ class PerceptionLMMultiModalProjector(nn.Module):
             ]
         )
         self.pooling = (
-            AdaptiveAvgPooling(config.projector_pooling_ratio)
-            if config.projector_pooling_ratio > 1
-            else nn.Identity()
+            AdaptiveAvgPooling(config.projector_pooling_ratio) if config.projector_pooling_ratio > 1 else nn.Identity()
         )
 
     def forward(self, features):
@@ -239,26 +235,14 @@ class PerceptionLMModel(LlavaModel):
         "USER:  \nWhat's the content of the image? ASSISTANT: The image features a busy city street with a stop sign prominently displayed"
         ```"""
 
-        output_attentions = (
-            output_attentions
-            if output_attentions is not None
-            else self.config.output_attentions
-        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You must specify exactly one of input_ids or inputs_embeds"
-            )
-        if (
-            pixel_values is not None or pixel_values_videos is not None
-        ) and inputs_embeds is not None:
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+        if (pixel_values is not None or pixel_values_videos is not None) and inputs_embeds is not None:
             raise ValueError(
                 "You cannot specify both (pixel_values or pixel_values_videos) and inputs_embeds at the same time, and must specify either one"
             )
@@ -273,13 +257,9 @@ class PerceptionLMModel(LlavaModel):
             )
             special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
             self.check_mask_feature_size_match(special_image_mask, image_features)
-            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(
-                inputs_embeds.device
-            )
+            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
             image_features = image_features.to(inputs_embeds)
-            inputs_embeds = inputs_embeds.masked_scatter(
-                special_image_mask, image_features
-            )
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         if pixel_values_videos is not None:
             video_features = self.get_image_features(
@@ -287,13 +267,9 @@ class PerceptionLMModel(LlavaModel):
             )
             special_video_mask = (input_ids == self.config.video_token_id).unsqueeze(-1)
             self.check_mask_feature_size_match(special_video_mask, video_features)
-            special_video_mask = special_video_mask.expand_as(inputs_embeds).to(
-                inputs_embeds.device
-            )
+            special_video_mask = special_video_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
             video_features = video_features.to(inputs_embeds)
-            inputs_embeds = inputs_embeds.masked_scatter(
-                special_video_mask, video_features
-            )
+            inputs_embeds = inputs_embeds.masked_scatter(special_video_mask, video_features)
 
         outputs = self.language_model(
             attention_mask=attention_mask,
@@ -312,17 +288,13 @@ class PerceptionLMModel(LlavaModel):
 
 
 @auto_docstring
-class PerceptionLMForConditionalGeneration(
-    PerceptionLMPreTrainedModel, GenerationMixin
-):
+class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: PerceptionLMConfig, **super_kwargs):
         super().__init__(config, **super_kwargs)
         self.model = PerceptionLMModel(config)
-        self.lm_head = nn.Linear(
-            config.text_config.hidden_size, config.text_config.vocab_size, bias=False
-        )
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
 
     def get_input_embeddings(self):
@@ -437,11 +409,7 @@ class PerceptionLMForConditionalGeneration(
 
         hidden_states = outputs[0]
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = (
-            slice(-logits_to_keep, None)
-            if isinstance(logits_to_keep, int)
-            else logits_to_keep
-        )
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None

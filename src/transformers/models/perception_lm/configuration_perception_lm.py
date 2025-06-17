@@ -13,7 +13,6 @@
 # limitations under the License.
 """PerceptionLM model configuration"""
 
-
 from transformers.configuration_utils import PretrainedConfig
 
 from ...utils import logging
@@ -70,7 +69,9 @@ class PerceptionEncoderConfig(PretrainedConfig):
     >>> configuration = model.config
     ```
     """
+
     model_type = "perception_encoder"
+
     def __init__(
         self,
         use_cls_token=True,
@@ -96,6 +97,7 @@ class PerceptionEncoderConfig(PretrainedConfig):
         self.use_post_transformer_norm = use_post_transformer_norm
         self.init_values = init_values
         self.ref_feat_shape = ref_feat_shape
+
 
 class PerceptionLMConfig(PretrainedConfig):
     r"""
