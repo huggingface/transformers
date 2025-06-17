@@ -69,16 +69,6 @@ generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
 print(generated_text)
 ```
 
-</hfoption>
-<hfoption id="transformers-cli">
-
-```python
-echo -e "The future of coding is" | transformers-cli run --task text-generation --model microsoft/Phi-4-multimodal-instruct --device 0
-```
-
-</hfoption>
-</hfoptions>
-
 ## Notes
 
 ## Phi4MultimodalFeatureExtractor
