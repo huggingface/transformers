@@ -270,12 +270,15 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
-                thumbnails, _ = self.resize(stacked_images, self.tile_size, max_num_tiles=1)
-                images_for_tiling, (tiles_w, tiles_h) = self.resize(
-                    stacked_images, self.tile_size, max_num_tiles=self.max_num_tiles
-                )
-                image_tiles = self._split(images_for_tiling, tiles_w, tiles_h)
-                stacked_images = torch.cat([thumbnails.unsqueeze(1), image_tiles], dim=1)
+                if self.vision_input_type == "thumb+tile":
+                    thumbnails, _ = self.resize(stacked_images, self.tile_size, max_num_tiles=1)
+                    images_for_tiling, (tiles_w, tiles_h) = self.resize(
+                        stacked_images, self.tile_size, max_num_tiles=self.max_num_tiles
+                    )
+                    image_tiles = self._split(images_for_tiling, tiles_w, tiles_h)
+                    stacked_images = torch.cat([thumbnails.unsqueeze(1), image_tiles], dim=1)
+                else: # vanilla single tile for low memory devices
+                    stacked_images, _ = self.resize(stacked_images, self.tile_size, max_num_tiles=1)
 
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
