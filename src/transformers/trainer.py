@@ -821,7 +821,7 @@ class Trainer:
     def _activate_neftune(self, model):
         r"""
         Activates the neftune as presented in this code: https://github.com/neelsjain/NEFTune and paper:
-        https://arxiv.org/abs/2310.05914
+        https://huggingface.co/papers/2310.05914
         """
         unwrapped_model = self.accelerator.unwrap_model(model)
 
@@ -932,7 +932,7 @@ class Trainer:
         columns = [k for k in signature_columns if k in dataset.column_names]
         if len(columns) == 0:
             raise ValueError(
-                "No columns in the dataset match the model's forward method signature: ({', '.join(signature_columns)}). "
+                f"No columns in the dataset match the model's forward method signature: ({', '.join(signature_columns)}). "
                 f"The following columns have been ignored: [{', '.join(ignored_columns)}]. "
                 "Please check the dataset and model. You may need to set `remove_unused_columns=False` in `TrainingArguments`."
             )

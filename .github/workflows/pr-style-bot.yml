@@ -5,6 +5,9 @@ on:
   issue_comment:
     types: [created]
 
+permissions:
+  pull-requests: write
+
 jobs:
   style:
     uses: huggingface/huggingface_hub/.github/workflows/style-bot-action.yml@main

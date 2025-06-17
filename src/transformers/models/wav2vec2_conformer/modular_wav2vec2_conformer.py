@@ -73,7 +73,7 @@ class Wav2Vec2ConformerPositionalConvEmbedding(Wav2Vec2PositionalConvEmbedding):
 
 class Wav2Vec2ConformerRotaryPositionalEmbedding(nn.Module):
     """Rotary positional embedding
-    Reference : https://blog.eleuther.ai/rotary-embeddings/ Paper: https://arxiv.org/pdf/2104.09864.pdf
+    Reference : https://blog.eleuther.ai/rotary-embeddings/ Paper: https://huggingface.co/papers/2104.09864
     """
 
     def __init__(self, config):
@@ -140,7 +140,7 @@ class Wav2Vec2ConformerRelPositionalEmbedding(nn.Module):
 
         # Reverse the order of positive indices and concat both positive and
         # negative indices. This is used to support the shifting trick
-        # as in https://arxiv.org/abs/1901.02860
+        # as in https://huggingface.co/papers/1901.02860
         pe_positive = torch.flip(pe_positive, [0]).unsqueeze(0)
         pe_negative = pe_negative[1:].unsqueeze(0)
         pe = torch.cat([pe_positive, pe_negative], dim=1)
@@ -250,7 +250,7 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
             # linear transformation for positional encoding
             self.linear_pos = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
             # these two learnable bias are used in matrix c and matrix d
-            # as described in https://arxiv.org/abs/1901.02860 Section 3.3
+            # as described in https://huggingface.co/papers/1901.02860 Section 3.3
             self.pos_bias_u = nn.Parameter(torch.zeros(self.num_heads, self.head_size))
             self.pos_bias_v = nn.Parameter(torch.zeros(self.num_heads, self.head_size))
 
@@ -292,7 +292,7 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
                     " 'relative'"
                 )
             # apply relative_position_embeddings to qk scores
-            # as proposed in Transformer_XL: https://arxiv.org/abs/1901.02860
+            # as proposed in Transformer_XL: https://huggingface.co/papers/1901.02860
             scores = self._apply_relative_embeddings(
                 query=query, key=key, relative_position_embeddings=relative_position_embeddings
             )
@@ -352,7 +352,7 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
         q_with_bias_v = (query + self.pos_bias_v).transpose(1, 2)
 
         # 3. attention score: first compute matrix a and matrix c
-        # as described in https://arxiv.org/abs/1901.02860 Section 3.3
+        # as described in https://huggingface.co/papers/1901.02860 Section 3.3
         # => (batch, head, time1, time2)
         scores_ac = torch.matmul(q_with_bias_u, key.transpose(-2, -1))
 
@@ -376,7 +376,7 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
 
 
 class Wav2Vec2ConformerEncoderLayer(nn.Module):
-    """Conformer block based on https://arxiv.org/abs/2005.08100."""
+    """Conformer block based on https://huggingface.co/papers/2005.08100."""
 
     def __init__(self, config):
         super().__init__()
@@ -496,7 +496,7 @@ class Wav2Vec2ConformerEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
             skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False

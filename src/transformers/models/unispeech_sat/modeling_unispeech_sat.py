@@ -532,7 +532,7 @@ class UniSpeechSatEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
             skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
@@ -705,7 +705,7 @@ class UniSpeechSatEncoderStableLayerNorm(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
             skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
@@ -770,7 +770,7 @@ class UniSpeechSatEncoderStableLayerNorm(nn.Module):
 class UniSpeechSatGumbelVectorQuantizer(nn.Module):
     """
     Vector quantization using gumbel softmax. See `[CATEGORICAL REPARAMETERIZATION WITH
-    GUMBEL-SOFTMAX](https://arxiv.org/pdf/1611.01144.pdf) for more information.
+    GUMBEL-SOFTMAX](https://huggingface.co/papers/1611.01144) for more information.
     """
 
     def __init__(self, config):
@@ -920,7 +920,7 @@ def _compute_mask_indices(
 ) -> np.ndarray:
     """
     Computes random mask spans for a given shape. Used to implement [SpecAugment: A Simple Data Augmentation Method for
-    ASR](https://arxiv.org/abs/1904.08779). Note that this method is not optimized to run on TPU and should be run on
+    ASR](https://huggingface.co/papers/1904.08779). Note that this method is not optimized to run on TPU and should be run on
     CPU as part of the preprocessing during training.
 
     Args:
@@ -1059,7 +1059,7 @@ class UniSpeechSatModel(UniSpeechSatPreTrainedModel):
     ):
         """
         Masks extracted features along time axis and/or along feature axis according to
-        [SpecAugment](https://arxiv.org/abs/1904.08779).
+        [SpecAugment](https://huggingface.co/papers/1904.08779).
         """
 
         # `config.apply_spec_augment` can set masking to False

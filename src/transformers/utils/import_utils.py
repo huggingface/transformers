@@ -225,6 +225,7 @@ _triton_available = _is_package_available("triton")
 _spqr_available = _is_package_available("spqr_quant")
 _rich_available = _is_package_available("rich")
 _kernels_available = _is_package_available("kernels")
+_matplotlib_available = _is_package_available("matplotlib")
 
 _torch_version = "N/A"
 _torch_available = False
@@ -393,6 +394,13 @@ def get_torch_version():
     return _torch_version
 
 
+def get_torch_major_and_minor_version() -> str:
+    if _torch_version == "N/A":
+        return "N/A"
+    parsed_version = version.parse(_torch_version)
+    return str(parsed_version.major) + "." + str(parsed_version.minor)
+
+
 def is_torch_sdpa_available():
     if not is_torch_available():
         return False
@@ -473,6 +481,24 @@ def is_torch_cuda_available():
         import torch
 
         return torch.cuda.is_available()
+    else:
+        return False
+
+
+def is_cuda_platform():
+    if is_torch_available():
+        import torch
+
+        return torch.version.cuda is not None
+    else:
+        return False
+
+
+def is_rocm_platform():
+    if is_torch_available():
+        import torch
+
+        return torch.version.hip is not None
     else:
         return False
 
@@ -1416,6 +1442,10 @@ def is_triton_available():
 
 def is_rich_available():
     return _rich_available
+
+
+def is_matplotlib_available():
+    return _matplotlib_available
 
 
 def check_torch_load_is_safe():

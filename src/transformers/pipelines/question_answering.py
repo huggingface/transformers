@@ -595,20 +595,27 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                 # - we start by finding the right word containing the token with `token_to_word`
                 # - then we convert this word in a character span with `word_to_chars`
                 sequence_index = 1 if question_first else 0
+
                 for s, e, score in zip(starts, ends, scores):
                     s = s - offset
                     e = e - offset
 
                     start_index, end_index = self.get_indices(enc, s, e, sequence_index, align_to_words)
 
-                    answers.append(
-                        {
-                            "score": score.item(),
-                            "start": start_index,
-                            "end": end_index,
-                            "answer": example.context_text[start_index:end_index],
-                        }
-                    )
+                    target_answer = example.context_text[start_index:end_index]
+                    answer = self.get_answer(answers, target_answer)
+
+                    if answer:
+                        answer["score"] += score.item()
+                    else:
+                        answers.append(
+                            {
+                                "score": score.item(),
+                                "start": start_index,
+                                "end": end_index,
+                                "answer": example.context_text[start_index:end_index],
+                            }
+                        )
 
         if handle_impossible_answer:
             answers.append({"score": min_null_score, "start": 0, "end": 0, "answer": ""})
@@ -616,6 +623,12 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         if len(answers) == 1:
             return answers[0]
         return answers
+
+    def get_answer(self, answers: List[Dict], target: str) -> Optional[Dict]:
+        for answer in answers:
+            if answer["answer"].lower() == target.lower():
+                return answer
+        return None
 
     def get_indices(
         self, enc: "tokenizers.Encoding", s: int, e: int, sequence_index: int, align_to_words: bool

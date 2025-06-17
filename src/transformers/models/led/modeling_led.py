@@ -1463,7 +1463,7 @@ class LEDEncoder(LEDPreTrainedModel):
                 important for task-specific finetuning because it makes the model more flexible at representing the
                 task. For example, for classification, the <s> token should be given global attention. For QA, all
                 question tokens should also have global attention. Please refer to the [Longformer
-                paper](https://arxiv.org/abs/2004.05150) for more details. Mask values selected in `[0, 1]`:
+                paper](https://huggingface.co/papers/2004.05150) for more details. Mask values selected in `[0, 1]`:
 
                 - 0 for local attention (a sliding window attention),
                 - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
@@ -1553,7 +1553,7 @@ class LEDEncoder(LEDPreTrainedModel):
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
@@ -1686,7 +1686,7 @@ class LEDDecoder(LEDPreTrainedModel):
                 for task-specific finetuning because it makes the model more flexible at representing the task. For
                 example, for classification, the <s> token should be given global attention. For QA, all question
                 tokens should also have global attention. Please refer to the [Longformer
-                paper](https://arxiv.org/abs/2004.05150) for more details. Mask values selected in `[0, 1]`:
+                paper](https://huggingface.co/papers/2004.05150) for more details. Mask values selected in `[0, 1]`:
 
                 - 0 for local attention (a sliding window attention),
                 - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
@@ -1812,7 +1812,7 @@ class LEDDecoder(LEDPreTrainedModel):
                         f" {head_mask.size()[0]}."
                     )
         for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
             if self.training:
@@ -1945,7 +1945,7 @@ class LEDModel(LEDPreTrainedModel):
             be used by default.
 
             If you want to change padding behavior, you should read [`modeling_led._prepare_decoder_inputs`] and modify
-            to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more information on the
+            to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more information on the
             default strategy.
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
@@ -1959,7 +1959,7 @@ class LEDModel(LEDPreTrainedModel):
             important for task-specific finetuning because it makes the model more flexible at representing the task.
             For example, for classification, the <s> token should be given global attention. For QA, all question
             tokens should also have global attention. Please refer to the [Longformer
-            paper](https://arxiv.org/abs/2004.05150) for more details. Mask values selected in `[0, 1]`:
+            paper](https://huggingface.co/papers/2004.05150) for more details. Mask values selected in `[0, 1]`:
 
             - 0 for local attention (a sliding window attention),
             - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
@@ -2115,7 +2115,7 @@ class LEDForConditionalGeneration(LEDPreTrainedModel, GenerationMixin):
             be used by default.
 
             If you want to change padding behavior, you should read [`modeling_led._prepare_decoder_inputs`] and modify
-            to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more information on the
+            to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more information on the
             default strategy.
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
@@ -2129,7 +2129,7 @@ class LEDForConditionalGeneration(LEDPreTrainedModel, GenerationMixin):
             important for task-specific finetuning because it makes the model more flexible at representing the task.
             For example, for classification, the <s> token should be given global attention. For QA, all question
             tokens should also have global attention. Please refer to the [Longformer
-            paper](https://arxiv.org/abs/2004.05150) for more details. Mask values selected in `[0, 1]`:
+            paper](https://huggingface.co/papers/2004.05150) for more details. Mask values selected in `[0, 1]`:
 
             - 0 for local attention (a sliding window attention),
             - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
@@ -2321,7 +2321,7 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
             be used by default.
 
             If you want to change padding behavior, you should read [`modeling_led._prepare_decoder_inputs`] and modify
-            to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more information on the
+            to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more information on the
             default strategy.
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
@@ -2335,7 +2335,7 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
             important for task-specific finetuning because it makes the model more flexible at representing the task.
             For example, for classification, the <s> token should be given global attention. For QA, all question
             tokens should also have global attention. Please refer to the [Longformer
-            paper](https://arxiv.org/abs/2004.05150) for more details. Mask values selected in `[0, 1]`:
+            paper](https://huggingface.co/papers/2004.05150) for more details. Mask values selected in `[0, 1]`:
 
             - 0 for local attention (a sliding window attention),
             - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
@@ -2473,7 +2473,7 @@ class LEDForQuestionAnswering(LEDPreTrainedModel):
             be used by default.
 
             If you want to change padding behavior, you should read [`modeling_led._prepare_decoder_inputs`] and modify
-            to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more information on the
+            to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more information on the
             default strategy.
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
@@ -2487,7 +2487,7 @@ class LEDForQuestionAnswering(LEDPreTrainedModel):
             important for task-specific finetuning because it makes the model more flexible at representing the task.
             For example, for classification, the <s> token should be given global attention. For QA, all question
             tokens should also have global attention. Please refer to the [Longformer
-            paper](https://arxiv.org/abs/2004.05150) for more details. Mask values selected in `[0, 1]`:
+            paper](https://huggingface.co/papers/2004.05150) for more details. Mask values selected in `[0, 1]`:
 
             - 0 for local attention (a sliding window attention),
             - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).

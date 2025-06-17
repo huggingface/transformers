@@ -42,7 +42,6 @@ class HQQLLMRunner:
             torch_dtype=compute_dtype,
             device_map=device,
             quantization_config=quant_config,
-            low_cpu_mem_usage=True,
             cache_dir=cache_dir,
         )
         self.tokenizer = AutoTokenizer.from_pretrained(model_id, cache_dir=cache_dir)
@@ -233,7 +232,9 @@ class HQQSerializationTest(unittest.TestCase):
 
         # Load and check if the logits match
         model_loaded = AutoModelForCausalLM.from_pretrained(
-            "quant_model", torch_dtype=torch.float16, device_map=torch_device, low_cpu_mem_usage=True
+            "quant_model",
+            torch_dtype=torch.float16,
+            device_map=torch_device,
         )
 
         with torch.no_grad():

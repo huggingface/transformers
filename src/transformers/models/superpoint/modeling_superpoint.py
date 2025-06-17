@@ -255,7 +255,7 @@ class SuperPointInterestPointDecoder(nn.Module):
             keypoints, scores = top_k_keypoints(keypoints, scores, self.max_keypoints)
 
         # Convert (y, x) to (x, y)
-        keypoints = torch.flip(keypoints, [1]).float()
+        keypoints = torch.flip(keypoints, [1]).to(scores.dtype)
 
         return keypoints, scores
 
@@ -365,7 +365,7 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
     """
     SuperPoint model. It consists of a SuperPointEncoder, a SuperPointInterestPointDecoder and a
     SuperPointDescriptorDecoder. SuperPoint was proposed in `SuperPoint: Self-Supervised Interest Point Detection and
-    Description <https://arxiv.org/abs/1712.07629>`__ by Daniel DeTone, Tomasz Malisiewicz, and Andrew Rabinovich. It
+    Description <https://huggingface.co/papers/1712.07629>`__ by Daniel DeTone, Tomasz Malisiewicz, and Andrew Rabinovich. It
     is a fully convolutional neural network that extracts keypoints and descriptors from an image. It is trained in a
     self-supervised manner, using a combination of a photometric loss and a loss based on the homographic adaptation of
     keypoints. It is made of a convolutional encoder and two decoders: one for keypoints and one for descriptors.

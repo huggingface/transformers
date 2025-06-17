@@ -412,7 +412,8 @@ class GraniteMoeSharedDecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
 
         self.self_attn = GraniteMoeSharedAttention(config=config, layer_idx=layer_idx)
-        self.block_sparse_moe = GraniteMoeSharedMoE(config)
+        if config.num_local_experts > 0:
+            self.block_sparse_moe = GraniteMoeSharedMoE(config)
         self.input_layernorm = GraniteMoeSharedRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = GraniteMoeSharedRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -848,7 +849,7 @@ def load_balancing_loss_func(
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
 
-    See Switch Transformer (https://arxiv.org/abs/2101.03961) for more details. This function implements the loss
+    See Switch Transformer (https://huggingface.co/papers/2101.03961) for more details. This function implements the loss
     function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
     experts is too unbalanced.
 
