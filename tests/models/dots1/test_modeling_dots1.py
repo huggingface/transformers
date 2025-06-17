@@ -1,4 +1,4 @@
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -136,7 +136,6 @@ class Dots1IntegrationTest(unittest.TestCase):
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=20, do_sample=False)
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        print(text)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
         del model

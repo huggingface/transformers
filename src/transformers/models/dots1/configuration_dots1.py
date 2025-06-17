@@ -71,9 +71,6 @@ class Dots1Config(PretrainedConfig):
             Epsilon used by the RMS normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions. Only relevant if `config.is_decoder=True`.
-        pretraining_tp (`int`, *optional*, defaults to 1):
-            Experimental: tensor parallelism rank used during pretraining. This is necessary for exact reproducibility
-            of pretraining results.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie the input and output word embeddings.
         rope_theta (`float`, *optional*, defaults to 10000.0):
@@ -86,12 +83,11 @@ class Dots1Config(PretrainedConfig):
             Dropout ratio for the attention probabilities.
         routed_scaling_factor (`float`, *optional*, defaults to 1.0):
             Scaling factor for routed experts.
-        use_sliding_window (`bool`, *optional*, defaults to `False`):
-            Whether to use sliding window attention.
         sliding_window (`int`, *optional*, defaults to 4096):
             Size of the sliding window for attention. If not specified, defaults to `4096`.
         max_window_layers (`int`, *optional*, defaults to 62):
-            The number of layers that use SWA (Sliding Window Attention). The bottom layers use SWA while the top use full attention.
+            The number of layers using full attention. The first `max_window_layers` layers will use full attention, while any
+            additional layer afterwards will use SWA (Sliding Window Attention).
         layer_types (`list`, *optional*):
             Attention pattern for each layer.
 
@@ -156,14 +152,12 @@ class Dots1Config(PretrainedConfig):
         initializer_range=0.02,
         rms_norm_eps=1e-6,
         use_cache=True,
-        pretraining_tp=1,
         tie_word_embeddings=False,
         rope_theta=10000.0,
         rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
         routed_scaling_factor=1.0,
-        use_sliding_window=False,
         sliding_window=4096,
         max_window_layers=62,
         layer_types=None,
@@ -189,15 +183,13 @@ class Dots1Config(PretrainedConfig):
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
-        self.pretraining_tp = pretraining_tp
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.routed_scaling_factor = routed_scaling_factor
-        self.use_sliding_window = use_sliding_window
-        self.sliding_window = sliding_window if self.use_sliding_window else None
+        self.sliding_window = sliding_window
         self.max_window_layers = max_window_layers
 
         self.layer_types = layer_types
