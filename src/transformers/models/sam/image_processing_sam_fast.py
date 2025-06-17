@@ -16,8 +16,15 @@
 
 from typing import Dict, Optional
 
-from ...image_processing_utils_fast import BaseImageProcessorFast, DefaultFastImageProcessorKwargs
-from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling
+from ...image_processing_utils_fast import (
+    BaseImageProcessorFast,
+    DefaultFastImageProcessorKwargs,
+)
+from ...image_utils import (
+    IMAGENET_DEFAULT_MEAN,
+    IMAGENET_DEFAULT_STD,
+    PILImageResampling,
+)
 from ...utils import auto_docstring
 
 import torch
@@ -37,6 +44,7 @@ class SamFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     mask_pad_size (`Dict[str, int]`, *optional*, defaults to `self.mask_pad_size`):
         Controls the size of the padding applied to the segmentation map.
     """
+
     do_pad: Optional[bool]
     pad_size: Optional[Dict[str, int]]
     mask_size: Optional[Dict[str, int]]
@@ -64,43 +72,52 @@ class SamImageProcessorFast(BaseImageProcessorFast):
 
     def resize(self, image, size, **kwargs):
         """Essential: BaseImageProcessorFast doesn't support longest_edge."""
-        if hasattr(size, 'longest_edge') and size.longest_edge:
+        if hasattr(size, "longest_edge") and size.longest_edge:
             h, w = image.shape[-2:]
             scale = size.longest_edge / max(h, w)
             from ...image_utils import SizeDict
+
             size = SizeDict(height=int(h * scale + 0.5), width=int(w * scale + 0.5))
         return super().resize(image, size, **kwargs)
 
     def _preprocess(self, images, **kwargs):
         """Essential: Add padding capability."""
-        if not kwargs.get('do_pad', self.do_pad):
+        if not kwargs.get("do_pad", self.do_pad):
             return super()._preprocess(images, **kwargs)
 
         kwargs_copy = kwargs.copy()
-        kwargs_copy['return_tensors'] = None
+        kwargs_copy["return_tensors"] = None
         result = super()._preprocess(images, **kwargs_copy)
 
-        pad_size = kwargs.get('pad_size', self.pad_size)
-        target_h, target_w = pad_size['height'], pad_size['width']
-        result['pixel_values'] = [
-            F.pad(img, (0, max(0, target_w - img.shape[-1]),
-                        0, max(0, target_h - img.shape[-2])))
-            for img in result['pixel_values']
+        pad_size = kwargs.get("pad_size", self.pad_size)
+        target_h, target_w = pad_size["height"], pad_size["width"]
+        result["pixel_values"] = [
+            F.pad(
+                img,
+                (
+                    0,
+                    max(0, target_w - img.shape[-1]),
+                    0,
+                    max(0, target_h - img.shape[-2]),
+                ),
+            )
+            for img in result["pixel_values"]
         ]
 
-        if kwargs.get('return_tensors'):
-            result['pixel_values'] = torch.stack(result['pixel_values'])
+        if kwargs.get("return_tensors"):
+            result["pixel_values"] = torch.stack(result["pixel_values"])
         return result
 
     def preprocess(self, images, **kwargs):
         """Essential: Add SAM-required metadata."""
         from ...image_utils import get_image_size
+
         if not isinstance(images, list):
             images = [images]
 
         original_sizes = []
         for img in images:
-            if hasattr(img, 'size') and hasattr(img.size, '__getitem__'):  # PIL Image
+            if hasattr(img, "size") and hasattr(img.size, "__getitem__"):  # PIL Image
                 original_sizes.append([img.size[1], img.size[0]])  # (height, width)
             else:  # Tensor or numpy array
                 try:
@@ -112,17 +129,21 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         result = super().preprocess(images, **kwargs)
 
         # Calculate reshaped sizes
-        size = kwargs.get('size', self.size)
-        if 'longest_edge' in size:
-            longest_edge = size['longest_edge']
-            reshaped_sizes = [[int(h * longest_edge / max(h, w) + 0.5),
-                               int(w * longest_edge / max(h, w) + 0.5)]
-                              for h, w in original_sizes]
+        size = kwargs.get("size", self.size)
+        if "longest_edge" in size:
+            longest_edge = size["longest_edge"]
+            reshaped_sizes = [
+                [
+                    int(h * longest_edge / max(h, w) + 0.5),
+                    int(w * longest_edge / max(h, w) + 0.5),
+                ]
+                for h, w in original_sizes
+            ]
         else:
             reshaped_sizes = original_sizes
 
-        result['original_sizes'] = original_sizes
-        result['reshaped_input_sizes'] = reshaped_sizes
+        result["original_sizes"] = original_sizes
+        result["reshaped_input_sizes"] = reshaped_sizes
         return result
 
 
