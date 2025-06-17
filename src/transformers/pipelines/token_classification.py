@@ -30,6 +30,8 @@ class TokenClassificationArgumentHandler(ArgumentHandler):
     """
 
     def __call__(self, inputs: Union[str, List[str]], **kwargs):
+        is_split_into_words = kwargs.get("is_split_into_words", False)
+
         if inputs is not None and isinstance(inputs, (list, tuple)) and len(inputs) > 0:
             inputs = list(inputs)
             batch_size = len(inputs)
@@ -37,11 +39,10 @@ class TokenClassificationArgumentHandler(ArgumentHandler):
             inputs = [inputs]
             batch_size = 1
         elif Dataset is not None and isinstance(inputs, Dataset) or isinstance(inputs, types.GeneratorType):
-            return inputs, None
+            return inputs, is_split_into_words, None
         else:
             raise ValueError("At least one input is required.")
 
-        is_split_into_words = kwargs.get("is_split_into_words", False)
 
         offset_mapping = kwargs.get("offset_mapping")
         if offset_mapping:
