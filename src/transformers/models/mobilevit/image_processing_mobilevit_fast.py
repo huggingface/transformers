@@ -66,9 +66,7 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(
-        self, images, **kwargs: Unpack[MobileViTFastImageProcessorKwargs]
-    ) -> BatchFeature:
+    def preprocess(self, images, **kwargs: Unpack[MobileViTFastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _preprocess(
@@ -93,9 +91,7 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
-                stacked_images = self.resize(
-                    image=stacked_images, size=size, interpolation=interpolation
-                )
+                stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation)
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
@@ -121,21 +117,13 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
                 stacked_images = stacked_images.flip(1)
             processed_images_grouped[shape] = stacked_images
 
-        processed_images = reorder_images(
-            processed_images_grouped, grouped_images_index
-        )
-        processed_images = (
-            torch.stack(processed_images, dim=0) if return_tensors else processed_images
-        )
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
-        return BatchFeature(
-            data={"pixel_values": processed_images}, tensor_type=return_tensors
-        )
+        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
     # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.post_process_semantic_segmentation with Beit->MobileViT
-    def post_process_semantic_segmentation(
-        self, outputs, target_sizes: Optional[List[Tuple]] = None
-    ):
+    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[List[Tuple]] = None):
         """
         Converts the output of [`MobileViTForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 
@@ -177,9 +165,7 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
                 semantic_segmentation.append(semantic_map)
         else:
             semantic_segmentation = logits.argmax(dim=1)
-            semantic_segmentation = [
-                semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])
-            ]
+            semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
 
         return semantic_segmentation
 
