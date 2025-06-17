@@ -14,7 +14,7 @@
 # limitations under the License.
 """Fast Image processor class for MobileViT."""
 
-from typing import List, Optional, Union
+from typing import List, Optional, Tuple, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -25,7 +25,7 @@ from ...image_processing_utils_fast import (
 )
 from ...image_utils import PILImageResampling, SizeDict
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available
+from ...utils import TensorType, auto_docstring, is_torch_available, is_torch_tensor
 
 
 if is_torch_available():
@@ -132,12 +132,15 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
             data={"pixel_values": processed_images}, tensor_type=return_tensors
         )
 
-    def post_process_semantic_segmentation(self, outputs, target_sizes=None):
+    # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.post_process_semantic_segmentation with Beit->MobileViT
+    def post_process_semantic_segmentation(
+        self, outputs, target_sizes: Optional[List[Tuple]] = None
+    ):
         """
         Converts the output of [`MobileViTForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 
         Args:
-            outputs ([`MobileViTForSemanticSegmentationOutput`]):
+            outputs ([`MobileViTForSemanticSegmentation`]):
                 Raw outputs of the model.
             target_sizes (`List[Tuple]` of length `batch_size`, *optional*):
                 List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
@@ -148,39 +151,35 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
             segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
             specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
         """
-        # Import torch here to avoid errors if torch is not available
-        if not is_torch_available():
-            raise ImportError(
-                "PyTorch is required for post-processing semantic segmentation outputs."
-            )
-
-        import torch
-        import torch.nn.functional as F
-
+        # TODO: add support for other frameworks
         logits = outputs.logits
 
-        # Resize logits if target sizes are provided
+        # Resize logits and compute semantic segmentation maps
         if target_sizes is not None:
             if len(logits) != len(target_sizes):
                 raise ValueError(
                     "Make sure that you pass in as many target sizes as the batch dimension of the logits"
                 )
 
-            resized_logits = []
-            for i in range(len(logits)):
-                resized_logit = F.interpolate(
-                    logits[i].unsqueeze(dim=0),
-                    size=target_sizes[i],
+            if is_torch_tensor(target_sizes):
+                target_sizes = target_sizes.numpy()
+
+            semantic_segmentation = []
+
+            for idx in range(len(logits)):
+                resized_logits = torch.nn.functional.interpolate(
+                    logits[idx].unsqueeze(dim=0),
+                    size=target_sizes[idx],
                     mode="bilinear",
                     align_corners=False,
                 )
-                resized_logits.append(resized_logit[0])
-            logits = torch.stack(resized_logits)
-
-        semantic_segmentation = logits.argmax(dim=1)
-        semantic_segmentation = [
-            semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])
-        ]
+                semantic_map = resized_logits[0].argmax(dim=0)
+                semantic_segmentation.append(semantic_map)
+        else:
+            semantic_segmentation = logits.argmax(dim=1)
+            semantic_segmentation = [
+                semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])
+            ]
 
         return semantic_segmentation
 
