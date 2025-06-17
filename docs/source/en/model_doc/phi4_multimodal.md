@@ -28,7 +28,9 @@ rendered properly in your Markdown viewer.
 You can find all the original Phi4 Multimodal checkpoints under the [Phi4 Multimodal](https://huggingface.co/microsoft/Phi-4-multimodal-instruct) collection.
 
 > [!TIP]
-> Click on the Phi-4 Multimodal in the right sidebar for more examples of how to apply Phi-4 Multimodal to different language tasks.
+> This model was contributed by [cyrilvallez](https://huggingface.co/cyrilvallez).
+>
+> Click on the Phi-4 Multimodal in the right sidebar for more examples of how to apply Phi-4 Multimodal to different tasks.
 
 The example below demonstrates how to generate text based on an image with [`Pipeline`], [`AutoModel`] class and from the command line.
 
