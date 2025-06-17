@@ -85,7 +85,7 @@ class Wav2Vec2Processor(ProcessorMixin):
         PreTrainedTokenizer’s [`~PreTrainedTokenizer.__call__`] and returns their outputs.  Invocation of either or
         both methods are determined by the presence of the `audio` and `text` arguments.
 
-        Important Args:
+        Args:
             audio:
                 When the first argument is an audio array, or the `audio` argument is present,
                 Wav2Vec2FeatureExtractor's [`~Wav2Vec2FeatureExtractor.__call__`] will be invoked.
