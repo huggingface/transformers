@@ -110,8 +110,11 @@ class Glm4vVisionText2TextModelTester:
         self.num_channels = num_channels
         self.image_size = image_size
         self.is_training = is_training
+        self.hidden_size = text_config["hidden_size"]
+        self.num_hidden_layers = text_config["num_hidden_layers"]
+        self.num_attention_heads = text_config["num_attention_heads"]
         self.vocab_size = text_config["vocab_size"]
-        self.num_image_tokens = 32
+        self.num_image_tokens = 64
         self.seq_length = seq_length + self.num_image_tokens
 
     def get_config(self):
@@ -145,7 +148,7 @@ class Glm4vVisionText2TextModelTester:
         input_ids[input_ids == self.video_token_id] = self.pad_token_id
         input_ids[input_ids == self.image_token_id] = self.pad_token_id
         input_ids[input_ids == self.vision_start_token_id] = self.pad_token_id
-        input_ids[:, self.num_image_tokens] = self.image_token_id
+        input_ids[:, : self.num_image_tokens] = self.image_token_id
         patch_size = config.vision_config.patch_size
         patches_per_side = self.image_size // patch_size
 
