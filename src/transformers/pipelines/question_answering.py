@@ -624,7 +624,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             return answers[0]
         return answers
 
-    def get_answer(self, answers: List[Dict], target: str) -> Optional[Dict]:
+    def get_answer(self, answers: list[dict], target: str) -> Optional[dict]:
         for answer in answers:
             if answer["answer"].lower() == target.lower():
                 return answer
