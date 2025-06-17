@@ -435,28 +435,6 @@ class LightGluePreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-def normalize_keypoints(keypoints: torch.Tensor, height: int, width: int) -> torch.Tensor:
-    """
-    Normalize keypoints locations based on image image_shape
-
-    Args:
-        keypoints (`torch.Tensor` of shape `(batch_size, num_keypoints, 2)`):
-            Keypoints locations in (x, y) format.
-        height (`int`):
-            Image height.
-        width (`int`):
-            Image width.
-
-    Returns:
-        Normalized keypoints locations of shape (`torch.Tensor` of shape `(batch_size, num_keypoints, 2)`).
-    """
-    size = torch.tensor([width, height], device=keypoints.device, dtype=keypoints.dtype)[None]
-    shift = size / 2
-    scale = size.max(-1).values / 2
-    keypoints = (keypoints - shift[..., None, :]) / scale[..., None, None]
-    return keypoints
-
-
 def get_matches_from_scores(scores: torch.Tensor, threshold: float) -> Tuple[torch.Tensor, torch.Tensor]:
     """obtain matches from a score matrix [Bx M+1 x N+1]"""
     batch_size, _, _ = scores.shape
@@ -487,6 +465,28 @@ def get_matches_from_scores(scores: torch.Tensor, threshold: float) -> Tuple[tor
     matching_scores = torch.stack([matching_scores0, matching_scores1]).transpose(0, 1).reshape(batch_size * 2, -1)
 
     return matches, matching_scores
+
+
+def normalize_keypoints(keypoints: torch.Tensor, height: int, width: int) -> torch.Tensor:
+    """
+    Normalize keypoints locations based on image image_shape
+
+    Args:
+        keypoints (`torch.Tensor` of shape `(batch_size, num_keypoints, 2)`):
+            Keypoints locations in (x, y) format.
+        height (`int`):
+            Image height.
+        width (`int`):
+            Image width.
+
+    Returns:
+        Normalized keypoints locations of shape (`torch.Tensor` of shape `(batch_size, num_keypoints, 2)`).
+    """
+    size = torch.tensor([width, height], device=keypoints.device, dtype=keypoints.dtype)[None]
+    shift = size / 2
+    scale = size.max(-1).values / 2
+    keypoints = (keypoints - shift[..., None, :]) / scale[..., None, None]
+    return keypoints
 
 
 @auto_docstring(
