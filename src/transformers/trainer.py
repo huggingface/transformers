@@ -3739,7 +3739,7 @@ class Trainer:
         model.train()
         if hasattr(self.optimizer, "train") and callable(self.optimizer.train):
             self.optimizer.train()
-        
+
         # tracking attributes for compute_loss
         if not hasattr(self, "_accumulated_steps"):
             self._accumulated_steps = 0
@@ -3831,7 +3831,7 @@ class Trainer:
             self._loss_accumulator = 0.0
 
             return avg_loss.detach()
-        
+
         return loss.detach()
 
     def compute_loss(
