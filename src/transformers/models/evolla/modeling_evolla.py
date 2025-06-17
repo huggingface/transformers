@@ -29,11 +29,15 @@ from torch import Tensor, nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_attn_mask_utils import AttentionMaskConverter
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_flash_attention_utils import (
+    FlashAttentionKwargs,
+    flash_attn_supports_top_left_mask,
+    is_flash_attn_available,
+)
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -51,7 +55,7 @@ from ...modeling_utils import (
     prune_linear_layer,
 )
 from ...processing_utils import Unpack
-from ...utils import can_return_tuple, is_torch_flex_attn_available, logging
+from ...utils import auto_docstring, is_torch_flex_attn_available, logging
 from ...utils.import_utils import is_torch_fx_proxy, is_torchdynamo_compiling
 from .configuration_evolla import EvollaConfig, SaProtConfig
 
@@ -60,6 +64,10 @@ if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import BlockMask
 
     from ...integrations.flex_attention import make_flex_block_causal_mask
+
+
+if is_flash_attn_available():
+    from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
 logger = logging.get_logger(__name__)
@@ -269,15 +277,8 @@ class EvollaAttention(nn.Module):
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
-
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -317,9 +318,9 @@ class EvollaSequenceAlignerCrossAttention(nn.Module):
     def __init__(
         self,
         config,
-        protein_encoder_dim: int = None,
-        structure_encoder_dim: int = None,
-        msa_encoder_dim: int = None,
+        protein_encoder_dim: Optional[int] = None,
+        structure_encoder_dim: Optional[int] = None,
+        msa_encoder_dim: Optional[int] = None,
     ):
         super().__init__()
 
@@ -559,7 +560,7 @@ class EvollaSequenceAlignerCrossAttention(nn.Module):
         return hidden_states
 
 
-class EvollaDecoderLayer(nn.Module):
+class EvollaDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: EvollaConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -674,11 +675,14 @@ class EvollaSaProtEmbeddings(nn.Module):
         )
 
         self.padding_idx = config.pad_token_id
-        self.position_embeddings = nn.Embedding(
-            config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
-        )
+        if self.position_embedding_type == "absolute":
+            self.position_embeddings = nn.Embedding(
+                config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
+            )
         self.token_dropout = config.token_dropout
         self.mask_token_id = config.mask_token_id
+        # remove the position_ids in EsmEmbeddings
+        self.position_ids = None
 
     def forward(
         self, input_ids=None, attention_mask=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
@@ -801,6 +805,8 @@ class RotaryEmbedding(torch.nn.Module):
 class EvollaSaProtSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
+        self.config = config
+
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
                 f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
@@ -949,10 +955,128 @@ class EvollaSaProtSelfOutput(nn.Module):
         return hidden_states
 
 
+class EvollaSaProtFlashAttention2(EvollaSaProtSelfAttention):
+    """
+    EVOLLA_SA_PROT flash attention module. This module inherits from `EvollaSaProtSelfAttention` as the weights of the module stays
+    untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
+    flash attention and deal with padding tokens in case the input contains any of them.
+    """
+
+    def __init__(self, config, position_embedding_type=None):
+        super().__init__(config, position_embedding_type=position_embedding_type)
+
+        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
+        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
+        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
+        self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
+        self.dropout_prob = config.attention_probs_dropout_prob
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor]:
+        # Flash attention doesn't support output_attentions or cross attention
+        if output_attentions or head_mask is not None or encoder_hidden_states is not None:
+            logger.warning_once(
+                "EvollaSaProtFlashAttention2 does not support output_attentions, head_mask, or cross_attention. "
+                "Falling back to the manual attention implementation. This warning can be removed using "
+                'the argument `attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                hidden_states,
+                attention_mask,
+                head_mask,
+                encoder_hidden_states,
+                encoder_attention_mask,
+                past_key_value,
+                output_attentions,
+            )
+
+        bsz, q_len, _ = hidden_states.size()
+
+        query_layer = self.transpose_for_scores(self.query(hidden_states))
+        key_layer = self.transpose_for_scores(self.key(hidden_states))
+        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        if past_key_value is not None:
+            key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
+            value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
+
+        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
+        # therefore the input hidden states gets silently casted in float32. Hence, we need
+        # cast them back in the correct dtype just to be sure everything works as expected.
+        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
+        # in fp32.
+        input_dtype = query_layer.dtype
+        if input_dtype == torch.float32:
+            if torch.is_autocast_enabled():
+                target_dtype = torch.get_autocast_gpu_dtype()
+            # Handle the case where the model is quantized
+            elif hasattr(self.config, "_pre_quantization_dtype"):
+                target_dtype = self.config._pre_quantization_dtype
+            else:
+                target_dtype = self.query.weight.dtype
+
+            logger.warning_once(
+                f"The input hidden states seems to be silently casted in float32, this might be related to"
+                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
+                f" {target_dtype}."
+            )
+
+            query_layer = query_layer.to(target_dtype)
+            key_layer = key_layer.to(target_dtype)
+            value_layer = value_layer.to(target_dtype)
+
+        # Matt: Our BERT model (which this code was derived from) scales attention logits down by sqrt(head_dim).
+        # EVOLLA_SA_PROT scales the query down by the same factor instead. Modulo numerical stability these are equivalent,
+        # but not when rotary embeddings get involved. Therefore, we scale the query here to match the original
+        # EVOLLA_SA_PROT code and fix rotary embeddings.
+        query_layer = query_layer * self.attention_head_size**-0.5
+
+        if self.position_embedding_type == "rotary":
+            query_layer, key_layer = self.rotary_embeddings(query_layer, key_layer)
+        elif self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
+            raise ValueError(f"ESM flash attention does not support {self.position_embedding_type} embeddings")
+
+        # It would likely be faster to change self.transpose_for_scores to output the correct
+        # dimensions for flash_attention_2, but that would also mean changing the rotary embedding
+        # functions. Here we just permute the dimensions to match the expected input.
+        attn_output = _flash_attention_forward(
+            query_layer.permute(0, 2, 1, 3),
+            key_layer.permute(0, 2, 1, 3),
+            value_layer.permute(0, 2, 1, 3),
+            attention_mask,
+            query_length=q_len,
+            is_causal=self.is_decoder,
+            softmax_scale=1.0,
+            dropout=self.dropout_prob if self.training else 0.0,
+            use_top_left_mask=self._flash_attn_uses_top_left_mask,
+        )
+
+        attn_output = attn_output.reshape(bsz, q_len, -1)
+
+        outputs = (attn_output, None)
+        if self.is_decoder:
+            outputs = outputs + (past_key_value,)
+
+        return outputs
+
+
+EVOLLA_SA_PROT_ATTENTION_CLASSES = {
+    "eager": EvollaSaProtSelfAttention,
+    "flash_attention_2": EvollaSaProtFlashAttention2,
+}
+
+
 class EvollaSaProtAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.self = EvollaSaProtSelfAttention(config)
+        self.self = EVOLLA_SA_PROT_ATTENTION_CLASSES[config._attn_implementation](config)
         self.output = EvollaSaProtSelfOutput(config)
         self.pruned_heads = set()
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -1670,27 +1794,7 @@ class EvollaSequenceCompressorResampler(nn.Module):
         return self.norm(transformed_feature)
 
 
-EVOLLA_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`EvollaConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare Evolla Model outputting raw hidden-states without any specific head on top.",
-    EVOLLA_START_DOCSTRING,
-)
+@auto_docstring
 class EvollaPreTrainedModel(PreTrainedModel):
     config_class = EvollaConfig
     base_model_prefix = "model"
@@ -1812,88 +1916,8 @@ class EvollaProteinEncoder(nn.Module):
         )
 
 
-EVOLLA_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length) or `BlockMask`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            If the model is configured to use flex_attention, it will attempt to convert the mask Tensor into a BlockMask,
-            but you can also pass a `BlockMask` object directly here.
-
-            [What are attention masks?](../glossary#attention-mask)
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            If `past_key_values` is used, optionally only the last `input_ids` have to be input (see
-            `past_key_values`).
-
-            If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
-            information on the default strategy.
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.n_positions - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        past_key_values (`Cache`, *optional*):
-            Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
-            returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
-
-            It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-            If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
-            have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
-            of shape `(batch_size, sequence_length)`.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
-            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
-            the complete sequence length.
-"""
-
-
-@add_start_docstrings(
-    "The bare Evolla Model outputting raw hidden-states without any specific head on top.",
-    EVOLLA_START_DOCSTRING,
-)
 class EvollaModel(EvollaPreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`EvollaDecoderLayer`]
-
-    Args:
-        config: EvollaConfig
-
-    """
+    r""" """
 
     def __init__(
         self,
@@ -1904,6 +1928,11 @@ class EvollaModel(EvollaPreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(self.vocab_size, config.hidden_size, self.padding_idx)
+
+        self.protein_encoder = EvollaProteinEncoder(
+            config=self.config,
+            add_pooling_layer=False,
+        )
 
         self.layers = nn.ModuleList(
             [
@@ -1918,14 +1947,8 @@ class EvollaModel(EvollaPreTrainedModel):
         self.norm = EvollaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = EvollaRotaryEmbedding(config=config)
         self.gradient_checkpointing = getattr(config, "gradient_checkpointing", False)
-
-        self.protein_encoder = EvollaProteinEncoder(
-            config=self.config,
-            add_pooling_layer=False,
-        )
         self.config = config
 
-        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -1934,8 +1957,6 @@ class EvollaModel(EvollaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    @can_return_tuple
-    @add_start_docstrings_to_model_forward(EVOLLA_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
