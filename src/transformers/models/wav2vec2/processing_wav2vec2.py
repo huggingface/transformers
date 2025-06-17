@@ -88,7 +88,7 @@ class Wav2Vec2Processor(ProcessorMixin):
             audio (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`, *optional*):
                 An audio input is passed to [`Wav2Vec2FeatureExtractor.__call__`].
             text (`str`, `List[str]`, *optional*):
-                When the `text` argument is present, PreTrainedTokenizer’s [`~PreTrainedTokenizer.__call__`] will be invoked.
+                A text input is passed to [`PreTrainedTokenizer.__call__`].
 
         [`~Wav2Vec2FeatureExtractor.__call__`] and PreTrainedTokenizer’s [`~PreTrainedTokenizer.__call__`] for more information.
 
