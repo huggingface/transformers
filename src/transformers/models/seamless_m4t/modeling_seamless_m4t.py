@@ -2368,9 +2368,14 @@ class SeamlessM4TCodeHifiGan(PreTrainedModel):
         unit_lengths = torch.clamp(unit_lengths, 0, dur_out.shape[1] - 1)
 
         cumulative_dur_out = torch.cumsum(dur_out, dim=1)
-        batch_size = unit_lengths.size(0)
-        row_indices = torch.arange(batch_size, device=input_ids.device)
-        unit_lengths = cumulative_dur_out[row_indices, unit_lengths]
+
+        # FIXME: the below lines are added to work-aound a bug related to INT64 gather on Gaudi. Remove them once it is fixed in Gaudi PyTorch.
+        if input_ids.device.type == "hpu":
+            batch_size = unit_lengths.size(0)
+            row_indices = torch.arange(batch_size, device=input_ids.device)
+            unit_lengths = cumulative_dur_out[row_indices, unit_lengths]
+        else:
+            unit_lengths = cumulative_dur_out.gather(dim=1, index=unit_lengths.unsqueeze(1)).squeeze()
 
         return unit_lengths
 
