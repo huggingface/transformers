@@ -634,7 +634,6 @@ class BambaModelIntegrationTest(unittest.TestCase):
         ].to(torch_device)
         out = self.model.generate(input_ids, do_sample=False, max_new_tokens=10)
         output_sentence = self.tokenizer.decode(out[0, :])
-        print(f"output_sentence: {output_sentence}")
         expected = expectations.get_expectation()
         self.assertEqual(output_sentence, expected)
 
