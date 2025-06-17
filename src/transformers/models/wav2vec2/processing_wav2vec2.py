@@ -138,8 +138,7 @@ class Wav2Vec2Processor(ProcessorMixin):
             input_features:
                 When the first argument is a dictionary containing a batch of tensors, or the `input_features` argument is present, it is passed to [`Wav2Vec2FeatureExtractor.pad`].
             labels:
-                When the `label` argument is present, PreTrainedTokenizer’s [`~PreTrainedTokenizer.pad`] will be invoked on the
-                batch of input_ids.
+                When the `label` argument is present, it is passed to [`PreTrainedTokenizer.pad`].
 
         Returns:
             This method returns the results of each `pad` method. If both are used, the output is a dictionary containing the results of both.
