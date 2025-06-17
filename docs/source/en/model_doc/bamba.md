@@ -39,7 +39,7 @@ Checkout all Bamba-9B model checkpoints [here](https://github.com/foundation-mod
 <!---
 ## Usage Tips
 
-Tips: 
+Tips:
 
 - The architecture is based on Mamba-2 models.
 
@@ -63,7 +63,35 @@ response = model.generate(**inputs, max_new_tokens=64)
 print(tokenizer.batch_decode(response, skip_special_tokens=True)[0])
 ```
 
+
+## Padding-Free Training
+
+Bamba supports padding-free training in which distinct training examples can be concatenated
+together while nevertheless processing the inputs as though they belonged to separate batches. When
+the examples are of varying lengths, padding-free training can provide significant speed ups and
+memory savings compared to batching the examples together and using padding, as the unnecessary
+compute and memory due to padding is avoided entirely. The performance gains depend on factors such
+as the model and the data distribution, but throughput gains up to [~2x are commonly
+seen](https://github.com/huggingface/transformers/pull/35861#issue-2807873129).
+
+Using padding-free training with Bamba requires the `flash-attn`, `mamba-ssm`, and `causal-conv1d`
+packages, and the following arguments must be passed to the model in addition to `input_ids` and
+`labels`:
+* `position_ids: torch.LongTensor`: the position index of each token in each sequence.
+* `seq_idx: torch.IntTensor`: the index of each sequence in the batch.
+* Each of the [`FlashAttentionKwargs`]
+    * `cu_seq_lens_q: torch.LongTensor`: The cumulative sequence lengths of all queries.
+    * `cu_seq_lens_k: torch.LongTensor`: The cumulative sequence lengths of all keys.
+    * `max_length_q: int`: the longest query length in the batch.
+    * `max_length_k: int`: the longest key length in the batch.
+
+The `attention_mask` inputs should not be provided. The [`DataCollatorWithFlattening`] can be used
+to programmatically generate the above set of additional arguments using `return_seq_idx=True` and
+`return_flash_attn_kwargs=True`. See [this blog post](https://huggingface.co/blog/packing-with-FA2)
+for additional information.
+
+
 [[autodoc]] BambaForCausalLM
     - forward
 
-This HF implementation is contributed by [ani300](https://github.com/ani300) and [fabianlim](https://github.com/fabianlim). 
+This HF implementation is contributed by [ani300](https://github.com/ani300) and [fabianlim](https://github.com/fabianlim).

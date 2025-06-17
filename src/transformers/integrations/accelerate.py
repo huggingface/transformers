@@ -171,7 +171,7 @@ def find_tied_parameters(model: "nn.Module", **kwargs):
     ```
     """
 
-    # get ALL model parameters and thier names
+    # get ALL model parameters and their names
     all_named_parameters = dict(model.named_parameters(remove_duplicate=False))
 
     # get ONLY unique named parameters,
@@ -187,7 +187,7 @@ def find_tied_parameters(model: "nn.Module", **kwargs):
     for tied_param_name in tied_param_names:
         tied_param = all_named_parameters[tied_param_name]
         for param_name, param in no_duplicate_named_parameters.items():
-            # compare if parameters are the same, if so, group thier names together
+            # compare if parameters are the same, if so, group their names together
             if param is tied_param:
                 if param_name not in tied_param_groups:
                     tied_param_groups[param_name] = []

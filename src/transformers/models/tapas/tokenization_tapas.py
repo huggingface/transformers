@@ -22,8 +22,9 @@ import math
 import os
 import re
 import unicodedata
+from collections.abc import Generator
 from dataclasses import dataclass
-from typing import Callable, Dict, Generator, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -2162,7 +2163,7 @@ class WordpieceTokenizer:
         Tokenizes a piece of text into its word pieces. This uses a greedy longest-match-first algorithm to perform
         tokenization using the given vocabulary.
 
-        For example, `input = "unaffable"` wil return as output `["un", "##aff", "##able"]`.
+        For example, `input = "unaffable"` will return as output `["un", "##aff", "##able"]`.
 
         Args:
             text: A single token or whitespace separated tokens. This should have
@@ -2359,7 +2360,7 @@ _ORDINAL_WORDS = [
     "second",
     "third",
     "fourth",
-    "fith",
+    "fifth",
     "sixth",
     "seventh",
     "eighth",

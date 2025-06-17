@@ -1054,7 +1054,7 @@ class TFWav2Vec2Encoder(keras.layers.Layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = np.random.uniform(0, 1)
             if training and (dropout_probability < self.config.layerdrop):  # skip the layer
                 continue
@@ -1135,7 +1135,7 @@ class TFWav2Vec2EncoderStableLayerNorm(keras.layers.Layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = np.random.uniform(0, 1)
             if training and (dropout_probability < self.config.layerdrop):  # skip the layer
                 continue
@@ -1231,7 +1231,7 @@ class TFWav2Vec2MainLayer(keras.layers.Layer):
     def _mask_hidden_states(self, hidden_states: tf.Tensor, mask_time_indices: tf.Tensor | None = None):
         """
         Masks extracted features along time axis and/or along feature axis according to
-        [SpecAugment](https://arxiv.org/abs/1904.08779).
+        [SpecAugment](https://huggingface.co/papers/1904.08779).
         """
         batch_size, sequence_length, hidden_size = shape_list(hidden_states)
 
@@ -1496,7 +1496,7 @@ WAV2VEC2_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare TFWav2Vec2 Model transformer outputing raw hidden-states without any specific head on top.",
+    "The bare TFWav2Vec2 Model transformer outputting raw hidden-states without any specific head on top.",
     WAV2VEC2_START_DOCSTRING,
 )
 class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):

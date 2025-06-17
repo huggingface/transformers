@@ -837,7 +837,7 @@ class TFMBartEncoder(keras.layers.Layer):
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
             if training and (dropout_probability < self.layerdrop):  # skip the layer
                 continue
@@ -1066,7 +1066,7 @@ class TFMBartDecoder(keras.layers.Layer):
                 )
 
         for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
             dropout_probability = random.uniform(0, 1)
@@ -1430,7 +1430,7 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel, TFCausalLanguageMo
         decoder_head_mask: tf.Tensor | None = None,
         cross_attn_head_mask: tf.Tensor | None = None,
         encoder_outputs: Optional[TFBaseModelOutput] = None,
-        past_key_values: Tuple[Tuple[tf.Tensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[tf.Tensor]]] = None,
         inputs_embeds: tf.Tensor | None = None,
         decoder_inputs_embeds: tf.Tensor | None = None,
         use_cache: Optional[bool] = None,

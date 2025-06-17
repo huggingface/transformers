@@ -23,22 +23,14 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...file_utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
 from ...modeling_outputs import DepthEstimatorOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, logging
+from ...utils import ModelOutput, auto_docstring, logging
 from ...utils.backbone_utils import load_backbone
 from .configuration_zoedepth import ZoeDepthConfig
 
 
 logger = logging.get_logger(__name__)
-
-# General docstring
-_CONFIG_FOR_DOC = "ZoeDepthConfig"
 
 
 @dataclass
@@ -1221,12 +1213,8 @@ class ZoeDepthMetricDepthEstimationHead(nn.Module):
 
 # Modified from transformers.models.dpt.modeling_dpt.DPTPreTrainedModel with DPT->ZoeDepth,dpt->zoedepth
 # avoiding sdpa and flash_attn_2 support, it's done int the backend
+@auto_docstring
 class ZoeDepthPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = ZoeDepthConfig
     base_model_prefix = "zoedepth"
     main_input_name = "pixel_values"
@@ -1245,39 +1233,10 @@ class ZoeDepthPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-ZOEDEPTH_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`ViTConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-ZOEDEPTH_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`DPTImageProcessor.__call__`]
-            for details.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     ZoeDepth model with one or multiple metric depth estimation head(s) on top.
-    """,
-    ZOEDEPTH_START_DOCSTRING,
+    """
 )
 class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
     def __init__(self, config):
@@ -1305,8 +1264,7 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(ZOEDEPTH_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=DepthEstimatorOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1318,8 +1276,6 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth depth estimation maps for computing the loss.
-
-        Returns:
 
         Examples:
         ```python

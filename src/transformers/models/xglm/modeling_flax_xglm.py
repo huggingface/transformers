@@ -413,7 +413,7 @@ class FlaxXGLMDecoderLayerCollection(nn.Module):
         for decoder_layer in self.layers:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-                # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+                # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
             if not deterministic and (dropout_probability < self.layerdrop):
                 layer_outputs = (None, None, None)
@@ -619,8 +619,8 @@ class FlaxXGLMPreTrainedModel(FlaxPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         train: bool = False,
-        params: dict = None,
-        past_key_values: dict = None,
+        params: Optional[dict] = None,
+        past_key_values: Optional[dict] = None,
         dropout_rng: PRNGKey = None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

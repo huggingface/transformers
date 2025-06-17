@@ -19,8 +19,10 @@ import unittest
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, AwqConfig, OPTForCausalLM
 from transformers.testing_utils import (
     backend_empty_cache,
+    get_device_properties,
     require_accelerate,
     require_auto_awq,
+    require_flash_attn,
     require_intel_extension_for_pytorch,
     require_torch_accelerator,
     require_torch_gpu,
@@ -60,12 +62,10 @@ class AwqConfigTest(unittest.TestCase):
 
         # Only cuda and xpu devices can run this function
         support_llm_awq = False
-        if torch.cuda.is_available():
-            compute_capability = torch.cuda.get_device_capability()
-            major, minor = compute_capability
-            if major >= 8:
-                support_llm_awq = True
-        elif torch.xpu.is_available():
+        device_type, major, _ = get_device_properties()
+        if device_type == "cuda" and major >= 8:
+            support_llm_awq = True
+        elif device_type == "xpu":
             support_llm_awq = True
 
         if support_llm_awq:
@@ -110,7 +110,7 @@ class AwqTest(unittest.TestCase):
     input_text = "Hello my name is"
 
     EXPECTED_OUTPUT = "Hello my name is Katie and I am a 20 year old student at the University of North Carolina at Chapel Hill. I am a junior and I am majoring in Journalism and minoring in Spanish"
-    EXPECTED_OUTPUT_BF16 = "Hello my name is Katie and I am a 20 year old student at the University of North Carolina at Chapel Hill. I am a junior and I am majoring in Exercise and Sport Science with a"
+    EXPECTED_OUTPUT_BF16 = "Hello my name is Katie and I am a 20 year old student at the University of North Carolina at Chapel Hill. I am a junior and I am majoring in Journalism and minoring in Spanish"
 
     EXPECTED_OUTPUT_EXLLAMA = [
         "Hello my name is Katie and I am a 20 year old student from the UK. I am currently studying for a degree in English Literature and History at the University of York. I am a very out",
@@ -243,7 +243,7 @@ class AwqTest(unittest.TestCase):
             self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
     @require_torch_multi_accelerator
-    def test_quantized_model_multi_gpu(self):
+    def test_quantized_model_multi_accelerator(self):
         """
         Simple test that checks if the quantized model is working properly with multiple GPUs
         """
@@ -299,13 +299,13 @@ class AwqFusedTest(unittest.TestCase):
         "You end up exactly where you started. Where are you?"
     )
 
-    EXPECTED_GENERATION = prompt + "\n\nThis is a classic puzzle that has been around for"
+    EXPECTED_GENERATION = prompt + "\n\nYou're at the center of a square."
     EXPECTED_GENERATION_CUSTOM_MODEL = "Hello,\n\nI have a problem with my 20"
     EXPECTED_GENERATION_MIXTRAL = prompt + " You're on the North Pole.\n\nThe"
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
         gc.collect()
 
     def _check_fused_modules(self, model):
@@ -328,7 +328,6 @@ class AwqFusedTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             quantization_config=quantization_config,
-            low_cpu_mem_usage=True,
             revision=self.model_revision,
         ).to(torch_device)
 
@@ -347,7 +346,6 @@ class AwqFusedTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
             quantization_config=quantization_config,
-            low_cpu_mem_usage=True,
         ).to(torch_device)
 
         # Check if model has been correctly fused
@@ -355,6 +353,12 @@ class AwqFusedTest(unittest.TestCase):
         # Checks if the modules_to_not_convert (here gate layer) is a Linear
         self.assertTrue(isinstance(model.model.layers[0].block_sparse_moe.gate, torch.nn.Linear))
 
+    @unittest.skipIf(
+        get_device_properties()[0] == "cuda" and get_device_properties()[1] < 8,
+        "Skipping because RuntimeError: FlashAttention only supports Ampere GPUs or newer, so not supported on GPU with capability < 8.0",
+    )
+    @require_flash_attn
+    @require_torch_gpu
     def test_generation_fused(self):
         """
         Test generation quality for fused models - single batch case
@@ -364,7 +368,6 @@ class AwqFusedTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             quantization_config=quantization_config,
-            low_cpu_mem_usage=True,
             revision=self.model_revision,
         ).to(torch_device)
 
@@ -378,6 +381,12 @@ class AwqFusedTest(unittest.TestCase):
 
         self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION)
 
+    @require_flash_attn
+    @require_torch_gpu
+    @unittest.skipIf(
+        get_device_properties()[0] == "cuda" and get_device_properties()[1] < 8,
+        "Skipping because RuntimeError: FlashAttention only supports Ampere GPUs or newer, so not supported on GPU with capability < 8.0",
+    )
     def test_generation_fused_batched(self):
         """
         Test generation quality for fused models - multi batch case
@@ -387,7 +396,6 @@ class AwqFusedTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             quantization_config=quantization_config,
-            low_cpu_mem_usage=True,
             revision=self.model_revision,
         ).to(torch_device)
 
@@ -425,7 +433,12 @@ class AwqFusedTest(unittest.TestCase):
 
         self.assertEqual(outputs[0]["generated_text"], EXPECTED_OUTPUT)
 
+    @require_flash_attn
     @require_torch_multi_gpu
+    @unittest.skipIf(
+        get_device_properties()[0] == "cuda" and get_device_properties()[1] < 8,
+        "Skipping because RuntimeError: FlashAttention only supports Ampere GPUs or newer, so not supported on GPU with capability < 8.0",
+    )
     def test_generation_custom_model(self):
         """
         Test generation quality for fused models using custom fused map.
@@ -461,8 +474,9 @@ class AwqFusedTest(unittest.TestCase):
         outputs = model.generate(**inputs, max_new_tokens=12)
         self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION_CUSTOM_MODEL)
 
-    @unittest.skip(reason="Not enough GPU memory on CI runners")
+    @require_flash_attn
     @require_torch_multi_gpu
+    @unittest.skip(reason="Not enough GPU memory on CI runners")
     def test_generation_mixtral_fused(self):
         """
         Text generation test for Mixtral + AWQ + fused

@@ -319,7 +319,7 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_generate_with_past_key_values(*config_and_inputs)
 
-    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
+    @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
     def test_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
@@ -407,21 +407,11 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             normalized_1 = F.softmax(out_shared_prefix_last_tokens)
             torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
 
-    @unittest.skip(
-        "Not currently compatible. Fails with - NotImplementedError: Cannot copy out of meta tensor; no data!"
-    )
-    def test_save_load_low_cpu_mem_usage(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "microsoft/udop-large"
         model = UdopForConditionalGeneration.from_pretrained(model_name)
         self.assertIsNotNone(model)
-
-    @unittest.skip(reason="TODO: Fix me @joao")
-    def test_generate_with_head_masking(self):
-        pass
 
     @unittest.skip(reason="TODO: Fix me @joao")
     def test_generate_without_input_ids(self):
@@ -618,12 +608,6 @@ class UdopEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
             normalized_0 = F.softmax(out_last_tokens)
             normalized_1 = F.softmax(out_shared_prefix_last_tokens)
             torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
-
-    @unittest.skip(
-        "Not currently compatible. Fails with - NotImplementedError: Cannot copy out of meta tensor; no data!"
-    )
-    def test_save_load_low_cpu_mem_usage(self):
-        pass
 
 
 @require_torch

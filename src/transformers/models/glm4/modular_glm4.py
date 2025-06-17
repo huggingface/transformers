@@ -15,20 +15,15 @@
 # limitations under the License.
 from typing import Optional, Tuple, Union
 
-import torch.nn as nn
 import torch.utils.checkpoint
 
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import LossKwargs, logging
-from ..glm.modeling_glm import (
-    GlmAttention,
-    GlmForCausalLM,
-    GlmForSequenceClassification,
-    GlmForTokenClassification,
-)
+from ..glm.modeling_glm import GlmAttention, GlmForCausalLM, GlmForSequenceClassification, GlmForTokenClassification
 from ..phi3.modeling_phi3 import Phi3MLP
 from .configuration_glm4 import Glm4Config
 from .modeling_glm4 import Glm4RMSNorm
@@ -36,14 +31,14 @@ from .modeling_glm4 import Glm4RMSNorm
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "THUDM/GLM-4-9B-Chat-0414"
+_CHECKPOINT_FOR_DOC = "THUDM/GLM-4-9B-0414"
 
 
 class Glm4MLP(Phi3MLP):
     pass
 
 
-class Glm4DecoderLayer(nn.Module):
+class Glm4DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Glm4Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -114,27 +109,18 @@ class Glm4ForCausalLM(GlmForCausalLM):
         **super_kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-            logits_to_keep (`int` or `torch.Tensor`, *optional*):
-                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
-                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
-                This is useful when using packed tensor format (single dimension for batch and sequence length).
-
-        Returns:
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 
         ```python
         >>> from transformers import AutoTokenizer, Glm4ForCausalLM
 
-        >>> model = Glm4ForCausalLM.from_pretrained("THUDM/GLM-4-9B-Chat-0414")
-        >>> tokenizer = AutoTokenizer.from_pretrained("THUDM/GLM-4-9B-Chat-0414")
+        >>> model = Glm4ForCausalLM.from_pretrained("THUDM/GLM-4-9B-0414")
+        >>> tokenizer = AutoTokenizer.from_pretrained("THUDM/GLM-4-9B-0414")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")

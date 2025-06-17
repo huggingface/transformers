@@ -161,7 +161,7 @@ The downside is that if you aren't used to them, it may take some time to get us
 Run the command below to start and complete the questionnaire with some basic information about the new model. This command jumpstarts the process by automatically generating some model code that you'll need to adapt.
 
 ```bash
-transformers-cli add-new-model-like
+transformers add-new-model-like
 ```
 
 ## Create a pull request
@@ -292,7 +292,7 @@ Once you're able to run the original checkpoint, you're ready to start adapting 
 
 ## Adapt the model code
 
-The `transformers-cli add-new-model-like` command should have generated a model and configuration file.
+The `transformers add-new-model-like` command should have generated a model and configuration file.
 
 - `src/transformers/models/brand_new_llama/modeling_brand_new_llama.py`
 - `src/transformers/models/brand_new_llama/configuration_brand_new_llama.py`
@@ -551,10 +551,10 @@ While this example doesn't include an image processor, you may need to implement
 
 If you do need to implement a new image processor, refer to an existing image processor to understand the expected structure. Slow image processors ([`BaseImageProcessor`]) and fast image processors ([`BaseImageProcessorFast`]) are designed differently, so make sure you follow the correct structure based on the processor type you're implementing.
 
-Run the following command (only if you haven't already created the fast image processor with the `transformers-cli add-new-model-like` command) to generate the necessary imports and to create a prefilled template for the fast image processor. Modify the template to fit your model.
+Run the following command (only if you haven't already created the fast image processor with the `transformers add-new-model-like` command) to generate the necessary imports and to create a prefilled template for the fast image processor. Modify the template to fit your model.
 
 ```bash
-transformers-cli add-fast-image-processor --model-name your_model_name
+transformers add-fast-image-processor --model-name your_model_name
 ```
 
 This command will generate the necessary imports and provide a pre-filled template for the fast image processor. You can then modify it to fit your model's needs.

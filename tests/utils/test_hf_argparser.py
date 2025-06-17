@@ -446,7 +446,7 @@ class HfArgumentParserTest(unittest.TestCase):
         self.assertEqual(
             len(raw_dict_fields),
             0,
-            "Found invalid raw `dict` types in the `TrainingArgument` typings. "
+            f"Found invalid raw `dict` types in the `TrainingArgument` typings, which are {raw_dict_fields}. "
             "This leads to issues with the CLI. Please turn this into `typing.Optional[dict,str]`",
         )
 

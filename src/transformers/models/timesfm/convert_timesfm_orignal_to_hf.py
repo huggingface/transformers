@@ -48,6 +48,7 @@ def write_model(model_path, safe_serialization=True, huggingface_repo_id="google
             num_layers=50,
             model_dims=1280,
             use_positional_embedding=False,
+            context_len=2048,
         ),
         checkpoint=timesfm.TimesFmCheckpoint(huggingface_repo_id=huggingface_repo_id),
     )
@@ -159,6 +160,7 @@ def check_outputs(model_path, huggingface_repo_id):
             input_patch_len=32,
             output_patch_len=128,
             num_layers=50,
+            context_len=2048,
             model_dims=1280,
             use_positional_embedding=False,
             point_forecast_mode="mean",

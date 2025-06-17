@@ -634,7 +634,7 @@ class FlaxBeitPreTrainedModel(FlaxPreTrainedModel):
         self,
         pixel_values,
         bool_masked_pos=None,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: jax.random.PRNGKey = None,
         train: bool = False,
         output_attentions: Optional[bool] = None,

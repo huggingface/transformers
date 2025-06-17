@@ -14,7 +14,8 @@
 # limitations under the License.
 """Image processor class for Vilt."""
 
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from collections.abc import Iterable
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -165,7 +166,7 @@ class ViltImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         size_divisor: int = 32,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
