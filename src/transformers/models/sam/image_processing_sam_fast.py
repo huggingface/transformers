@@ -16,6 +16,9 @@
 
 from typing import Dict, Optional
 
+import torch
+import torch.nn.functional as F
+
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
@@ -26,9 +29,6 @@ from ...image_utils import (
     PILImageResampling,
 )
 from ...utils import auto_docstring
-
-import torch
-import torch.nn.functional as F
 
 
 class SamFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):

@@ -15,15 +15,22 @@
 
 import unittest
 
-from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 from transformers.image_utils import PILImageResampling
+from transformers.testing_utils import require_torch, require_vision
+from transformers.utils import (
+    is_torch_available,
+    is_torchvision_available,
+    is_vision_available,
+)
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    ImageProcessingTestMixin,
+    prepare_image_inputs,
+)
 
 
 if is_torch_available():
-    import torch
+    pass
 
 if is_vision_available():
     from transformers import SamImageProcessor
@@ -91,7 +98,9 @@ class SamImageProcessingTester:
     def expected_output_image_shape(self, images):
         return self.num_channels, self.pad_size["height"], self.pad_size["width"]
 
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+    def prepare_image_inputs(
+        self, equal_resolution=False, numpify=False, torchify=False
+    ):
         return prepare_image_inputs(
             batch_size=self.batch_size,
             num_channels=self.num_channels,
@@ -107,7 +116,9 @@ class SamImageProcessingTester:
 @require_vision
 class SamImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = SamImageProcessor if is_vision_available() else None
-    fast_image_processing_class = SamImageProcessorFast if is_torchvision_available() else None
+    fast_image_processing_class = (
+        SamImageProcessorFast if is_torchvision_available() else None
+    )
 
     def setUp(self):
         super().setUp()
@@ -134,7 +145,9 @@ class SamImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_image_processor_from_dict_with_kwargs(self):
         for image_processing_class in self.image_processor_list:
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
+            image_processor = image_processing_class.from_dict(
+                self.image_processor_dict
+            )
             self.assertEqual(image_processor.size, {"longest_edge": 1024})
             self.assertEqual(image_processor.pad_size, {"height": 1024, "width": 1024})
             self.assertEqual(image_processor.do_normalize, True)
