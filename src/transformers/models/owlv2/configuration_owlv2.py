@@ -14,7 +14,7 @@
 # limitations under the License.
 """OWLv2 model configuration"""
 
-from typing import TYPE_CHECKING, Dict
+from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
@@ -269,21 +269,6 @@ class Owlv2Config(PretrainedConfig):
         self.logit_scale_init_value = logit_scale_init_value
         self.return_dict = return_dict
         self.initializer_factor = 1.0
-
-    @classmethod
-    def from_text_vision_configs(cls, text_config: Dict, vision_config: Dict, **kwargs):
-        r"""
-        Instantiate a [`Owlv2Config`] (or a derived class) from owlv2 text model configuration and owlv2 vision
-        model configuration.
-
-        Returns:
-            [`Owlv2Config`]: An instance of a configuration object
-        """
-        config_dict = {}
-        config_dict["text_config"] = text_config
-        config_dict["vision_config"] = vision_config
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
 __all__ = ["Owlv2Config", "Owlv2TextConfig", "Owlv2VisionConfig"]
