@@ -148,7 +148,7 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
     @slow
     def test_model_15b_a2b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = Qwen3MoeForCausalLM.from_pretrained("Qwen/Qwen3-15B-A2B-Base", device_map="auto")
+        model = Qwen3MoeForCausalLM.from_pretrained("Qwen/Qwen3-30B-A3B-Base", device_map="auto")
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         with torch.no_grad():
             out = model(input_ids).logits.float().cpu()
@@ -169,8 +169,8 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
             """To be or not to be, that is the question. Whether 'tis nobler in the mind to suffer the sl"""
         )
         prompt = "To be or not to"
-        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-15B-A2B-Base", use_fast=False)
-        model = Qwen3MoeForCausalLM.from_pretrained("Qwen/Qwen3-15B-A2B-Base", device_map="auto")
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-30B-A3B-Base", use_fast=False)
+        model = Qwen3MoeForCausalLM.from_pretrained("Qwen/Qwen3-30B-A3B-Base", device_map="auto")
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
         # greedy generation outputs
@@ -191,7 +191,7 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
         # An input with 4097 tokens that is above the size of the sliding window
         input_ids = [1] + [306, 338] * 2048
         model = Qwen3MoeForCausalLM.from_pretrained(
-            "Qwen/Qwen3-15B-A2B-Base",
+            "Qwen/Qwen3-30B-A3B-Base",
             device_map="auto",
             load_in_4bit=True,
             attn_implementation="flash_attention_2",
@@ -219,7 +219,7 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
         # An input with 4097 tokens that is above the size of the sliding window
         input_ids = [1] + [306, 338] * 2048
         model = Qwen3MoeForCausalLM.from_pretrained(
-            "Qwen/Qwen3-15B-A2B-Base",
+            "Qwen/Qwen3-30B-A3B-Base",
             device_map="auto",
             attn_implementation="sdpa",
         )
@@ -243,7 +243,7 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
             """To be or not to be, that is the question. Whether 'tis nobler in the mind to suffer the sl"""
         )
         prompt = "To be or not to"
-        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-15B-A2B-Base", use_fast=False)
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-30B-A3B-Base", use_fast=False)
 
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
@@ -258,12 +258,12 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
             "To be or not to be, that is the question: whether 'tis nobler in the mind to suffer the sl"
         )
         prompt = "To be or not to"
-        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-15B-A2B-Base", use_fast=False)
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-30B-A3B-Base", use_fast=False)
         model = Qwen3MoeForCausalLM.from_pretrained(
-            "Qwen/Qwen3-15B-A2B-Base", device_map="auto", torch_dtype=torch.float16
+            "Qwen/Qwen3-30B-A3B-Base", device_map="auto", torch_dtype=torch.float16
         )
         assistant_model = Qwen3MoeForCausalLM.from_pretrained(
-            "Qwen/Qwen3-15B-A2B-Base", device_map="auto", torch_dtype=torch.float16
+            "Qwen/Qwen3-30B-A3B-Base", device_map="auto", torch_dtype=torch.float16
         )
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
