@@ -1700,27 +1700,23 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
 
             for key in dict_to_expand:
                 if key == "pixel_values":
-                    # split images into samples
-                    samples = torch.split(image_grid_thw, list(image_nums))
-                    # compute the sequence length of images for each sample
-                    lengths = [torch.prod(sample, dim=1).sum() for sample in samples]
+                    lengths = torch.prod(image_grid_thw, dim=-1).tolist()
                     dict_to_expand[key] = _repeat_interleave_samples(
                         dict_to_expand[key], lengths=lengths, repeat_times=expand_size
                     )
                 elif key == "image_grid_thw":
                     # get the num of images for each sample
-                    lengths = list(image_nums)
+                    lengths = len(image_grid_thw)
                     dict_to_expand[key] = _repeat_interleave_samples(
                         dict_to_expand[key], lengths=lengths, repeat_times=expand_size
                     )
                 elif key == "pixel_values_videos":
-                    samples = torch.split(video_grid_thw, list(video_nums))
-                    lengths = [torch.prod(sample, dim=1).sum() for sample in samples]
+                    lengths = torch.prod(video_grid_thw, dim=-1).tolist()
                     dict_to_expand[key] = _repeat_interleave_samples(
                         dict_to_expand[key], lengths=lengths, repeat_times=expand_size
                     )
                 elif key == "video_grid_thw":
-                    lengths = list(video_nums)
+                    lengths = len(video_grid_thw)
                     dict_to_expand[key] = _repeat_interleave_samples(
                         dict_to_expand[key], lengths=lengths, repeat_times=expand_size
                     )
@@ -1730,7 +1726,7 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
                             f"Expected value for key '{key}' to be a list, but got {type(dict_to_expand[key])} instead."
                         )
                     tensor = torch.tensor(dict_to_expand[key])
-                    lengths = list(video_nums)
+                    lengths = len(video_grid_thw)
                     tensor = _repeat_interleave_samples(tensor, lengths=lengths, repeat_times=expand_size)
                     dict_to_expand[key] = tensor.tolist()
             return dict_to_expand
