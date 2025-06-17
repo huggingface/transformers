@@ -435,11 +435,11 @@ class HfArgumentParserTest(unittest.TestCase):
 
         for field in fields.values():
             # First verify raw dict
-            if field.type == dict:
+            if field.type is dict:
                 raw_dict_fields.append(field)
             # Next check for `Union` or `Optional`
             elif get_origin(field.type) == Union:
-                if any(arg == dict for arg in get_args(field.type)):
+                if any(arg is dict for arg in get_args(field.type)):
                     optional_dict_fields.append(field)
 
         # First check: anything in `raw_dict_fields` is very bad
