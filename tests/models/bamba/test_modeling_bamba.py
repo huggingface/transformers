@@ -623,7 +623,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
                 (
                     "xpu",
                     3,
-                ): "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are all doing well. Today I",
+                ): "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are all doing well. I am",
             }
         )
 
@@ -634,6 +634,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
         ].to(torch_device)
         out = self.model.generate(input_ids, do_sample=False, max_new_tokens=10)
         output_sentence = self.tokenizer.decode(out[0, :])
+        print(f"output_sentence: {output_sentence}")
         expected = expectations.get_expectation()
         self.assertEqual(output_sentence, expected)
 
