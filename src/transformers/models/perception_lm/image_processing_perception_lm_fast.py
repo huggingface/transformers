@@ -15,6 +15,8 @@
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
+import math
+from functools import reduce
 
 from transformers.models.perception_lm.image_transform import get_image_transform
 
@@ -26,17 +28,28 @@ from ...image_processing_utils_fast import (
     DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
+    get_image_size,
 )
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     add_start_docstrings,
     is_torch_available,
+    is_torchvision_available,
 )
-from ...image_utils import PILImageResampling, IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
+from ...image_utils import (
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
+    ChannelDimension,
+    PILImageResampling,
+)
 
 if is_torch_available():
     import torch
+
+if is_torchvision_available():
+    from torchvision.transforms import functional as F
+
 
 class PerceptionLMFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     vision_input_type: str = "thumb+tile"
@@ -58,19 +71,209 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
     do_convert_rgb = True
     valid_kwargs = PerceptionLMFastImageProcessorKwargs
 
-
     def __init__(self, **kwargs: Unpack[PerceptionLMFastImageProcessorKwargs]) -> None:
         super().__init__(**kwargs)
-        self.image_transform = get_image_transform(
-            vision_input_type=self.vision_input_type,
-            image_res=self.tile_size,
-            max_num_tiles=self.max_num_tiles,
-        )
 
     def to_dict(self):
         dictionary = super().to_dict()
         dictionary["image_transform"] = self.image_transform.to_dict()
         return dictionary
+
+    @staticmethod
+    def _factors(n: int):
+        """Return all factors of a number."""
+        return set(
+            reduce(
+                list.__add__,
+                ([i, n // i] for i in range(1, int(n**0.5) + 1) if n % i == 0),
+            )
+        )
+
+    def _find_supported_aspect_ratios(self):
+        """
+        This function computes all the allowed aspect ratios for a fixed
+        number of input chunks.
+
+        For example, with `num_tiles=5`, it will return:
+        {
+            0.2: [(1, 5)],
+            5.0: [(5, 1)],
+            0.25: [(1, 4)],
+            1.0: [(2, 2), (1, 1)],
+            4.0: [(4, 1)],
+            0.3333333333333333: [(1, 3)],
+            3.0: [(3, 1)],
+            0.5: [(1, 2)],
+            2.0: [(2, 1)]
+        }
+        """
+        asp_dict = {}
+        for chunk_size in range(self.max_num_tiles, 0, -1):
+            _factors = sorted(self._factors(chunk_size))
+            _asp_ratios = [(x, chunk_size // x) for x in _factors]
+            for ratio in _asp_ratios:
+                k = ratio[0] / ratio[1]
+                if k not in asp_dict:
+                    asp_dict[k] = [ratio]
+                else:
+                    asp_dict[k].append(ratio)
+        return asp_dict
+
+    def _get_image_height_width(
+        self, image_width: int, image_height: int, target_width: int, target_height: int
+    ) -> Tuple[int, int]:
+        """
+        Given image width, height and target width, height for the canvas, return the dimensions of how the image would be resized
+        with aspect ratio preservation.
+        """
+        scale = image_width / image_height
+
+        if scale > 1.0:
+            # Width is larger than height
+
+            # Rescaling factor is the minimum of the two scaling factors. Else one side would be outside of the canvas.
+            rescaling_factor = min(
+                target_width / image_width, target_height / image_height
+            )
+
+            # Set new width to target width and height to the rescaled height.
+            new_w = rescaling_factor * image_width
+            new_h = math.floor(new_w / scale)
+
+        else:
+            # Height is larger than width
+
+            # Rescaling factor is the minimum of the two scaling factors. Else one side would be outside of the canvas.
+            rescaling_factor = min(
+                target_width / image_width, target_height / image_height
+            )
+
+            # Set new height to target height and width to the rescaled width.
+            new_h = rescaling_factor * image_height
+            new_w = math.floor(new_h * scale)
+
+        return new_w, new_h
+
+    def _fit_image_to_canvas(self, img_width: int, img_height: int, tile_size: int):
+        """
+        Given an image width, height and target number of chunks this function will see if the image
+        can be fit into any of the canvases that can be build from arranging the tiles in a grid.
+        If the image can be fit onto several canvases, it will return the canvas where the shorter edge
+        of the image will be largest.
+        """
+        # Initialize the optimal canvas to None. If no canvas is found where image fits, function returns None.
+        optimal_canvas = None
+        optimal_image_width_height = None
+
+        scale = img_width / img_height
+
+        # Gather all potential supported image resolutions and iterate through them to find best match
+        potential_arrangements = [
+            item
+            for sublist in self._find_supported_aspect_ratios().values()
+            for item in sublist
+        ]
+        for n_w, n_h in potential_arrangements:
+            # Compute the canvas size
+            canvas_width, canvas_height = n_w * tile_size, n_h * tile_size
+
+            # Check if image can fit into the canvas without downsampling
+            if canvas_width >= img_width and canvas_height >= img_height:
+                # If we did not find a good canvas yet, we will use the current one
+                if optimal_canvas is None:
+                    # Set optimal canvas and determine the actual image height and width in the canvas with aspect ratio preserving resampling
+                    optimal_canvas = (n_w, n_h)
+                    optimal_image_width_height = self._get_image_height_width(
+                        image_width=img_width,
+                        image_height=img_height,
+                        target_width=n_w * tile_size,
+                        target_height=n_h * tile_size,
+                    )
+                else:
+                    # If we already found an optimal canvas before, we will check if the shorter edge of the image will be larger than the current optimal canvas.
+                    # This means we can potentially upsample the image resolution which is beneficial to performance.
+                    image_width_height = self._get_image_height_width(
+                        image_width=img_width,
+                        image_height=img_height,
+                        target_width=n_w * tile_size,
+                        target_height=n_h * tile_size,
+                    )
+                    # Llama3V dynamic tiling. Priortize biggest canvas.
+                    if (
+                        scale < 1.0
+                        and (image_width_height[0] >= optimal_image_width_height[0])
+                    ) or (
+                        scale >= 1.0
+                        and (image_width_height[1] >= optimal_image_width_height[1])
+                    ):
+                        optimal_canvas = (n_w, n_h)
+                        optimal_image_width_height = image_width_height
+        return optimal_canvas
+
+    def _find_closest_aspect_ratio(self, img_width: int, img_height: int) -> Tuple:
+        """
+        Given an image width, height and target number of chunks
+        this function will find the closest supported aspect ratio.
+        """
+        tgt_ar = img_width / img_height
+        asp_dict = self._find_supported_aspect_ratios()
+        cl_d, cl_p = 1e23, None
+        if tgt_ar >= 1:
+            cl_p = min(
+                [k for k in asp_dict.keys() if k <= tgt_ar],
+                key=lambda x: abs(x - tgt_ar),
+            )
+            v = asp_dict[cl_p]
+            # select width
+            widths = [(idx, self.size * vv[0]) for idx, vv in enumerate(v)]
+            tgt_idx = max(widths, key=lambda x: x[1])[0]
+        else:
+            cl_p = min(
+                [k for k in asp_dict.keys() if k > tgt_ar],
+                key=lambda x: abs(1 / x - 1 / tgt_ar),
+            )
+            v = asp_dict[cl_p]
+            # select height
+            heights = [(idx, self.size * vv[1]) for idx, vv in enumerate(v)]
+            tgt_idx = max(heights, key=lambda x: x[1])[0]
+        out = v[tgt_idx]
+        return out
+
+    def _split(self, image: torch.Tensor, ncw: int, nch: int) -> torch.Tensor:
+        # Split image into number of required tiles (width x height)
+        batch_size, num_channels, height, width = image.size()
+        image = image.view(
+            batch_size, num_channels, nch, height // nch, ncw, width // ncw
+        )
+        # Permute dimensions to reorder the axes
+        image = image.permute(0, 2, 4, 1, 3, 5).contiguous()
+        # Reshape into the desired output shape (batch_size * 4, num_channels, width/2, height/2)
+        image = image.view(
+            batch_size, ncw * nch, num_channels, height // nch, width // ncw
+        )
+        return image
+
+    def resize(
+        self,
+        image: np.ndarray,
+        tile_size: int,
+        max_num_tiles: int,
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ):
+        h, w = get_image_size(image, channel_dim=input_data_format)
+        if max_num_tiles > 1:
+            ar = self._fit_image_to_canvas(
+                img_width=w, img_height=h, tile_size=tile_size
+            )
+            if ar is None:
+                # If we did not find a canvas, we have to find the closest aspect ratio and downsample the image
+                ar = self._find_closest_aspect_ratio(img_width=w, img_height=h)
+        else:
+            ar = (1, 1)
+        new_w, new_h = ar[0] * tile_size, ar[1] * tile_size
+        image = F.resize(image, (new_h, new_w), interpolation=resample)
+        return image, ar
 
     def _preprocess(
         self,
@@ -85,29 +288,49 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
         **kwargs: Unpack[PerceptionLMFastImageProcessorKwargs]
     ) -> BatchFeature:
         # Group images by size for batched transformation
-        if images:
-            grouped_images, grouped_images_index = group_images_by_shape(images)
-            resized_images_grouped = {}
-            for shape, stacked_images in grouped_images.items():
-                if do_resize:
-                    stacked_images, _ = self.image_transform(stacked_images)
-                resized_images_grouped[shape] = stacked_images
-            resized_images = reorder_images(resized_images_grouped, grouped_images_index)
-                
-            grouped_images, grouped_images_index = group_images_by_shape(resized_images)
-            processed_images_grouped = {}
-            for shape, stacked_images in grouped_images.items():
-                # Fused rescale and normalize
-                stacked_images = self.rescale_and_normalize(
-                    stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+        grouped_images, grouped_images_index = group_images_by_shape(images)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                thumbnails, _ = self.resize(
+                    stacked_images, self.tile_size, max_num_tiles=1
                 )
-                processed_images_grouped[shape] = stacked_images
-            processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-            
-            processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
-            return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
-        else:
-            return BatchFeature(data={"pixel_values": None}, tensor_type=return_tensors)
+                images_for_tiling, (tiles_w, tiles_h) = self.resize(
+                    stacked_images, self.tile_size, max_num_tiles=self.max_num_tiles
+                )
+                image_tiles = self._split(images_for_tiling, tiles_w, tiles_h)
+                stacked_images = torch.cat([thumbnails.unsqueeze(1), image_tiles], dim=1)
+
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(
+            resized_images_grouped, grouped_images_index
+        )
+
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            # Fused rescale and normalize
+            stacked_images = self.rescale_and_normalize(
+                stacked_images,
+                do_rescale,
+                rescale_factor,
+                do_normalize,
+                image_mean,
+                image_std,
+            )
+            processed_images_grouped[shape] = stacked_images
+        processed_images = reorder_images(
+            processed_images_grouped, grouped_images_index
+        )
+
+        processed_images = (
+            torch.stack(processed_images, dim=0)
+            if return_tensors
+            else processed_images
+        )
+        return BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors
+        )
 
 
 __all__ = ["PerceptionLMImageProcessorFast"]
