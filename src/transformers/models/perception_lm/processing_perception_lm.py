@@ -122,7 +122,9 @@ class PerceptionLMProcessor(ProcessorMixin):
             - **pixel_values_videos** -- Video pixel values to be fed to a model. Returned when `videos` is provided.
         """
         if text is None:
-            raise ValueError("You have to specify at least `text` input. Optionally, you can also specify `images` or `videos`.")
+            raise ValueError(
+                "You have to specify at least `text` input. Optionally, you can also specify `images` or `videos`."
+            )
 
         output_kwargs = self._merge_kwargs(
             PerceptionLMProcessorKwargs,
@@ -169,9 +171,11 @@ class PerceptionLMProcessor(ProcessorMixin):
             for media in media_list:
                 height, width = get_image_size(to_numpy_array(media))
                 num_tiles = media.shape[0]
-                num_media_tokens = (height // self.patch_size // self.pooling_ratio) * (
-                    width // self.patch_size // self.pooling_ratio
-                ) * num_tiles
+                num_media_tokens = (
+                    (height // self.patch_size // self.pooling_ratio)
+                    * (width // self.patch_size // self.pooling_ratio)
+                    * num_tiles
+                )
                 media_token_list.append(num_media_tokens)
             sample = ""
             for i, num_media_tokens in enumerate(media_token_list):

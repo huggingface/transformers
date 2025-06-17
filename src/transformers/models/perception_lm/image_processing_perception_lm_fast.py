@@ -126,9 +126,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
             # Width is larger than height
 
             # Rescaling factor is the minimum of the two scaling factors. Else one side would be outside of the canvas.
-            rescaling_factor = min(
-                target_width / image_width, target_height / image_height
-            )
+            rescaling_factor = min(target_width / image_width, target_height / image_height)
 
             # Set new width to target width and height to the rescaled height.
             new_w = rescaling_factor * image_width
@@ -138,9 +136,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
             # Height is larger than width
 
             # Rescaling factor is the minimum of the two scaling factors. Else one side would be outside of the canvas.
-            rescaling_factor = min(
-                target_width / image_width, target_height / image_height
-            )
+            rescaling_factor = min(target_width / image_width, target_height / image_height)
 
             # Set new height to target height and width to the rescaled width.
             new_h = rescaling_factor * image_height
@@ -163,9 +159,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
 
         # Gather all potential supported image resolutions and iterate through them to find best match
         potential_arrangements = [
-            item
-            for sublist in self._find_supported_aspect_ratios().values()
-            for item in sublist
+            item for sublist in self._find_supported_aspect_ratios().values() for item in sublist
         ]
         for n_w, n_h in potential_arrangements:
             # Compute the canvas size
@@ -193,20 +187,14 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
                         target_height=n_h * tile_size,
                     )
                     # Llama3V dynamic tiling. Priortize biggest canvas.
-                    if (
-                        scale < 1.0
-                        and (image_width_height[0] >= optimal_image_width_height[0])
-                    ) or (
-                        scale >= 1.0
-                        and (image_width_height[1] >= optimal_image_width_height[1])
+                    if (scale < 1.0 and (image_width_height[0] >= optimal_image_width_height[0])) or (
+                        scale >= 1.0 and (image_width_height[1] >= optimal_image_width_height[1])
                     ):
                         optimal_canvas = (n_w, n_h)
                         optimal_image_width_height = image_width_height
         return optimal_canvas
 
-    def _find_closest_aspect_ratio(
-        self, img_width: int, img_height: int, tile_size: int
-    ) -> Tuple:
+    def _find_closest_aspect_ratio(self, img_width: int, img_height: int, tile_size: int) -> Tuple:
         """
         Given an image width, height and target number of chunks
         this function will find the closest supported aspect ratio.
@@ -238,15 +226,11 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
     def _split(self, image: torch.Tensor, ncw: int, nch: int) -> torch.Tensor:
         # Split image into number of required tiles (width x height)
         batch_size, num_channels, height, width = image.size()
-        image = image.view(
-            batch_size, num_channels, nch, height // nch, ncw, width // ncw
-        )
+        image = image.view(batch_size, num_channels, nch, height // nch, ncw, width // ncw)
         # Permute dimensions to reorder the axes
         image = image.permute(0, 2, 4, 1, 3, 5).contiguous()
         # Reshape into the desired output shape (batch_size * 4, num_channels, width/2, height/2)
-        image = image.view(
-            batch_size, ncw * nch, num_channels, height // nch, width // ncw
-        )
+        image = image.view(batch_size, ncw * nch, num_channels, height // nch, width // ncw)
         return image
 
     def resize(
@@ -259,14 +243,10 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
     ):
         h, w = get_image_size(image, channel_dim=input_data_format)
         if max_num_tiles > 1:
-            ar = self._fit_image_to_canvas(
-                img_width=w, img_height=h, tile_size=tile_size
-            )
+            ar = self._fit_image_to_canvas(img_width=w, img_height=h, tile_size=tile_size)
             if ar is None:
                 # If we did not find a canvas, we have to find the closest aspect ratio and downsample the image
-                ar = self._find_closest_aspect_ratio(
-                    img_width=w, img_height=h, tile_size=tile_size
-                )
+                ar = self._find_closest_aspect_ratio(img_width=w, img_height=h, tile_size=tile_size)
         else:
             ar = (1, 1)
         new_w, new_h = ar[0] * tile_size, ar[1] * tile_size
@@ -283,23 +263,19 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
         return_tensors: Optional[Union[str, TensorType]],
-        **kwargs: Unpack[PerceptionLMFastImageProcessorKwargs]
+        **kwargs: Unpack[PerceptionLMFastImageProcessorKwargs],
     ) -> BatchFeature:
         # Group images by size for batched transformation
         grouped_images, grouped_images_index = group_images_by_shape(images)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
-                thumbnails, _ = self.resize(
-                    stacked_images, self.tile_size, max_num_tiles=1
-                )
+                thumbnails, _ = self.resize(stacked_images, self.tile_size, max_num_tiles=1)
                 images_for_tiling, (tiles_w, tiles_h) = self.resize(
                     stacked_images, self.tile_size, max_num_tiles=self.max_num_tiles
                 )
                 image_tiles = self._split(images_for_tiling, tiles_w, tiles_h)
-                stacked_images = torch.cat(
-                    [thumbnails.unsqueeze(1), image_tiles], dim=1
-                )
+                stacked_images = torch.cat([thumbnails.unsqueeze(1), image_tiles], dim=1)
 
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
@@ -317,16 +293,10 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
                 image_std,
             )
             processed_images_grouped[shape] = stacked_images
-        processed_images = reorder_images(
-            processed_images_grouped, grouped_images_index
-        )
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
-        processed_images = (
-            torch.stack(processed_images, dim=0) if return_tensors else processed_images
-        )
-        return BatchFeature(
-            data={"pixel_values": processed_images}, tensor_type=return_tensors
-        )
+        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
+        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
 
 __all__ = ["PerceptionLMImageProcessorFast"]

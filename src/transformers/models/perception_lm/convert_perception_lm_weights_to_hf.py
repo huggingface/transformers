@@ -171,9 +171,7 @@ CHAT_TEMPLATE = (
 
 
 def compute_intermediate_size(n, ffn_dim_multiplier=1, multiple_of=256):
-    return multiple_of * (
-        (int(ffn_dim_multiplier * int(8 * n / 3)) + multiple_of - 1) // multiple_of
-    )
+    return multiple_of * ((int(ffn_dim_multiplier * int(8 * n / 3)) + multiple_of - 1) // multiple_of)
 
 
 def read_json(path):
@@ -213,9 +211,7 @@ def write_model(
     dim = model_params["dim"]
     dims_per_head = dim // n_heads
     base = model_params.get("rope_theta", 10000.0)
-    inv_freq = 1.0 / (
-        base ** (torch.arange(0, dims_per_head, 2).float() / dims_per_head)
-    )
+    inv_freq = 1.0 / (base ** (torch.arange(0, dims_per_head, 2).float() / dims_per_head))
     context_length = model_params["max_seqlen"]
     max_position_embeddings = context_length
     tie_word_embeddings = model_params.get("weight_tying", False)
@@ -230,11 +226,7 @@ def write_model(
 
     # permute for sliced rotary
     def permute(w, n_heads, dim1=dim, dim2=dim):
-        return (
-            w.view(n_heads, dim1 // n_heads // 2, 2, dim2)
-            .transpose(1, 2)
-            .reshape(dim1, dim2)
-        )
+        return w.view(n_heads, dim1 // n_heads // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
 
     with tempfile.TemporaryDirectory() as tmp_model_path:
         print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
@@ -249,9 +241,7 @@ def write_model(
             )
         else:
             # Sharded
-            checkpoint_list = sorted(
-                [file for file in os.listdir(input_base_path) if file.endswith(".pth")]
-            )
+            checkpoint_list = sorted([file for file in os.listdir(input_base_path) if file.endswith(".pth")])
             print("Loading in order:", checkpoint_list)
             loaded = [
                 torch.load(
@@ -297,9 +287,7 @@ def write_model(
                     f"layers.{layer_i}.ffn_norm.weight"
                 ],
             }
-            state_dict[
-                f"model.language_model.layers.{layer_i}.self_attn.rotary_emb.inv_freq"
-            ] = inv_freq
+            state_dict[f"model.language_model.layers.{layer_i}.self_attn.rotary_emb.inv_freq"] = inv_freq
             for k, v in state_dict.items():
                 index_dict["weight_map"][k] = filename
                 param_count += v.numel()
@@ -311,18 +299,10 @@ def write_model(
         state_dict = {
             "model.language_model.embed_tokens.weight": loaded["tok_embeddings.weight"],
             "model.language_model.norm.weight": loaded["norm.weight"],
-            "model.multi_modal_projector.projector.0.weight": loaded[
-                "vision_projector.projector.0.weight"
-            ],
-            "model.multi_modal_projector.projector.2.weight": loaded[
-                "vision_projector.projector.2.weight"
-            ],
-            "model.multi_modal_projector.projector.0.bias": loaded[
-                "vision_projector.projector.0.bias"
-            ],
-            "model.multi_modal_projector.projector.2.bias": loaded[
-                "vision_projector.projector.2.bias"
-            ],
+            "model.multi_modal_projector.projector.0.weight": loaded["vision_projector.projector.0.weight"],
+            "model.multi_modal_projector.projector.2.weight": loaded["vision_projector.projector.2.weight"],
+            "model.multi_modal_projector.projector.0.bias": loaded["vision_projector.projector.0.bias"],
+            "model.multi_modal_projector.projector.2.bias": loaded["vision_projector.projector.2.bias"],
         }
         if not tie_word_embeddings:
             state_dict["lm_head.weight"] = loaded["output.weight"]
@@ -333,18 +313,16 @@ def write_model(
         print(f"Saved {filename}")
 
         filename = f"pytorch_model-{n_layers + 2}-of-{n_layers + 2}.bin"
-        state_dict = {
-            k.replace("vision_model.", ""): v
-            for k, v in loaded.items()
-            if "vision_model" in k
-        }
+        state_dict = {k.replace("vision_model.", ""): v for k, v in loaded.items() if "vision_model" in k}
         vision_params = model_params["vision_model"]
         if vision_params["layers"] == 23 and vision_params["width"] == 1024:
             architecture = "vit_pe_core_large_patch14_336"
         elif vision_params["layers"] == 47 and vision_params["width"] == 1536:
             architecture = "vit_pe_core_gigantic_patch14_448"
         else:
-            raise ValueError(f"Unsupported PE config: {vision_params['layers']} layers and {vision_params['width']} width")
+            raise ValueError(
+                f"Unsupported PE config: {vision_params['layers']} layers and {vision_params['width']} width"
+            )
 
         vision_config = PerceptionEncoderConfig(
             use_cls_token=vision_params["use_cls_token"],
@@ -372,23 +350,12 @@ def write_model(
 
         # Write configs
         index_dict["metadata"] = {"total_size": param_count * 2}
-        write_json(
-            index_dict, os.path.join(tmp_model_path, "pytorch_model.bin.index.json")
-        )
-        ffn_dim_multiplier = (
-            model_params["ffn_dim_multiplier"]
-            if "ffn_dim_multiplier" in model_params
-            else 1
-        )
-        multiple_of = (
-            model_params["multiple_of"] if "multiple_of" in model_params else 256
-        )
+        write_json(index_dict, os.path.join(tmp_model_path, "pytorch_model.bin.index.json"))
+        ffn_dim_multiplier = model_params["ffn_dim_multiplier"] if "ffn_dim_multiplier" in model_params else 1
+        multiple_of = model_params["multiple_of"] if "multiple_of" in model_params else 256
 
         bos_token_id = tokenizer.convert_tokens_to_ids("<|begin_of_text|>")
-        eos_token_id = [
-            tokenizer.convert_tokens_to_ids(t)
-            for t in ["<|end_of_text|>", "<|eot_id|>"]
-        ]
+        eos_token_id = [tokenizer.convert_tokens_to_ids(t) for t in ["<|end_of_text|>", "<|eot_id|>"]]
 
         use_scaled_rope = model_params["use_scaled_rope"]
         if use_scaled_rope:
@@ -404,9 +371,7 @@ def write_model(
 
         text_config = LlamaConfig(
             hidden_size=dim,
-            intermediate_size=compute_intermediate_size(
-                dim, ffn_dim_multiplier, multiple_of
-            ),
+            intermediate_size=compute_intermediate_size(dim, ffn_dim_multiplier, multiple_of),
             num_attention_heads=model_params["n_heads"],
             num_hidden_layers=model_params["n_layers"],
             rms_norm_eps=model_params["norm_eps"],
@@ -531,9 +496,7 @@ def write_tokenizer(
     push_to_hub=False,
 ):
     print("Converting the tokenizer.")
-    tokenizer_class = (
-        LlamaTokenizer if LlamaTokenizerFast is None else LlamaTokenizerFast
-    )
+    tokenizer_class = LlamaTokenizer if LlamaTokenizerFast is None else LlamaTokenizerFast
     context_length = params["model"]["max_seqlen"]
     tokenizer = Llama3Converter(
         input_tokenizer_path,
@@ -541,9 +504,7 @@ def write_tokenizer(
         context_length,
     ).converted_tokenizer
 
-    tokenizer.image_token_id = tokenizer.encode(
-        tokenizer.image_token, add_special_tokens=False
-    )[0]
+    tokenizer.image_token_id = tokenizer.encode(tokenizer.image_token, add_special_tokens=False)[0]
     processor_config = {
         "pooling_ratio": params["model"]["pooling_ratio"],
         "patch_size": params["model"]["vision_model"]["patch_size"],
@@ -579,9 +540,7 @@ def write_tokenizer(
     )
 
     if push_to_hub:
-        print(
-            f"Pushing a {tokenizer_class.__name__} to the Hub repo - {tokenizer_path}."
-        )
+        print(f"Pushing a {tokenizer_class.__name__} to the Hub repo - {tokenizer_path}.")
         processor.push_to_hub(tokenizer_path, private=True, use_temp_dir=True)
     else:
         print(f"Saving a {tokenizer_class.__name__} to {tokenizer_path}.")
