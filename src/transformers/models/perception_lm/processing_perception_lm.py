@@ -56,6 +56,8 @@ class PerceptionLMProcessor(ProcessorMixin):
     Args:
         image_processor ([`PerceptionLMImageProcessor`], *optional*):
             The image processor is a required input.
+        video_processor ([`PerceptionLMVideoProcessor`], *optional*):
+            The video processor is a required input.
         tokenizer ([`PerceptionLMTokenizerFast`], *optional*):
             The tokenizer is a required input.
         patch_size (`int`, *optional*):
@@ -128,8 +130,8 @@ class PerceptionLMProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is provided.
             - **pixel_values_videos** -- Video pixel values to be fed to a model. Returned when `videos` is provided.
         """
-        if images is None and text is None:
-            raise ValueError("You have to specify at least one of `images` or `text`.")
+        if text is None:
+            raise ValueError("You have to specify at least `text` input. Optionally, you can also specify `images` or `videos`.")
 
         output_kwargs = self._merge_kwargs(
             PerceptionLMProcessorKwargs,
