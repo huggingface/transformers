@@ -106,7 +106,6 @@ class PerceptionLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCas
     fast_image_processing_class = PerceptionLMImageProcessorFast if is_torchvision_available() else None
     test_slow_image_processor = False
 
-    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.setUp with CLIP->LlavaNext
     def setUp(self):
         super().setUp()
         self.image_processor_tester = PerceptionLMImageProcessingTester(self)
