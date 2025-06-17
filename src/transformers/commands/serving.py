@@ -17,7 +17,9 @@ import time
 from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass, field
 from threading import Thread
-from typing import Dict, Optional
+from typing import Any, Optional
+
+from huggingface_hub import ChatCompletionStreamOutputDeltaToolCall, ChatCompletionStreamOutputFunction
 
 from transformers.utils.import_utils import is_fastapi_available, is_pydantic_available, is_uvicorn_available
 
@@ -55,7 +57,7 @@ if is_pydantic_available() and is_fastapi_available() and is_uvicorn_available()
         stream: Optional[bool] = False
         model: Optional[str] = None
         request_id: Optional[str] = None
-        extra_body: Optional[Dict] = None
+        extra_body: Optional[dict] = None
         frequency_penalty: Optional[float] = None
         logit_bias: Optional[list[float]] = None
         max_tokens: Optional[int] = None
@@ -68,7 +70,7 @@ if is_pydantic_available() and is_fastapi_available() and is_uvicorn_available()
         # that aren't yet supported here.
 
         # logprobs: Optional[bool] = None
-        # tools: Any = None
+        tools: Any = None
         # n: Optional[int] = None
         # presence_penalty: Optional[float] = None
         # response_format: Optional[ChatCompletionInputGrammarType] = None
@@ -203,7 +205,9 @@ class ServeCommand(BaseTransformersCLICommand):
         cb_logger = logging.get_logger("transformers.generation.continuous_batching")
         cb_logger.setLevel(logging.log_levels[self.args.log_level.lower()])
 
-    def build_chunk(self, content: str, request_id: str, finish_reason: Optional[str] = None) -> str:
+    def build_chunk(self, content: str, request_id: str, finish_reason: Optional[str] = None, tool_calls=None) -> str:
+        print(content)
+        print(tool_calls)
         payload = {
             "object": "chat.completion.chunk",
             "id": request_id,
@@ -213,12 +217,14 @@ class ServeCommand(BaseTransformersCLICommand):
             "choices": [
                 {
                     "index": 0,
-                    "delta": {"role": "assistant", "content": content, "tool_calls": []},
+                    "delta": {"role": "assistant", "content": content, "tool_calls": tool_calls or []},
                     "logprobs": None,
                     "finish_reason": finish_reason,
                 }
             ],
         }
+        print(payload)
+        print(f"data: {json.dumps(payload)}\n\n")
         return f"data: {json.dumps(payload)}\n\n"
 
     def run(self):
@@ -265,7 +271,6 @@ class ServeCommand(BaseTransformersCLICommand):
                 try:
                     max_new_tokens = req.max_tokens or generation_config.max_new_tokens or 256
                     request_id = manager.add_request(_inputs, request_id=req.request_id, max_new_tokens=max_new_tokens)
-                    print(request_id)
                     queue_is_flushed = False
 
                     for result in manager:
@@ -294,7 +299,9 @@ class ServeCommand(BaseTransformersCLICommand):
             if not req.stream:
                 return {"error": "Only streaming mode is supported."}
 
-            text = self.tokenizer.apply_chat_template(req.messages, add_generation_prompt=True, tokenize=False)
+            text = self.tokenizer.apply_chat_template(
+                req.messages, add_generation_prompt=True, tokenize=False, tools=req.tools
+            )
 
             inputs = self.tokenizer(text, return_tensors="pt").to(self.model.device)["input_ids"]
             request_id = req.request_id if req.request_id is not None else "req_0"
@@ -304,8 +311,6 @@ class ServeCommand(BaseTransformersCLICommand):
             generation_config = create_generation_config_from_req(req)
             max_new_tokens = req.max_tokens or generation_config.max_new_tokens or 256
             generation_config.max_new_tokens = max_new_tokens
-
-            print(generation_config)
 
             generation_kwargs = {
                 "inputs": inputs,
@@ -320,7 +325,41 @@ class ServeCommand(BaseTransformersCLICommand):
                 try:
                     thread.start()
 
+                    inside_tool_call = False
+                    tool_call_buffer = ""
+
                     for result in streamer:
+                        print("Chunk:", result)
+
+                        if result.strip() == "<tool_call>":
+                            inside_tool_call = True
+                            tool_call_buffer = ""
+                            continue
+
+                        if inside_tool_call:
+                            if result.strip() == "</tool_call>":
+                                try:
+                                    tool_data = json.loads(tool_call_buffer)
+                                    tool = ChatCompletionStreamOutputDeltaToolCall(
+                                        function=ChatCompletionStreamOutputFunction(
+                                            arguments=json.dumps(tool_data.get("arguments")),
+                                            name=tool_data.get("name"),
+                                        ),
+                                        id=tool_data.get("id"),
+                                        index=0,
+                                        type=tool_data.get("type"),
+                                    )
+                                    yield self.build_chunk("", _request_id, tool_calls=[tool])
+                                except Exception as e:
+                                    logger.error(f"Failed to parse tool call: {e}")
+                                    raise e
+                                inside_tool_call = False
+                                tool_call_buffer = ""
+                            else:
+                                tool_call_buffer += result
+
+                            continue
+
                         yield self.build_chunk(result, _request_id)
                     yield "data: [DONE]\n\n"
 
@@ -386,4 +425,5 @@ class ServeCommand(BaseTransformersCLICommand):
 
 if __name__ == "__main__":
     serve = ServeCommand()
+    serve.model_name_or_path = "Menlo/Jan-nano"
     serve.run()
