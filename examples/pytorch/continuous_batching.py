@@ -11,7 +11,7 @@ torch.set_float32_matmul_precision("high")
 
 model_id = "meta-llama/Llama-3.2-3b-Instruct"
 model = AutoModelForCausalLM.from_pretrained(
-    model_id, attn_implementation="sdpa_paged", torch_dtype=torch.bfloat16, device_map="auto"
+    model_id, attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16, device_map="auto"
 ).eval()
 tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
 
@@ -20,11 +20,12 @@ generation_config = GenerationConfig(
     eos_token_id=tokenizer.eos_token_id,
     pad_token_id=tokenizer.pad_token_id,
     use_cache=False,
-    num_blocks=2048,
-    block_size=128,
+    num_blocks=1024,
+    block_size=64,
     do_sample=True,
-    max_batch_tokens=1024,  # Maximum number of tokens to process in a single batch
+    max_batch_tokens=512,  # Maximum number of tokens to process in a single batch
     scheduler="prefill_first",
+    sliding_window=64,
 )
 
 train_dataset = datasets.load_dataset("openai/gsm8k", "socratic", split="test")
