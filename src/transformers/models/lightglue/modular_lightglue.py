@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 import numpy as np
 import torch
@@ -195,17 +195,17 @@ class LightGlueKeypointMatchingOutput(ModelOutput):
     keypoints: Optional[torch.FloatTensor] = None
     prune: Optional[torch.IntTensor] = None
     mask: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 class LightGlueImageProcessor(SuperGlueImageProcessor):
     def post_process_keypoint_matching(
         self,
         outputs: LightGlueKeypointMatchingOutput,
-        target_sizes: Union[TensorType, List[Tuple]],
+        target_sizes: Union[TensorType, list[tuple]],
         threshold: float = 0.0,
-    ) -> List[Dict[str, torch.Tensor]]:
+    ) -> list[dict[str, torch.Tensor]]:
         return super().post_process_keypoint_matching(outputs, target_sizes, threshold)
 
     def plot_keypoint_matching(self, images: ImageInput, keypoint_matching_output: LightGlueKeypointMatchingOutput):
@@ -262,7 +262,7 @@ class LightGluePositionalEncoder(nn.Module):
 
     def forward(
         self, keypoints: torch.Tensor, output_hidden_states: Optional[bool] = False
-    ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
+    ) -> Union[tuple[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
         projected_keypoints = self.projector(keypoints)
         embeddings = projected_keypoints.repeat_interleave(2, dim=-1)
         cosines = torch.cos(embeddings)
@@ -276,12 +276,12 @@ class LightGlueAttention(LlamaAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -347,7 +347,7 @@ class LightGlueTransformerLayer(nn.Module):
         attention_mask: torch.Tensor,
         output_hidden_states: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor]], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[tuple[torch.Tensor]], Optional[tuple[torch.Tensor]]]:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
@@ -508,7 +508,7 @@ class LightGluePreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-def get_matches_from_scores(scores: torch.Tensor, threshold: float) -> Tuple[torch.Tensor, torch.Tensor]:
+def get_matches_from_scores(scores: torch.Tensor, threshold: float) -> tuple[torch.Tensor, torch.Tensor]:
     """obtain matches from a score matrix [Bx M+1 x N+1]"""
     batch_size, _, _ = scores.shape
     # For each keypoint, get the best match
@@ -621,7 +621,7 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
 
     def _keypoint_processing(
         self, descriptors: torch.Tensor, keypoints: torch.Tensor, output_hidden_states: Optional[bool] = False
-    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         descriptors = descriptors.detach().contiguous()
         projected_descriptors = self.input_projection(descriptors)
         keypoint_encoding_output = self.positional_encoder(keypoints, output_hidden_states=output_hidden_states)
@@ -732,7 +732,7 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
         matches: torch.Tensor,
         matching_scores: torch.Tensor,
         num_keypoints: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         # (batch_size, num_keypoints) -> (batch_size // 2, 2, num_keypoints) -> 2 * (batch_size // 2, num_keypoints) to
         # have tensors from
         batch_size, _ = indices.shape
@@ -772,7 +772,7 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
         mask: torch.Tensor = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Tuple, Tuple]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, tuple, tuple]:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
@@ -948,7 +948,7 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-    ) -> Union[Tuple, LightGlueKeypointMatchingOutput]:
+    ) -> Union[tuple, LightGlueKeypointMatchingOutput]:
         loss = None
         if labels is not None:
             raise ValueError("LightGlue is not trainable, no labels should be provided.")
