@@ -3756,6 +3756,13 @@ class Trainer:
         with self.compute_loss_context_manager():
             loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
 
+        kwargs = {}
+        # For LOMO optimizers you need to explicitly use the learnign rate
+        if self.args.optim in [OptimizerNames.LOMO, OptimizerNames.ADALOMO]:
+            kwargs["learning_rate"] = self._get_learning_rate()
+
+        self.accelerator.backward(loss, **kwargs)
+
         del inputs
         if (
             self.args.torch_empty_cache_steps is not None
@@ -3780,14 +3787,8 @@ class Trainer:
 
         # logic for accumulating loss
         self._accumulated_steps += 1
-        self._loss_accumulator += loss
+        self._loss_accumulator += loss.detach()
         self._batch_counter += 1
-
-        kwargs = {}
-
-        # For LOMO optimizers you need to explicitly use the learnign rate
-        if self.args.optim in [OptimizerNames.LOMO, OptimizerNames.ADALOMO]:
-            kwargs["learning_rate"] = self._get_learning_rate()
 
         # Deciding whether to perform optimizer step
         is_final_step = self.control.should_training_stop or (
@@ -3800,22 +3801,6 @@ class Trainer:
 
             if self.args.n_gpu > 1:
                 avg_loss = avg_loss.mean()  # mean() to average on multi-gpu parallel training
-
-            if self.use_apex:
-                from apex import amp
-
-                with amp.scale_loss(avg_loss, self.optimizer) as scaled_loss:
-                    scaled_loss.backward()
-            else:
-                # Finally we need to normalize the loss for reporting if GA loss bug is not fixed during compute loss
-                # if (not self.model_accepts_loss_kwargs or num_items_in_batch is None) and self.compute_loss_func is None:
-                #     loss = loss / self.args.gradient_accumulation_steps
-
-                # Turning off loss scaling w.r.t. gradient accumulation when DeepSpeed is enabled
-                # https://github.com/huggingface/transformers/pull/35808
-                if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
-                    kwargs["scale_wrt_gas"] = False
-                self.accelerator.backward(avg_loss, **kwargs)
 
             self.optimizer.step()
             self.lr_scheduler.step()
