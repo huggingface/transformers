@@ -1,10 +1,5 @@
 # coding=utf-8
-# Copyright 2025 EleutherAI and the HuggingFace Inc. team. All rights reserved.
-#
-# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
-# and OPT implementations in this library. It has been modified from its
-# original forms to accommodate minor architectural differences compared
-# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
+# Copyright 2025 Westlake Representational Learning Lab (Fajie Yuan Lab) team and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -155,7 +150,6 @@ class EvollaConfig(PretrainedConfig):
     ```"""
 
     model_type = "EvollaModel"
-    # sub_configs = {"protein_config": EvollaProteinConfig, "llm_config": EvollaLLMConfig}
 
     def __init__(
         self,
@@ -174,7 +168,6 @@ class EvollaConfig(PretrainedConfig):
         attention_bias=False,
         attention_dropout=0.0,
         mlp_bias=False,
-        # head_dim=None,
         aligner_ffn_mult=4,
         aligner_enable_bias=True,
         aligner_attention_probs_dropout_prob=0.1,
@@ -198,8 +191,6 @@ class EvollaConfig(PretrainedConfig):
         resampler_heads=8,
         resampler_num_latents=64,
         resampler_ff_mult=4,
-        # protein_config=None,
-        # llm_config=None,
         initializer_range=0.02,
         pad_token_id=None,
         bos_token_id=128000,
@@ -212,8 +203,6 @@ class EvollaConfig(PretrainedConfig):
         **kwargs,
     ):
         self.vocab_size = vocab_size
-        # self.output_attentions = output_attentions
-        # self.output_hidden_states = output_hidden_states
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
@@ -222,9 +211,6 @@ class EvollaConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.max_position_embeddings = max_position_embeddings
         self.rms_norm_eps = rms_norm_eps
-        # self.pad_token_id = pad_token_id
-        # self.bos_token_id = bos_token_id
-        # self.eos_token_id = eos_token_id
         self.pretraining_tp = pretraining_tp
         self.tie_word_embeddings = tie_word_embeddings
         self.attention_bias = attention_bias
@@ -256,12 +242,6 @@ class EvollaConfig(PretrainedConfig):
         self.resampler_num_latents = resampler_num_latents
         self.resampler_ff_mult = resampler_ff_mult
 
-        # self.max_new_tokens = max_new_tokens
-        # self.do_sample = do_sample
-        # self.temperature = temperature
-        # self.top_p = top_p
-        # print(return_dict, self.return_dict)
-
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
         # Validate the correctness of rotary position embeddings parameters
@@ -269,28 +249,6 @@ class EvollaConfig(PretrainedConfig):
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
-
-        # if protein_config is None:
-        #     self.protein_config = EvollaProteinConfig(protein_text_hidden_size=self.protein_text_hidden_size)
-        # elif isinstance(protein_config, dict):
-        #     protein_config.update({"protein_text_hidden_size": self.protein_text_hidden_size})
-        #     self.protein_config = EvollaProteinConfig(**protein_config)
-        # elif isinstance(protein_config, EvollaProteinConfig):
-        #     self.protein_config = protein_config
-
-        # if llm_config is None:
-        #     self.llm_config = EvollaLLMConfig(protein_text_hidden_size=self.protein_text_hidden_size)
-        # elif isinstance(llm_config, dict):
-        #     llm_config.update({"protein_text_hidden_size": self.protein_text_hidden_size})
-        #     self.llm_config = EvollaLLMConfig(**llm_config)
-        # elif isinstance(llm_config, EvollaLLMConfig):
-        #     self.llm_config = llm_config
-
-        # if self.protein_config.resampler_config.output_repr_dim is None:
-        #     self.protein_config.resampler_config.output_repr_dim = self.llm_config.llama_config.hidden_size
-
-        # if self.llm_config.sequence_aligner_config.protein_encoder_dim is None:
-        #     self.llm_config.sequence_aligner_config.protein_encoder_dim = self.protein_config.resampler_config.output_repr_dim
 
         self.initializer_range = initializer_range
         super().__init__(
@@ -301,10 +259,6 @@ class EvollaConfig(PretrainedConfig):
             output_hidden_states=output_hidden_states,
             use_cache=use_cache,
             return_dict=return_dict,
-            # max_new_tokens=max_new_tokens,
-            # do_sample=do_sample,
-            # temperature=temperature,
-            # top_p=top_p,
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )

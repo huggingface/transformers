@@ -4,6 +4,20 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_evolla.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# coding=utf-8
+# Copyright 2025 Westlake Representational Learning Lab (Fajie Yuan Lab) team and the HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import math
 import warnings
@@ -15,7 +29,7 @@ from torch import Tensor, nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
-from ...file_utils import add_start_docstrings
+from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_attn_mask_utils import AttentionMaskConverter
@@ -37,7 +51,7 @@ from ...modeling_utils import (
     prune_linear_layer,
 )
 from ...processing_utils import Unpack
-from ...utils import add_start_docstrings_to_model_forward, is_torch_flex_attn_available, logging
+from ...utils import can_return_tuple, is_torch_flex_attn_available, logging
 from ...utils.import_utils import is_torch_fx_proxy, is_torchdynamo_compiling
 from .configuration_evolla import EvollaConfig, SaProtConfig
 
@@ -52,7 +66,7 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class ProteinEncoderModelOutput(ModelOutput):
+class EvollaProteinEncoderModelOutput(ModelOutput):
     """ """
 
     sequence_compressor_output: torch.FloatTensor = None
@@ -281,24 +295,43 @@ class EvollaAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class SequenceAlignerCrossAttention(nn.Module):
+class EvollaFeedForward(nn.Module):
+    def __init__(self, dim, mult=4):
+        super().__init__()
+        inner_dim = int(dim * mult)
+
+        self.norm = nn.LayerNorm(dim)
+        self.fc1 = nn.Linear(dim, inner_dim, bias=False)
+        self.activation = nn.GELU()
+        self.fc2 = nn.Linear(inner_dim, dim, bias=False)
+
+    def forward(self, x):
+        x = self.norm(x)
+        x = self.fc1(x)
+        x = self.activation(x)
+        x = self.fc2(x)
+        return x
+
+
+class EvollaSequenceAlignerCrossAttention(nn.Module):
     def __init__(
         self,
-        hidden_size: int,
-        num_attention_heads: int,
-        attention_probs_dropout_prob: float,
-        enable_bias: bool,
-        ffn_mult: float,
+        config,
         protein_encoder_dim: int = None,
         structure_encoder_dim: int = None,
         msa_encoder_dim: int = None,
     ):
         super().__init__()
-        self.hidden_size = hidden_size
-        self.scale = num_attention_heads**-0.5
-        self.num_attention_heads = num_attention_heads
-        self.attention_head_size = int(self.hidden_size / num_attention_heads)
+
+        self.hidden_size = config.hidden_size
+        self.num_attention_heads = config.num_attention_heads
+        self.scale = self.num_attention_heads**-0.5
+        self.attention_head_size = int(self.hidden_size / self.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
+
+        attention_probs_dropout_prob = (config.aligner_attention_probs_dropout_prob,)
+        enable_bias = (config.aligner_enable_bias,)
+        ffn_mult = (config.aligner_ffn_mult,)
 
         self.query = nn.Linear(self.hidden_size, self.all_head_size)
         if protein_encoder_dim is not None:
@@ -328,7 +361,7 @@ class SequenceAlignerCrossAttention(nn.Module):
 
         self.out_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=enable_bias)
 
-        self.ff = FeedForward(self.hidden_size, ffn_mult)
+        self.ff = EvollaFeedForward(self.hidden_size, ffn_mult)
         self.gate_attention = nn.Parameter(torch.tensor([0.0]))
         self.gate_ffw = nn.Parameter(torch.tensor([0.0]))
 
@@ -399,9 +432,23 @@ class SequenceAlignerCrossAttention(nn.Module):
         value_layer = [_ for _ in value_layer if _ is not None]
         value_layer = torch.cat(value_layer, dim=1)
 
-        query_layer = self.transpose_for_scores(query_layer)  # [bs, numheads, querylength, dim/numheads]
-        key_layer = self.transpose_for_scores(key_layer)  # [bs, numheads, keylength, dim/numheads]
-        value_layer = self.transpose_for_scores(value_layer)  # [bs, numheads, keylength, dim/numheads]
+        new_query_layer_shape = query_layer.size()[:-1] + (
+            self.num_attention_heads,
+            self.attention_head_size,
+        )
+        query_layer = query_layer.view(*new_query_layer_shape).permute(0, 2, 1, 3)
+
+        new_key_layer_shape = key_layer.size()[:-1] + (
+            self.num_attention_heads,
+            self.attention_head_size,
+        )
+        key_layer = key_layer.view(*new_key_layer_shape).permute(0, 2, 1, 3)
+
+        new_value_layer_shape = value_layer.size()[:-1] + (
+            self.num_attention_heads,
+            self.attention_head_size,
+        )
+        value_layer = value_layer.view(*new_value_layer_shape).permute(0, 2, 1, 3)
 
         query_layer = query_layer * self.scale
 
@@ -511,17 +558,9 @@ class SequenceAlignerCrossAttention(nn.Module):
 
         return hidden_states
 
-    def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (
-            self.num_attention_heads,
-            self.attention_head_size,
-        )
-        x = x.view(*new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
 
 class EvollaDecoderLayer(nn.Module):
-    def __init__(self, config: EvollaConfig, layer_idx: int, adapter: SequenceAlignerCrossAttention = None):
+    def __init__(self, config: EvollaConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 
@@ -530,8 +569,11 @@ class EvollaDecoderLayer(nn.Module):
         self.mlp = EvollaMLP(config)
         self.input_layernorm = EvollaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = EvollaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        if adapter is not None:
-            self.adapter = adapter
+        if not (layer_idx + 1) % max(config.num_hidden_layers // config.aligner_num_add_layers, 1) == 0:
+            self.adapter = EvollaSequenceAlignerCrossAttention(
+                config,
+                protein_encoder_dim=config.hidden_size,
+            )
 
     def forward(
         self,
@@ -576,7 +618,7 @@ class EvollaDecoderLayer(nn.Module):
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
-        if hasattr(self, "adapter"):
+        if hasattr(self, "adapter") and self.adapter is not None:
             hidden_states = self.adapter(
                 query_states=hidden_states,
                 protein_kv_states=protein_kv_states,
@@ -611,7 +653,7 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     return incremental_indices.long() + padding_idx
 
 
-class SaProtEmbeddings(nn.Module):
+class EvollaSaProtEmbeddings(nn.Module):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
     """
@@ -651,11 +693,11 @@ class SaProtEmbeddings(nn.Module):
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
 
-        # Note that if we want to support SA_PROT-1 (not 1b!) in future then we need to support an
+        # Note that if we want to support EVOLLA_SA_PROT-1 (not 1b!) in future then we need to support an
         # embedding_scale factor here.
         embeddings = inputs_embeds
 
-        # Matt: SA_PROT has the option to handle masking in MLM in a slightly unusual way. If the token_dropout
+        # Matt: EVOLLA_SA_PROT has the option to handle masking in MLM in a slightly unusual way. If the token_dropout
         # flag is False then it is handled in the same was as BERT/RoBERTa. If it is set to True, however,
         # masked tokens are treated as if they were selected for input dropout and zeroed out.
         # This "mask-dropout" is compensated for when masked tokens are not present, by scaling embeddings by
@@ -664,7 +706,7 @@ class SaProtEmbeddings(nn.Module):
         # actually dropping out values (or, equivalently, scale up their un-dropped outputs in training).
         if self.token_dropout:
             embeddings = embeddings.masked_fill((input_ids == self.mask_token_id).unsqueeze(-1), 0.0)
-            mask_ratio_train = 0.15 * 0.8  # Hardcoded as the ratio used in all SA_PROT model training runs
+            mask_ratio_train = 0.15 * 0.8  # Hardcoded as the ratio used in all EVOLLA_SA_PROT model training runs
             src_lengths = attention_mask.sum(-1)
             mask_ratio_observed = (input_ids == self.mask_token_id).sum(-1).float() / src_lengths
             embeddings = (embeddings * (1 - mask_ratio_train) / (1 - mask_ratio_observed)[:, None, None]).to(
@@ -756,7 +798,7 @@ class RotaryEmbedding(torch.nn.Module):
         )
 
 
-class SaProtSelfAttention(nn.Module):
+class EvollaSaProtSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -829,9 +871,9 @@ class SaProtSelfAttention(nn.Module):
         query_layer = self.transpose_for_scores(mixed_query_layer)
 
         # Matt: Our BERT model (which this code was derived from) scales attention logits down by sqrt(head_dim).
-        # SA_PROT scales the query down by the same factor instead. Modulo numerical stability these are equivalent,
+        # EVOLLA_SA_PROT scales the query down by the same factor instead. Modulo numerical stability these are equivalent,
         # but not when rotary embeddings get involved. Therefore, we scale the query here to match the original
-        # SA_PROT code and fix rotary embeddings.
+        # EVOLLA_SA_PROT code and fix rotary embeddings.
         query_layer = query_layer * self.attention_head_size**-0.5
 
         if self.is_decoder:
@@ -867,7 +909,7 @@ class SaProtSelfAttention(nn.Module):
                 attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
 
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in SaProtModel forward() function)
+            # Apply the attention mask is (precomputed for all layers in EvollaSaProtModel forward() function)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
@@ -894,7 +936,7 @@ class SaProtSelfAttention(nn.Module):
         return outputs
 
 
-class SaProtSelfOutput(nn.Module):
+class EvollaSaProtSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -907,11 +949,11 @@ class SaProtSelfOutput(nn.Module):
         return hidden_states
 
 
-class SaProtAttention(nn.Module):
+class EvollaSaProtAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.self = SaProtSelfAttention(config)
-        self.output = SaProtSelfOutput(config)
+        self.self = EvollaSaProtSelfAttention(config)
+        self.output = EvollaSaProtSelfOutput(config)
         self.pruned_heads = set()
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -960,12 +1002,12 @@ class SaProtAttention(nn.Module):
 
 def gelu(x):
     """
-    This is the gelu implementation from the original SA_PROT repo. Using F.gelu yields subtly wrong results.
+    This is the gelu implementation from the original EVOLLA_SA_PROT repo. Using F.gelu yields subtly wrong results.
     """
     return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
 
 
-class SaProtIntermediate(nn.Module):
+class EvollaSaProtIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
@@ -976,7 +1018,7 @@ class SaProtIntermediate(nn.Module):
         return hidden_states
 
 
-class SaProtOutput(nn.Module):
+class EvollaSaProtOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
@@ -989,20 +1031,20 @@ class SaProtOutput(nn.Module):
         return hidden_states
 
 
-class SaProtLayer(nn.Module):
+class EvollaSaProtLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = SaProtAttention(config)
+        self.attention = EvollaSaProtAttention(config)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise RuntimeError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = SaProtAttention(config)
-        self.intermediate = SaProtIntermediate(config)
-        self.output = SaProtOutput(config)
+            self.crossattention = EvollaSaProtAttention(config)
+        self.intermediate = EvollaSaProtIntermediate(config)
+        self.output = EvollaSaProtOutput(config)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
@@ -1075,11 +1117,11 @@ class SaProtLayer(nn.Module):
         return layer_output
 
 
-class SaProtEncoder(nn.Module):
+class EvollaSaProtEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([SaProtLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([EvollaSaProtLayer(config) for _ in range(config.num_hidden_layers)])
         self.emb_layer_norm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.gradient_checkpointing = False
 
@@ -1172,7 +1214,7 @@ class SaProtEncoder(nn.Module):
         )
 
 
-class SaProtPooler(nn.Module):
+class EvollaSaProtPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -1187,7 +1229,7 @@ class SaProtPooler(nn.Module):
         return pooled_output
 
 
-class SaProtProteinEncoder(nn.Module):
+class EvollaSaProtProteinEncoder(nn.Module):
     def __init__(
         self,
         config: SaProtConfig,
@@ -1196,10 +1238,10 @@ class SaProtProteinEncoder(nn.Module):
         super().__init__()
         self.config = config
 
-        self.embeddings = SaProtEmbeddings(config)
-        self.encoder = SaProtEncoder(config)
+        self.embeddings = EvollaSaProtEmbeddings(config)
+        self.encoder = EvollaSaProtEncoder(config)
 
-        self.pooler = SaProtPooler(config) if add_pooling_layer else None
+        self.pooler = EvollaSaProtPooler(config) if add_pooling_layer else None
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -1493,35 +1535,7 @@ class SaProtProteinEncoder(nn.Module):
         return head_mask
 
 
-class FeedForward(nn.Module):
-    def __init__(self, dim, mult=4):
-        super().__init__()
-        inner_dim = int(dim * mult)
-
-        self.norm = nn.LayerNorm(dim)
-        self.fc1 = nn.Linear(dim, inner_dim, bias=False)
-        self.activation = nn.GELU()
-        self.fc2 = nn.Linear(inner_dim, dim, bias=False)
-
-    def forward(self, x):
-        x = self.norm(x)
-        x = self.fc1(x)
-        x = self.activation(x)
-        x = self.fc2(x)
-        return x
-
-
-def rearrange(out):
-    # [batch, head, seq, features] -> [batch, seq, head, features]
-    out = out.permute(0, 2, 1, 3)
-
-    # [batch, seq, head, features] -> [batch, seq, head*features]
-    out = out.reshape(out.size(0), out.size(1), -1)
-
-    return out
-
-
-class SequenceCompressorAttention(nn.Module):
+class EvollaSequenceCompressorAttention(nn.Module):
     def __init__(self, dim, dim_head=64, heads=8):
         super().__init__()
         self.scale = dim_head**-0.5
@@ -1585,32 +1599,38 @@ class SequenceCompressorAttention(nn.Module):
         # out = einsum("... i j, ... j d -> ... i d", attn, v)
         out = torch.matmul(attn, v)
 
-        out = rearrange(out)
+        out = out.permute(0, 2, 1, 3)
+
+        # [batch, seq, head, features] -> [batch, seq, head*features]
+        out = out.reshape(out.size(0), out.size(1), -1)
+
         # assert torch.allclose(out_raw, out)
         return self.to_out(out)
 
 
-class SequenceCompressorResampler(nn.Module):
+class EvollaSequenceCompressorResampler(nn.Module):
     def __init__(
         self,
-        protein_repr_dim: int,
-        output_repr_dim: int,
-        depth: int,
-        dim_head: int,
-        heads: int,
-        num_latents: int,
-        ff_mult: int,
+        config: EvollaConfig,
     ):
         super().__init__()
-        self.latents = nn.Parameter(torch.randn(num_latents, protein_repr_dim), requires_grad=True)
+        protein_repr_dim = config.protein_hidden_size
+        output_repr_dim = config.hidden_size
+        depth = config.resampler_depth
+        dim_head = config.resampler_dim_head
+        heads = config.resampler_heads
+        ff_mult = config.resampler_ff_mult
+        self.num_latents = config.resampler_num_latents
+
+        self.latents = nn.Parameter(torch.randn(self.num_latents, protein_repr_dim), requires_grad=True)
 
         self.layers = nn.ModuleList([])
         for _ in range(depth):
             self.layers.append(
                 nn.ModuleList(
                     [
-                        SequenceCompressorAttention(dim=protein_repr_dim, dim_head=dim_head, heads=heads),
-                        FeedForward(dim=protein_repr_dim, mult=ff_mult),
+                        EvollaSequenceCompressorAttention(dim=protein_repr_dim, dim_head=dim_head, heads=heads),
+                        EvollaFeedForward(dim=protein_repr_dim, mult=ff_mult),
                     ]
                 )
             )
@@ -1618,8 +1638,6 @@ class SequenceCompressorResampler(nn.Module):
         self.norm = nn.LayerNorm(output_repr_dim)
 
         self.protein_projector = nn.Linear(protein_repr_dim, output_repr_dim)
-
-        self.num_latents = num_latents
 
     @property
     def device(self):
@@ -1705,11 +1723,11 @@ class EvollaPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
         elif isinstance(module, EvollaRMSNorm):
             module.weight.data.fill_(1.0)
-        elif isinstance(module, SequenceAlignerCrossAttention):
+        elif isinstance(module, EvollaSequenceAlignerCrossAttention):
             module.gate_attention.zero_()
             module.gate_ffw.zero_()
             module.attention_norm.weight.data.fill_(1.0)
-        elif isinstance(module, SequenceCompressorResampler):
+        elif isinstance(module, EvollaSequenceCompressorResampler):
             module.latents.data.normal_(mean=0.0, std=std)
 
 
@@ -1736,20 +1754,12 @@ class EvollaProteinEncoder(nn.Module):
             emb_layer_norm_before=config.protein_emb_layer_norm_before,
             token_dropout=config.protein_token_dropout,
         )
-        self.model = SaProtProteinEncoder(
+        self.model = EvollaSaProtProteinEncoder(
             config=protein_config,
             add_pooling_layer=add_pooling_layer,
         )
 
-        self.sequence_compressor_resampler = SequenceCompressorResampler(
-            protein_repr_dim=config.protein_hidden_size,
-            output_repr_dim=config.hidden_size,
-            depth=config.resampler_depth,
-            dim_head=config.resampler_dim_head,
-            heads=config.resampler_heads,
-            num_latents=config.resampler_num_latents,
-            ff_mult=config.resampler_ff_mult,
-        )
+        self.sequence_compressor_resampler = EvollaSequenceCompressorResampler(config=config)
 
     def sequence_encode(
         self,
@@ -1794,7 +1804,7 @@ class EvollaProteinEncoder(nn.Module):
         if not return_dict:
             return sequence_repr, protein_embeds, attention_mask
 
-        return ProteinEncoderModelOutput(
+        return EvollaProteinEncoderModelOutput(
             sequence_compressor_output=sequence_repr,
             last_hidden_state=protein_output.last_hidden_state,
             hidden_states=protein_output.hidden_states,
@@ -1802,7 +1812,7 @@ class EvollaProteinEncoder(nn.Module):
         )
 
 
-LLAMA_INPUTS_DOCSTRING = r"""
+EVOLLA_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -1812,18 +1822,21 @@ LLAMA_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length) or `BlockMask`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
+
+            If the model is configured to use flex_attention, it will attempt to convert the mask Tensor into a BlockMask,
+            but you can also pass a `BlockMask` object directly here.
 
             [What are attention masks?](../glossary#attention-mask)
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
-            If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
+            If `past_key_values` is used, optionally only the last `input_ids` have to be input (see
             `past_key_values`).
 
             If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
@@ -1834,18 +1847,19 @@ LLAMA_INPUTS_DOCSTRING = r"""
             - 0 indicates the head is **masked**.
         position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
-            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+            config.n_positions - 1]`.
 
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+            [What are position IDs?](../glossary#position-ids)
+        past_key_values (`Cache`, *optional*):
+            Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
+            returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
 
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+            It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+
+            If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
+            have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
+            of shape `(batch_size, sequence_length)`.
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
@@ -1896,19 +1910,6 @@ class EvollaModel(EvollaPreTrainedModel):
                 EvollaDecoderLayer(
                     config=config,
                     layer_idx=layer_idx,
-                    adapter=SequenceAlignerCrossAttention(
-                        hidden_size=config.hidden_size,
-                        num_attention_heads=config.num_attention_heads,
-                        attention_probs_dropout_prob=config.aligner_attention_probs_dropout_prob,
-                        enable_bias=config.aligner_enable_bias,
-                        ffn_mult=config.aligner_ffn_mult,
-                        protein_encoder_dim=config.hidden_size,
-                    ),
-                )
-                if (layer_idx + 1) % max(config.num_hidden_layers // config.aligner_num_add_layers, 1) == 0
-                else EvollaDecoderLayer(
-                    config=config,
-                    layer_idx=layer_idx,
                 )
                 for layer_idx in range(config.num_hidden_layers)
             ]
@@ -1933,7 +1934,8 @@ class EvollaModel(EvollaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
+    @can_return_tuple
+    @add_start_docstrings_to_model_forward(EVOLLA_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
