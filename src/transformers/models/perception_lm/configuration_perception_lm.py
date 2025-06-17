@@ -35,19 +35,19 @@ class PerceptionEncoderConfig(PretrainedConfig):
             Whether to use a CLS token.
         architecture (`str`, *optional*, defaults to `"vit_pe_core_large_patch14_336"`):
             The architecture of the model.
-        width (`int`, *optional*, defaults to `1024`):
+        width (`int`, *optional*, defaults to 1024):
             The width (hidden size) of the model.
         img_size (`List[int]`, *optional*, defaults to `[448, 448]`):
             The size of the input image as [height, width].
-        depth (`int`, *optional*, defaults to `23`):
+        depth (`int`, *optional*, defaults to 23):
             The number of layers in the model.
-        num_classes (`int`, *optional*, defaults to `0`):
+        num_classes (`int`, *optional*, defaults to 0):
             The number of classes for classification.
         global_pool (`str`, *optional*, defaults to `""`):
             The global pooling strategy.
         use_post_transformer_norm (`bool`, *optional*, defaults to `False`):
             Whether to use post-transformer normalization.
-        init_values (`float`, *optional*, defaults to `0.1`):
+        init_values (`float`, *optional*, defaults to 0.1):
             The initialization value for LayerScale.
         ref_feat_shape (`List[int]`, *optional*, defaults to `[32, 32]`):
             The shape of the reference feature as [height, width].
