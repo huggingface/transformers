@@ -468,13 +468,6 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     def test_load_save_without_tied_weights(self):
         pass
 
-    def test_generate_with_head_masking(self):
-        # overwritten to temporarily switch the attention type to `original_full`
-        original_self_attention_type = self.model_tester.attention_type
-        self.model_tester.attention_type = "original_full"
-        super().test_generate_with_head_masking()
-        self.model_tester.attention_type = original_self_attention_type
-
 
 @require_torch
 @require_sentencepiece

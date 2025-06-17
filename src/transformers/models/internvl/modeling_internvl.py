@@ -178,6 +178,8 @@ class InternVLVisionPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["InternVLVisionLayer"]
     _supports_sdpa = True
     _supports_flash_attn_2 = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -537,6 +539,7 @@ class InternVLPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_quantized_cache = True
     _supports_static_cache = True
+    _supports_flex_attn = True
     _supports_attention_backend = True
 
     def _init_weights(self, module):
@@ -879,6 +882,20 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
 
     def get_decoder(self):
         return self.model
+
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        vision_feature_layer: Optional[Union[int, List[int]]] = None,
+        vision_feature_select_strategy: Optional[str] = None,
+        **kwargs,
+    ):
+        return self.model.get_image_features(
+            pixel_values=pixel_values,
+            vision_feature_layer=vision_feature_layer,
+            vision_feature_select_strategy=vision_feature_select_strategy,
+            **kwargs,
+        )
 
     # Make modules available throught conditional class for BC
     @property

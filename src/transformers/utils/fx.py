@@ -56,6 +56,7 @@ from ..models.auto.modeling_auto import (
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES,
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
 )
@@ -166,6 +167,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "t5",
     "trocr",
     "vit",
+    "vjepa2",
     "xglm",
     "wav2vec2",
     #    "xlnet",
@@ -193,6 +195,7 @@ _SPECIAL_SUPPORTED_MODELS = [
     "TrOCRDecoder",
     "PeftModelForCausalLM",
     "PeftModelForSeq2SeqLM",
+    "VJEPA2ForVideoClassification",
     # TODO: add support for them as it should be quite easy to do so (small blocking issues).
     # XLNetForQuestionAnswering,
 ]
@@ -903,6 +906,7 @@ class HFTracer(Tracer):
                 *get_values(MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES),
                 *get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES),
                 *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES),
+                *get_values(MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES),
                 *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES),
                 *get_values(MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES),
             ]:
