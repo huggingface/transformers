@@ -18,7 +18,7 @@ import json
 import os
 import unicodedata
 from functools import lru_cache
-from typing import Optional, Tuple
+from typing import Optional
 
 import regex as re
 
@@ -305,7 +305,7 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
         )
 
     # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
