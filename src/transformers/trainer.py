@@ -3790,14 +3790,10 @@ class Trainer:
             kwargs["learning_rate"] = self._get_learning_rate()
 
         # Deciding whether to perform optimizer step
-        is_final_step = (
-            self.control.should_training_stop
-            or (self._current_flos >= self.args.max_steps if self.args.max_steps > 0 else False)
+        is_final_step = self.control.should_training_stop or (
+            self._current_flos >= self.args.max_steps if self.args.max_steps > 0 else False
         )
-        should_step = (
-            self._accumulated_steps == self.args.gradient_accumulation_steps
-            or is_final_step
-        )
+        should_step = self._accumulated_steps == self.args.gradient_accumulation_steps or is_final_step
 
         if should_step:
             avg_loss = self._loss_accumulator / self._accumulated_steps
@@ -3807,6 +3803,7 @@ class Trainer:
 
             if self.use_apex:
                 from apex import amp
+
                 with amp.scale_loss(avg_loss, self.optimizer) as scaled_loss:
                     scaled_loss.backward()
             else:
