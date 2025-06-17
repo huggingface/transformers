@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 [Bamba](https://huggingface.co/blog/bamba) is a 9B parameter decoder-only language model built on the [Mamba-2](./mamba2) architecture. It is pretrained in two stages - it starts by training on 2T tokens from the [Dolma v1.7](https://huggingface.co/datasets/allenai/dolma) dataset and then trained on an additional 200B tokens from [FineWeb](https://huggingface.co/datasets/HuggingFaceFW/fineweb) and [Cosmopedia](https://huggingface.co/datasets/HuggingFaceTB/cosmopedia).
 
-You can find all the original Bamba checkpoints under the [foundation-model-stack](https://github.com/foundation-model-stack/bamba) collection and the [ibm-ai-platform](https://huggingface.co/ibm-ai-platform/Bamba-9B-v1) collection.
+You can find all the original Bamba checkpoints under the [Bamba](https://huggingface.co/collections/ibm-ai-platform/bamba-674f1388b9bbc98b413c7bab) collection.
 
 > [!TIP]
 > Click on the Bamba models in the right sidebar for more examples of how to apply Bamba to different text generation tasks.
