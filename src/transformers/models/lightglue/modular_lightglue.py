@@ -135,6 +135,9 @@ class LightGlueConfig(PretrainedConfig):
         self.filter_threshold = filter_threshold
         self.initializer_range = initializer_range
 
+        # Keypoint Detector is forced into eager attention mode because SuperPoint does not have Attention
+        # Without this, the test TODO fails
+        # See https://github.com/huggingface/transformers/pull/31718#discussion_r2109733153
         if isinstance(keypoint_detector_config, dict):
             keypoint_detector_config["model_type"] = (
                 keypoint_detector_config["model_type"] if "model_type" in keypoint_detector_config else "superpoint"
