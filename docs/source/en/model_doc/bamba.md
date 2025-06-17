@@ -31,7 +31,7 @@ You can find all the original Bamba checkpoints under the [Bamba](https://huggin
 > [!TIP]
 > Click on the Bamba models in the right sidebar for more examples of how to apply Bamba to different text generation tasks.
 
-The example below demonstrates how to generate text with the [`AutoModel`] class.
+The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line.
 
 <hfoptions id="usage">
 <hfoption id="AutoModel">
