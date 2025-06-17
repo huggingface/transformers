@@ -19,7 +19,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Any, Dict, Optional, Union
+from typing import Any, Optional, Union
 
 from ...configuration_utils import PretrainedConfig, layer_type_validation
 
@@ -50,7 +50,7 @@ class T5GemmaModuleConfig(PretrainedConfig):
                 `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
                 converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
                 by meanpooling all the original heads within that group. For more details, check out [this
-                paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
+                paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
                 `num_attention_heads`.
             head_dim (`int`, *optional*, defaults to 256):
                 The attention head dimension.
@@ -252,8 +252,8 @@ class T5GemmaConfig(PretrainedConfig):
 
     def __init__(
         self,
-        encoder: Optional[Union[T5GemmaModuleConfig, Dict[Any, Any]]] = None,
-        decoder: Optional[Union[T5GemmaModuleConfig, Dict[Any, Any]]] = None,
+        encoder: Optional[Union[T5GemmaModuleConfig, dict[Any, Any]]] = None,
+        decoder: Optional[Union[T5GemmaModuleConfig, dict[Any, Any]]] = None,
         is_encoder_decoder: bool = True,
         dropout_rate: float = 0.0,
         classifier_dropout_rate: float = 0.0,

@@ -20,7 +20,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from functools import partial
-from typing import Callable, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -192,7 +192,7 @@ def eager_attention_forward(
     scaling: Optional[float] = None,
     softcap: Optional[float] = None,
     **kwargs,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     if scaling is None:
         scaling = module.head_dim**-0.5
 
@@ -249,12 +249,12 @@ class T5GemmaSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -334,7 +334,7 @@ class T5GemmaCrossAttention(nn.Module):
         encoder_hidden_states: Optional[torch.Tensor],
         past_key_value: Optional[Cache] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         if encoder_hidden_states is None:
             raise ValueError("Encoder hidden state is required for cross attention.")
 
@@ -430,14 +430,14 @@ class T5GemmaEncoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = False,
         **kwargs,
-    ) -> Tuple[
+    ) -> tuple[
         torch.FloatTensor,
-        Optional[Tuple[torch.FloatTensor, torch.FloatTensor]],
+        Optional[tuple[torch.FloatTensor, torch.FloatTensor]],
     ]:
         # Self Attention
         residual = hidden_states
@@ -485,7 +485,7 @@ class T5GemmaDecoderLayer(T5GemmaEncoderLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[EncoderDecoderCache] = None,
@@ -495,10 +495,10 @@ class T5GemmaDecoderLayer(T5GemmaEncoderLayer):
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
-    ) -> Tuple[
+    ) -> tuple[
         torch.FloatTensor,
-        Optional[Tuple[torch.FloatTensor, torch.FloatTensor]],
-        Optional[Tuple[torch.FloatTensor, torch.FloatTensor]],
+        Optional[tuple[torch.FloatTensor, torch.FloatTensor]],
+        Optional[tuple[torch.FloatTensor, torch.FloatTensor]],
     ]:
         # Self Attention
         residual = hidden_states
@@ -1325,7 +1325,7 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **loss_kwargs,
-    ) -> Union[Tuple[torch.FloatTensor], Seq2SeqLMOutput]:
+    ) -> Union[tuple[torch.FloatTensor], Seq2SeqLMOutput]:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
