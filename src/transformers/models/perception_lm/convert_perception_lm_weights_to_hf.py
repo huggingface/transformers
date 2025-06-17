@@ -560,6 +560,12 @@ def write_tokenizer(
         "tile_size": tile_size,
         "max_num_tiles": params["data"]["max_num_tiles"],
         "max_frame_tiles": 1,
+        "size": {"height": tile_size, "width": tile_size},
+        "do_resize": True,
+        "do_rescale": True,
+        "do_normalize": True,
+        "image_mean": [0.5, 0.5, 0.5],
+        "image_std": [0.5, 0.5, 0.5],
     }
     image_preprocessor = PerceptionLMImageProcessorFast(**image_preprocessor_config)
     video_preprocessor_config = {

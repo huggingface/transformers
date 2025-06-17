@@ -19,9 +19,9 @@ Processor class for PerceptionLM.
 from typing import List, Union, Iterable
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, PILImageResampling, get_image_size, to_numpy_array, IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
+from ...image_utils import ImageInput, get_image_size, to_numpy_array
 from ...video_utils import VideoInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_torch_available, logging
 
@@ -35,15 +35,6 @@ class PerceptionLMProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
-        },
-        "images_kwargs": {
-            "do_resize": True,
-            "do_rescale": True,
-            "do_normalize": True,
-            "size": 448,
-            "resample": PILImageResampling.BICUBIC,
-            "image_mean": IMAGENET_STANDARD_MEAN,
-            "image_std": IMAGENET_STANDARD_STD,
         },
     }
 
