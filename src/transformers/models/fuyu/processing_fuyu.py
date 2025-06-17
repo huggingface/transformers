@@ -17,7 +17,7 @@ Image/Text processor class for GIT
 """
 
 import re
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -77,8 +77,8 @@ class FuyuProcessorKwargs(ProcessingKwargs, total=False):
 
 
 def full_unpacked_stream_to_tensor(
-    all_bi_tokens_to_place: List[int],
-    full_unpacked_stream: List["torch.Tensor"],
+    all_bi_tokens_to_place: list[int],
+    full_unpacked_stream: list["torch.Tensor"],
     fill_value: int,
     batch_size: int,
     new_seq_len: int,
@@ -108,12 +108,12 @@ def full_unpacked_stream_to_tensor(
 
 
 def construct_full_unpacked_stream(
-    num_real_text_tokens: Union[List[List[int]], "torch.Tensor"],
+    num_real_text_tokens: Union[list[list[int]], "torch.Tensor"],
     input_stream: "torch.Tensor",
-    image_tokens: List[List["torch.Tensor"]],
+    image_tokens: list[list["torch.Tensor"]],
     batch_size: int,
     num_sub_sequences: int,
-) -> List["torch.Tensor"]:
+) -> list["torch.Tensor"]:
     """Takes an input_stream tensor of shape B x S x ?. For each subsequence, adds any required
     padding to account for images and then unpacks the subsequences to create a single sequence per item in the batch.
     Returns a list of tensors, one for each item in the batch."""
@@ -143,12 +143,12 @@ def _replace_string_repr_with_token_tags(prompt: str) -> str:
     return prompt
 
 
-def _segment_prompt_into_text_token_conversions(prompt: str) -> List:
+def _segment_prompt_into_text_token_conversions(prompt: str) -> list:
     """
     Given a string prompt, converts the prompt into a list of TextTokenConversions.
     """
     # Wherever, we notice the [TOKEN_OPEN_STRING, TOKEN_CLOSE_STRING], we split the prompt
-    prompt_text_list: List = []
+    prompt_text_list: list = []
     regex_pattern = re.compile(
         f"({TOKEN_BBOX_OPEN_STRING}|{TOKEN_BBOX_CLOSE_STRING}|{TOKEN_POINT_OPEN_STRING}|{TOKEN_POINT_CLOSE_STRING})"
     )
@@ -168,7 +168,7 @@ def _segment_prompt_into_text_token_conversions(prompt: str) -> List:
     return prompt_text_list
 
 
-def _transform_coordinates_and_tokenize(prompt: str, scale_factor: float, tokenizer) -> List[int]:
+def _transform_coordinates_and_tokenize(prompt: str, scale_factor: float, tokenizer) -> list[int]:
     """
     This function transforms the prompt in the following fashion:
     - <box> <point> and </box> </point> to their respective token mappings
@@ -188,7 +188,7 @@ def _transform_coordinates_and_tokenize(prompt: str, scale_factor: float, tokeni
     # Tokenize the prompt
     # Convert prompt into a list split
     prompt_text_list = _segment_prompt_into_text_token_conversions(prompt)
-    transformed_prompt_tokens: List[int] = []
+    transformed_prompt_tokens: list[int] = []
     for elem in prompt_text_list:
         if elem[1]:
             # This is a location, we need to tokenize it
@@ -200,7 +200,7 @@ def _transform_coordinates_and_tokenize(prompt: str, scale_factor: float, tokeni
     return transformed_prompt_tokens
 
 
-def _transform_within_tags(text: str, scale_factor: float, tokenizer) -> List[int]:
+def _transform_within_tags(text: str, scale_factor: float, tokenizer) -> list[int]:
     """
     Given a bounding box of the fashion <box>1, 2, 3, 4</box> | <point>1, 2</point> This function is responsible for
     converting 1, 2, 3, 4 into tokens of 1 2 3 4 without any commas.
@@ -237,13 +237,13 @@ def _transform_within_tags(text: str, scale_factor: float, tokenizer) -> List[in
 
 def _tokenize_prompts_with_image_and_batch(
     tokenizer,
-    prompts: List[List[str]],
-    scale_factors: Optional[List[List["torch.Tensor"]]],
+    prompts: list[list[str]],
+    scale_factors: Optional[list[list["torch.Tensor"]]],
     max_tokens_to_generate: int,
     max_position_embeddings: int,
     add_BOS: bool,  # Same issue with types as above
     add_beginning_of_answer_token: bool,
-) -> Tuple["torch.Tensor", "torch.Tensor"]:
+) -> tuple["torch.Tensor", "torch.Tensor"]:
     """
     Given a set of prompts and number of tokens to generate:
     - tokenize prompts
@@ -318,7 +318,7 @@ def original_to_transformed_w_coords(original_coords, scale_w):
     return np.round(original_coords * scale_w).astype(np.int32)
 
 
-def scale_point_to_transformed_image(x: float, y: float, scale_factor: float) -> List[int]:
+def scale_point_to_transformed_image(x: float, y: float, scale_factor: float) -> list[int]:
     x_scaled = original_to_transformed_w_coords(np.array([x / 2]), scale_factor)[0]
     y_scaled = original_to_transformed_h_coords(np.array([y / 2]), scale_factor)[0]
     return [x_scaled, y_scaled]
@@ -326,7 +326,7 @@ def scale_point_to_transformed_image(x: float, y: float, scale_factor: float) ->
 
 def scale_bbox_to_transformed_image(
     top: float, left: float, bottom: float, right: float, scale_factor: float
-) -> List[int]:
+) -> list[int]:
     top_scaled = original_to_transformed_w_coords(np.array([top / 2]), scale_factor)[0]
     left_scaled = original_to_transformed_h_coords(np.array([left / 2]), scale_factor)[0]
     bottom_scaled = original_to_transformed_w_coords(np.array([bottom / 2]), scale_factor)[0]
@@ -364,7 +364,7 @@ class FuyuProcessor(ProcessorMixin):
         self.image_token_id = tokenizer.encode("|SPEAKER|", add_special_tokens=False)[1]
         self.image_newline_id = tokenizer.encode("|NEWLINE|", add_special_tokens=False)[1]
 
-    def _left_pad_inputs_with_attention_mask(self, model_inputs: List[Dict], return_attention_mask: bool):
+    def _left_pad_inputs_with_attention_mask(self, model_inputs: list[dict], return_attention_mask: bool):
         max_length_input_ids = max(entry["input_ids"].shape[1] for entry in model_inputs)
         max_length_image_patch_indices = max(entry["image_patches_indices"].shape[1] for entry in model_inputs)
 
@@ -487,7 +487,7 @@ class FuyuProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Optional[Union[str, List[str], TextInput, PreTokenizedInput]] = None,
+        text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[FuyuProcessorKwargs],
@@ -500,10 +500,10 @@ class FuyuProcessor(ProcessorMixin):
         of the above two methods for more information.
 
         Args:
-            images (`PIL.Image.Image`, `List[PIL.Image.Image]`):
+            images (`PIL.Image.Image`, `list[PIL.Image.Image]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `List[str]`):
+            text (`str`, `list[str]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
@@ -600,7 +600,7 @@ class FuyuProcessor(ProcessorMixin):
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
 
         Args:
-            image_sizes (`List[List[int]]`, *optional*):
+            image_sizes (`list[list[int]]`, *optional*):
                 The input sizes formatted as (height, width) per each image.
 
         Returns:
@@ -761,7 +761,7 @@ class FuyuProcessor(ProcessorMixin):
                 Additional arguments to be passed to the tokenizer's `batch_decode method`.
 
         Returns:
-            `List[str]`: The decoded text output.
+            `list[str]`: The decoded text output.
         """
         beginning_of_answer = self.tokenizer.convert_tokens_to_ids(BEGINNING_OF_ANSWER_STRING)
         # get boa index for each outputted sequence tensor

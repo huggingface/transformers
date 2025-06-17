@@ -14,7 +14,7 @@
 # limitations under the License.
 """Fast Image processor class for Got-OCR-2."""
 
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -97,7 +97,7 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
         min_patches: int,
         max_patches: int,
         use_thumbnail: bool = True,
-        patch_size: Optional[Union[Tuple, int, dict]] = None,
+        patch_size: Optional[Union[tuple, int, dict]] = None,
         interpolation: Optional["F.InterpolationMode"] = None,
     ):
         """
@@ -115,12 +115,12 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
                 The maximum number of patches to be extracted from the image.
             use_thumbnail (`bool`, *optional*, defaults to `True`):
                 Whether to add a thumbnail image to the list of cropped patches.
-            patch_size (`int`, `Tuple[int, int]`, `dict`, *optional*):
+            patch_size (`int`, `tuple[int, int]`, `dict`, *optional*):
                 The size of the output patches.
                 The format of the image data. If `None`, the format is inferred from the input image.
 
         Returns:
-            List[`PIL.Image.Image`] or List[np.ndarray]: The list of cropped images.
+            list[`PIL.Image.Image`] or list[np.ndarray]: The list of cropped images.
         """
         patch_size_height, patch_size_width = patch_size.height, patch_size.width
         original_height, original_width = images.shape[-2:]
@@ -163,7 +163,7 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: List["torch.Tensor"],
+        images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
         crop_to_patches: bool,
@@ -175,8 +175,8 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
         return_tensors: Optional[Union[str, TensorType]],
     ) -> BatchFeature:
         if crop_to_patches:
