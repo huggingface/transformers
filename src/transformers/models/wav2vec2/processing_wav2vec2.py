@@ -132,9 +132,7 @@ class Wav2Vec2Processor(ProcessorMixin):
     def pad(self, *args, **kwargs):
         """
         This method operates on batches of extracted features and/or tokenized text. It forwards all arguments to
-        Wav2Vec2FeatureExtractor's [`~Wav2Vec2FeatureExtractor.pad`] and/or PreTrainedTokenizer’s [`~PreTrainedTokenizer.pad`]
-        and returns their outputs.  Invocation of either or both methods are determined by the presence of the `input_features`
-        and `labels` arguments.
+        [`Wav2Vec2FeatureExtractor.pad`] and/or [`PreTrainedTokenizer.pad`] depending on the input modality and returns their outputs. If both modalities are passed, [`Wav2Vec2FeatureExtractor.pad`] and [`PreTrainedTokenizer.pad`] are called.
 
         Args:
             input_features:
