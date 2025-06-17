@@ -39,7 +39,6 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
 )
@@ -174,20 +173,6 @@ class Glm4vModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
 
     # GLM4V has images shaped as (bs*patch_len, dim) so we can't slice to batches in generate
     def prepare_config_and_inputs_for_generate(self, batch_size=2):

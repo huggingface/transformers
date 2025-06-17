@@ -751,7 +751,7 @@ class Glm4vPreTrainedModel(Qwen2_5_VLPreTrainedModel):
 
     def _init_weights(self, module):
         std = self.config.get_text_config().initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv3d)):
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.Conv3d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -799,6 +799,7 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         self.post_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.gradient_checkpointing = False
+        self.post_init()
 
     def rot_pos_emb(self, grid_thw):
         pos_ids = []
