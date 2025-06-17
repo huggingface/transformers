@@ -34,15 +34,7 @@ from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    auto_docstring,
-    can_return_tuple,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging, replace_return_docstrings
 from .configuration_aimv2 import Aimv2Config, Aimv2TextConfig, Aimv2VisionConfig
 
 
@@ -449,6 +441,7 @@ class Aimv2AttentionPoolingHead(nn.Module):
         return output
 
 
+@auto_docstring
 class Aimv2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -458,7 +451,12 @@ class Aimv2PreTrainedModel(PreTrainedModel):
     config_class = Aimv2Config
     base_model_prefix = "aimv2"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["AIMv2SwiGLUFFN"]
+    _no_split_modules = [
+        "Aimv2EncoderLayer",
+        "Aimv2AttentionPoolingHead",
+        "Aimv2VisionEmbeddings",
+        "Aimv2TextEmbeddings",
+    ]
     _supports_sdpa = True
 
     def _init_weights(self, module):
@@ -482,42 +480,10 @@ class Aimv2PreTrainedModel(PreTrainedModel):
             module.cls_token.data.normal_(mean=0.0, std=std)
 
 
-AIMV2_VISION_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`Aimv2VisionConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-AIMV2_VISION_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        interpolate_pos_encoding (`bool`, *optional*, defaults `False`):
-            Whether to interpolate the pre-trained position encodings.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    """The vision model from AIMv2 without any head or projection on top.""",
-    AIMV2_VISION_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The Vision model from AIMv2 without any head or projection on top.
+    """
 )
 class Aimv2VisionModel(Aimv2PreTrainedModel):
     main_input_name = "pixel_values"
@@ -540,7 +506,7 @@ class Aimv2VisionModel(Aimv2PreTrainedModel):
         return self.embeddings.patch_embed
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(AIMV2_VISION_INPUTS_DOCSTRING)
+    @auto_docstring
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=Aimv2VisionConfig)
     def forward(
         self,
@@ -597,6 +563,11 @@ class Aimv2VisionModel(Aimv2PreTrainedModel):
         )
 
 
+@auto_docstring(
+    custom_intro="""
+    The text model from AIMv2 without any head or projection on top.
+    """
+)
 class Aimv2TextModel(Aimv2PreTrainedModel):
     main_input_name = "input_ids"
 
@@ -618,6 +589,7 @@ class Aimv2TextModel(Aimv2PreTrainedModel):
         self.embeddings.token_embedding = value
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids,

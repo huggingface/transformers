@@ -742,7 +742,6 @@ class Siglip2PreTrainedModel(PreTrainedModel):
 
     _no_split_modules = [
         "Siglip2TextEmbeddings",
-        "Siglip2EncoderLayer",
         "Siglip2VisionEmbeddings",
         "Siglip2EncoderLayer",
         "Siglip2MultiheadAttentionPoolingHead",
