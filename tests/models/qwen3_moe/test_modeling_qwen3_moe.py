@@ -25,6 +25,8 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_gpu,
+    require_torch_large_accelerator,
+    require_torch_multi_accelerator,
     require_torch_sdpa,
     slow,
     torch_device,
@@ -143,9 +145,10 @@ class Qwen3MoeModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertNotAlmostEqual(include_padding_result.aux_loss.item(), result.aux_loss.item())
 
 
+@require_torch_multi_accelerator
+@require_torch_large_accelerator
 @require_torch
 class Qwen3MoeIntegrationTest(unittest.TestCase):
-
     @classmethod
     def setUpClass(cls):
         cls.model = None
@@ -153,7 +156,9 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
     @classmethod
     def get_model(cls):
         if cls.model is None:
-            cls.model = Qwen3MoeForCausalLM.from_pretrained("Qwen/Qwen3-30B-A3B-Base", device_map="auto", load_in_4bit=True)
+            cls.model = Qwen3MoeForCausalLM.from_pretrained(
+                "Qwen/Qwen3-30B-A3B-Base", device_map="auto", load_in_4bit=True
+            )
 
         return cls.model
 
@@ -175,7 +180,7 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
 
     @slow
     def test_model_15b_a2b_generation(self):
-        EXPECTED_TEXT_COMPLETION = 'To be or not to be: the role of the cell cycle in the regulation of apoptosis.\nThe cell cycle is a highly'
+        EXPECTED_TEXT_COMPLETION = "To be or not to be: the role of the cell cycle in the regulation of apoptosis.\nThe cell cycle is a highly"
         prompt = "To be or not to"
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-30B-A3B-Base", use_fast=False)
         model = self.get_model()
@@ -225,28 +230,16 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
         model = self.get_model()
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
-
-        breakpoint()
-        print(1)
-
-        # self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
-
-
+        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
         # Assisted generation
         assistant_model = model
         assistant_model.generation_config.num_assistant_tokens = 2
         assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
         generated_ids = assistant_model.generate(input_ids, max_new_tokens=4, temperature=0)
+        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
-        breakpoint()
-        print(1)
-
-        # self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
-
-        EXPECTED_TEXT_COMPLETION = (
-            """To be or not to be, that is the question. Whether 'tis nobler in the mind to suffer the sl"""
-        )
+        EXPECTED_TEXT_COMPLETION = "To be or not to be: the role of the cell cycle in the regulation of apoptosis.\nThe cell cycle is a highly"
         prompt = "To be or not to"
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-30B-A3B-Base", use_fast=False)
 
@@ -255,11 +248,7 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-
-        breakpoint()
-        print(1)
-
-        # self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @slow
     def test_speculative_generation(self):
@@ -279,6 +268,3 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
         )
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
-
-        breakpoint()
-        print(1)
