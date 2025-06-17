@@ -81,9 +81,8 @@ class Wav2Vec2Processor(ProcessorMixin):
         **kwargs: Unpack[Wav2Vec2ProcessorKwargs],
     ):
         """
-        This method forwards all arguments to Wav2Vec2FeatureExtractor's [`~Wav2Vec2FeatureExtractor.__call__`] and/or
-        PreTrainedTokenizer’s [`~PreTrainedTokenizer.__call__`] and returns their outputs.  Invocation of either or
-        both methods are determined by the presence of the `audio` and `text` arguments.
+        This method forwards all arguments to [`Wav2Vec2FeatureExtractor.__call__`] and/or
+        [`PreTrainedTokenizer.__call__`] depending on the input modality and returns their outputs. If both modalities are passed, [`Wav2Vec2FeatureExtractor.__call__`] and [`PreTrainedTokenizer.__call__`] are called.
 
         Args:
             audio (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`, *optional*):
