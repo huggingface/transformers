@@ -39,6 +39,7 @@ from .utils import (
     ExplicitEnum,
     cached_property,
     is_accelerate_available,
+    is_apex_available,
     is_ipex_available,
     is_safetensors_available,
     is_sagemaker_dp_enabled,
@@ -764,12 +765,12 @@ class TrainingArguments:
 
         neftune_noise_alpha (`Optional[float]`):
             If not `None`, this will activate NEFTune noise embeddings. This can drastically improve model performance
-            for instruction fine-tuning. Check out the [original paper](https://arxiv.org/abs/2310.05914) and the
+            for instruction fine-tuning. Check out the [original paper](https://huggingface.co/papers/2310.05914) and the
             [original code](https://github.com/neelsjain/NEFTune). Support transformers `PreTrainedModel` and also
             `PeftModel` from peft. The original paper used values in the range [5.0, 15.0].
         optim_target_modules (`Union[str, List[str]]`, *optional*):
             The target modules to optimize, i.e. the module names that you would like to train.
-            Currently used for the GaLore algorithm (https://arxiv.org/abs/2403.03507) and APOLLO algorithm (https://arxiv.org/abs/2412.05270).
+            Currently used for the GaLore algorithm (https://huggingface.co/papers/2403.03507) and APOLLO algorithm (https://huggingface.co/papers/2412.05270).
             See GaLore implementation (https://github.com/jiaweizzhao/GaLore) and APOLLO implementation (https://github.com/zhuhanqing/APOLLO) for more details.
             You need to make sure to pass a valid GaLore or APOLLO optimizer, e.g., one of: "apollo_adamw", "galore_adamw", "galore_adamw_8bit", "galore_adafactor" and make sure that the target modules are `nn.Linear` modules only.
 
@@ -1488,7 +1489,7 @@ class TrainingArguments:
     neftune_noise_alpha: Optional[float] = field(
         default=None,
         metadata={
-            "help": "Activates neftune noise embeddings into the model. NEFTune has been proven to drastically improve model performances for instruction fine-tuning. Check out the original paper here: https://arxiv.org/abs/2310.05914 and the original code here: https://github.com/neelsjain/NEFTune. Only supported for `PreTrainedModel` and `PeftModel` classes."
+            "help": "Activates neftune noise embeddings into the model. NEFTune has been proven to drastically improve model performances for instruction fine-tuning. Check out the original paper here: https://huggingface.co/papers/2310.05914 and the original code here: https://github.com/neelsjain/NEFTune. Only supported for `PreTrainedModel` and `PeftModel` classes."
         },
     )
 
@@ -1580,6 +1581,12 @@ class TrainingArguments:
                 FutureWarning,
             )
             self.use_cpu = self.no_cuda
+        if self.use_ipex:
+            warnings.warn(
+                "using `use_ipex` is deprecated and will be removed in version 4.54 of 🤗 Transformers. "
+                "You only need PyTorch for the needed optimizations on Intel CPU and XPU.",
+                FutureWarning,
+            )
 
         self.eval_strategy = IntervalStrategy(self.eval_strategy)
         self.logging_strategy = IntervalStrategy(self.logging_strategy)
@@ -1685,7 +1692,7 @@ class TrainingArguments:
                     # cpu
                     raise ValueError("Your setup doesn't support bf16/(cpu, tpu, neuroncore). You need torch>=1.10")
                 elif not self.use_cpu:
-                    if not is_torch_bf16_gpu_available():
+                    if not is_torch_bf16_gpu_available() and not is_torch_xla_available():  # added for tpu support
                         error_message = "Your setup doesn't support bf16/gpu."
                         if is_torch_cuda_available():
                             error_message += " You need Ampere+ GPU with cuda>=11.0"
@@ -1701,6 +1708,19 @@ class TrainingArguments:
         if self.bf16:
             if self.half_precision_backend == "apex":
                 raise ValueError(" `--half_precision_backend apex`: GPU bf16 is not supported by apex.")
+
+        if self.half_precision_backend == "apex":
+            if not is_apex_available():
+                raise ImportError(
+                    "Using FP16 with APEX but APEX is not installed, please refer to"
+                    " https://www.github.com/nvidia/apex."
+                )
+            try:
+                from apex import amp  # noqa: F401
+            except ImportError as e:
+                raise ImportError(
+                    f"apex.amp is deprecated in the latest version of apex, causing this error {e}. Either revert to an older version or use pytorch amp by setting half_precision_backend='auto' instead. See https://github.com/NVIDIA/apex/pull/1896 "
+                )
 
         if self.lr_scheduler_type == SchedulerType.REDUCE_ON_PLATEAU:
             if self.eval_strategy == IntervalStrategy.NO:
@@ -1742,9 +1762,8 @@ class TrainingArguments:
         if self.average_tokens_across_devices:
             try:
                 if self.world_size == 1:
-                    logger.warning(
-                        "average_tokens_across_devices is set to True but it is invalid when world size is"
-                        "1. Turn it to False automatically."
+                    logger.info(
+                        "average_tokens_across_devices is True but world size is 1. Setting it to False automatically."
                     )
                     self.average_tokens_across_devices = False
             except ImportError as e:

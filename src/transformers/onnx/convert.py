@@ -13,10 +13,11 @@
 # limitations under the License.
 
 import warnings
+from collections.abc import Iterable
 from inspect import signature
 from itertools import chain
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterable, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
 import numpy as np
 from packaging.version import Version, parse

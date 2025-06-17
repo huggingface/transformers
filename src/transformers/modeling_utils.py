@@ -1069,7 +1069,7 @@ def _get_resolved_checkpoint_files(
                 os.path.isfile(os.path.join(pretrained_model_name_or_path, subfolder, TF_WEIGHTS_NAME + ".index"))
                 or os.path.isfile(os.path.join(pretrained_model_name_or_path, subfolder, TF2_WEIGHTS_NAME))
             ):
-                raise EnvironmentError(
+                raise OSError(
                     f"Error no file named {_add_variant(WEIGHTS_NAME, variant)} found in directory"
                     f" {pretrained_model_name_or_path} but there is a file for TensorFlow weights. Use"
                     " `from_tf=True` to load this model from those weights."
@@ -1077,18 +1077,18 @@ def _get_resolved_checkpoint_files(
             elif not use_safetensors and os.path.isfile(
                 os.path.join(pretrained_model_name_or_path, subfolder, FLAX_WEIGHTS_NAME)
             ):
-                raise EnvironmentError(
+                raise OSError(
                     f"Error no file named {_add_variant(WEIGHTS_NAME, variant)} found in directory"
                     f" {pretrained_model_name_or_path} but there is a file for Flax weights. Use `from_flax=True`"
                     " to load this model from those weights."
                 )
             elif use_safetensors:
-                raise EnvironmentError(
+                raise OSError(
                     f"Error no file named {_add_variant(SAFE_WEIGHTS_NAME, variant)} found in directory"
                     f" {pretrained_model_name_or_path}."
                 )
             else:
-                raise EnvironmentError(
+                raise OSError(
                     f"Error no file named {_add_variant(WEIGHTS_NAME, variant)}, {_add_variant(SAFE_WEIGHTS_NAME, variant)},"
                     f" {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME + '.index'} or {FLAX_WEIGHTS_NAME} found in directory"
                     f" {pretrained_model_name_or_path}."
@@ -1156,7 +1156,7 @@ def _get_resolved_checkpoint_files(
                             )
                         cached_file_kwargs["revision"] = revision
                         if resolved_archive_file is None:
-                            raise EnvironmentError(
+                            raise OSError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named"
                                 f" {_add_variant(SAFE_WEIGHTS_NAME, variant)} or {_add_variant(SAFE_WEIGHTS_INDEX_NAME, variant)} "
                                 "and thus cannot be loaded with `safetensors`. Please make sure that the model has "
@@ -1222,13 +1222,13 @@ def _get_resolved_checkpoint_files(
                             "local_files_only": local_files_only,
                         }
                         if has_file(pretrained_model_name_or_path, TF2_WEIGHTS_NAME, **has_file_kwargs):
-                            raise EnvironmentError(
+                            raise OSError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named"
                                 f" {_add_variant(WEIGHTS_NAME, variant)} but there is a file for TensorFlow weights."
                                 " Use `from_tf=True` to load this model from those weights."
                             )
                         elif has_file(pretrained_model_name_or_path, FLAX_WEIGHTS_NAME, **has_file_kwargs):
-                            raise EnvironmentError(
+                            raise OSError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named"
                                 f" {_add_variant(WEIGHTS_NAME, variant)} but there is a file for Flax weights. Use"
                                 " `from_flax=True` to load this model from those weights."
@@ -1236,25 +1236,25 @@ def _get_resolved_checkpoint_files(
                         elif variant is not None and has_file(
                             pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs
                         ):
-                            raise EnvironmentError(
+                            raise OSError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named"
                                 f" {_add_variant(WEIGHTS_NAME, variant)} but there is a file without the variant"
                                 f" {variant}. Use `variant=None` to load this model from those weights."
                             )
                         else:
-                            raise EnvironmentError(
+                            raise OSError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named"
                                 f" {_add_variant(WEIGHTS_NAME, variant)}, {_add_variant(SAFE_WEIGHTS_NAME, variant)},"
                                 f" {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME} or {FLAX_WEIGHTS_NAME}."
                             )
 
-            except EnvironmentError:
+            except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted
                 # to the original exception.
                 raise
             except Exception as e:
                 # For any other exception, we throw a generic error.
-                raise EnvironmentError(
+                raise OSError(
                     f"Can't load the model for '{pretrained_model_name_or_path}'. If you were trying to load it"
                     " from 'https://huggingface.co/models', make sure you don't have a local directory with the"
                     f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
@@ -1881,7 +1881,7 @@ class ModuleUtilsMixin:
         Get number of (optionally, non-embeddings) floating-point operations for the forward and backward passes of a
         batch with this transformer model. Default approximation neglects the quadratic dependency on the number of
         tokens (valid if `12 * d_model << sequence_length`) as laid out in [this
-        paper](https://arxiv.org/pdf/2001.08361.pdf) section 2.1. Should be overridden for transformers with parameter
+        paper](https://huggingface.co/papers/2001.08361) section 2.1. Should be overridden for transformers with parameter
         re-use e.g. Albert or Universal Transformers, or if doing long-range modeling with very high sequence lengths.
 
         Args:
@@ -2157,8 +2157,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         if isinstance(torch_dtype, str):
             torch_dtype = getattr(torch, torch_dtype)
 
-        use_flash_attention_2 = kwargs.pop("use_flash_attention_2", False)
-
         # override default dtype if needed
         dtype_orig = None
         if torch_dtype is not None:
@@ -2177,7 +2175,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         if not getattr(config, "_attn_implementation_autoset", False):
             config = cls._autoset_attn_implementation(
                 config,
-                use_flash_attention_2=use_flash_attention_2,
                 check_device_map=False,
                 torch_dtype=torch_dtype,
             )
@@ -2205,7 +2202,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
     def _autoset_attn_implementation(
         cls,
         config,
-        use_flash_attention_2: bool = False,
         torch_dtype: Optional[torch.dtype] = None,
         device_map: Optional[Union[str, Dict[str, int]]] = None,
         check_device_map: bool = True,
@@ -2213,21 +2209,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         """
         Automatically checks and dispatches to a default attention implementation. In order of priority:
             1. An implementation specified in `config._attn_implementation` (due for example to the argument attn_implementation="sdpa" in from_pretrained).
-            2. DEPRECATED: if use_flash_attention_2 is set to `True` and `flash_attn` is available, flash attention. (`LlamaFlashAttention` for example)
-            3. SDPA implementation, if available and supported by the model type. (`LlamaSdpaAttention` for example)
-            4. The default model's implementation otherwise (`LlamaAttention` for example) .
+            2. SDPA implementation, if available and supported by the model type. (`LlamaSdpaAttention` for example)
+            3. The default model's implementation otherwise (`LlamaAttention` for example) .
         """
         # Here we use config._attn_implementation_internal to check whether the attention implementation was explicitly set by the user.
         # The property `PretrainedConfig._attn_implementation` is never `None`, for backward compatibility (always fall back on "eager").
         # The `hasattr` here is used as some Transformers tests for some reason do not call PretrainedConfig __init__ (e.g. test_no_super_init_config_and_model)
         requested_attn_implementation = None
         if hasattr(config, "_attn_implementation_internal") and config._attn_implementation_internal is not None:
-            if config._attn_implementation != "flash_attention_2" and use_flash_attention_2:
-                raise ValueError(
-                    f'Both attn_implementation="{config._attn_implementation}" and `use_flash_attention_2=True` were used when loading the model, which are not compatible.'
-                    ' We recommend to just use `attn_implementation="flash_attention_2"` when loading the model.'
-                )
-
             if isinstance(config._attn_implementation, str) and re.match(
                 r"^[^/:]+/[^/:]+:[^/:]+$", config._attn_implementation
             ):
@@ -2288,15 +2277,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 if not isinstance(requested_attn_implementation, dict)
                 else requested_attn_implementation.get(key, None)
             )
-            # For models with backbone sub-config might be not initialized
-            if sub_config is not None:
+            # For models with backbone sub-config might be not initialized. Set the requested att
+            # if the config hasn't got any attn pre-set and the requested attn in not `None` (i.e not the default attn)
+            if (
+                sub_config is not None
+                and sub_config._attn_implementation_internal is None
+                and curr_attn_implementation is not None
+            ):
                 sub_config._attn_implementation_internal = curr_attn_implementation
-
-        if use_flash_attention_2:
-            logger.warning_once(
-                'The model was loaded with use_flash_attention_2=True, which is deprecated and may be removed in a future release. Please use `attn_implementation="flash_attention_2"` instead.'
-            )
-            config._attn_implementation = "flash_attention_2"
 
         if config._attn_implementation == "flash_attention_2":
             cls._check_and_enable_flash_attn_2(
@@ -2309,10 +2297,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         elif requested_attn_implementation == "flex_attention":
             config = cls._check_and_enable_flex_attn(config, hard_check_only=True)
         elif requested_attn_implementation in [None, "sdpa"] and not is_torch_xla_available():
-            # use_flash_attention_2 takes priority over SDPA, hence SDPA treated in this elif.
+            # flash_attention_2 takes priority over SDPA, hence SDPA treated in this elif.
             config = cls._check_and_enable_sdpa(
                 config,
-                hard_check_only=False if requested_attn_implementation is None else True,
+                hard_check_only=requested_attn_implementation is not None,
             )
 
             if (
@@ -3767,7 +3755,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         index = None
         if state_dict_split.is_sharded:
             index = {
-                "metadata": state_dict_split.metadata,
+                "metadata": {"total_parameters": self.num_parameters(), **state_dict_split.metadata},
                 "weight_map": state_dict_split.tensor_to_filename,
             }
 
@@ -4256,7 +4244,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         variant = kwargs.pop("variant", None)
         adapter_kwargs = kwargs.pop("adapter_kwargs", {})
         adapter_name = kwargs.pop("adapter_name", "default")
-        use_flash_attention_2 = kwargs.pop("use_flash_attention_2", False)
         generation_config = kwargs.pop("generation_config", None)
         gguf_file = kwargs.pop("gguf_file", None)
         tp_plan = kwargs.pop("tp_plan", None)
@@ -4264,11 +4251,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         device_mesh = kwargs.pop("device_mesh", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
 
-        # Load models with hardcoded key mapping on class for VLMs only,  to keep BC and standardize model
-        if any(allowed_name in cls.__name__.lower() for allowed_name in VLMS):
-            key_mapping = kwargs.pop("key_mapping", cls._checkpoint_conversion_mapping)
-        else:
-            key_mapping = kwargs.pop("key_mapping", None)
+        key_mapping = kwargs.pop("key_mapping", None)
+        # Load models with hardcoded key mapping on class for VLMs only, to keep BC and standardize model
+        if key_mapping is None and any(allowed_name in cls.__name__.lower() for allowed_name in VLMS):
+            key_mapping = cls._checkpoint_conversion_mapping
 
         # Not used anymore -- remove them from the kwargs
         _ = kwargs.pop("resume_download", None)
@@ -4618,7 +4604,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         if not getattr(config, "_attn_implementation_autoset", False):
             config = cls._autoset_attn_implementation(
                 config,
-                use_flash_attention_2=use_flash_attention_2,
                 torch_dtype=torch_dtype,
                 device_map=device_map,
             )
@@ -4792,6 +4777,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             model.hf_quantizer = hf_quantizer
 
         if _adapter_model_path is not None:
+            adapter_kwargs["key_mapping"] = key_mapping
             model.load_adapter(
                 _adapter_model_path,
                 adapter_name=adapter_name,

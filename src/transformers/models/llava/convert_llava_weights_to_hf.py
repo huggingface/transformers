@@ -40,7 +40,7 @@ Example for creating the old state dict file with Python:
 
     # load model
     kwargs = {"device_map": "auto", "torch_dtype": torch.float16}
-    model = LlavaLlamaForCausalLM.from_pretrained("liuhaotian/llava-v1.5-7b", low_cpu_mem_usage=True, **kwargs)
+    model = LlavaLlamaForCausalLM.from_pretrained("liuhaotian/llava-v1.5-7b", **kwargs)
 
     # load vision tower
     model.get_vision_tower().load_model()

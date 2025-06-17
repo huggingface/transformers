@@ -40,11 +40,13 @@ if is_flash_attn_2_available():
 
 # patch functions in package `flash-attn` when using flash-attention on Ascend NPU.
 if is_torch_npu_available():
-    from torch_npu import npu_rotary_mul as apply_rotary_emb  # noqa
-
     from .integrations.npu_flash_attention import index_first_axis, pad_input, unpad_input
+    from .integrations.npu_flash_attention import npu_apply_rotary_emb as apply_rotary_emb  # noqa
     from .integrations.npu_flash_attention import npu_flash_attn_func as flash_attn_func
     from .integrations.npu_flash_attention import npu_flash_attn_varlen_func as flash_attn_varlen_func
+
+
+_flash_supports_window_size = False
 
 
 if flash_attn_func:
@@ -279,7 +281,7 @@ def fa_peft_integration_check(
 
 
 flash_241 = is_flash_attn_greater_or_equal("2.4.1")
-deterministic_g = os.environ.get("FLASH_ATTENTION_DETERMINISTIC", "0") == "1"
+deterministic_g = None
 
 
 def _flash_attention_forward(
@@ -342,6 +344,9 @@ def _flash_attention_forward(
 
     if flash_241:
         if deterministic is None:
+            global deterministic_g
+            if deterministic_g is None:
+                deterministic_g = os.environ.get("FLASH_ATTENTION_DETERMINISTIC", "0") == "1"
             deterministic = deterministic_g
         flash_kwargs["deterministic"] = deterministic
 

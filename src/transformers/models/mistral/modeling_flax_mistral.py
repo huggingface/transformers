@@ -103,7 +103,7 @@ MISTRAL_INPUTS_DOCSTRING = r"""
             `past_key_values`).
 
             If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+            and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
             information on the default strategy.
 
             - 1 indicates the head is **not masked**,
@@ -240,8 +240,8 @@ class FlaxMistralAttention(nn.Module):
         self.v_proj = nn.Dense(self.num_key_value_heads * self.head_dim, use_bias=False, dtype=self.dtype)
         self.o_proj = nn.Dense(self.hidden_size, use_bias=False, dtype=self.dtype)
         casual_mask = make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool")
-        self.causal_mask = jnp.triu(casual_mask, k=-config.sliding_window)
-        self.rotary_emb = FlaxMistralRotaryEmbedding(config, dtype=self.dtype)
+        self.causal_mask = jnp.triu(casual_mask, k=-(config.sliding_window or 0))
+        self.rotary_emb = FlaxMistralRotaryEmbedding(self.config, dtype=self.dtype)
 
     def _split_heads(self, hidden_states, num_heads):
         return hidden_states.reshape(hidden_states.shape[:2] + (num_heads, self.head_dim))

@@ -22,7 +22,7 @@ specific language governing permissions and limitations under the License. -->
 ## Overview
 
 The TrOCR model was proposed in [TrOCR: Transformer-based Optical Character Recognition with Pre-trained
-Models](https://arxiv.org/abs/2109.10282) by Minghao Li, Tengchao Lv, Lei Cui, Yijuan Lu, Dinei Florencio, Cha Zhang,
+Models](https://huggingface.co/papers/2109.10282) by Minghao Li, Tengchao Lv, Lei Cui, Yijuan Lu, Dinei Florencio, Cha Zhang,
 Zhoujun Li, Furu Wei. TrOCR consists of an image Transformer encoder and an autoregressive text Transformer decoder to
 perform [optical character recognition (OCR)](https://en.wikipedia.org/wiki/Optical_character_recognition).
 
@@ -40,7 +40,7 @@ tasks.*
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/trocr_architecture.jpg"
 alt="drawing" width="600"/>
 
-<small> TrOCR architecture. Taken from the <a href="https://arxiv.org/abs/2109.10282">original paper</a>. </small>
+<small> TrOCR architecture. Taken from the <a href="https://huggingface.co/papers/2109.10282">original paper</a>. </small>
 
 Please refer to the [`VisionEncoderDecoder`] class on how to use this model.
 

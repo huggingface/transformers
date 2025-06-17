@@ -48,7 +48,7 @@ def initialize_tensor_parallelism(tp_plan, tp_size=None):
         return None, None, None
 
     if not is_torch_greater_or_equal("2.5"):
-        raise EnvironmentError("Tensor parallel is only supported for `torch>=2.5`.")
+        raise OSError("Tensor parallel is only supported for `torch>=2.5`.")
 
     # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
     device_type = torch._C._get_accelerator().type
@@ -70,7 +70,7 @@ def initialize_tensor_parallelism(tp_plan, tp_size=None):
                 current_device.set_device(local_rank)
 
         except Exception as e:
-            raise EnvironmentError(
+            raise OSError(
                 "We tried to initialize torch.distributed for you, but it failed. Make "
                 "sure you init torch distributed in your script to use `tp_plan='auto'`."
             ) from e
@@ -647,7 +647,7 @@ class SequenceParallel(TensorParallelLayer):
     `RMSNorm python implementation <https://github.com/facebookresearch/llama/blob/main/llama/model.py#L34>`__
 
     This style implements the operation that is described in the paper
-    `Reducing Activation Recomputation in Large Transformer Models <https://arxiv.org/abs/2205.05198>`__
+    `Reducing Activation Recomputation in Large Transformer Models <https://huggingface.co/papers/2205.05198>`__
 
     If the input passed in to this ``nn.Module`` is a :class:`torch.Tensor`, it assumes that the input is already sharded
     on the sequence dimension and converts the input to a :class:`DTensor` sharded on the sequence dimension. If the input

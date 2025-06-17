@@ -959,7 +959,8 @@ class Emu3VQVAEDecoder(nn.Module):
     custom_intro="""
     The VQ-VAE model used in Emu3 for encoding/decoding images into discrete tokens.
     This model follows the "Make-a-scene: Scene-based text-to-image generation with human priors" paper from
-    [ Oran Gafni, Adam Polyak, Oron Ashual, Shelly Sheynin, Devi Parikh, and Yaniv Taigman](https://arxiv.org/abs/2203.13131).
+    [ Oran Gafni, Adam Polyak, Oron Ashual, Shelly Sheynin, Devi Parikh, and Yaniv
+    Taigman](https://huggingface.co/papers/2203.13131).
     """
 )
 class Emu3VQVAE(PreTrainedModel):
@@ -1142,8 +1143,8 @@ class Emu3PreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
     _supports_static_cache = True
     _supports_param_buffer_assignment = False
-    _supports_attention_backend = True
     _supports_flex_attn = True
+    _supports_attention_backend = True
 
     def _init_weights(self, module):
         std = self.config.get_text_config().initializer_range

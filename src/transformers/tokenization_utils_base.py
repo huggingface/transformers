@@ -24,11 +24,11 @@ import os
 import re
 import warnings
 from collections import UserDict
-from collections.abc import Mapping, Sized
+from collections.abc import Mapping, Sequence, Sized
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
 from packaging import version
@@ -2086,7 +2086,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         chat_template_file = resolved_vocab_files.pop("chat_template_file", None)
         extra_chat_templates = [key for key in resolved_vocab_files if key.startswith("chat_template_")]
         if chat_template_file is not None:
-            with open(chat_template_file) as chat_template_handle:
+            with open(chat_template_file, encoding="utf-8") as chat_template_handle:
                 chat_templates["default"] = chat_template_handle.read()
         for extra_chat_template in extra_chat_templates:
             template_file = resolved_vocab_files.pop(extra_chat_template, None)
@@ -2838,6 +2838,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             "split_special_tokens": kwargs.pop("split_special_tokens", self.split_special_tokens),
             "verbose": verbose,
         }
+
+        if return_tensors in ("tf", "jax"):
+            logger.warning_once(
+                "TensorFlow and JAX classes are deprecated and will be removed in Transformers v5. We "
+                "recommend migrating to PyTorch classes or pinning your version of Transformers."
+            )
         all_kwargs.update(kwargs)
         if text is None and text_target is None:
             raise ValueError("You need to specify either `text` or `text_target`.")
@@ -3383,9 +3389,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         Returns:
             `List[int]`: The token type ids.
         """
+        cls_len = int(getattr(self, "cls_token_id", None) is not None)
+        sep_len = int(getattr(self, "sep_token_id", None) is not None)
+
         if token_ids_1 is None:
-            return len(token_ids_0) * [0]
-        return [0] * len(token_ids_0) + [1] * len(token_ids_1)
+            return [0] * (cls_len + len(token_ids_0) + sep_len)
+
+        return [0] * (cls_len + len(token_ids_0) + sep_len) + [1] * (len(token_ids_1) + sep_len)
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
