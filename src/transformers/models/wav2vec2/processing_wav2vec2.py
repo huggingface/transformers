@@ -139,7 +139,7 @@ class Wav2Vec2Processor(ProcessorMixin):
         and returns their outputs.  Invocation of either or both methods are determined by the presence of the `input_features`
         and `labels` arguments.
 
-        Important Args:
+        Args:
             input_features:
                 When the first argument is a dictionary containing a batch of tensors, or the `input_features` argument is present,
                 Wav2Vec2FeatureExtractor's [`~Wav2Vec2FeatureExtractor.pad`] will be invoked.
