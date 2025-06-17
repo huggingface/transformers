@@ -215,8 +215,8 @@ class DiaGenerationMixin(GenerationMixin):
         # Post processing for CFG and overwriting via delay pattern mask
         # 1. Delay pattern mask -- force tokens if not allowed to predict (!= pad_token in mask)
         model_inputs["decoder_input_ids"] = self.apply_delay_mask(
-            model_inputs["decoder_input_ids"], self.config.pad_token_id, decoder_delay_mask
-        )
+            input_ids, self.config.pad_token_id, decoder_delay_mask
+        )[:, -1, :][:, None, :]
 
         # 2. Apply CFG duplication if needed
         if self._uses_cfg:
