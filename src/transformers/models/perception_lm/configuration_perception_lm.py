@@ -31,18 +31,16 @@ class PerceptionEncoderConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        model_type (`str`, *optional*, defaults to `"perception_encoder"`):
-            The type of the model.
         use_cls_token (`bool`, *optional*, defaults to `True`):
             Whether to use a CLS token.
         architecture (`str`, *optional*, defaults to `"vit_pe_core_large_patch14_336"`):
             The architecture of the model.
         width (`int`, *optional*, defaults to `1024`):
-            The width of the model.
-        img_size (`Tuple[int, int]`, *optional*, defaults to `(448, 448)`):
-            The size of the input image.
+            The width (hidden size) of the model.
+        img_size (`List[int]`, *optional*, defaults to `[448, 448]`):
+            The size of the input image as [height, width].
         depth (`int`, *optional*, defaults to `23`):
-            The depth of the model.
+            The number of layers in the model.
         num_classes (`int`, *optional*, defaults to `0`):
             The number of classes for classification.
         global_pool (`str`, *optional*, defaults to `""`):
@@ -50,9 +48,9 @@ class PerceptionEncoderConfig(PretrainedConfig):
         use_post_transformer_norm (`bool`, *optional*, defaults to `False`):
             Whether to use post-transformer normalization.
         init_values (`float`, *optional*, defaults to `0.1`):
-            The initialization values.
-        ref_feat_shape (`Tuple[int, int]`, *optional*, defaults to `(32, 32)`):
-            The shape of the reference feature.
+            The initialization value for LayerScale.
+        ref_feat_shape (`List[int]`, *optional*, defaults to `[32, 32]`):
+            The shape of the reference feature as [height, width].
 
     Example:
 
@@ -111,33 +109,24 @@ class PerceptionLMConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `CLIPVisionConfig`):
+        vision_config (`Union[PerceptionEncoderConfig, dict]`, *optional*, defaults to `PerceptionEncoderConfig()`):
             The config object or dictionary of the vision backbone.
-        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
+        text_config (`Union[PretrainedConfig, dict]`, *optional*, defaults to `LlamaConfig()`):
             The config object or dictionary of the text backbone.
-        image_token_id (`int`, *optional*, defaults to 32000):
+        projector_pooling_ratio (`int`, *optional*, defaults to 1):
+            The pooling ratio used in the multimodal projector.
+        image_token_id (`int`, *optional*, defaults to 128002):
             The image token index to encode the image prompt.
-        projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The activation function used by the multimodal projector.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`.
-        vision_feature_layer (`Union[int, List[int]]`, *optional*, defaults to -2):
-            The index of the layer to select the vision feature. If multiple indices are provided,
-            the vision feature of the corresponding indices will be concatenated to form the
-            vision features.
-        image_seq_length (`int`, *optional*, defaults to 576):
-            Sequence length of one image embedding.
-        multimodal_projector_bias (`bool`, *optional*, defaults to `True`):
-            Whether to use bias in the multimodal projector.
+        video_token_id (`int`, *optional*, defaults to 128003):
+            The video token index to encode the video prompt.
 
     Example:
 
     ```python
-    >>> from transformers import PerceptionLMForConditionalGeneration, PerceptionLMConfig, CLIPVisionConfig, LlamaConfig
+    >>> from transformers import PerceptionLMForConditionalGeneration, PerceptionLMConfig, PerceptionEncoderConfig, LlamaConfig
 
-    >>> # Initializing a CLIP-vision config
-    >>> vision_config = CLIPVisionConfig()
+    >>> # Initializing a PerceptionEncoder config
+    >>> vision_config = PerceptionEncoderConfig()
 
     >>> # Initializing a Llama config
     >>> text_config = LlamaConfig()
