@@ -17,25 +17,32 @@
 from typing import List, Optional, Union
 
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import BaseImageProcessorFast
-from ...image_utils import ImageInput, PILImageResampling, SizeDict
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
+from ...image_processing_utils_fast import (
+    BaseImageProcessorFast,
+    DefaultFastImageProcessorKwargs,
+    group_images_by_shape,
+    reorder_images,
 )
+from ...image_utils import PILImageResampling, SizeDict
+from ...processing_utils import Unpack
+from ...utils import TensorType, auto_docstring, is_torch_available
 
 
 if is_torch_available():
     import torch
 
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
+
+class MobileViTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    """
+    Keyword arguments for MobileViTImageProcessorFast that extend the default ones
+    to include channel flipping support.
+
+    Args:
+        do_flip_channel_order (`bool`, *optional*, defaults to `True`):
+            Whether to flip the color channels from RGB to BGR. This matches the behavior of the
+            slow MobileViT image processor.
+    """
+    do_flip_channel_order: Optional[bool]
 
 
 @auto_docstring
@@ -43,30 +50,22 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
     # Default values verified against the slow MobileViTImageProcessor
     resample = PILImageResampling.BILINEAR
     size = {"shortest_edge": 224}
-    default_to_square = False
     crop_size = {"height": 256, "width": 256}
+    default_to_square = False
     do_resize = True
     do_center_crop = True
     do_rescale = True
     rescale_factor = 1 / 255
     do_flip_channel_order = True
+    # MobileViT slow processor does NOT have normalization, so set to None
+    do_normalize = None
+    valid_kwargs = MobileViTFastImageProcessorKwargs
 
-    def preprocess(
-        self,
-        images: ImageInput,
-        segmentation_maps: Optional[ImageInput] = None,
-        **kwargs,
-    ) -> BatchFeature:
-        """
-        Preprocess an image or batch of images and optionally segmentation maps.
-        """
-        if segmentation_maps is not None:
-            # For now, pass None for segmentation maps as the base class doesn't handle them
-            # This test is mainly checking that both processors can handle the same interface
-            # In a full implementation, we'd need to process segmentation maps similarly to the slow processor
-            pass
+    def __init__(self, **kwargs: Unpack[MobileViTFastImageProcessorKwargs]):
+        super().__init__(**kwargs)
 
-        # Call parent preprocess method for images only
+    @auto_docstring
+    def preprocess(self, images, **kwargs: Unpack[MobileViTFastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _preprocess(
@@ -74,7 +73,7 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
         images: List["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["torch.nn.functional.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -82,46 +81,38 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
         do_normalize: bool,
         image_mean: Optional[Union[float, List[float]]],
         image_std: Optional[Union[float, List[float]]],
+        do_flip_channel_order: bool,
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
-    ):
-        # Extract the custom parameter
-        do_flip_channel_order = kwargs.pop("do_flip_channel_order", self.do_flip_channel_order)
+    ) -> BatchFeature:
+        # Group images by size for batched resizing
+        grouped_images, grouped_images_index = group_images_by_shape(images)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation)
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
-        # First apply the standard processing (resize, crop, rescale, normalize)
-        processed_batch = super()._preprocess(
-            images=images,
-            do_resize=do_resize,
-            size=size,
-            interpolation=interpolation,
-            do_center_crop=do_center_crop,
-            crop_size=crop_size,
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            return_tensors=None,  # Don't stack yet, we need to flip channels first
-            **kwargs,
-        )
+        # Group images by size for further processing
+        # Needed in case do_resize is False, or resize returns images with different sizes
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_center_crop:
+                stacked_images = self.center_crop(stacked_images, crop_size)
+            # Fused rescale and normalize
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            # Handle channel flipping (RGB to BGR conversion)
+            if do_flip_channel_order:
+                # Flip the channel dimension (channels are at dimension 1 for batched tensors)
+                stacked_images = stacked_images.flip(1)
+            processed_images_grouped[shape] = stacked_images
 
-        # Extract the list of processed images from the BatchFeature
-        processed_data = processed_batch["pixel_values"]
-
-        # Apply channel flipping if requested (RGB to BGR)
-        if do_flip_channel_order:
-            # Flip the channel order for each image
-            processed_images = []
-            for image in processed_data:
-                # Flip channels: [C, H, W] -> flip dimension 0
-                flipped_image = torch.flip(image, dims=[0])
-                processed_images.append(flipped_image)
-        else:
-            processed_images = processed_data
-
-        # Stack if return_tensors is specified
-        if return_tensors:
-            processed_images = torch.stack(processed_images, dim=0)
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
