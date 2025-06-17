@@ -434,19 +434,20 @@ class HiFTNetModel(HiFTNetPreTrainedModel):
 
         # 3. generator layers (see paper for more details): 
         #
-        #           hidden states         source
-        #               |                    |
-        #               |                    |
-        #               |                    |
-        #               v                    v 
-        #  ConvTranspose upsampling        NSF (see paper)
-        #               |                    |
-        #               |                    |
-        #               └──────── + ─────────┘
-        #                         |
-        #              MRF with snake activation
-        #                         |
-        #                         v
+        #           hidden states     source spectrogram (magnitude and phase)
+        #               |                               |
+        #               |                               |
+        #               |                               |
+        #               |                               |
+        #               v                               v 
+        #  ConvTranspose upsampling               NSF (see paper)
+        #               |                               |
+        #               |                               |
+        #               └────────────── + ──────────────┘
+        #                               |
+        #              MRF with snake activation (see paper)
+        #                               |
+        #                               v
         #
         for layer in self.layers:
             hidden_states, input_lengths = layer(hidden_states, source, input_lengths, source_lengths)
