@@ -1,6 +1,6 @@
 import warnings
 from collections import UserDict
-from typing import Any, Dict, List, Union, overload
+from typing import Any, Union, overload
 
 from ..utils import (
     add_end_docstrings,
@@ -76,32 +76,32 @@ class ZeroShotImageClassificationPipeline(Pipeline):
 
     @overload
     def __call__(
-        self, image: Union[str, "Image.Image"], candidate_labels: List[str], **kwargs: Any
-    ) -> List[Dict[str, Any]]: ...
+        self, image: Union[str, "Image.Image"], candidate_labels: list[str], **kwargs: Any
+    ) -> list[dict[str, Any]]: ...
 
     @overload
     def __call__(
-        self, image: Union[List[str], List["Image.Image"]], candidate_labels: List[str], **kwargs: Any
-    ) -> List[List[Dict[str, Any]]]: ...
+        self, image: Union[list[str], list["Image.Image"]], candidate_labels: list[str], **kwargs: Any
+    ) -> list[list[dict[str, Any]]]: ...
 
     def __call__(
         self,
-        image: Union[str, List[str], "Image.Image", List["Image.Image"]],
-        candidate_labels: List[str],
+        image: Union[str, list[str], "Image.Image", list["Image.Image"]],
+        candidate_labels: list[str],
         **kwargs: Any,
-    ) -> Union[List[Dict[str, Any]], List[List[Dict[str, Any]]]]:
+    ) -> Union[list[dict[str, Any]], list[list[dict[str, Any]]]]:
         """
         Assign labels to the image(s) passed as inputs.
 
         Args:
-            image (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
+            image (`str`, `list[str]`, `PIL.Image` or `list[PIL.Image]`):
                 The pipeline handles three types of images:
 
                 - A string containing a http link pointing to an image
                 - A string containing a local path to an image
                 - An image loaded in PIL directly
 
-            candidate_labels (`List[str]`):
+            candidate_labels (`list[str]`):
                 The candidate labels for this image. They will be formatted using *hypothesis_template*.
 
             hypothesis_template (`str`, *optional*, defaults to `"This is a photo of {}"`):
