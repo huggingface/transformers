@@ -166,8 +166,10 @@ class FastConformerMultiHeadAttention(nn.Module):
         v = v.transpose(1, 2)
         
         if pos_emb is not None:
-            p = self.linear_pos(pos_emb).view(batch_size, -1, self.n_heads, self.d_k)
-            p = p.transpose(1, 2)
+            # pos_emb has shape [1, pos_len, d_model] - match NeMo's approach exactly
+            n_batch_pos = pos_emb.size(0)  # This will be 1
+            p = self.linear_pos(pos_emb).view(n_batch_pos, -1, self.n_heads, self.d_k)
+            p = p.transpose(1, 2)  # (1, n_heads, pos_len, d_k)
             
             q_with_bias_u = (q + self.pos_bias_u.unsqueeze(0).unsqueeze(2)).transpose(1, 2)
             q_with_bias_v = (q + self.pos_bias_v.unsqueeze(0).unsqueeze(2)).transpose(1, 2)
@@ -233,10 +235,15 @@ class FastConformerConvModule(nn.Module):
         self.activation = ACT2FN[config.activation_function]
         self.pointwise_conv2 = nn.Conv1d(d_model, d_model, kernel_size=1, bias=use_bias)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, pad_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         hidden_states = hidden_states.transpose(1, 2)
         hidden_states = self.pointwise_conv1(hidden_states)
         hidden_states = nn.functional.glu(hidden_states, dim=1)
+        
+        # Apply padding mask before convolution (like NeMo)
+        if pad_mask is not None:
+            hidden_states = hidden_states.masked_fill(pad_mask.unsqueeze(1), 0.0)
+        
         hidden_states = nn.functional.pad(hidden_states, (self.padding, self.padding))
         hidden_states = self.depthwise_conv(hidden_states)
         hidden_states = self.batch_norm(hidden_states)
@@ -267,6 +274,7 @@ class FastConformerBlock(nn.Module):
         hidden_states: torch.Tensor, 
         attention_mask: Optional[torch.Tensor] = None,
         pos_emb: Optional[torch.Tensor] = None,
+        pad_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         
@@ -277,7 +285,7 @@ class FastConformerBlock(nn.Module):
             x_norm, attention_mask=attention_mask, pos_emb=pos_emb, output_attentions=output_attentions
         )[0]
         
-        hidden_states = hidden_states + self.conv(self.norm_conv(hidden_states))
+        hidden_states = hidden_states + self.conv(self.norm_conv(hidden_states), pad_mask=pad_mask)
         hidden_states = hidden_states + 0.5 * self.feed_forward2(self.norm_feed_forward2(hidden_states))
         
         hidden_states = self.norm_out(hidden_states)
@@ -431,11 +439,19 @@ class FastConformerEncoder(FastConformerPreTrainedModel):
         
         max_audio_length = hidden_states.size(1)
         
-        # pad_mask is True for padding positions
-        pad_mask = torch.arange(max_audio_length, device=hidden_states.device)[None, :] >= lengths[:, None]
+        # Create masks following NeMo's approach
+        # pad_mask_valid: True for valid positions (not padding)
+        pad_mask_valid = torch.arange(max_audio_length, device=hidden_states.device)[None, :] < lengths[:, None]
+        
+        # Create 2D attention mask: valid if both query and key positions are valid
+        pad_mask_for_att = pad_mask_valid.unsqueeze(1).expand(-1, max_audio_length, -1)  # (B, T, T)
+        pad_mask_for_att = pad_mask_for_att & pad_mask_for_att.transpose(1, 2)  # (B, T, T)
         
         # attention_mask should be True for positions we want to mask
-        attention_mask = pad_mask[:, None, :] | pad_mask[:, :, None]
+        attention_mask = ~pad_mask_for_att
+        
+        # pad_mask for convolution: True for padding positions (to be masked)
+        pad_mask = ~pad_mask_valid  # True for padding positions
 
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -445,7 +461,7 @@ class FastConformerEncoder(FastConformerPreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
                 
             layer_outputs = layer(
-                hidden_states, attention_mask=attention_mask, pos_emb=pos_emb, output_attentions=output_attentions
+                hidden_states, attention_mask=attention_mask, pos_emb=pos_emb, pad_mask=pad_mask, output_attentions=output_attentions
             )
             hidden_states = layer_outputs[0]
             
