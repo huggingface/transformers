@@ -43,7 +43,7 @@ import os
 import re
 from collections import OrderedDict
 from pathlib import Path
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 from check_repo import ignore_undocumented
 from git import Repo
@@ -797,7 +797,7 @@ def find_source_file(obj: Any) -> Path:
     return obj_file.with_suffix(".py")
 
 
-def match_docstring_with_signature(obj: Any) -> Optional[Tuple[str, str]]:
+def match_docstring_with_signature(obj: Any) -> Optional[tuple[str, str]]:
     """
     Matches the docstring of an object with its signature.
 
