@@ -147,11 +147,8 @@ class Wav2Vec2Processor(ProcessorMixin):
                 When the `label` argument is present, PreTrainedTokenizer’s [`~PreTrainedTokenizer.pad`] will be invoked on the
                 batch of input_ids.
 
-        If both args above are present, both pad() methods will be invoked.  Please refer to the docstring of Wav2Vec2FeatureExtractor's
-        [`~Wav2Vec2FeatureExtractor.pad`] and PreTrainedTokenizer’s [`~PreTrainedTokenizer.pad`] for more information.
-
-        This method returns the results of each pad() method.  If both are invoked, the output will be a dictionary
-        containing the results of both pads.
+        Returns:
+            This method returns the results of each `pad` method. If both are used, the output is a dictionary containing the results of both.
         """
         # For backward compatibility
         if self._in_target_context_manager:
