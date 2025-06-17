@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Qwen3MoE model."""
 
+import copy
 import gc
 import unittest
 
@@ -232,12 +233,16 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
+        orig_generation_config = copy.deepcopy(model.generation_config)
+
         # Assisted generation
         assistant_model = model
         assistant_model.generation_config.num_assistant_tokens = 2
         assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
         generated_ids = assistant_model.generate(input_ids, max_new_tokens=4, temperature=0)
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
+
+        model.generation_config = orig_generation_config
 
         EXPECTED_TEXT_COMPLETION = "To be or not to be: the role of the cell cycle in the regulation of apoptosis.\nThe cell cycle is a highly"
         prompt = "To be or not to"
