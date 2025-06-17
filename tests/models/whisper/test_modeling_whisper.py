@@ -64,6 +64,7 @@ if is_torch_available():
         WhisperForConditionalGeneration,
         WhisperModel,
         WhisperProcessor,
+        WhisperTokenizer,
         set_seed,
     )
     from transformers.generation import (
@@ -424,6 +425,36 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
         inputs_dict["force_unique_generate_call"] = True
         return config, inputs_dict
+
+    def test_num_return_sequences(self):
+        torch_device = "cpu"
+        set_seed(0)
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
+        model.to(torch_device)
+
+        for batch_size, num_beams, num_return_sequences in [[1, 3, 3], [3, 3, 3], [3, 5, 3]]:
+            input_speech = self._load_datasamples(batch_size)
+            feature_extractor = WhisperFeatureExtractor.from_pretrained("openai/whisper-tiny")
+            tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny")
+            input_features = feature_extractor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
+
+            # Perform beam search
+            output = model.generate(
+                input_features,
+                num_beams=num_beams,
+                num_return_sequences=num_return_sequences,
+                return_dict_in_generate=True,
+                output_scores=True,
+            )
+
+            self.assertEqual(len(output.sequences), num_return_sequences * batch_size)
+            hypotheses = [tokenizer.decode(output_ids, skip_special_tokens=True) for output_ids in output.sequences]
+            # Check that the hypotheses for each input are different
+            for i in range(batch_size):
+                self.assertEqual(
+                    len(set(hypotheses[i * num_return_sequences: (i + 1) * num_return_sequences])),
+                    num_return_sequences,
+                )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -1462,6 +1493,45 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         ds = self._dataset
         speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
         return [x["array"] for x in speech_samples]
+
+    def test_num_return_sequences(self):
+        torch_device = "cpu"
+        set_seed(0)
+
+        from transformers.models.whisper.custom_generation_whisper import CustomWhisperGenerationMixin
+
+        class CustomWhisperForConditionalGeneration(
+            CustomWhisperGenerationMixin, WhisperForConditionalGeneration
+        ):
+            def __init__(self, config: WhisperConfig):
+                super().__init__(config)
+
+        model = CustomWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
+        model.to(torch_device)
+
+        for batch_size, num_beams, num_return_sequences in [[1, 3, 3], [3, 3, 3], [3, 5, 3]]:
+            input_speech = self._load_datasamples(batch_size)
+            feature_extractor = WhisperFeatureExtractor.from_pretrained("openai/whisper-tiny")
+            tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny")
+            input_features = feature_extractor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
+
+            # Perform beam search
+            output = model.generate(
+                input_features,
+                num_beams=num_beams,
+                num_return_sequences=num_return_sequences,
+                return_dict_in_generate=True,
+                output_scores=True,
+            )
+
+            self.assertEqual(len(output.sequences), num_return_sequences * batch_size)
+            hypotheses = [tokenizer.decode(output_ids, skip_special_tokens=True) for output_ids in output.sequences]
+            # Check that the hypotheses for each input are different
+            for i in range(batch_size):
+                self.assertEqual(
+                    len(set(hypotheses[i * num_return_sequences: (i + 1) * num_return_sequences])),
+                    num_return_sequences,
+                )
 
     @slow
     def test_tiny_logits_librispeech(self):
