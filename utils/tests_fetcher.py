@@ -1099,7 +1099,7 @@ def infer_tests_to_run(
 
     create_test_list_from_filter(test_files_to_run, out_path="test_preparation/")
 
-    doctest_list = get_doctest_files()
+    # doctest_list = get_doctest_files()
     doctest_list = []
 
     print(f"\n### DOCTEST TO RUN ###\n{_print_list(doctest_list)}")
