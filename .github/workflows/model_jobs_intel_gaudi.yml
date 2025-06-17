@@ -22,12 +22,12 @@ on:
 
 env:
   RUN_SLOW: yes
-  HF_HOME: /mnt/cache
   PT_HPU_LAZY_MODE: 0
   TRANSFORMERS_IS_CI: yes
   PT_ENABLE_INT64_SUPPORT: 1
   HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
+  HF_HOME: /mnt/cache/.cache/huggingface
 
 jobs:
   run_models_gpu:
@@ -42,6 +42,7 @@ jobs:
     container:
       image: vault.habana.ai/gaudi-docker/1.20.1/ubuntu22.04/habanalabs/pytorch-installer-2.6.0:latest
       options: --runtime=habana
+        -v /mnt/cache/.cache/huggingface:/mnt/cache/.cache/huggingface
         --env OMPI_MCA_btl_vader_single_copy_mechanism=none
         --env HABANA_VISIBLE_DEVICES
         --env HABANA_VISIBLE_MODULES
