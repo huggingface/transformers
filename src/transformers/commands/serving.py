@@ -17,7 +17,9 @@ import time
 from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass, field
 from threading import Thread
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
+
+from huggingface_hub import ChatCompletionStreamOutputDeltaToolCall, ChatCompletionStreamOutputFunction
 
 from transformers.utils.import_utils import is_fastapi_available, is_pydantic_available, is_uvicorn_available
 
@@ -68,7 +70,7 @@ if is_pydantic_available() and is_fastapi_available() and is_uvicorn_available()
         # that aren't yet supported here.
 
         # logprobs: Optional[bool] = None
-        # tools: Any = None
+        tools: Any = None
         # n: Optional[int] = None
         # presence_penalty: Optional[float] = None
         # response_format: Optional[ChatCompletionInputGrammarType] = None
@@ -203,7 +205,7 @@ class ServeCommand(BaseTransformersCLICommand):
         cb_logger = logging.get_logger("transformers.generation.continuous_batching")
         cb_logger.setLevel(logging.log_levels[self.args.log_level.lower()])
 
-    def build_chunk(self, content: str, request_id: str, finish_reason: Optional[str] = None) -> str:
+    def build_chunk(self, content: str, request_id: str, finish_reason: Optional[str] = None, tool_calls = None) -> str:
         payload = {
             "object": "chat.completion.chunk",
             "id": request_id,
@@ -213,12 +215,13 @@ class ServeCommand(BaseTransformersCLICommand):
             "choices": [
                 {
                     "index": 0,
-                    "delta": {"role": "assistant", "content": content, "tool_calls": []},
+                    "delta": {"role": "assistant", "content": content, "tool_calls": tool_calls or []},
                     "logprobs": None,
                     "finish_reason": finish_reason,
                 }
             ],
         }
+        print(f"data: {json.dumps(payload)}\n\n")
         return f"data: {json.dumps(payload)}\n\n"
 
     def run(self):
@@ -291,10 +294,12 @@ class ServeCommand(BaseTransformersCLICommand):
     def generate(self, app):
         @app.post("/v1/chat/completions")
         def _serve(req: ChatCompletionInput):
+            print(req)
+
             if not req.stream:
                 return {"error": "Only streaming mode is supported."}
 
-            text = self.tokenizer.apply_chat_template(req.messages, add_generation_prompt=True, tokenize=False)
+            text = self.tokenizer.apply_chat_template(req.messages, add_generation_prompt=True, tokenize=False, tools=req.tools)
 
             inputs = self.tokenizer(text, return_tensors="pt").to(self.model.device)["input_ids"]
             request_id = req.request_id if req.request_id is not None else "req_0"
@@ -320,8 +325,25 @@ class ServeCommand(BaseTransformersCLICommand):
                 try:
                     thread.start()
 
+                    tool = None
+                    tool_calls = None
+
                     for result in streamer:
-                        yield self.build_chunk(result, _request_id)
+                        print("Chunk:", result)
+
+                        if result == '<tool_call>':
+                            tool = ChatCompletionStreamOutputDeltaToolCall(
+                                function=ChatCompletionStreamOutputFunction(
+                                    arguments='":',
+                                    name=None
+                                ),
+                                id=None,
+                                index=0,
+                                type=None
+                            )
+                            tool_calls = [tool]
+
+                        yield self.build_chunk(result, _request_id, tool_calls=tool_calls)
                     yield "data: [DONE]\n\n"
 
                     thread.join()
@@ -386,4 +408,5 @@ class ServeCommand(BaseTransformersCLICommand):
 
 if __name__ == "__main__":
     serve = ServeCommand()
+    serve.model_name_or_path = "Menlo/Jan-nano"
     serve.run()
