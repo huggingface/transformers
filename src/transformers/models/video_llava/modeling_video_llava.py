@@ -443,6 +443,24 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
+    def set_decoder(self, decoder):
+        self.model = decoder
+
+    def get_decoder(self):
+        return self.model
+
+    def get_image_features(
+        self,
+        pixel_values_images: torch.FloatTensor,
+        vision_feature_layer: Optional[Union[int, List[int]]] = None,
+        vision_feature_select_strategy: Optional[str] = None,
+    ):
+        return self.model.get_image_features(
+            pixel_values_images=pixel_values_images,
+            vision_feature_layer=vision_feature_layer,
+            vision_feature_select_strategy=vision_feature_select_strategy,
+        )
+
     # Make modules available throught conditional class for BC
     @property
     def language_model(self):

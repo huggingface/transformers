@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The YOLOS model was proposed in [You Only Look at One Sequence: Rethinking Transformer in Vision through Object Detection](https://arxiv.org/abs/2106.00666) by Yuxin Fang, Bencheng Liao, Xinggang Wang, Jiemin Fang, Jiyang Qi, Rui Wu, Jianwei Niu, Wenyu Liu.
+The YOLOS model was proposed in [You Only Look at One Sequence: Rethinking Transformer in Vision through Object Detection](https://huggingface.co/papers/2106.00666) by Yuxin Fang, Bencheng Liao, Xinggang Wang, Jiemin Fang, Jiyang Qi, Rui Wu, Jianwei Niu, Wenyu Liu.
 YOLOS proposes to just leverage the plain [Vision Transformer (ViT)](vit) for object detection, inspired by DETR. It turns out that a base-sized encoder-only Transformer can also achieve 42 AP on COCO, similar to DETR and much more complex frameworks such as Faster R-CNN.
 
 The abstract from the paper is the following:
@@ -34,7 +34,7 @@ The abstract from the paper is the following:
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/yolos_architecture.png"
 alt="drawing" width="600"/>
 
-<small> YOLOS architecture. Taken from the <a href="https://arxiv.org/abs/2106.00666">original paper</a>.</small>
+<small> YOLOS architecture. Taken from the <a href="https://huggingface.co/papers/2106.00666">original paper</a>.</small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/hustvl/YOLOS).
 

@@ -307,7 +307,7 @@ class SmolVLMModel(Idefics3Model):
         if pixel_values is not None and image_hidden_states is not None:
             raise ValueError("You cannot specify both pixel_values and image_hidden_states at the same time")
         elif pixel_values is not None:
-            image_hidden_states = self.get_image_features(pixel_values, pixel_attention_mask)
+            image_hidden_states = self.get_image_features(pixel_values, pixel_attention_mask).to(input_ids.device)
         elif image_hidden_states is not None:
             image_hidden_states = image_hidden_states.to(dtype=self.dtype, device=input_ids.device)
 

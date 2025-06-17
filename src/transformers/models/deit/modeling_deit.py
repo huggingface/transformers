@@ -450,6 +450,8 @@ class DeiTPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["DeiTLayer"]
     _supports_sdpa = True
     _supports_flash_attn_2 = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
@@ -585,7 +587,7 @@ class DeiTPooler(nn.Module):
 
 @auto_docstring(
     custom_intro="""
-    DeiT Model with a decoder on top for masked image modeling, as proposed in [SimMIM](https://arxiv.org/abs/2111.09886).
+    DeiT Model with a decoder on top for masked image modeling, as proposed in [SimMIM](https://huggingface.co/papers/2111.09886).
 
     <Tip>
 

@@ -23,6 +23,7 @@ if is_torch_npu_available():
 
     import torch_npu
     from einops import rearrange, repeat
+    from torch_npu import npu_rotary_mul
 
 
 # FlashAttention2 is supported on Ascend NPU with down-right aligned causal mask by default.
@@ -36,6 +37,8 @@ if SPARSE_MODE not in [TOP_LEFT_ALIGNED_CAUSAL_MASK_MODE, DOWN_RIGHT_ALIGNED_CAU
         "Environment variable `NPU_FA2_SPARSE_MODE` can only be set as 2 (top-left aligned causal mask) "
         "or 3 (down-right aligned causal mask)."
     )
+
+ATTN_MASK_NPU = None
 
 
 def is_npu_fa2_top_left_aligned_causal_mask():
@@ -171,7 +174,9 @@ def npu_flash_attn_func(
         head_num = q.shape[2]
         output = torch_npu.npu_fusion_attention(q, k, v, head_num, "BSND", keep_prob=keep_prob, scale=softmax_scale)[0]
     else:
-        attn_mask_npu = torch.triu(torch.ones([2048, 2048], device=q.device), diagonal=1).bool()
+        global ATTN_MASK_NPU
+        if ATTN_MASK_NPU is None:
+            ATTN_MASK_NPU = torch.triu(torch.ones([2048, 2048], device=q.device), diagonal=1).bool()
         head_num = q.shape[2]
         output = torch_npu.npu_fusion_attention(
             q,
@@ -181,7 +186,7 @@ def npu_flash_attn_func(
             "BSND",
             keep_prob=keep_prob,
             scale=softmax_scale,
-            atten_mask=attn_mask_npu,
+            atten_mask=ATTN_MASK_NPU,
             sparse_mode=SPARSE_MODE,
         )[0]
 
@@ -222,7 +227,9 @@ def npu_flash_attn_varlen_func(
             actual_seq_kvlen=tuple(cu_seqlens_k[1:].cpu().numpy().tolist()),
         )[0]
     else:
-        attn_mask_npu = torch.triu(torch.ones([2048, 2048], device=q.device), diagonal=1).bool()
+        global ATTN_MASK_NPU
+        if ATTN_MASK_NPU is None:
+            ATTN_MASK_NPU = torch.triu(torch.ones([2048, 2048], device=q.device), diagonal=1).bool()
         head_num = q.shape[1]
         output = torch_npu.npu_fusion_attention(
             q,
@@ -231,7 +238,7 @@ def npu_flash_attn_varlen_func(
             head_num,
             pse=None,
             padding_mask=None,
-            atten_mask=attn_mask_npu,
+            atten_mask=ATTN_MASK_NPU,
             scale=softmax_scale,
             keep_prob=keep_prob,
             input_layout="TND",
@@ -241,3 +248,19 @@ def npu_flash_attn_varlen_func(
         )[0]
 
     return output
+
+
+def npu_apply_rotary_emb(x, cos, sin, **kwargs):
+    # cos tensor after chunk should be repeated through chunked dimension to original shape on Ascend NPU
+    if len(cos.shape) == 2 and cos.shape[-1] == x.shape[-1] // 2:
+        cos = cos.repeat(1, 2)
+        # cos tensor with [S,D] shape should be unsqueezed to 4-d tensor with shape [1,S,1,D]
+        cos = cos.unsqueeze(0).unsqueeze(2)
+
+    # sin tensor after chunk should be repeated through chunked dimension to original shape on Ascend NPU
+    if len(sin.shape) == 2 and sin.shape[-1] == x.shape[-1] // 2:
+        sin = sin.repeat(1, 2)
+        # sin tensor with [S,D] shape should be unsqueezed to 4-d tensor with shape [1,S,1,D]
+        sin = sin.unsqueeze(0).unsqueeze(2)
+
+    return npu_rotary_mul(x, cos, sin)

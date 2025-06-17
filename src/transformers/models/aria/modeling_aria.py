@@ -549,15 +549,8 @@ class AriaTextAttention(nn.Module):
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
-
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -680,7 +673,7 @@ class AriaPreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
     _supports_quantized_cache = True
     _supports_static_cache = False  # MoE models don't work with torch.compile (dynamic slicing)
-    _supports_attention_backend = False
+    _supports_attention_backend = True
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -812,7 +805,6 @@ class AriaTextModel(AriaTextPreTrainedModel):
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
-            output_attentions=output_attentions,
         )
 
         hidden_states = inputs_embeds
@@ -1226,6 +1218,24 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
+
+    def set_decoder(self, decoder):
+        self.model = decoder
+
+    def get_decoder(self):
+        return self.model
+
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        pixel_mask: Optional[torch.FloatTensor] = None,
+        vision_feature_layer: int = -1,
+    ):
+        return self.model.get_image_features(
+            pixel_values=pixel_values,
+            pixel_mask=pixel_mask,
+            vision_feature_layer=vision_feature_layer,
+        )
 
     # Make modules available throught conditional class for BC
     @property

@@ -18,7 +18,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Iterable, List, Optional, Tuple, Union
+from collections.abc import Iterable
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -499,6 +500,27 @@ class AriaImageProcessor(BaseImageProcessor):
             for patch in patches
         ]
         return patches
+
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
+        """
+        A utility that returns number of image patches for a given image size.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `int`: Number of patches per image.
+        """
+        split_image = images_kwargs.get("split_image", None) or self.split_image
+        max_image_size = images_kwargs.get("max_image_size", None) or self.max_image_size
+
+        resized_height, resized_width = select_best_resolution((height, width), self.split_resolutions)
+        num_patches = 1 if not split_image else resized_height // max_image_size * resized_width // max_image_size
+        return num_patches
 
 
 __all__ = ["AriaImageProcessor"]

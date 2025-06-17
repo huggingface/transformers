@@ -53,7 +53,6 @@ if is_causal_conv1d_available():
 else:
     causal_conv1d_update, causal_conv1d_fn = None, None
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -326,7 +325,7 @@ class Zamba2Attention(nn.Module):
     Adapted from transformers.models.mistral.modeling_mistral.MistralAttention:
     The input dimension here is attention_hidden_size = 2 * hidden_size, and head_dim = attention_hidden_size // num_heads.
     The extra factor of 2 comes from the input being the concatenation of original_hidden_states with the output of the previous (mamba) layer
-    (see fig. 2 in https://arxiv.org/pdf/2405.16712).
+    (see fig. 2 in https://huggingface.co/papers/2405.16712).
     Additionally, replaced
     attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim) with
     attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim/2)
@@ -336,13 +335,13 @@ class Zamba2Attention(nn.Module):
     Adapted from transformers.models.mistral.modeling_mistral.MistralAttention:
     The input dimension here is attention_hidden_size = 2 * hidden_size, and head_dim = attention_hidden_size // num_heads.
     The extra factor of 2 comes from the input being the concatenation of original_hidden_states with the output of the previous (mamba) layer
-    (see fig. 2 in https://arxiv.org/pdf/2405.16712).
+    (see fig. 2 in https://huggingface.co/papers/2405.16712).
     Additionally, replaced
     attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim) with
     attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim/2)
     Finally, this attention layer contributes to tied transformer blocks aimed to increasing compute without increasing model size. Because this
     layer is tied, un-tied adapters (formally the same as LoRA but used in the base model) modules are added to the q, k, v projectors to increase
-    expressivity with a small memory overhead (see Fig. 2 of https://arxiv.org/pdf/2411.15242).
+    expressivity with a small memory overhead (see Fig. 2 of https://huggingface.co/papers/2411.15242).
     """
 
     def __init__(
@@ -435,13 +434,7 @@ class Zamba2Attention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -1015,7 +1008,7 @@ class Zamba2AttentionDecoderLayer(nn.Module):
             original_hidden_states (`torch.FloatTensor`): word embedding output of shape `(batch, seq_len, embed_dim)`.
                 This is concatenated with `hidden_states` (which is the output of the previous (mamba) layer). The
                 concatenated tensor is then used as input of the pre-attention RMSNorm
-                (see fig. 2 in https://arxiv.org/pdf/2405.16712).
+                (see fig. 2 in https://huggingface.co/papers/2405.16712).
             attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
                 `(batch, sequence_length)` where padding elements are indicated by 0.
             past_key_value (`Zamba2HybridDynamicCache`, *optional*): cached past key and value projection states
@@ -1091,8 +1084,8 @@ class Zamba2MambaDecoderLayer(nn.Module):
 
         residual = hidden_states
 
-        # `transformer_hidden_states` is the output from shared transformer + linear layer (see fig. 2 in https://arxiv.org/pdf/2405.16712).
-        # `transformer_hidden_states` is then added to the input to the mamba layer below (as described in eq. (6) of https://arxiv.org/pdf/2405.16712).
+        # `transformer_hidden_states` is the output from shared transformer + linear layer (see fig. 2 in https://huggingface.co/papers/2405.16712).
+        # `transformer_hidden_states` is then added to the input to the mamba layer below (as described in eq. (6) of https://huggingface.co/papers/2405.16712).
         hidden_states = (
             hidden_states + transformer_hidden_states if transformer_hidden_states is not None else hidden_states
         )

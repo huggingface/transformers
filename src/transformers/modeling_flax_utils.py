@@ -179,6 +179,10 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
     ):
+        logger.warning_once(
+            "TensorFlow and JAX classes are deprecated and will be removed in Transformers v5. We "
+            "recommend migrating to PyTorch classes or pinning your version of Transformers."
+        )
         if config is None:
             raise ValueError("config cannot be None")
 
@@ -435,7 +439,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                     else:
                         raise ValueError from e
             except (UnicodeDecodeError, ValueError):
-                raise EnvironmentError(f"Unable to convert {resolved_archive_file} to Flax deserializable object. ")
+                raise OSError(f"Unable to convert {resolved_archive_file} to Flax deserializable object. ")
 
         return state
 
@@ -476,7 +480,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                     else:
                         raise ValueError from e
             except (UnicodeDecodeError, ValueError):
-                raise EnvironmentError(f"Unable to convert {shard_file} to Flax deserializable object. ")
+                raise OSError(f"Unable to convert {shard_file} to Flax deserializable object. ")
 
             state = flatten_dict(state, sep="/")
             state_sharded_dict.update(state)
@@ -738,13 +742,13 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                     is_sharded = True
                     raise NotImplementedError("Support for sharded checkpoints using safetensors is coming soon!")
                 elif os.path.isfile(os.path.join(pretrained_model_name_or_path, subfolder, WEIGHTS_NAME)):
-                    raise EnvironmentError(
+                    raise OSError(
                         f"Error no file named {FLAX_WEIGHTS_NAME} found in directory {pretrained_model_name_or_path} "
                         "but there is a file for PyTorch weights. Use `from_pt=True` to load this model from those "
                         "weights."
                     )
                 else:
-                    raise EnvironmentError(
+                    raise OSError(
                         f"Error no file named {FLAX_WEIGHTS_NAME} or {WEIGHTS_NAME} found in directory "
                         f"{pretrained_model_name_or_path}."
                     )
@@ -820,29 +824,29 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                                 "Support for sharded checkpoints using safetensors is coming soon!"
                             )
                         elif has_file(pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs):
-                            raise EnvironmentError(
+                            raise OSError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named"
                                 f" {FLAX_WEIGHTS_NAME} but there is a file for PyTorch weights. Use `from_pt=True` to"
                                 " load this model from those weights."
                             )
                         elif has_file(pretrained_model_name_or_path, WEIGHTS_INDEX_NAME, **has_file_kwargs):
-                            raise EnvironmentError(
+                            raise OSError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named"
                                 f" {FLAX_WEIGHTS_INDEX_NAME} but there is a sharded file for PyTorch weights. Use"
                                 " `from_pt=True` to load this model from those weights."
                             )
                         else:
-                            raise EnvironmentError(
+                            raise OSError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named"
                                 f" {FLAX_WEIGHTS_NAME} or {WEIGHTS_NAME}."
                             )
-                except EnvironmentError:
+                except OSError:
                     # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted
                     # to the original exception.
                     raise
                 except Exception:
                     # For any other exception, we throw a generic error.
-                    raise EnvironmentError(
+                    raise OSError(
                         f"Can't load the model for '{pretrained_model_name_or_path}'. If you were trying to load it"
                         " from 'https://huggingface.co/models', make sure you don't have a local directory with the"
                         f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
@@ -1218,11 +1222,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         Register this class with a given auto class. This should only be used for custom models as the ones in the
         library are already mapped with an auto class.
 
-        <Tip warning={true}>
 
-        This API is experimental and may have some slight breaking changes in the next releases.
-
-        </Tip>
 
         Args:
             auto_class (`str` or `type`, *optional*, defaults to `"FlaxAutoModel"`):

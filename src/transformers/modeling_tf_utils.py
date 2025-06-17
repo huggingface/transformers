@@ -1199,6 +1199,10 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         self.name_or_path = config.name_or_path
         self.generation_config = GenerationConfig.from_model_config(config) if self.can_generate() else None
         self._set_save_spec(self.input_signature)
+        logger.warning_once(
+            "TensorFlow and JAX classes are deprecated and will be removed in Transformers v5. We "
+            "recommend migrating to PyTorch classes or pinning your version of Transformers."
+        )
 
     def get_config(self):
         return self.config.to_dict()
@@ -2760,7 +2764,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
 
                 # At this stage we don't have a weight file so we will raise an error.
                 elif use_safetensors:
-                    raise EnvironmentError(
+                    raise OSError(
                         f"Error no file named {SAFE_WEIGHTS_NAME} or {SAFE_WEIGHTS_INDEX_NAME} found in directory {pretrained_model_name_or_path}. "
                         f"Please make sure that the model has been saved with `safe_serialization=True` or do not "
                         f"set `use_safetensors=True`."
@@ -2768,13 +2772,13 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
                 elif os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)) or os.path.isfile(
                     os.path.join(pretrained_model_name_or_path, WEIGHTS_INDEX_NAME)
                 ):
-                    raise EnvironmentError(
+                    raise OSError(
                         f"Error no file named {TF2_WEIGHTS_NAME} or {SAFE_WEIGHTS_NAME} found in directory {pretrained_model_name_or_path} "
                         "but there is a file for PyTorch weights. Use `from_pt=True` to load this model from those "
                         "weights."
                     )
                 else:
-                    raise EnvironmentError(
+                    raise OSError(
                         f"Error no file named {TF2_WEIGHTS_NAME}, {SAFE_WEIGHTS_NAME} or {WEIGHTS_NAME} found in directory "
                         f"{pretrained_model_name_or_path}."
                     )
@@ -2850,25 +2854,25 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
                         if has_file(pretrained_model_name_or_path, SAFE_WEIGHTS_INDEX_NAME, **has_file_kwargs):
                             is_sharded = True
                         elif has_file(pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs):
-                            raise EnvironmentError(
+                            raise OSError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named"
                                 f" {TF2_WEIGHTS_NAME} but there is a file for PyTorch weights. Use `from_pt=True` to"
                                 " load this model from those weights."
                             )
                         else:
-                            raise EnvironmentError(
+                            raise OSError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named {WEIGHTS_NAME},"
                                 f" {TF2_WEIGHTS_NAME} or {TF_WEIGHTS_NAME}"
                             )
 
-                except EnvironmentError:
+                except OSError:
                     # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted
                     # to the original exception.
                     raise
                 except Exception:
                     # For any other exception, we throw a generic error.
 
-                    raise EnvironmentError(
+                    raise OSError(
                         f"Can't load the model for '{pretrained_model_name_or_path}'. If you were trying to load it"
                         " from 'https://huggingface.co/models', make sure you don't have a local directory with the"
                         f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
@@ -3229,11 +3233,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         Register this class with a given auto class. This should only be used for custom models as the ones in the
         library are already mapped with an auto class.
 
-        <Tip warning={true}>
 
-        This API is experimental and may have some slight breaking changes in the next releases.
-
-        </Tip>
 
         Args:
             auto_class (`str` or `type`, *optional*, defaults to `"TFAutoModel"`):

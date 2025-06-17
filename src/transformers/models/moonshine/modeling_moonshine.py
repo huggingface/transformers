@@ -265,13 +265,7 @@ class MoonshineAttention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         is_causal = True if self.is_causal and attention_mask is None and q_len > 1 else False
 
@@ -749,7 +743,6 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
-            output_attentions=output_attentions,
         )
 
         hidden_states = inputs_embeds
@@ -832,7 +825,7 @@ def _compute_mask_indices(
 ) -> np.ndarray:
     """
     Computes random mask spans for a given shape. Used to implement [SpecAugment: A Simple Data Augmentation Method for
-    ASR](https://arxiv.org/abs/1904.08779). Note that this method is not optimized to run on TPU and should be run on
+    ASR](https://huggingface.co/papers/1904.08779). Note that this method is not optimized to run on TPU and should be run on
     CPU as part of the preprocessing during training.
 
     Args:
@@ -978,7 +971,7 @@ class MoonshineModel(MoonshinePreTrainedModel):
     ):
         """
         Masks extracted features along time axis and/or along feature axis according to
-        [SpecAugment](https://arxiv.org/abs/1904.08779).
+        [SpecAugment](https://huggingface.co/papers/1904.08779).
         """
 
         # `config.apply_spec_augment` can set masking to False
@@ -1061,7 +1054,7 @@ class MoonshineModel(MoonshinePreTrainedModel):
             `past_key_values`).
 
             If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+            and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
             information on the default strategy.
 
             - 1 indicates the head is **not masked**,
@@ -1237,7 +1230,7 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
             `past_key_values`).
 
             If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+            and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
             information on the default strategy.
 
             - 1 indicates the head is **not masked**,

@@ -261,12 +261,12 @@ class TorchAoHfQuantizer(HfQuantizer):
                 model.tie_weights()
                 setattr(model.config.get_text_config(decoder=True), "tie_word_embeddings", False)
 
-            # handle AOPerModuleConfig, introduced in torchao 0.11.0+
-            if self.quantization_config._get_ao_version() > version.Version("0.10.0"):
-                from torchao.quantization import AOPerModuleConfig
+            # handle ModuleFqnToConfig, introduced in torchao 0.12.0+
+            if self.quantization_config._get_ao_version() >= version.Version("0.12.0"):
+                from torchao.quantization import ModuleFqnToConfig
 
                 config = self.quantization_config.get_apply_tensor_subclass()
-                if isinstance(config, AOPerModuleConfig):
+                if isinstance(config, ModuleFqnToConfig):
                     module_fqn, _ = param_name.rsplit(".", 1)
                     c = None
                     if module_fqn in config.module_fqn_to_config:

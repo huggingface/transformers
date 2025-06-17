@@ -71,7 +71,9 @@ class VipLlavaPreTrainedModel(LlavaPreTrainedModel):
 
 
 class VipLlavaModel(LlavaModel):
-    def get_image_features(self, pixel_values: torch.FloatTensor, vision_feature_layers: Union[int, List[int]]):
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, vision_feature_layers: Optional[Union[int, List[int]]] = None
+    ):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
 
@@ -84,6 +86,9 @@ class VipLlavaModel(LlavaModel):
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
+        vision_feature_layers = (
+            vision_feature_layers if vision_feature_layers is not None else self.config.vision_feature_layers
+        )
         image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
 
         # If multiple feature layers are provided (which is usually the case)
@@ -179,6 +184,11 @@ class VipLlavaModel(LlavaModel):
 
 
 class VipLlavaForConditionalGeneration(LlavaForConditionalGeneration):
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, vision_feature_layers: Optional[Union[int, List[int]]] = None
+    ):
+        return self.model.get_image_features(pixel_values=pixel_values, vision_feature_layers=vision_feature_layers)
+
     def forward(
         self,
         input_ids: torch.LongTensor = None,
