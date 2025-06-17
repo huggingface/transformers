@@ -17,7 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -159,7 +159,7 @@ class LightGlueImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255,
@@ -180,7 +180,7 @@ class LightGlueImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
@@ -220,7 +220,7 @@ class LightGlueImageProcessor(BaseImageProcessor):
         self,
         images,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
@@ -337,9 +337,9 @@ class LightGlueImageProcessor(BaseImageProcessor):
     def post_process_keypoint_matching(
         self,
         outputs: LightGlueKeypointMatchingOutput,
-        target_sizes: Union[TensorType, List[Tuple]],
+        target_sizes: Union[TensorType, list[tuple]],
         threshold: float = 0.0,
-    ) -> List[Dict[str, torch.Tensor]]:
+    ) -> list[dict[str, torch.Tensor]]:
         """
         Converts the raw output of [`KeypointMatchingOutput`] into lists of keypoints, scores and descriptors
         with coordinates absolute to the original image sizes.
@@ -361,7 +361,7 @@ class LightGlueImageProcessor(BaseImageProcessor):
         if not all(len(target_size) == 2 for target_size in target_sizes):
             raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
 
-        if isinstance(target_sizes, List):
+        if isinstance(target_sizes, list):
             image_pair_sizes = torch.tensor(target_sizes, device=outputs.mask.device)
         else:
             if target_sizes.shape[1] != 2 or target_sizes.shape[2] != 2:
