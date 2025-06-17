@@ -938,6 +938,7 @@ class WandbCallback(TrainerCallback):
 
             args_for_fake = copy.deepcopy(args)
             args_for_fake.deepspeed = None
+            args_for_fake.deepspeed_plugin = None
             fake_trainer = Trainer(
                 args=args_for_fake, model=model, processing_class=processing_class, eval_dataset=["fake"]
             )
