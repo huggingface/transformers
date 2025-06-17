@@ -116,7 +116,8 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
     def __init__(self, config: TimmWrapperConfig):
         super().__init__(config)
         # using num_classes=0 to avoid creating classification head
-        self.timm_model = timm.create_model(config.architecture, pretrained=False, num_classes=0)
+        model_init_kwargs = config.model_init_kwargs or {}
+        self.timm_model = timm.create_model(config.architecture, pretrained=False, num_classes=0, **model_init_kwargs)
         self.post_init()
 
     @auto_docstring
@@ -233,7 +234,10 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
                 "or use `TimmWrapperModel` for feature extraction."
             )
 
-        self.timm_model = timm.create_model(config.architecture, pretrained=False, num_classes=config.num_labels)
+        model_init_kwargs = config.model_init_kwargs or {}
+        self.timm_model = timm.create_model(
+            config.architecture, pretrained=False, num_classes=config.num_labels, **model_init_kwargs
+        )
         self.num_labels = config.num_labels
         self.post_init()
 
