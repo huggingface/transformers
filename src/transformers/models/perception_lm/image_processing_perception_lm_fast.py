@@ -203,7 +203,9 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
                         optimal_image_width_height = image_width_height
         return optimal_canvas
 
-    def _find_closest_aspect_ratio(self, img_width: int, img_height: int) -> Tuple:
+    def _find_closest_aspect_ratio(
+        self, img_width: int, img_height: int, tile_size: int
+    ) -> Tuple:
         """
         Given an image width, height and target number of chunks
         this function will find the closest supported aspect ratio.
@@ -218,7 +220,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
             )
             v = asp_dict[cl_p]
             # select width
-            widths = [(idx, self.size * vv[0]) for idx, vv in enumerate(v)]
+            widths = [(idx, tile_size * vv[0]) for idx, vv in enumerate(v)]
             tgt_idx = max(widths, key=lambda x: x[1])[0]
         else:
             cl_p = min(
@@ -227,7 +229,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
             )
             v = asp_dict[cl_p]
             # select height
-            heights = [(idx, self.size * vv[1]) for idx, vv in enumerate(v)]
+            heights = [(idx, tile_size * vv[1]) for idx, vv in enumerate(v)]
             tgt_idx = max(heights, key=lambda x: x[1])[0]
         out = v[tgt_idx]
         return out
@@ -261,7 +263,9 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
             )
             if ar is None:
                 # If we did not find a canvas, we have to find the closest aspect ratio and downsample the image
-                ar = self._find_closest_aspect_ratio(img_width=w, img_height=h)
+                ar = self._find_closest_aspect_ratio(
+                    img_width=w, img_height=h, tile_size=tile_size
+                )
         else:
             ar = (1, 1)
         new_w, new_h = ar[0] * tile_size, ar[1] * tile_size
@@ -292,12 +296,12 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
                     stacked_images, self.tile_size, max_num_tiles=self.max_num_tiles
                 )
                 image_tiles = self._split(images_for_tiling, tiles_w, tiles_h)
-                stacked_images = torch.cat([thumbnails.unsqueeze(1), image_tiles], dim=1)
+                stacked_images = torch.cat(
+                    [thumbnails.unsqueeze(1), image_tiles], dim=1
+                )
 
             resized_images_grouped[shape] = stacked_images
-        resized_images = reorder_images(
-            resized_images_grouped, grouped_images_index
-        )
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
         grouped_images, grouped_images_index = group_images_by_shape(resized_images)
         processed_images_grouped = {}
@@ -317,9 +321,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
         )
 
         processed_images = (
-            torch.stack(processed_images, dim=0)
-            if return_tensors
-            else processed_images
+            torch.stack(processed_images, dim=0) if return_tensors else processed_images
         )
         return BatchFeature(
             data={"pixel_values": processed_images}, tensor_type=return_tensors
