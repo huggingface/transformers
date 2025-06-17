@@ -1296,13 +1296,17 @@ class LogitsProcessorTest(unittest.TestCase):
         # Ensure that argmax can not result in eos
         logits[:, :, eos] = -1
 
-        delay_pattern_processor = DiaEOSDelayPatternLogitsProcessor(delay_pattern=delay_pattern, eos_token_id=eos, max_generation_len=max_generation_len)
+        delay_pattern_processor = DiaEOSDelayPatternLogitsProcessor(
+            delay_pattern=delay_pattern, eos_token_id=eos, max_generation_len=max_generation_len
+        )
         out = delay_pattern_processor(input_ids, logits.clone()).view(bsz, channels, vocab)
 
         # Nothing should happen except for init of some attributes
         self.assertTrue((out == logits).all())
         self.assertTrue((~delay_pattern_processor.active_batches).all())
-        self.assertTrue((delay_pattern_processor.delay_pattern == torch.tensor([delay_pattern for _ in range(bsz)])).all())
+        self.assertTrue(
+            (delay_pattern_processor.delay_pattern == torch.tensor([delay_pattern for _ in range(bsz)])).all()
+        )
 
         # Make first batch end
         logits[0, 0, eos] = 1
@@ -1320,7 +1324,12 @@ class LogitsProcessorTest(unittest.TestCase):
                 self.assertTrue((out[1] == logits[1]).all())
                 self.assertTrue(delay_pattern_processor.active_batches[0])
                 self.assertFalse(delay_pattern_processor.active_batches[1])
-                self.assertTrue((delay_pattern_processor.delay_pattern[0] == torch.tensor([delay - (i + 1) for delay in delay_pattern])).all())
+                self.assertTrue(
+                    (
+                        delay_pattern_processor.delay_pattern[0]
+                        == torch.tensor([delay - (i + 1) for delay in delay_pattern])
+                    ).all()
+                )
                 self.assertTrue((delay_pattern_processor.delay_pattern[1] == torch.tensor(delay_pattern)).all())
 
         # Make second batch end
@@ -1331,12 +1340,18 @@ class LogitsProcessorTest(unittest.TestCase):
 
         self.assertTrue((out[0] == logits[0]).all())
         self.assertTrue(delay_pattern_processor.active_batches.all())
-        self.assertTrue((delay_pattern_processor.delay_pattern[0] == torch.tensor([delay - 5 for delay in delay_pattern])).all())
-        self.assertTrue((delay_pattern_processor.delay_pattern[1] == torch.tensor([delay - 1 for delay in delay_pattern])).all())
+        self.assertTrue(
+            (delay_pattern_processor.delay_pattern[0] == torch.tensor([delay - 5 for delay in delay_pattern])).all()
+        )
+        self.assertTrue(
+            (delay_pattern_processor.delay_pattern[1] == torch.tensor([delay - 1 for delay in delay_pattern])).all()
+        )
 
         # Last check on max generation length reached (with delay in mind until last channel produces eos)
         input_ids = torch.LongTensor([[0] * (max_generation_len - max(delay_pattern) - 1)])
-        delay_pattern_processor = DiaEOSDelayPatternLogitsProcessor(delay_pattern=delay_pattern, eos_token_id=eos, max_generation_len=max_generation_len)
+        delay_pattern_processor = DiaEOSDelayPatternLogitsProcessor(
+            delay_pattern=delay_pattern, eos_token_id=eos, max_generation_len=max_generation_len
+        )
         out = delay_pattern_processor(input_ids, logits.clone()).view(bsz, channels, vocab)
 
         check_eos_logits(out=out, logits=logits, batch=0, channel=0, eos=eos)

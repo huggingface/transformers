@@ -40,6 +40,7 @@ def build_indices(
 
     return sequence_idx, all_idx
 
+
 def apply_audio_delay(
     audio: torch.Tensor,
     pad_token_id: int,

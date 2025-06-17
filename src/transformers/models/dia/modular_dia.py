@@ -327,7 +327,7 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
 
         residual = hidden_states
         normed_states = self.pre_sa_norm(hidden_states)
-        hidden_states, self_attn_weights = self.self_attention(
+        self_attn_output, self_attn_weights = self.self_attention(
             normed_states,
             position_embeddings,
             attention_mask,
@@ -337,12 +337,12 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
             cache_position=cache_position,
             **kwargs,
         )
-        hidden_states = residual + hidden_states
+        hidden_states = residual + self_attn_output
 
         residual = hidden_states
-        hidden_states = self.pre_ca_norm(hidden_states)
+        normed_states = self.pre_ca_norm(hidden_states)
         cross_states, cross_attn_weights = self.cross_attention(
-            hidden_states,
+            normed_states,
             encoder_hidden_states,
             attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
@@ -697,7 +697,13 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, DiaGenerationMixin):
 
         last_hidden_state = outputs[0]
         batch_size = last_hidden_state.shape[0]
-        audio_logits = self.logits_dense(last_hidden_state).view((batch_size * self.num_channels, -1, self.vocab_size))
+        # 3D <-> 2D makes it necessary to prioritize channel dim
+        audio_logits = (
+            self.logits_dense(last_hidden_state)
+            .view((batch_size, -1, self.num_channels, self.vocab_size))
+            .transpose(1, 2)
+            .view(batch_size * self.num_channels, -1, self.vocab_size)
+        )
 
         loss = None
         if labels is not None:
