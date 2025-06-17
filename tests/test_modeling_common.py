@@ -92,6 +92,7 @@ from transformers.testing_utils import (
     require_torch_multi_accelerator,
     require_torch_multi_gpu,
     require_torch_sdpa,
+    run_first,
     run_test_using_subprocess,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
@@ -3808,6 +3809,9 @@ class ModelTesterMixin:
                 if torch_device in ["cpu", "cuda"]:
                     atol = atols[torch_device, enable_kernels, torch_dtype]
                     rtol = rtols[torch_device, enable_kernels, torch_dtype]
+                elif torch_device == "hpu":
+                    atol = atols["cuda", enable_kernels, torch_dtype]
+                    rtol = rtols["cuda", enable_kernels, torch_dtype]
                 elif torch_device == "xpu":
                     # As of PyTorch 2.5 XPU backend supports only torch.nn.attention.SDPBackend.MATH
                     # which is implemented on PyTorch level using aten operators and is
@@ -4722,6 +4726,7 @@ class ModelTesterMixin:
 
     # Here we need to run with a subprocess as otherwise setting back the default device to the default value ("cpu")
     # may bring unwanted consequences on other tests. See PR #37553
+    @run_first
     @run_test_using_subprocess
     @require_torch_accelerator
     def test_can_load_with_global_device_set(self):
