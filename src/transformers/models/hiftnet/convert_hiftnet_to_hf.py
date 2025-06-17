@@ -31,18 +31,19 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"^f0_predictor\.(.+)$":                                        r"fundamental_frequency_predictor.\1",
 
     r"^ups\.(\d+)\.(.+)$":                                          r"model.layers.\1.up.\2",
-    r"^source_downs\.(\d+)\.(weight|bias)$":                        r"model.layers.\1.noise_conv.\2",
+    r"^source_downs\.(\d+)\.(weight|bias)$":                        r"model.layers.\1.nsf_conv.\2",
 
-    r"conv_pre":                                                    r"model.conv_pre",
-    r"conv_post":                                                   r"model.conv_post",
-    r"m_source":                                                    r"model.m_source",
+    r"conv_pre":                                                    r"model.input_conv",
+    r"conv_post":                                                   r"model.output_conv",
+    r"m_source":                                                    r"model.source_generator",
     r"classifier":                                                  r"linear",
+    r"l_linear":                                                    r"linear",
 
-    r"^source_resblocks\.(\d+)\.convs([12])\.(\d+)":                lambda match: f"model.layers.{match.group(1)}.noise_res.layers.{match.group(3)}.conv{match.group(2)}",
-    r"^source_resblocks\.(\d+)\.activations([12]).([012])\.alpha$": lambda match: f"model.layers.{match.group(1)}.noise_res.layers.{match.group(3)}.alpha{match.group(2)}",
+    r"^source_resblocks\.(\d+)\.convs([12])\.(\d+)":                lambda match: f"model.layers.{match.group(1)}.nsf_res.layers.{match.group(3)}.conv{match.group(2)}",
+    r"^source_resblocks\.(\d+)\.activations([12]).([012])\.alpha$": lambda match: f"model.layers.{match.group(1)}.nsf_res.layers.{match.group(3)}.snake_activation_{match.group(2)}.alpha",
 
-    r"resblocks\.(\d+)\.convs([12])\.(\d+)":                        lambda match: f"model.layers.{int(match.group(1)) // 3}.resblocks.{int(match.group(1)) % 3}.layers.{match.group(3)}.conv{match.group(2)}",
-    r"resblocks\.(\d+)\.activations([12]).([012])\.alpha$":         lambda match: f"model.layers.{int(match.group(1)) // 3}.resblocks.{int(match.group(1)) % 3}.layers.{match.group(3)}.alpha{match.group(2)}",
+    r"resblocks\.(\d+)\.convs([12])\.(\d+)":                        lambda match: f"model.layers.{int(match.group(1)) // 3}.multi_receptive_field_fusion.{int(match.group(1)) % 3}.layers.{match.group(3)}.conv{match.group(2)}",
+    r"resblocks\.(\d+)\.activations([12]).([012])\.alpha$":         lambda match: f"model.layers.{int(match.group(1)) // 3}.multi_receptive_field_fusion.{int(match.group(1)) % 3}.layers.{match.group(3)}.snake_activation_{match.group(2)}.alpha",
 }
 # fmt: on
 
@@ -157,6 +158,7 @@ def main():
 
 
 if __name__ == "__main__":
+    # TODO: @eustlb, remove this
     # main()
     write_model(
         "ResembleAI/chatterbox",
@@ -164,3 +166,4 @@ if __name__ == "__main__":
         output_dir="./HiFTNet-HF",
         safe_serialization=True,
     )
+
