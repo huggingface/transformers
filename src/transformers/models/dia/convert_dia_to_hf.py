@@ -124,7 +124,7 @@ def convert_dia_model_to_hf(checkpoint_path, verbose=False):
                 embeddings[embeddings_key] = [tensor]
             continue
         elif re.sub(r"\d+", "*", key).removeprefix("model.") in shape_mappings:
-            # add exception to the head and mlps to be renamed immediately
+            # add exception to the head
             if "logits_dense" in key:
                 key = re.sub("decoder.logits_dense", "logits_dense", key).removeprefix("model.")
 
