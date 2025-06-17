@@ -995,4 +995,4 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
         )
 
 
-__all__ = ["LightGluePreTrainedModel", "LightGlueForKeypointMatching", "LightGlueConfig"]
+__all__ = ["LightGluePreTrainedModel", "LightGlueForKeypointMatching", "LightGlueConfig", "LightGlueImageProcessor"]

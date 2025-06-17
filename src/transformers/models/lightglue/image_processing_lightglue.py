@@ -447,3 +447,6 @@ class LightGlueImageProcessor(BaseImageProcessor):
                 plt.scatter(keypoint0_x, keypoint0_y, c="black", s=2)
                 plt.scatter(keypoint1_x + width0, keypoint1_y, c="black", s=2)
             plt.show()
+
+
+__all__ = ["LightGlueImageProcessor"]
