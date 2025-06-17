@@ -156,10 +156,7 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
 
             for idx in range(len(logits)):
                 resized_logits = torch.nn.functional.interpolate(
-                    logits[idx].unsqueeze(dim=0),
-                    size=target_sizes[idx],
-                    mode="bilinear",
-                    align_corners=False,
+                    logits[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
                 )
                 semantic_map = resized_logits[0].argmax(dim=0)
                 semantic_segmentation.append(semantic_map)
