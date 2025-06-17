@@ -58,10 +58,9 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] DiaProcessor
     - __call__
+    - decode
     - from_pretrained
     - save_pretrained
-    - batch_decode
-    - decode
 
 ## DiaModel
 
