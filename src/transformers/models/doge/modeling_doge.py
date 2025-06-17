@@ -483,6 +483,7 @@ class DogePreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
     def _init_weights(self, module):
+        """Initialize the weights"""
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
@@ -494,6 +495,17 @@ class DogePreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, DogeRMSNorm):
             module.weight.data.fill_(1.0)
+
+        if isinstance(module, DogeAttention):
+            # Initialize A parameter to zeros for dynamic mask
+            if hasattr(module, "A"):
+                module.A.data.zero_()
+        elif isinstance(module, DogeDecoderLayer):
+            # Initialize residual parameters to ones
+            if hasattr(module, "input_residual"):
+                module.input_residual.data.fill_(1.0)
+            if hasattr(module, "post_attention_residual"):
+                module.post_attention_residual.data.fill_(1.0)
 
 
 @auto_docstring

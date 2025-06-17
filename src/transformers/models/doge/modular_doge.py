@@ -33,7 +33,6 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import AttentionInterface
 from ...processing_utils import Unpack
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import LossKwargs, is_torch_flex_attn_available, logging
 from ..llama.modeling_llama import (
     LlamaForSequenceClassification,
@@ -272,9 +271,6 @@ class DogeConfig(PretrainedConfig):
 
 class DogeRMSNorm(LlamaRMSNorm):
     pass
-
-
-ALL_LAYERNORM_LAYERS.append(DogeRMSNorm)
 
 
 class DogeRotaryEmbedding(LlamaRotaryEmbedding):
@@ -621,6 +617,21 @@ class DogePreTrainedModel(LlamaPreTrainedModel):
     _supports_static_cache = True
     _supports_attention_backend = True
 
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        super()._init_weights(module)
+
+        if isinstance(module, DogeAttention):
+            # Initialize A parameter to zeros for dynamic mask
+            if hasattr(module, "A"):
+                module.A.data.zero_()
+        elif isinstance(module, DogeDecoderLayer):
+            # Initialize residual parameters to ones
+            if hasattr(module, "input_residual"):
+                module.input_residual.data.fill_(1.0)
+            if hasattr(module, "post_attention_residual"):
+                module.post_attention_residual.data.fill_(1.0)
+
 
 class DogeModel(DogePreTrainedModel, MixtralModel):
     def __init__(self, config: DogeConfig):
@@ -848,6 +859,6 @@ __all__ = [
     "DogeConfig",
     "DogeForCausalLM",
     "DogeModel",
-    "DogePreTrainedModel",  # noqa: F822
+    "DogePreTrainedModel",
     "DogeForSequenceClassification",
 ]
