@@ -28,11 +28,15 @@ def get_daily_ci_runs(token, num_runs=7, workflow_id=None):
 
     url = f"https://api.github.com/repos/huggingface/transformers/actions/workflows/{workflow_id}/runs"
     # On `main` branch + event being `schedule` + not returning PRs + only `num_runs` results
-    url += f"?branch=main&event=schedule&exclude_pull_requests=true&per_page={num_runs}"
+    url += f"?branch=main&exclude_pull_requests=true&per_page={num_runs}"
 
-    result = requests.get(url, headers=headers).json()
+    result = requests.get(f"{url}&event=schedule", headers=headers).json()
+    workflow_runs = result["workflow_runs"]
+    if len(workflow_runs) == 0:
+        result = requests.get(f"{url}&event=workflow_run", headers=headers).json()
+        workflow_runs = result["workflow_runs"]
 
-    return result["workflow_runs"]
+    return workflow_runs
 
 
 def get_last_daily_ci_run(token, workflow_run_id=None, workflow_id=None, commit_sha=None):
@@ -53,8 +57,8 @@ def get_last_daily_ci_run(token, workflow_run_id=None, workflow_id=None, commit_
         if commit_sha in [None, ""] and run["status"] == "completed":
             workflow_run = run
             break
-        # if `commit_sha` is specified, and `workflow_run["head_sha"]` matches it, return it.
-        elif commit_sha not in [None, ""] and run["head_sha"] == commit_sha:
+        # if `commit_sha` is specified, return the latest completed run with `workflow_run["head_sha"]` matching the specified sha.
+        elif commit_sha not in [None, ""] and run["head_sha"] == commit_sha and run["status"] == "completed":
             workflow_run = run
             break
 

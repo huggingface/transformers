@@ -399,7 +399,7 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
             curr_input_dict = copy.deepcopy(input_dict)
-            _ = model(**curr_input_dict)  # successfull forward with no modifications
+            _ = model(**curr_input_dict)  # successful forward with no modifications
 
             # remove one image but leave the image token in text
             curr_input_dict["pixel_values_images"] = curr_input_dict["pixel_values_images"][-1:, ...]

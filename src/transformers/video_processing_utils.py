@@ -36,8 +36,6 @@ from .processing_utils import Unpack, VideosKwargs
 from .utils import (
     VIDEO_PROCESSOR_NAME,
     TensorType,
-    add_model_info_to_auto_map,
-    add_model_info_to_custom_pipelines,
     add_start_docstrings,
     cached_file,
     copy_func,
@@ -53,6 +51,7 @@ from .utils import (
 from .utils.import_utils import requires
 from .video_utils import (
     VideoInput,
+    VideoMetadata,
     group_videos_by_shape,
     load_video,
     make_batched_videos,
@@ -120,6 +119,14 @@ BASE_VIDEO_PROCESSOR_DOCSTRING = r"""
             Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_convert_rgb (`bool`, *optional*, defaults to `self.image_std`):
             Whether to convert the video to RGB.
+        video_metadata (`VideoMetadata`, *optional*):
+            Metadata of the video containing information about total duration, fps and total number of frames.
+        do_sample_frames (`int`, *optional*, defaults to `self.do_sample_frames`):
+            Whether to sample frames from the video before processing or to process the whole video.
+        num_frames (`int`, *optional*, defaults to `self.num_frames`):
+            Maximum number of frames to sample when `do_sample_frames=True`.
+        fps (`int`, *optional*, defaults to `self.fps`):
+            Target frames to sample per second when `do_sample_frames=True`.
         return_tensors (`str` or `TensorType`, *optional*):
             Returns stacked tensors if set to `pt, otherwise returns a list of tensors.
         data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
@@ -159,6 +166,10 @@ class BaseVideoProcessor(BaseImageProcessorFast):
     rescale_factor = 1 / 255
     do_normalize = None
     do_convert_rgb = None
+    do_sample_frames = None
+    fps = None
+    num_frames = None
+    video_metadata = None
     valid_kwargs = VideosKwargs
     model_input_names = ["pixel_values_videos"]
 
@@ -221,9 +232,67 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         video = (1 - alpha[..., None, :, :]) * 255 + alpha[..., None, :, :] * video[..., :3, :, :]
         return video
 
+    def sample_frames(
+        self,
+        video: "torch.Tensor",
+        metadata: Optional[Union[VideoMetadata, dict]] = None,
+        num_frames: Optional[int] = None,
+        fps: Optional[int] = None,
+    ):
+        """
+        Default sampling function which uniformly samples the desired number of frames between 0 and total number of frames.
+        If `fps` is passed along with metadata, `fps` frames per second are sampled uniformty. Arguments `num_frames`
+        and `fps` are mutually exclusive.
+
+        Args:
+            video (`torch.Tensor`):
+                Video that need to be sampled.
+            metadata (`VideoMetadata`, *optional*):
+                Metadata of the video containing information about total duration, fps and total number of frames.
+            num_frames (`int`, *optional*):
+                Maximum number of frames to sample. Defaults to `self.num_frames`.
+            fps (`int`, *optional*):
+                Target frames to sample per second. Defaults to `self.fps`.
+
+        Returns:
+            torch.Tensor:
+                Sampled video frames.
+        """
+        if fps is not None and num_frames is not None:
+            raise ValueError(
+                "`num_frames`, `fps`, and `sample_indices_fn` are mutually exclusive arguments, please use only one!"
+            )
+
+        num_frames = num_frames if num_frames is not None else self.num_frames
+        fps = fps if fps is not None else self.fps
+        total_num_frames = video.shape[0]
+
+        # If num_frames is not given but fps is, calculate num_frames from fps
+        if num_frames is None and fps is not None:
+            if metadata is None:
+                raise ValueError(
+                    "Asked to sample `fps` frames per second but no video metadata was provided which is required when sampling with `fps`. "
+                    "Please pass in `VideoMetadata` object or use a fixed `num_frames` per input video"
+                )
+            num_frames = int(total_num_frames / metadata["fps"] * fps)
+
+        if num_frames > total_num_frames:
+            raise ValueError(
+                f"Video can't be sampled. The `num_frames={num_frames}` exceeds `total_num_frames={total_num_frames}`. "
+            )
+
+        if num_frames is not None:
+            indices = torch.arange(0, total_num_frames, total_num_frames / num_frames).int()
+        else:
+            indices = torch.arange(0, total_num_frames).int()
+
+        video = video[indices].contiguous()
+        return video
+
     def _prepare_input_videos(
         self,
         videos: VideoInput,
+        video_metadata: VideoMetadata = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         device: Optional["torch.device"] = None,
     ) -> List["torch.Tensor"]:
@@ -231,6 +300,11 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         Prepare the input videos for processing.
         """
         videos = make_batched_videos(videos)
+        if video_metadata is not None:
+            batch_metadata = [metadata for batch_list in video_metadata for metadata in batch_list]
+        else:
+            batch_metadata = [None] * len(videos)
+
         processed_videos = []
         for video in videos:
             # `make_batched_videos` always returns a 4D array per video
@@ -244,7 +318,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
                 video = video.to(device)
 
             processed_videos.append(video)
-        return processed_videos
+        return processed_videos, batch_metadata
 
     @add_start_docstrings(BASE_VIDEO_PROCESSOR_DOCSTRING)
     def preprocess(
@@ -252,7 +326,10 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         videos: VideoInput,
         **kwargs: Unpack[VideosKwargs],
     ) -> BatchFeature:
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_kwargs.__annotations__.keys())
+        validate_kwargs(
+            captured_kwargs=kwargs.keys(),
+            valid_processor_keys=list(self.valid_kwargs.__annotations__.keys()) + ["return_tensors"],
+        )
         # Set default kwargs from self. This ensures that if a kwarg is not provided
         # by the user, it gets its default value from the instance, or is set to None.
         for kwarg_name in self.valid_kwargs.__annotations__:
@@ -260,7 +337,10 @@ class BaseVideoProcessor(BaseImageProcessorFast):
 
         input_data_format = kwargs.pop("input_data_format")
         device = kwargs.pop("device")
-        videos = self._prepare_input_videos(videos=videos, input_data_format=input_data_format, device=device)
+        video_metadata = kwargs.pop("video_metadata")
+        videos, video_metadata = self._prepare_input_videos(
+            videos=videos, video_metadata=video_metadata, input_data_format=input_data_format, device=device
+        )
 
         kwargs = self._further_process_kwargs(**kwargs)
         self._validate_preprocess_kwargs(**kwargs)
@@ -275,11 +355,12 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         kwargs.pop("default_to_square")
         kwargs.pop("data_format")
 
-        return self._preprocess(videos=videos, **kwargs)
+        return self._preprocess(videos=videos, video_metadata=video_metadata, **kwargs)
 
     def _preprocess(
         self,
         videos: List["torch.Tensor"],
+        video_metadata: Union[List[VideoMetadata], List[dict]],
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
@@ -293,8 +374,18 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         do_normalize: bool,
         image_mean: Optional[Union[float, List[float]]],
         image_std: Optional[Union[float, List[float]]],
+        do_sample_frames: Optional[bool] = None,
+        fps: Optional[int] = None,
+        num_frames: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
     ) -> BatchFeature:
+        if do_sample_frames:
+            # Sample video frames
+            videos = [
+                self.sample_frames(video, metadata=metadata, num_frames=num_frames, fps=fps)
+                for video, metadata in zip(videos, video_metadata)
+            ]
+
         # Group videos by size for batched resizing
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}
@@ -578,7 +669,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
                     revision=revision,
                     subfolder=subfolder,
                 )
-            except EnvironmentError:
+            except OSError:
                 video_processor_file = "preprocessor_config.json"
                 resolved_video_processor_file = cached_file(
                     pretrained_model_name_or_path,
@@ -599,13 +690,13 @@ class BaseVideoProcessor(BaseImageProcessorFast):
                     "the file or load and save the processor back which renames it automatically. "
                     "Loading from `preprocessor.json` will be removed in v5.0."
                 )
-            except EnvironmentError:
+            except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
                 raise
             except Exception:
                 # For any other exception, we throw a generic error.
-                raise EnvironmentError(
+                raise OSError(
                     f"Can't load video processor for '{pretrained_model_name_or_path}'. If you were trying to load"
                     " it from 'https://huggingface.co/models', make sure you don't have a local directory with the"
                     f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
@@ -619,7 +710,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             video_processor_dict = json.loads(text)
 
         except json.JSONDecodeError:
-            raise EnvironmentError(
+            raise OSError(
                 f"It looks like the config file at '{resolved_video_processor_file}' is not a valid JSON file."
             )
 
@@ -629,16 +720,6 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             logger.info(
                 f"loading configuration file {video_processor_file} from cache at {resolved_video_processor_file}"
             )
-
-        if not is_local:
-            if "auto_map" in video_processor_dict:
-                video_processor_dict["auto_map"] = add_model_info_to_auto_map(
-                    video_processor_dict["auto_map"], pretrained_model_name_or_path
-                )
-            if "custom_pipelines" in video_processor_dict:
-                video_processor_dict["custom_pipelines"] = add_model_info_to_custom_pipelines(
-                    video_processor_dict["custom_pipelines"], pretrained_model_name_or_path
-                )
         return video_processor_dict, kwargs
 
     @classmethod

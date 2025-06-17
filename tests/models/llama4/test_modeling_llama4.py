@@ -18,7 +18,7 @@ import unittest
 from transformers import is_torch_available
 from transformers.testing_utils import (
     require_read_token,
-    require_torch_large_gpu,
+    require_torch_large_accelerator,
     slow,
     torch_device,
 )
@@ -34,19 +34,13 @@ if is_torch_available():
 
 
 @slow
-@require_torch_large_gpu
+@require_torch_large_accelerator
 @require_read_token
 class Llama4IntegrationTest(unittest.TestCase):
     model_id = "meta-llama/Llama-4-Scout-17B-16E"
-    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
-    # Depending on the hardware we get different logits / generations
-    cuda_compute_capability_major_version = None
 
     @classmethod
     def setUpClass(cls):
-        if is_torch_available() and torch.cuda.is_available():
-            # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
         cls.model = Llama4ForConditionalGeneration.from_pretrained(
             "meta-llama/Llama-4-Scout-17B-16E",
             device_map="auto",

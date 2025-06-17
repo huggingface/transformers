@@ -138,36 +138,23 @@ class Llama4TextMoe(nn.Module):
         self.shared_expert = Llama4TextMLP(config)
 
     def forward(self, hidden_states):
-        batch, seq_len, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = self.router(hidden_states)
-        tokens_per_expert = batch * seq_len
 
         router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=1)
+
         router_scores = (
             torch.full_like(router_logits, float("-inf")).scatter_(1, router_indices, router_top_value).transpose(0, 1)
         )
-        # We do this to make sure we have -inf for non topK tokens before going through the !
-        # Here we are just creating a tensor to index each and every single one of the hidden states. Let s maybe register a buffer for this!
-        router_indices = (
-            torch.arange(tokens_per_expert, device=hidden_states.device).view(1, -1).expand(router_scores.size(0), -1)
-        )
         router_scores = torch.sigmoid(router_scores.float()).to(hidden_states.dtype)
 
-        router_indices = router_indices.reshape(-1, 1).expand(-1, hidden_dim)
-        routed_in = torch.gather(
-            input=hidden_states,
-            dim=0,
-            index=router_indices,
-        ).to(hidden_states.device)
-        # we gather inputs corresponding to each expert based on the router indices
+        routed_in = hidden_states.repeat(self.num_experts, 1)
         routed_in = routed_in * router_scores.reshape(-1, 1)
         routed_out = self.experts(routed_in)
+
         out = self.shared_expert(hidden_states)
-        # now that we finished expert computation -> we scatter add because we gathered previously
-        # we have to do this because we used all experts on all tokens. This is faster than the for loop, tho you are compute bound
-        # this scales a lot better if you do EP!
-        out.scatter_add_(dim=0, index=router_indices, src=routed_out.view(-1, hidden_dim))
+        out.add_(routed_out.reshape(self.num_experts, -1, self.hidden_dim).sum(dim=0))
+
         return out, router_scores
 
 
@@ -338,7 +325,7 @@ class Llama4TextAttention(nn.Module):
             query_states = self.qk_norm(query_states)
             key_states = self.qk_norm(key_states)
 
-        # Use temperature tuning from https://arxiv.org/abs/2501.19399) to NoROPE layers
+        # Use temperature tuning from https://huggingface.co/papers/2501.19399) to NoROPE layers
         if self.attn_temperature_tuning and not self.use_rope:
             attn_scales = (
                 torch.log(torch.floor((cache_position.float() + 1.0) / self.floor_scale) + 1.0) * self.attn_scale + 1.0
@@ -356,13 +343,7 @@ class Llama4TextAttention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -570,7 +551,6 @@ class Llama4TextModel(Llama4PreTrainedModel):
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
-                "output_attentions": output_attentions,
             }
             # Create the masks
             causal_mask_mapping = {
@@ -916,13 +896,7 @@ class Llama4VisionAttention(nn.Module):
         attention_interface: Callable = vision_eager_attention_forward
         # flex disable because breaks on TP 8, embed is 88 not power of 2
         if self.config._attn_implementation not in ["eager", "flex_attention"]:
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,

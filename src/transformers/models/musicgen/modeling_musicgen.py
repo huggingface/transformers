@@ -436,8 +436,7 @@ class MusicgenPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["MusicgenDecoderLayer", "MusicgenAttention"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
-    # compilation errors occurr atm
-    _supports_flex_attn = False
+    _supports_flex_attn = True
 
     def _init_weights(self, module):
         std = self.config.initializer_factor
@@ -611,7 +610,7 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
                         f" {attn_mask.size()[0]}."
                     )
         for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
             dropout_probability = random.uniform(0, 1)
@@ -1361,8 +1360,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel, GenerationMixin):
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True
     _supports_sdpa = True
-    # compilation errors occurr atm
-    _supports_flex_attn = False
+    _supports_flex_attn = True
 
     def __init__(
         self,

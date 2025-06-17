@@ -15,7 +15,8 @@
 """Image processor class for DPT."""
 
 import math
-from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Tuple, Union
+from collections.abc import Iterable
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 from ...utils.import_utils import requires
 
@@ -213,8 +214,6 @@ class DPTImageProcessor(BaseImageProcessor):
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
                 Defines the resampling filter to use if resizing the image. Otherwise, the image is resized to size
                 specified in `size`.
-            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
-                Resampling filter to use when resiizing the image.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
             input_data_format (`str` or `ChannelDimension`, *optional*):

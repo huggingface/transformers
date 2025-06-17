@@ -203,13 +203,7 @@ class GraniteMoeHybridAttention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -1057,7 +1051,8 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
         # Either attention or mamba will be initialized, depending on the layer type.
         self.self_attn = None
-        self.block_sparse_moe = GraniteMoeHybridMoE(config)
+        if config.num_local_experts > 0:
+            self.block_sparse_moe = GraniteMoeHybridMoE(config)
         self.input_layernorm = GraniteMoeHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = GraniteMoeHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -1070,6 +1065,9 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
         else:
             self.self_attn = GraniteMoeHybridAttention(config, layer_idx)
         self.layer_type = config.layers_block_type[layer_idx]
+
+        # Accept 0 experts: skip MoE if num_local_experts == 0
+        self.has_experts = getattr(config, "num_local_experts", 0) > 0
 
     def forward(
         self,
@@ -1137,9 +1135,14 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        moe_hidden_states, router_logits = self.block_sparse_moe(hidden_states)
 
-        hidden_states = moe_hidden_states + self.shared_mlp(hidden_states)
+        if self.has_experts:
+            moe_hidden_states, router_logits = self.block_sparse_moe(hidden_states)
+            hidden_states = moe_hidden_states + self.shared_mlp(hidden_states)
+        else:
+            hidden_states = self.shared_mlp(hidden_states)
+            router_logits = None
+
         hidden_states = residual + hidden_states * self.residual_multiplier
 
         outputs = (hidden_states,)
@@ -1527,7 +1530,7 @@ def load_balancing_loss_func(
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
 
-    See Switch Transformer (https://arxiv.org/abs/2101.03961) for more details. This function implements the loss
+    See Switch Transformer (https://huggingface.co/papers/2101.03961) for more details. This function implements the loss
     function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
     experts is too unbalanced.
 

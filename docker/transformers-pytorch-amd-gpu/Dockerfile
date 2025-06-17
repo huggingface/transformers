@@ -30,3 +30,6 @@ RUN cd transformers && python3 setup.py develop
 
 # Remove nvml and nvidia-ml-py as it is not compatible with ROCm. apex is not tested on NVIDIA either.
 RUN python3 -m pip uninstall py3nvml pynvml nvidia-ml-py apex -y
+
+# `kernels` may causes many failing tests
+RUN python3 -m pip uninstall -y kernels
