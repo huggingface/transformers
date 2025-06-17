@@ -43,7 +43,6 @@ class TokenClassificationArgumentHandler(ArgumentHandler):
         else:
             raise ValueError("At least one input is required.")
 
-
         offset_mapping = kwargs.get("offset_mapping")
         if offset_mapping:
             if isinstance(offset_mapping, list) and isinstance(offset_mapping[0], tuple):
