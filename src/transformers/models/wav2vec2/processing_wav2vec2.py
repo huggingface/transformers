@@ -86,7 +86,7 @@ class Wav2Vec2Processor(ProcessorMixin):
         both methods are determined by the presence of the `audio` and `text` arguments.
 
         Args:
-            audio:
+            audio (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`, *optional*):
                 When the first argument is an audio array, or the `audio` argument is present,
                 Wav2Vec2FeatureExtractor's [`~Wav2Vec2FeatureExtractor.__call__`] will be invoked.
             text:
