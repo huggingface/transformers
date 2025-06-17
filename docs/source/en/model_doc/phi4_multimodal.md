@@ -13,11 +13,6 @@ rendered properly in your Markdown viewer.
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
     <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-EE4C2C?logo=pytorch&logoColor=white&style=flat">
-    <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?logo=tensorflow&logoColor=white&style=flat">
-    <img alt="Pillow" src="https://img.shields.io/badge/Pillow-DA70D6?style=flat&logo=python&logoColor=white">
-    <img alt="soundfile" src="https://img.shields.io/badge/soundfile-ff9900?style=flat&logo=python&logoColor=white">
-    <img alt="Accelerate" src="https://img.shields.io/badge/Accelerate-0052CC?style=flat&logo=python&logoColor=white">
-    <img alt="Flash-Attention" src="https://img.shields.io/badge/Flash--Attention-000000?style=flat&logo=nvidia&logoColor=white">
   </div>
 </div>
 
