@@ -1083,6 +1083,7 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, DiaGenerationMixin):
             self.logits_dense(last_hidden_state)
             .view((batch_size, -1, self.num_channels, self.vocab_size))
             .transpose(1, 2)
+            .contiguous()
             .view(batch_size * self.num_channels, -1, self.vocab_size)
         )
 
