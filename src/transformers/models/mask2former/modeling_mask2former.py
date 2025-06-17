@@ -202,7 +202,7 @@ class Mask2FormerForUniversalSegmentationOutput(ModelOutput):
     masks_queries_logits (`torch.FloatTensor`):
         A tensor of shape `(batch_size, num_queries, height, width)` representing the proposed masks for each
         query.
-    auxiliary_logits (`List[Dict(str, torch.FloatTensor)]`, *optional*):
+    auxiliary_logits (`list[Dict(str, torch.FloatTensor)]`, *optional*):
         List of class and mask predictions from each layer of the transformer decoder.
     encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
         Last hidden states (final feature map) of the last stage of the encoder model (backbone).

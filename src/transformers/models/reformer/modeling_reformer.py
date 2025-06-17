@@ -1817,7 +1817,7 @@ class ReformerModelOutput(ModelOutput):
 
         `num_predict` corresponds to `target_mapping.shape[1]`. If `target_mapping` is `None`, then `num_predict`
         corresponds to `sequence_length`.
-    past_buckets_states (`List[tuple(torch.LongTensor, torch.FloatTensor)]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    past_buckets_states (`list[tuple(torch.LongTensor, torch.FloatTensor)]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         List of `tuple(torch.LongTensor, torch.FloatTensor` of length `config.n_layers`, with the first element
         being the previous *buckets* of shape `(batch_size, num_heads, num_hashes, sequence_length)`) and the
         second being the previous *hidden_states* of shape `(batch_size, sequence_length, hidden_size)`).
@@ -1847,7 +1847,7 @@ class ReformerModelWithLMHeadOutput(ModelOutput):
 
         `num_predict` corresponds to `target_mapping.shape[1]`. If `target_mapping` is `None`, then `num_predict`
         corresponds to `sequence_length`.
-    past_buckets_states (`List[tuple(torch.LongTensor, torch.FloatTensor)]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    past_buckets_states (`list[tuple(torch.LongTensor, torch.FloatTensor)]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         List of `tuple(torch.LongTensor, torch.FloatTensor` of length `config.n_layers`, with the first element
         being the previous *buckets* of shape `(batch_size, num_heads, num_hashes, sequence_length)`) and the
         second being the previous *hidden_states* of shape `(batch_size, sequence_length, hidden_size)`).

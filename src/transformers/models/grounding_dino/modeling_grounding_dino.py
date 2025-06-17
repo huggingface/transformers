@@ -240,7 +240,7 @@ class GroundingDinoObjectDetectionOutput(ModelOutput):
         values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
         possible padding). You can use [`~GroundingDinoProcessor.post_process_grounded_object_detection`] to retrieve the
         unnormalized bounding boxes.
-    auxiliary_outputs (`List[Dict]`, *optional*):
+    auxiliary_outputs (`list[Dict]`, *optional*):
         Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
         and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
         `pred_boxes`) for each decoder layer.

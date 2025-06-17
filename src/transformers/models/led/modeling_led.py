@@ -1183,7 +1183,7 @@ class LEDSeq2SeqModelOutput(ModelOutput):
 
         If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
         hidden_size)` is output.
-    past_key_values (`List[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    past_key_values (`list[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
         num_heads, sequence_length, embed_size_per_head)`).
 
@@ -1221,7 +1221,7 @@ class LEDSeq2SeqLMOutput(ModelOutput):
         Language modeling loss.
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`List[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    past_key_values (`list[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
         num_heads, sequence_length, embed_size_per_head)`).
 
@@ -1260,7 +1260,7 @@ class LEDSeq2SeqSequenceClassifierOutput(ModelOutput):
         Classification (or regression if config.num_labels==1) loss.
     logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
         Classification (or regression if config.num_labels==1) scores (before SoftMax).
-    past_key_values (`List[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    past_key_values (`list[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
         num_heads, sequence_length, embed_size_per_head)`).
 
@@ -1297,7 +1297,7 @@ class LEDSeq2SeqQuestionAnsweringModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Total span extraction loss is the sum of a Cross-Entropy for the start and end positions.
-    past_key_values (`List[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    past_key_values (`list[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
         num_heads, sequence_length, embed_size_per_head)`).
 
