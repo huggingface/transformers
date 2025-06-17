@@ -20,6 +20,7 @@ import warnings
 from typing import List
 
 import torch
+from timm.models.eva import checkpoint_filter_fn
 from tokenizers import AddedToken, processors
 
 from transformers import (
@@ -30,14 +31,11 @@ from transformers import (
 )
 from transformers.convert_slow_tokenizer import TikTokenConverter
 from transformers.models.perception_lm.configuration_perception_lm import (
-    PerceptionLMConfig,
     PerceptionEncoderConfig,
+    PerceptionLMConfig,
 )
 from transformers.models.perception_lm.image_processing_perception_lm_fast import (
     PerceptionLMImageProcessorFast,
-)
-from transformers.models.perception_lm.video_processing_perception_lm import (
-    PerceptionLMVideoProcessor,
 )
 from transformers.models.perception_lm.modeling_perception_lm import (
     PerceptionEncoder,
@@ -46,7 +44,9 @@ from transformers.models.perception_lm.modeling_perception_lm import (
 from transformers.models.perception_lm.processing_perception_lm import (
     PerceptionLMProcessor,
 )
-from timm.models.eva import checkpoint_filter_fn
+from transformers.models.perception_lm.video_processing_perception_lm import (
+    PerceptionLMVideoProcessor,
+)
 
 
 try:
@@ -210,7 +210,6 @@ def write_model(
     model_params = params.get("model", params)
     n_layers = model_params["n_layers"]
     n_heads = model_params["n_heads"]
-    n_heads_per_shard = n_heads // num_shards
     dim = model_params["dim"]
     dims_per_head = dim // n_heads
     base = model_params.get("rope_theta", 10000.0)
@@ -224,11 +223,9 @@ def write_model(
 
     if model_params.get("n_kv_heads", None) is not None:
         num_key_value_heads = model_params["n_kv_heads"]  # for GQA / MQA
-        num_key_value_heads_per_shard = num_key_value_heads // num_shards
         key_value_dim = dims_per_head * num_key_value_heads
     else:  # compatibility with other checkpoints
         num_key_value_heads = n_heads
-        num_key_value_heads_per_shard = n_heads_per_shard
         key_value_dim = dim
 
     # permute for sliced rotary
@@ -348,7 +345,7 @@ def write_model(
             architecture = "vit_pe_core_gigantic_patch14_448"
         else:
             raise ValueError(f"Unsupported PE config: {vision_params['layers']} layers and {vision_params['width']} width")
-        
+
         vision_config = PerceptionEncoderConfig(
             use_cls_token=vision_params["use_cls_token"],
             width=vision_params["width"],

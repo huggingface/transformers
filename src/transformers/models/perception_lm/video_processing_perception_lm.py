@@ -24,6 +24,7 @@ from ...video_processing_utils import (
     BaseVideoProcessor,
 )
 
+
 if is_vision_available():
     from ...image_utils import PILImageResampling
 

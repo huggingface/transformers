@@ -16,17 +16,15 @@
 Processor class for PerceptionLM.
 """
 
-from typing import List, Union, Iterable
+from typing import Iterable, List, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, get_image_size, to_numpy_array
-from ...video_utils import VideoInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_torch_available, logging
+from ...utils import logging
+from ...video_utils import VideoInput
 
-if is_torch_available():
-    import torch
 
 logger = logging.get_logger(__name__)
 
@@ -151,7 +149,7 @@ class PerceptionLMProcessor(ProcessorMixin):
 
         pixel_values = iter(image_inputs.get("pixel_values", []))
         pixel_values_videos = iter(videos_inputs.get("pixel_values_videos", []))
-        for sample in text:       
+        for sample in text:
             # Replace the media token with the expanded media token sequence
             sample = self._expand_media_tokens(sample, self.tokenizer.image_token, pixel_values)
             sample = self._expand_media_tokens(sample, self.tokenizer.video_token, pixel_values_videos)
@@ -161,7 +159,7 @@ class PerceptionLMProcessor(ProcessorMixin):
         text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
         self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image", "video"])
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
-    
+
     def _expand_media_tokens(self, sample, media_token: str, media_iter: Iterable):
         media_count = sample.count(media_token)
         if media_count > 0:
