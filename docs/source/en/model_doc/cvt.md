@@ -29,7 +29,7 @@ You can find all the CvT checkpoints under the [Microsoft](https://huggingface.c
 
 
 > [!TIP]
-> Click on the CvT models in the right sidebar (if available) or check model hub pages for more examples of how to apply CvT to different computer vision tasks.
+> Click on the CvT models in the right sidebar for more examples of how to apply CvT to different computer vision tasks.
 
 The example below demonstrates how to classify an image with [`Pipeline`] or the [`AutoModel`] class.
 
