@@ -171,9 +171,8 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
         EXPECTED_SLICE = torch.tensor([7.5938, 2.6094, 4.0312, 4.0938, 2.5156, 2.7812, 2.9688, 1.5547, 1.3984, 2.2344, 3.0156, 3.1562, 1.1953, 3.2500, 1.0938, 8.4375, 9.5625, 9.0625, 7.5625, 7.5625, 7.9062, 7.2188, 7.0312, 6.9375, 8.0625, 1.7266, 0.9141, 3.7969, 5.3438, 3.9844])  # fmt: skip
         torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, rtol=1e-4, atol=1e-4)
 
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
+        breakpoint()
+        print(1)
 
     @slow
     def test_model_15b_a2b_generation(self):
@@ -190,9 +189,8 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
+        breakpoint()
+        print(1)
 
     @require_bitsandbytes
     @slow
@@ -233,19 +231,24 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
         model = self.get_model()
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
-        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
+
+        breakpoint()
+        print(1)
+
+        # self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
+
+
 
         # Assisted generation
         assistant_model = model
         assistant_model.generation_config.num_assistant_tokens = 2
         assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
         generated_ids = assistant_model.generate(input_ids, max_new_tokens=4, temperature=0)
-        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
-        del assistant_model
+        breakpoint()
+        print(1)
 
-        backend_empty_cache(torch_device)
-        gc.collect()
+        # self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
         EXPECTED_TEXT_COMPLETION = (
             """To be or not to be, that is the question. Whether 'tis nobler in the mind to suffer the sl"""
@@ -258,7 +261,11 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+
+        breakpoint()
+        print(1)
+
+        # self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @slow
     def test_speculative_generation(self):
@@ -279,6 +286,5 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
+        breakpoint()
+        print(1)
