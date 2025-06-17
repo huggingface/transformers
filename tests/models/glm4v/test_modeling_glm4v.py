@@ -17,6 +17,7 @@ import gc
 import unittest
 
 import requests
+from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -145,10 +146,12 @@ class Glm4vVisionText2TextModelTester:
         input_ids[input_ids == self.image_token_id] = self.pad_token_id
         input_ids[input_ids == self.vision_start_token_id] = self.pad_token_id
         input_ids[:, self.num_image_tokens] = self.image_token_id
+        patch_size = config.vision_config.patch_size
+        patches_per_side = self.image_size // patch_size
 
         inputs_dict = {
             "pixel_values": pixel_values,
-            "image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size),
+            "image_grid_thw": torch.tensor([[1, patches_per_side, patches_per_side]] * self.batch_size),
             "input_ids": input_ids,
             "attention_mask": attention_mask,
         }
@@ -266,6 +269,11 @@ class Glm4vModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
 
     @unittest.skip(reason="Compile not yet supported because in Glm4v models")
     def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+    @parameterized.expand([("greedy", 1), ("beam search", 2)])
+    @unittest.skip("Cannot generate from inputs embeds")
+    def test_generate_from_inputs_embeds(self):
         pass
 
     @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
