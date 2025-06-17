@@ -34,6 +34,7 @@ from .audio_utils import load_audio
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
 from .image_utils import ChannelDimension, ImageInput, is_valid_image, is_vision_available, load_image
+from .modeling_utils import PreTrainedModel
 from .utils.chat_template_utils import render_jinja_template
 from .video_utils import VideoInput, load_video
 
@@ -49,6 +50,7 @@ from .tokenization_utils_base import (
     TruncationStrategy,
 )
 from .utils import (
+    AUDIO_TOKENIZER_NAME,
     CHAT_TEMPLATE_DIR,
     CHAT_TEMPLATE_FILE,
     LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE,
@@ -491,7 +493,7 @@ class ProcessorMixin(PushToHubMixin):
     """
 
     attributes = ["feature_extractor", "tokenizer"]
-    optional_attributes = ["chat_template"]
+    optional_attributes = ["chat_template", "audio_tokenizer"]
     optional_call_args: list[str] = []
     # Names need to be attr_class for attr in attributes
     feature_extractor_class = None
@@ -519,6 +521,8 @@ class ProcessorMixin(PushToHubMixin):
                 f"This processor requires {len(self.attributes)} arguments: {', '.join(self.attributes)}. Got "
                 f"{len(args)} arguments instead."
             )
+
+        # TODO: check audio tokenizer class?
 
         # Check each arg is of the proper class (this will also catch a user initializing in the wrong order)
         for attribute_name, arg in kwargs.items():
@@ -569,6 +573,8 @@ class ProcessorMixin(PushToHubMixin):
             del output["feature_extractor"]
         if "chat_template" in output:
             del output["chat_template"]
+        if "audio_tokenizer" in output:
+            del output["audio_tokenizer"]
 
         # Some attributes have different names but containing objects that are not simple strings
         output = {
@@ -687,6 +693,7 @@ class ProcessorMixin(PushToHubMixin):
             save_directory, LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE
         )  # Legacy filename
         chat_template_dir = os.path.join(save_directory, CHAT_TEMPLATE_DIR)
+        output_audio_tokenizer_file = os.path.join(save_directory, AUDIO_TOKENIZER_NAME)
 
         processor_dict = self.to_dict()
         # Save `chat_template` in its own file. We can't get it from `processor_dict` as we popped it in `to_dict`
@@ -728,6 +735,19 @@ class ProcessorMixin(PushToHubMixin):
                     "Multiple chat templates are not supported in the legacy format. Please save them as "
                     "separate files using the `save_jinja_files` argument."
                 )
+
+        if self.audio_tokenizer is not None:
+            if not isinstance(self.audio_tokenizer, PreTrainedModel):
+                raise ValueError(f"`audio_tokenizer` can only be a `PreTrainedModel` but received {type(self.audio_tokenizer)}")
+
+            audio_tokenizer_dict = {
+                "model_type": self.audio_tokenizer.__class__.__name__,
+                "model_path": self.audio_tokenizer.name_or_path
+            }
+            audio_tokenizer_json = json.dumps(audio_tokenizer_dict, indent=2, sort_keys=True) + "\n"
+
+            with open(output_audio_tokenizer_file, "w", encoding="utf-8") as writer:
+                writer.write(audio_tokenizer_json)
 
         # For now, let's not save to `processor_config.json` if the processor doesn't have extra attributes and
         # `auto_map` is not specified.
@@ -1268,6 +1288,16 @@ class ProcessorMixin(PushToHubMixin):
                 attribute_class = cls.get_possibly_dynamic_module(class_name)
 
             args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
+
+        for optional_attribute in cls.optional_attributes:
+            if "audio_tokenizer" in optional_attribute:
+                # TODO: save class + full model in same dir to make dynamic inference here as well
+                output_audio_tokenizer_file = os.path.join(pretrained_model_name_or_path, AUDIO_TOKENIZER_NAME)
+                if os.path.isfile(output_audio_tokenizer_file):
+                    with open(output_audio_tokenizer_file, "r", encoding="utf-8") as f:
+                        audio_tokenizer_json = json.load(f)
+                        # TODO: load logic
+
         return args
 
     @staticmethod

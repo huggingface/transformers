@@ -76,9 +76,9 @@ class DiaProcessor(ProcessorMixin):
     feature_extractor_class = "DiaFeatureExtractor"
     tokenizer_class = "DiaTokenizer"
 
-    def __init__(self, feature_extractor, tokenizer, audio_model="descript/dac_44khz"):
-        super().__init__(feature_extractor, tokenizer)
-        self.audio_tokenizer = AutoModel.from_pretrained(audio_model)
+    def __init__(self, feature_extractor, tokenizer, audio_tokenizer="descript/dac_44khz"):
+        audio_tokenizer = AutoModel.from_pretrained(audio_tokenizer)  # TODO: move outside of init
+        super().__init__(feature_extractor, tokenizer, audio_tokenizer=audio_tokenizer)
 
     def __call__(
         self,
