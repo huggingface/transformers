@@ -27,8 +27,6 @@ rendered properly in your Markdown viewer.
 You can find all the original RoCBert checkpoints under the [weiweishi](https://huggingface.co/weiweishi) profile.
 
 > [!TIP]
-> This model was contributed by [weiweishi](https://huggingface.co/weiweishi).
->
 > Click on the RoCBert models in the right sidebar for more examples of how to apply RoCBert to different Chinese language tasks.
 
 <hfoptions id="usage">
