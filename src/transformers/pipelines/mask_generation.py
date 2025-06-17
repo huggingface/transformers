@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union, overload
+from typing import TYPE_CHECKING, Any, Optional, Union, overload
 
 from ..image_utils import load_image
 from ..utils import (
@@ -129,16 +129,16 @@ class MaskGenerationPipeline(ChunkPipeline):
         return preprocess_kwargs, forward_params, postprocess_kwargs
 
     @overload
-    def __call__(self, image: Union[str, "Image.Image"], *args: Any, **kwargs: Any) -> Dict[str, Any]: ...
+    def __call__(self, image: Union[str, "Image.Image"], *args: Any, **kwargs: Any) -> dict[str, Any]: ...
 
     @overload
     def __call__(
-        self, image: Union[List[str], List["Image.Image"]], *args: Any, **kwargs: Any
-    ) -> List[Dict[str, Any]]: ...
+        self, image: Union[list[str], list["Image.Image"]], *args: Any, **kwargs: Any
+    ) -> list[dict[str, Any]]: ...
 
     def __call__(
-        self, image: Union[str, "Image.Image", List[str], List["Image.Image"]], *args: Any, **kwargs: Any
-    ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+        self, image: Union[str, "Image.Image", list[str], list["Image.Image"]], *args: Any, **kwargs: Any
+    ) -> Union[dict[str, Any], list[dict[str, Any]]]:
         """
         Generates binary segmentation masks
 
