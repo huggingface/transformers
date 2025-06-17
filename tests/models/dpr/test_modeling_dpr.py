@@ -194,6 +194,10 @@ class DPRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.model_tester = DPRModelTester(self)
         self.config_tester = ConfigTester(self, config_class=DPRConfig, hidden_size=37)
 
+    @unittest.skip(reason="See issue #38820")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
