@@ -31,7 +31,7 @@ You can find all the original Bamba checkpoints under the [foundation-model-stac
 > [!TIP]
 > Click on the Bamba models in the right sidebar for more examples of how to apply Bamba to different text generation tasks.
 
-The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModel`] class.
+The example below demonstrates how to generate text with the [`AutoModel`] class.
 
 <hfoptions id="usage">
 <hfoption id="AutoModel">
