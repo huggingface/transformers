@@ -671,7 +671,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
                     "!!!<|begin_of_text|>I am late! I need to be at the airport in 20 minutes! I",
                 ],
                 ("xpu", 3): [
-                    "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are all doing well. Today I",
+                    "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are all doing well. I am",
                     "!!!<|begin_of_text|>I am late! I need to get to work! I have to get to the",
                 ],
             }
