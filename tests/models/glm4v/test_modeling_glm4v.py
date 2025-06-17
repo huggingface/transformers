@@ -189,6 +189,49 @@ class Glm4vModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
+    # GLM4V has images shaped as (bs*patch_len, dim) so we can't slice to batches in generate
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # We don't want a few model inputs in our model input dictionary for generation tests
+        input_keys_to_ignore = [
+            # we don't want to mask attention heads
+            "head_mask",
+            "decoder_head_mask",
+            "cross_attn_head_mask",
+            # we don't want encoder-decoder models to start from filled decoder ids
+            "decoder_input_ids",
+            "decoder_attention_mask",
+            # we'll set cache use in each test differently
+            "use_cache",
+            # Ignore labels if it is in the input dict
+            "labels",
+            # model-specific exceptions should overload/overwrite this function
+        ]
+
+        # The diff from the general `prepare_config_and_inputs_for_generate` lies here
+        patch_size = config.vision_config.patch_size
+        filtered_image_length = batch_size * (self.model_tester.image_size**2) // (patch_size**2)
+        filtered_inputs_dict = {
+            k: v[:batch_size, ...] if isinstance(v, torch.Tensor) else v
+            for k, v in inputs_dict.items()
+            if k not in input_keys_to_ignore
+        }
+        filtered_inputs_dict["pixel_values"] = inputs_dict["pixel_values"][:filtered_image_length]
+
+        # It is important set `eos_token_id` to `None` to avoid early stopping (would break for length-based checks)
+        text_gen_config = config.get_text_config(decoder=True)
+        if text_gen_config.eos_token_id is not None and text_gen_config.pad_token_id is None:
+            text_gen_config.pad_token_id = (
+                text_gen_config.eos_token_id
+                if isinstance(text_gen_config.eos_token_id, int)
+                else text_gen_config.eos_token_id[0]
+            )
+        text_gen_config.eos_token_id = None
+        text_gen_config.forced_eos_token_id = None
+
+        return config, filtered_inputs_dict
+
     def test_mismatching_num_image_tokens(self):
         """
         Tests that VLMs through an error with explicit message saying what is wrong
