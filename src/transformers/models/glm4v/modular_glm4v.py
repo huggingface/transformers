@@ -581,6 +581,7 @@ class Glm4vVisionAttention(nn.Module):
         self.config = config
         self.num_heads = config.num_heads
         self.head_dim = config.hidden_size // self.num_heads
+        self.num_key_value_groups = 1
         self.scale = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.qkv = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=config.attention_bias)
@@ -618,7 +619,11 @@ class Glm4vVisionAttention(nn.Module):
         k = k.transpose(0, 1).unsqueeze(0)
         v = v.transpose(0, 1).unsqueeze(0)
         attention_mask = attention_mask.unsqueeze(1)
-        attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
         attn_output, _ = attention_interface(
             self,
             q,
@@ -761,6 +766,11 @@ class Glm4vPreTrainedModel(Qwen2_5_VLPreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, Glm4vRMSNorm):
             module.weight.data.fill_(1.0)
+        elif isinstance(module, nn.LayerNorm):
+            if module.weight is not None:
+                module.weight.data.fill_(1.0)
+            if module.bias is not None:
+                module.bias.data.zero_()
 
 
 class Glm4vVisionModel(Glm4vPreTrainedModel):

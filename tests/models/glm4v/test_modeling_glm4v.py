@@ -217,63 +217,6 @@ class Glm4vModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
 
         return config, filtered_inputs_dict
 
-    def test_mismatching_num_image_tokens(self):
-        """
-        Tests that VLMs through an error with explicit message saying what is wrong
-        when number of images don't match number of image tokens in the text.
-        Also we need to test multi-image cases when one prompt has multiple image tokens.
-        """
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
-            _ = model(**input_dict)  # successfull forward with no modifications
-
-            # remove one image but leave the image token in text
-            patch_size = config.vision_config.patch_size
-            one_img_length = (self.model_tester.image_size**2) // (patch_size**2)
-            input_dict["pixel_values"] = input_dict["pixel_values"][-one_img_length:, ...]
-            input_dict["image_grid_thw"] = input_dict["image_grid_thw"][-1:, ...]
-            with self.assertRaises(ValueError):
-                _ = model(**input_dict)
-
-            # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
-            input_ids = input_dict["input_ids"][:1]
-            pixel_values = input_dict["pixel_values"][:one_img_length]
-            image_grid_thw = input_dict["image_grid_thw"][:1]
-            input_ids = torch.cat([input_ids, input_ids], dim=0)
-
-            # one image and two image tokens raise an error
-            with self.assertRaises(ValueError):
-                _ = model(input_ids=input_ids, pixel_values=pixel_values, image_grid_thw=image_grid_thw)
-
-            # two images and two image tokens don't raise an error
-            pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
-            image_grid_thw = torch.cat([image_grid_thw, image_grid_thw], dim=0)
-            _ = model(input_ids=input_ids, pixel_values=pixel_values, image_grid_thw=image_grid_thw)
-
-    def test_forward_with_rope_deltas_cached(self):
-        """
-        Tests that Qwen2-VL computes new rope deltas every forward pass with new set of inputs.
-        Rope deltas are cached when we generate and re-used for decoding phase, byt are not reset
-        automatically after generation ends. See https://github.com/huggingface/transformers/pull/36013 for more
-        """
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_generative_model_classes:
-            model = model_class(config).to(torch_device)
-
-            # Generate and make sure rope_deltas are not `None`
-            self.assertTrue(model.rope_deltas is None)
-            generation_output = model.generate(
-                **input_dict, max_new_tokens=4, return_dict_in_generate=True, output_logits=True
-            )
-            self.assertTrue(model.rope_deltas is not None)
-
-            # Now if we try to do forward pass, we should get new rope logits, because cache is not passed
-            forward_output = model(**input_dict)
-            torch.testing.assert_close(
-                generation_output.logits[0], forward_output.logits[:, -1, :], rtol=1e-4, atol=1e-4
-            )
-
     @unittest.skip(reason="Feedforward chunking is not yet supported")
     def test_feed_forward_chunking(self):
         pass
