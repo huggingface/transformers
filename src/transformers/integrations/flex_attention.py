@@ -235,6 +235,13 @@ def flex_attention_forward(
     head_mask: Optional[torch.Tensor] = None,
     **kwargs,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    `query` has shape `(batch, num_heads, q_len, head_dim)`, while `key`,
+    `value` have shape `(batch, num_key_value_groups, kv_len, head_dim)`. Here,
+    `num_key_value_groups <= num_heads` and
+    `num_heads % num_key_value_groups == 0`.
+
+    """
     if head_mask is not None:
         logger.warning_once(
             "`flex_attention` does not support `head_mask`. Please set your attention to `eager` if you want this feature."
