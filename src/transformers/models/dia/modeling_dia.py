@@ -599,13 +599,13 @@ class DiaEncoderLayer(GradientCheckpointingLayer):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         residual = hidden_states
         normed_states = self.pre_sa_norm(hidden_states)
-        hidden_states, self_attn_weights = self.self_attention(
+        self_attn_output, self_attn_weights = self.self_attention(
             normed_states,
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             **kwargs,
         )
-        hidden_states = residual + hidden_states
+        hidden_states = residual + self_attn_output
 
         residual = hidden_states
         normed_states = self.post_sa_norm(hidden_states)
@@ -732,8 +732,8 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
         hidden_states = residual + cross_states
 
         residual = hidden_states
-        x_norm = self.pre_mlp_norm(hidden_states)
-        mlp_out = self.mlp(x_norm)
+        normed_states = self.pre_mlp_norm(hidden_states)
+        mlp_out = self.mlp(normed_states)
         hidden_states = residual + mlp_out
 
         return hidden_states, self_attn_weights, cross_attn_weights
