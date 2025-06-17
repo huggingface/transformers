@@ -36,23 +36,22 @@ from transformers.utils.import_utils import _is_package_available
 # Provide just the list of layer keys you want to fix
 shape_mappings = [
     "encoder.layers.*.mlp.gate_up_proj.weight",
-    "decoder.layers.*.cross_attention.k_proj.weight",
-    "decoder.logits_dense.weight",
-    "encoder.layers.*.self_attention.q_proj.weight",
     "encoder.layers.*.mlp.down_proj.weight",
+    "encoder.layers.*.self_attention.q_proj.weight",
+    "encoder.layers.*.self_attention.k_proj.weight",
+    "encoder.layers.*.self_attention.v_proj.weight",
+    "encoder.layers.*.self_attention.o_proj.weight",
+    "decoder.layers.*.mlp.gate_up_proj.weight",
     "decoder.layers.*.mlp.down_proj.weight",
+    "decoder.layers.*.self_attention.q_proj.weight",
+    "decoder.layers.*.self_attention.k_proj.weight",
     "decoder.layers.*.self_attention.v_proj.weight",
     "decoder.layers.*.self_attention.o_proj.weight",
-    "encoder.embedding.weight",
-    "encoder.layers.*.self_attention.k_proj.weight",
     "decoder.layers.*.cross_attention.q_proj.weight",
-    "decoder.layers.*.self_attention.k_proj.weight",
-    "decoder.layers.*.self_attention.q_proj.weight",
-    "encoder.layers.*.self_attention.o_proj.weight",
-    "decoder.layers.*.cross_attention.o_proj.weight",
-    "encoder.layers.*.self_attention.v_proj.weight",
-    "decoder.layers.*.mlp.gate_up_proj.weight",
+    "decoder.layers.*.cross_attention.k_proj.weight",
     "decoder.layers.*.cross_attention.v_proj.weight",
+    "decoder.layers.*.cross_attention.o_proj.weight",
+    "decoder.logits_dense.weight",
 ]
 
 # Provide renamings here
@@ -60,17 +59,6 @@ rename_mapping = {
     "mlp.wo": "mlp.down_proj",
     "mlp.wi_fused": "mlp.gate_up_proj",
 }
-
-# Transpose reshape based on dense general layer before
-transpose_reshape_namings = [
-    "q_proj",
-    "k_proj",
-    "v_proj",
-    "o_proj",
-    "wi_fused",
-    "wo",
-    "logits_dense",
-]
 
 
 def get_generation_config(config):
@@ -84,44 +72,6 @@ def get_generation_config(config):
     model_generation_config.max_length = 3072  # Decoder max length
 
     return model_generation_config
-
-
-def reshape_or_transpose(tensor, target_tensor, key):
-    """Try reshaping or transposing tensor to match the shape of target_tensor."""
-    numel = tensor.numel()
-    target_shape = target_tensor
-    target_numel = target_tensor.numel()
-
-    if numel != target_numel:
-        raise ValueError(f"Cannot fix tensor of {tensor.shape} to {target_shape} (element count mismatch)")
-
-    # Direct reshape
-    try:
-        # Dense general all need a transpose even if it is the same shape
-        transpose_reshape = False
-        for name in transpose_reshape_namings:
-            if name in key:
-                transpose_reshape = True
-                break
-
-        if transpose_reshape:
-            reshaped = tensor.reshape(target_shape[1], target_shape[0]).T
-        elif tensor.shape[0] != target_shape[0] and tensor.shape[-1] != target_shape[-1]:
-            reshaped = tensor.permute(1, 2, 0).view(target_shape)
-        else:
-            reshaped = tensor.view(target_shape)
-
-        return reshaped, "reshaped"
-    except Exception:
-        pass
-
-    # Transpose if 2D and transpose shape fits
-    if tensor.ndim == 2 and tensor.T.shape == target_shape:
-        return tensor.T, "transposed"
-
-    # Flatten-reshape fallback
-    reshaped = tensor.view(-1).reshape(target_shape)
-    return reshaped, "flattened_reshape"
 
 
 def convert_dia_model_to_hf(checkpoint_path, verbose=False):
@@ -165,6 +115,7 @@ def convert_dia_model_to_hf(checkpoint_path, verbose=False):
             if original in key:
                 key = re.sub(original, rename, key)
 
+        # decoder multi channel
         if "embeddings" in key:
             embeddings_key = key.rsplit(".", 2)[0] + ".embed.weight"
             if embeddings_key in embeddings:
@@ -177,13 +128,13 @@ def convert_dia_model_to_hf(checkpoint_path, verbose=False):
             if "logits_dense" in key:
                 key = re.sub("decoder.logits_dense", "logits_dense", key).removeprefix("model.")
 
+            # dense general
             if key in hf_model_keys:
                 target_shape = hf_model_dict[key].shape
                 try:
-                    new_tensor, method = reshape_or_transpose(tensor, target_shape, key)
-                    tensor = new_tensor
+                    tensor = tensor.reshape(target_shape[1], target_shape[0]).T
                     if verbose:
-                        print(f"{key}: {method} from {tensor.shape} to {target_shape}")
+                        print(f"{key}: transpose reshaped from {tensor.shape} to {target_shape}")
                 except Exception as e:
                     print(f"WARNING: Could not reshape {key}: {e}")
 
