@@ -18,8 +18,6 @@ import numpy as np
 import math
 from functools import reduce
 
-from transformers.models.perception_lm.image_transform import get_image_transform
-
 from ...image_processing_utils import (
     BatchFeature,
 )
@@ -73,11 +71,6 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
 
     def __init__(self, **kwargs: Unpack[PerceptionLMFastImageProcessorKwargs]) -> None:
         super().__init__(**kwargs)
-
-    def to_dict(self):
-        dictionary = super().to_dict()
-        dictionary["image_transform"] = self.image_transform.to_dict()
-        return dictionary
 
     @staticmethod
     def _factors(n: int):
