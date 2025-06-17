@@ -182,7 +182,7 @@ class AdamWeightDecay(Adam):
     Adam enables L2 weight decay and clip_by_global_norm on gradients. Just adding the square of the weights to the
     loss function is *not* the correct way of using L2 regularization/weight decay with Adam, since that will interact
     with the m and v parameters in strange ways as shown in [Decoupled Weight Decay
-    Regularization](https://arxiv.org/abs/1711.05101).
+    Regularization](https://huggingface.co/papers/1711.05101).
 
     Instead we want to decay the weights in a manner that doesn't interact with the m/v parameters. This is equivalent
     to adding the square of the weights to the loss with plain (non-momentum) SGD.
@@ -198,7 +198,7 @@ class AdamWeightDecay(Adam):
             The epsilon parameter in Adam, which is a small constant for numerical stability.
         amsgrad (`bool`, *optional*, defaults to `False`):
             Whether to apply AMSGrad variant of this algorithm or not, see [On the Convergence of Adam and
-            Beyond](https://arxiv.org/abs/1904.09237).
+            Beyond](https://huggingface.co/papers/1904.09237).
         weight_decay_rate (`float`, *optional*, defaults to 0.0):
             The weight decay to apply.
         include_in_weight_decay (`List[str]`, *optional*):

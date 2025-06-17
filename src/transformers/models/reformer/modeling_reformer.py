@@ -602,7 +602,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
     def _hash_vectors(self, vectors, num_hashes, attention_mask, increase_num_buckets=False):
         batch_size = vectors.shape[0]
 
-        # See https://arxiv.org/pdf/1509.02897.pdf
+        # See https://huggingface.co/papers/1509.02897
         # We sample a different random rotation for each round of hashing to
         # decrease the probability of hash misses.
         if isinstance(self.num_buckets, int):
@@ -778,7 +778,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             del mask
 
         # Self mask is ALWAYS applied.
-        # From the reformer paper (https://arxiv.org/pdf/2001.04451.pdf):
+        # From the reformer paper (https://huggingface.co/papers/2001.04451):
         # " While attention to the future is not allowed, typical implementations of the
         # Transformer do allow a position to attend to itself.
         # Such behavior is undesirable in a shared-QK formulation because the dot-product

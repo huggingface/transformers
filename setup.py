@@ -120,7 +120,6 @@ _deps = [
     "huggingface-hub>=0.30.0,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
-    "isort>=5.5.4",
     "jax>=0.4.1,<=0.4.13",
     "jaxlib>=0.4.1,<=0.4.13",
     "jieba",
@@ -190,7 +189,7 @@ _deps = [
     "tiktoken",
     "timm<=1.0.11",
     "tokenizers>=0.21,<0.22",
-    "torch>=2.1,<2.7",  # Installing torch 2.7 results in slower compiled LLMs. Pinned while we investigate.
+    "torch>=2.1",
     "torchaudio",
     "torchvision",
     "pyctcdecode>=0.4.0",
@@ -368,7 +367,7 @@ extras["testing"] = (
 
 extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"] + extras["sentencepiece"]
 extras["ruff"] = deps_list("ruff")
-extras["quality"] = deps_list("datasets", "isort", "ruff", "GitPython", "urllib3", "libcst", "rich", "pandas")
+extras["quality"] = deps_list("datasets", "ruff", "GitPython", "urllib3", "libcst", "rich", "pandas")
 
 extras["all"] = (
     extras["tf"]

@@ -876,7 +876,7 @@ class M2M100Encoder(M2M100PreTrainedModel):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
 
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
             skip_the_layer = True if self.training and (dropout_probability < self.layerdrop) else False
@@ -1135,7 +1135,7 @@ class M2M100Decoder(M2M100PreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
             skip_the_layer = True if self.training and (dropout_probability < self.layerdrop) else False

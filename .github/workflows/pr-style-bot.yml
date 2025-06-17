@@ -6,29 +6,13 @@ on:
     types: [created]
 
 permissions:
-  contents: write
   pull-requests: write
 
 jobs:
   style:
-    uses: huggingface/huggingface_hub/.github/workflows/style-bot-action.yml@639ee721e149a281fe726a50a2cc1354b48bc463
+    uses: huggingface/huggingface_hub/.github/workflows/style-bot-action.yml@main
     with:
       python_quality_dependencies: "[quality]"
       style_command_type: "default"
     secrets:
-      bot_token: ${{ secrets.GITHUB_TOKEN }}
-
-  check-outputs:
-    runs-on: ubuntu-latest
-    needs: style
-    steps:
-      - run: echo ${{ needs.style.outputs.pr_number }}
-      - run: echo ${{ needs.style.outputs.new_commit_sha }}
-
-  trigger:
-    needs: style
-    if: needs.style.outputs.new_commit_sha != ''
-    uses: "./.github/workflows/build_pr_documentation.yml"
-    with:
-      pr_number: ${{ needs.style.outputs.pr_number }}
-      commit_sha: ${{ needs.style.outputs.new_commit_sha }}
+      bot_token: ${{ secrets.HF_STYLE_BOT_ACTION }}

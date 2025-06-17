@@ -114,7 +114,7 @@ def build_alibi_tensor(attention_mask: jnp.ndarray, num_heads: int, dtype: Optio
     relies on a translation invariance of softmax for quick implementation: with l being a tensor, and a fixed value
     `softmax(l+a) = softmax(l)`. Based on
     https://github.com/ofirpress/attention_with_linear_biases/blob/a35aaca144e0eb6b789dfcb46784c4b8e31b7983/fairseq/models/transformer.py#L742
-    Link to paper: https://arxiv.org/abs/2108.12409
+    Link to paper: https://huggingface.co/papers/2108.12409
 
     Args:
         attention_mask (`jnp.ndarray`):
