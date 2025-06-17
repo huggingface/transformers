@@ -16,6 +16,14 @@ rendered properly in your Markdown viewer.
 
 # Moonshine
 
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+          <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+          <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+          <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
+
 [Moonshine](https://huggingface.co/papers/2410.15608) is an encoder-decoder speech recognition model optimized for real-time transcription and recognizing voice command. Instead of using traditional absolute position embeddings, Moonshine uses Rotary Position Embedding (RoPE) to handle speech with varying lengths without using padding. This improves efficiency during inference, making it ideal for resource-constrained devices.
 
 You can find all the original Moonshine checkpoints under the [Useful Sensors](https://huggingface.co/UsefulSensors) organization.
@@ -24,8 +32,6 @@ You can find all the original Moonshine checkpoints under the [Useful Sensors](h
 > Click on the Moonshine models in the right sidebar for more examples of how to apply Moonshine to different speech recognition tasks.
 
 The example below demonstrates how to transcribe speech into text with [`Pipeline`] or the [`AutoModel`] class.
-
-
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -78,10 +84,6 @@ transcription[0]
 ```
 </hfoption>
 </hfoptions>
-
-## Resources
-
-- [Automatic speech recognition task guide](../tasks/asr)
 
 ## MoonshineConfig
 
