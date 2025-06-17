@@ -89,7 +89,7 @@ class Wav2Vec2Processor(ProcessorMixin):
             audio (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`, *optional*):
                 When the first argument is an audio array, or the `audio` argument is present,
                 Wav2Vec2FeatureExtractor's [`~Wav2Vec2FeatureExtractor.__call__`] will be invoked.
-            text:
+            text (`str`, `List[str]`, *optional*):
                 When the `text` argument is present, PreTrainedTokenizer’s [`~PreTrainedTokenizer.__call__`] will be invoked.
 
         If both args above are present, both call() methods will be invoked.  Please refer to the docstring of Wav2Vec2FeatureExtractor's
