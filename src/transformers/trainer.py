@@ -3790,8 +3790,8 @@ class Trainer:
             kwargs["learning_rate"] = self._get_learning_rate()
 
         # Deciding whether to perform optimizer step
-        is_final_step = self.control.should_training_stop or (
-            self._current_flos >= self.args.max_steps if self.args.max_steps > 0 else False
+        is_final_step = (
+            self.control.should_training_stop or (self.state.global_step + 1 >= self.args.max_steps if self.args.max_steps > 0 else False)
         )
         should_step = self._accumulated_steps == self.args.gradient_accumulation_steps or is_final_step
 
