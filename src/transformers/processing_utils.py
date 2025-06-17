@@ -24,7 +24,7 @@ import typing
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional, TypedDict, Union
+from typing import Any, Optional, TypedDict, Union
 
 import numpy as np
 import typing_extensions
@@ -155,11 +155,11 @@ class ImagesKwargs(TypedDict, total=False):
     Attributes:
         do_resize (`bool`, *optional*):
             Whether to resize the image.
-        size (`Dict[str, int]`, *optional*):
+        size (`dict[str, int]`, *optional*):
             Resize the shorter side of the input to `size["shortest_edge"]`.
         size_divisor (`int`, *optional*):
             The size by which to make sure both the height and width can be divided.
-        crop_size (`Dict[str, int]`, *optional*):
+        crop_size (`dict[str, int]`, *optional*):
             Desired output size when applying center-cropping.
         resample (`PILImageResampling`, *optional*):
             Resampling filter to use if resizing the image.
@@ -169,13 +169,13 @@ class ImagesKwargs(TypedDict, total=False):
             Scale factor to use if rescaling the image.
         do_normalize (`bool`, *optional*):
             Whether to normalize the image.
-        image_mean (`float` or `List[float]`, *optional*):
+        image_mean (`float` or `list[float]`, *optional*):
             Mean to use if normalizing the image.
-        image_std (`float` or `List[float]`, *optional*):
+        image_std (`float` or `list[float]`, *optional*):
             Standard deviation to use if normalizing the image.
         do_pad (`bool`, *optional*):
             Whether to pad the image to the `(max_height, max_width)` of the images in the batch.
-        pad_size (`Dict[str, int]`, *optional*):
+        pad_size (`dict[str, int]`, *optional*):
             The size `{"height": int, "width" int}` to pad the images to.
         do_center_crop (`bool`, *optional*):
             Whether to center crop the image.
@@ -190,7 +190,7 @@ class ImagesKwargs(TypedDict, total=False):
     do_resize: Optional[bool]
     size: Optional[dict[str, int]]
     size_divisor: Optional[int]
-    crop_size: Optional[Dict[str, int]]
+    crop_size: Optional[dict[str, int]]
     resample: Optional[Union["PILImageResampling", int]]
     do_rescale: Optional[bool]
     rescale_factor: Optional[float]
@@ -214,7 +214,7 @@ class VideosKwargs(TypedDict, total=False):
             Whether to convert the video to RGB fromat.
         do_resize (`bool`):
             Whether to resize the video.
-        size (`Dict[str, int]`, *optional*):
+        size (`dict[str, int]`, *optional*):
             Resize the shorter side of the input to `size["shortest_edge"]`.
         default_to_square (`bool`, *optional*, defaults to `self.default_to_square`):
             Whether to default to a square when resizing, if size is an int.
@@ -228,9 +228,9 @@ class VideosKwargs(TypedDict, total=False):
             Scale factor to use if rescaling the video.
         do_normalize (`bool`, *optional*):
             Whether to normalize the video.
-        image_mean (`float` or `List[float]`, *optional*):
+        image_mean (`float` or `list[float]`, *optional*):
             Mean to use if normalizing the video.
-        image_std (`float` or `List[float]`, *optional*):
+        image_std (`float` or `list[float]`, *optional*):
             Standard deviation to use if normalizing the video.
         do_pad (`bool`, *optional*):
             Whether to pad the video to the `(max_height, max_width)` of the videos in the batch.
@@ -244,7 +244,7 @@ class VideosKwargs(TypedDict, total=False):
             Maximum number of frames to sample when `do_sample_frames=True`.
         fps (`int`, *optional*):
             Target frames to sample per second when `do_sample_frames=True`.
-        crop_size (`Dict[str, int]`, *optional*):
+        crop_size (`dict[str, int]`, *optional*):
             Desired output size when applying center-cropping.
         data_format (`ChannelDimension` or `str`, *optional*):
             The channel dimension format for the output video.
@@ -265,7 +265,7 @@ class VideosKwargs(TypedDict, total=False):
     image_std: Optional[Union[float, list[float]]]
     do_pad: Optional[bool]
     do_center_crop: Optional[bool]
-    crop_size: Optional[Dict[str, int]]
+    crop_size: Optional[dict[str, int]]
     data_format: Optional[ChannelDimension]
     input_data_format: Optional[Union[str, ChannelDimension]]
     device: Optional[str]
@@ -282,7 +282,7 @@ class AudioKwargs(TypedDict, total=False):
     Attributes:
         sampling_rate (`int`, *optional*):
             The sampling rate at which the `raw_speech` input was sampled.
-        raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
+        raw_speech (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`):
             The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
             values, a list of numpy arrays or a list of list of float values. Must be mono channel audio, not
             stereo, i.e. single float per timestep.
@@ -377,13 +377,13 @@ class TokenizerChatTemplateKwargs(TypedDict, total=False):
     """
     Keyword arguments for tokenizer's `apply_chat_template`, when it is called from within a processor.
 
-    tools (`List[Dict]`, *optional*):
+    tools (`list[Dict]`, *optional*):
         A list of tools (callable functions) that will be accessible to the model. If the template does not
         support function calling, this argument will have no effect. Each tool should be passed as a JSON Schema,
         giving the name, description and argument types for the tool. See our
         [chat templating guide](https://huggingface.co/docs/transformers/main/en/chat_templating#automated-function-conversion-for-tool-use)
         for more information.
-    documents (`List[Dict[str, str]]`, *optional*):
+    documents (`list[dict[str, str]]`, *optional*):
         A list of dicts representing documents that will be accessible to the model if it is performing RAG
         (retrieval-augmented generation). If the template does not support RAG, this argument will have no
         effect. We recommend that each document should be a dict containing "title" and "text" keys. Please
@@ -550,7 +550,7 @@ class ProcessorMixin(PushToHubMixin):
         Serializes this instance to a Python dictionary.
 
         Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this processor instance.
+            `dict[str, Any]`: Dictionary of all the attributes that make up this processor instance.
         """
         output = copy.deepcopy(self.__dict__)
 
@@ -635,7 +635,7 @@ class ProcessorMixin(PushToHubMixin):
                 Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
                 repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
                 namespace).
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
         use_auth_token = kwargs.pop("use_auth_token", None)
@@ -772,7 +772,7 @@ class ProcessorMixin(PushToHubMixin):
                 specify the folder name here.
 
         Returns:
-            `Tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the processor object.
+            `tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the processor object.
         """
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
@@ -981,11 +981,11 @@ class ProcessorMixin(PushToHubMixin):
         Instantiates a type of [`~processing_utils.ProcessingMixin`] from a Python dictionary of parameters.
 
         Args:
-            processor_dict (`Dict[str, Any]`):
+            processor_dict (`dict[str, Any]`):
                 Dictionary that will be used to instantiate the processor object. Such a dictionary can be
                 retrieved from a pretrained checkpoint by leveraging the
                 [`~processing_utils.ProcessingMixin.to_dict`] method.
-            kwargs (`Dict[str, Any]`):
+            kwargs (`dict[str, Any]`):
                 Additional parameters from which to initialize the processor object.
 
         Returns:
@@ -1405,7 +1405,7 @@ class ProcessorMixin(PushToHubMixin):
         ]
 
         Args:
-            conversation (`Union[List[Dict, [str, str]], List[List[Dict[str, str]]]]`):
+            conversation (`Union[list[Dict, [str, str]], list[list[dict[str, str]]]]`):
                 The conversation to format.
             chat_template (`Optional[str]`, *optional*):
                 The Jinja template to use for formatting the conversation. If not provided, the tokenizer's
@@ -1607,7 +1607,7 @@ class ProcessorMixin(PushToHubMixin):
                 Additional arguments to be passed to the tokenizer's `batch_decode method`.
 
         Returns:
-            `List[str]`: The decoded text.
+            `list[str]`: The decoded text.
         """
         return self.tokenizer.batch_decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)
 

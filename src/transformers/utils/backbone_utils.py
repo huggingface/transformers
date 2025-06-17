@@ -91,9 +91,9 @@ def _align_output_features_output_indices(
         - `out_indices` and `out_features` set: input `out_indices` and `out_features` are returned.
 
     Args:
-        out_features (`List[str]`): The names of the features for the backbone to output.
-        out_indices (`List[int]` or `Tuple[int]`): The indices of the features for the backbone to output.
-        stage_names (`List[str]`): The names of the stages of the backbone.
+        out_features (`list[str]`): The names of the features for the backbone to output.
+        out_indices (`list[int]` or `tuple[int]`): The indices of the features for the backbone to output.
+        stage_names (`list[str]`): The names of the stages of the backbone.
     """
     if out_indices is None and out_features is None:
         out_indices = [len(stage_names) - 1]
@@ -122,9 +122,9 @@ def get_aligned_output_features_output_indices(
         - `out_indices` and `out_features` set: they are verified to be aligned.
 
     Args:
-        out_features (`List[str]`): The names of the features for the backbone to output.
-        out_indices (`List[int]` or `Tuple[int]`): The indices of the features for the backbone to output.
-        stage_names (`List[str]`): The names of the stages of the backbone.
+        out_features (`list[str]`): The names of the features for the backbone to output.
+        out_indices (`list[int]` or `tuple[int]`): The indices of the features for the backbone to output.
+        stage_names (`list[str]`): The names of the stages of the backbone.
     """
     out_indices = list(out_indices) if out_indices is not None else None
     # First verify that the out_features and out_indices are valid
