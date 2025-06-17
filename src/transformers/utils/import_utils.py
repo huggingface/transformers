@@ -225,6 +225,7 @@ _triton_available = _is_package_available("triton")
 _spqr_available = _is_package_available("spqr_quant")
 _rich_available = _is_package_available("rich")
 _kernels_available = _is_package_available("kernels")
+_matplotlib_available = _is_package_available("matplotlib")
 
 _torch_version = "N/A"
 _torch_available = False
@@ -1441,6 +1442,10 @@ def is_triton_available():
 
 def is_rich_available():
     return _rich_available
+
+
+def is_matplotlib_available():
+    return _matplotlib_available
 
 
 def check_torch_load_is_safe():
