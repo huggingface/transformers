@@ -315,9 +315,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
         Tests the pipeline with pre-tokenized inputs (is_split_into_words=True)
         and validates that the character offsets are correct.
         """
-        token_classifier = pipeline(
-            task="ner", model="dslim/bert-base-NER", aggregation_strategy="simple"
-        )
+        token_classifier = pipeline(task="ner", model="dslim/bert-base-NER", aggregation_strategy="simple")
 
         # Input is a list of words
         words = ["Hello", "Sarah", "lives", "in", "New", "York"]
@@ -331,9 +329,9 @@ class TokenClassificationPipelineTests(unittest.TestCase):
         self.assertEqual(
             nested_simplify(output),
             [
-                {'entity_group': 'PER', 'score': ANY(float), 'word': 'Sarah', 'start': 6, 'end': 11},
-                {'entity_group': 'LOC', 'score': ANY(float), 'word': 'New York', 'start': 21, 'end': 29},
-            ]
+                {"entity_group": "PER", "score": ANY(float), "word": "Sarah", "start": 6, "end": 11},
+                {"entity_group": "LOC", "score": ANY(float), "word": "New York", "start": 21, "end": 29},
+            ],
         )
 
         # Also test batching with pre-tokenized inputs
@@ -348,14 +346,14 @@ class TokenClassificationPipelineTests(unittest.TestCase):
             nested_simplify(batch_output),
             [
                 [
-                    {'entity_group': 'PER', 'score': ANY(float), 'word': 'Sarah', 'start': 6, 'end': 11},
-                    {'entity_group': 'LOC', 'score': ANY(float), 'word': 'New York', 'start': 21, 'end': 29},
+                    {"entity_group": "PER", "score": ANY(float), "word": "Sarah", "start": 6, "end": 11},
+                    {"entity_group": "LOC", "score": ANY(float), "word": "New York", "start": 21, "end": 29},
                 ],
                 [
-                    {'entity_group': 'PER', 'score': ANY(float), 'word': 'Wolfgang', 'start': 12, 'end': 20},
-                    {'entity_group': 'LOC', 'score': ANY(float), 'word': 'Berlin', 'start': 36, 'end': 42},
-                ]
-            ]
+                    {"entity_group": "PER", "score": ANY(float), "word": "Wolfgang", "start": 12, "end": 20},
+                    {"entity_group": "LOC", "score": ANY(float), "word": "Berlin", "start": 36, "end": 42},
+                ],
+            ],
         )
 
     @require_torch

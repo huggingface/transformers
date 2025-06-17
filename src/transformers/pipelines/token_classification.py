@@ -656,4 +656,5 @@ class TokenClassificationPipeline(ChunkPipeline):
 
         return entity_groups
 
+
 NerPipeline = TokenClassificationPipeline
