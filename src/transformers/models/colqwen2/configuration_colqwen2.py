@@ -14,7 +14,7 @@
 
 
 from copy import deepcopy
-from typing import Any, Dict
+from typing import Any
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -54,7 +54,7 @@ class ColQwen2Config(PretrainedConfig):
     """
 
     model_type = "colqwen2"
-    sub_configs: Dict[str, Any] = {"vlm_config": PretrainedConfig}
+    sub_configs: dict[str, Any] = {"vlm_config": PretrainedConfig}
 
     def __init__(
         self,

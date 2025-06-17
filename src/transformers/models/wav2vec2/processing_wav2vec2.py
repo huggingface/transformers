@@ -18,7 +18,7 @@ Speech processor class for Wav2Vec2
 
 import warnings
 from contextlib import contextmanager
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
@@ -75,7 +75,7 @@ class Wav2Vec2Processor(ProcessorMixin):
     def __call__(
         self,
         audio: AudioInput = None,
-        text: Optional[Union[str, List[str], TextInput, PreTokenizedInput]] = None,
+        text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
         images=None,
         videos=None,
         **kwargs: Unpack[Wav2Vec2ProcessorKwargs],

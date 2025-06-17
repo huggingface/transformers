@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import math
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 import numpy as np
 import torch
@@ -489,7 +489,7 @@ class Phi4MultimodalVisionAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
@@ -1500,7 +1500,7 @@ class Phi4MultimodalModel(Phi3Model, nn.Module):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_pixel_values: Optional[torch.FloatTensor] = None,
         image_sizes: Optional[torch.LongTensor] = None,
@@ -1640,7 +1640,7 @@ class Phi4MultimodalForCausalLM(Phi3ForCausalLM, nn.Module):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_pixel_values: Optional[torch.FloatTensor] = None,
         image_sizes: Optional[torch.LongTensor] = None,
