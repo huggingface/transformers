@@ -67,10 +67,10 @@ class NllbMoeConfig(PretrainedConfig):
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         encoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
         decoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
         second_expert_policy ( `str`, *optional*, default to `"all"`):
             The policy used for the sampling the probability of being sampled to a second expert for each token.
@@ -94,7 +94,7 @@ class NllbMoeConfig(PretrainedConfig):
             Frequency of the sparse layers in the decoder. 4 means that one out of 4 layers will be sparse.
         router_dtype (`str`, *optional*, default to `"float32"`):
             The `dtype` used for the routers. It is preferable to keep the `dtype` to `"float32"` as specified in the
-            *selective precision* discussion in [the paper](https://arxiv.org/abs/2101.03961).
+            *selective precision* discussion in [the paper](https://huggingface.co/papers/2101.03961).
         router_ignore_padding_tokens (`bool`, *optional*, defaults to `False`):
             Whether to ignore padding tokens when routing. if `False`, the padding tokens are not routed to any
             experts.

@@ -431,7 +431,7 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
 
             ratio_h, ratio_w = (
                 target_size[0] // size.height,
-                target_size[1] // size.height,
+                target_size[1] // size.width,
             )
             # split into tiles
             processed_images = split_to_tiles(processed_images, ratio_h, ratio_w)

@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Any, Dict, List, Union
 
 from ..utils import add_end_docstrings
 from .base import GenericTensor, Pipeline, build_pipeline_init_args
@@ -73,9 +73,9 @@ class FeatureExtractionPipeline(Pipeline):
         elif self.framework == "tf":
             return model_outputs[0].numpy().tolist()
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args: Union[str, List[str]], **kwargs: Any) -> Union[Any, List[Any]]:
         """
-        Extract the features of the input(s).
+        Extract the features of the input(s) text.
 
         Args:
             args (`str` or `List[str]`): One or several texts (or one list of texts) to get the features of.

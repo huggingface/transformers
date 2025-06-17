@@ -419,7 +419,7 @@ def write_model(
         gc.collect()
 
         print("Loading the checkpoint in a Llama model.")
-        model = LlamaForCausalLM.from_pretrained(tmp_model_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True)
+        model = LlamaForCausalLM.from_pretrained(tmp_model_path, torch_dtype=torch.bfloat16)
 
         # Avoid saving this as part of the config.
         del model.config._name_or_path
