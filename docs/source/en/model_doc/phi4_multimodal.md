@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Phi4 Multimodal
 
-[Phi4 Multimodal](https://arxiv.org/pdf/2503.01743) is a small, efficient AI model from Microsoft that can understand and respond to text, images, and audio together. It’s part of the Phi family of models, which focus on being lightweight but still highly capable.Designed to run without requiring huge GPUs or high-end servers, making it more accessible for developers and researchers.Microsoft used only safe and filtered data for training
+[Phi4 Multimodal](https://huggingface.co/papers/2503.01743) is a multimodal model capable of text, image, and speech and audio inputs or any combination of these. It features a mixture of LoRA adapters for handling different inputs, and each input is routed to the appropriate encoder.
 
 You can find all the original Phi4 Multimodal checkpoints under the [Phi4](https://huggingface.co/collections/microsoft/phi-4-677e9380e514feb5577a40e4) collection.
 
