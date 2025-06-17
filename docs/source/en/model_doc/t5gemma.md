@@ -75,6 +75,10 @@ echo -e "Question: Why is the sky blue? Answer:" | transformers run --task text2
 
 [[autodoc]] T5GemmaConfig
 
+## T5GemmaModuleConfig
+
+[[autodoc]] T5GemmaModuleConfig
+
 ## T5GemmaModel
 
 [[autodoc]] T5GemmaModel
