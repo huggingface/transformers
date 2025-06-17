@@ -122,5 +122,50 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
+    def post_process_semantic_segmentation(self, outputs, target_sizes=None):
+        """
+        Converts the output of [`MobileViTForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
+
+        Args:
+            outputs ([`MobileViTForSemanticSegmentationOutput`]):
+                Raw outputs of the model.
+            target_sizes (`List[Tuple]` of length `batch_size`, *optional*):
+                List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
+                predictions will not be resized.
+
+        Returns:
+            semantic_segmentation: `List[torch.Tensor]` of length `batch_size`, where each item is a semantic
+            segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
+            specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
+        """
+        # Import torch here to avoid errors if torch is not available
+        if not is_torch_available():
+            raise ImportError("PyTorch is required for post-processing semantic segmentation outputs.")
+
+        import torch
+        import torch.nn.functional as F
+
+        logits = outputs.logits
+
+        # Resize logits if target sizes are provided
+        if target_sizes is not None:
+            if len(logits) != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
+
+            resized_logits = []
+            for i in range(len(logits)):
+                resized_logit = F.interpolate(
+                    logits[i].unsqueeze(dim=0), size=target_sizes[i], mode="bilinear", align_corners=False
+                )
+                resized_logits.append(resized_logit[0])
+            logits = torch.stack(resized_logits)
+
+        semantic_segmentation = logits.argmax(dim=1)
+        semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
+
+        return semantic_segmentation
+
 
 __all__ = ["MobileViTImageProcessorFast"]
