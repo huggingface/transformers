@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for MobileViT."""
 
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -61,7 +61,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
             `do_resize` parameter in the `preprocess` method.
-        size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 224}`):
+        size (`dict[str, int]` *optional*, defaults to `{"shortest_edge": 224}`):
             Controls the size of the output image after resizing. Can be overridden by the `size` parameter in the
             `preprocess` method.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
@@ -77,7 +77,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
             Whether to crop the input at the center. If the input size is smaller than `crop_size` along any edge, the
             image is padded with 0's and then center cropped. Can be overridden by the `do_center_crop` parameter in
             the `preprocess` method.
-        crop_size (`Dict[str, int]`, *optional*, defaults to `{"height": 256, "width": 256}`):
+        crop_size (`dict[str, int]`, *optional*, defaults to `{"height": 256, "width": 256}`):
             Desired output size `(size["height"], size["width"])` when applying center-cropping. Can be overridden by
             the `crop_size` parameter in the `preprocess` method.
         do_flip_channel_order (`bool`, *optional*, defaults to `True`):
@@ -90,12 +90,12 @@ class MobileViTImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_center_crop: bool = True,
-        crop_size: Optional[Dict[str, int]] = None,
+        crop_size: Optional[dict[str, int]] = None,
         do_flip_channel_order: bool = True,
         **kwargs,
     ) -> None:
@@ -118,7 +118,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -131,7 +131,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Size of the output image.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 Resampling filter to use when resiizing the image.
@@ -199,10 +199,10 @@ class MobileViTImageProcessor(BaseImageProcessor):
         do_rescale: bool,
         do_center_crop: bool,
         do_flip_channel_order: bool,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = None,
         rescale_factor: Optional[float] = None,
-        crop_size: Optional[Dict[str, int]] = None,
+        crop_size: Optional[dict[str, int]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
         if do_resize:
@@ -223,12 +223,12 @@ class MobileViTImageProcessor(BaseImageProcessor):
         self,
         image: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_center_crop: Optional[bool] = None,
-        crop_size: Optional[Dict[str, int]] = None,
+        crop_size: Optional[dict[str, int]] = None,
         do_flip_channel_order: Optional[bool] = None,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -265,9 +265,9 @@ class MobileViTImageProcessor(BaseImageProcessor):
         self,
         segmentation_map: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         do_center_crop: Optional[bool] = None,
-        crop_size: Optional[Dict[str, int]] = None,
+        crop_size: Optional[dict[str, int]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
         """Preprocesses a single mask."""
@@ -305,12 +305,12 @@ class MobileViTImageProcessor(BaseImageProcessor):
         images: ImageInput,
         segmentation_maps: Optional[ImageInput] = None,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_center_crop: Optional[bool] = None,
-        crop_size: Optional[Dict[str, int]] = None,
+        crop_size: Optional[dict[str, int]] = None,
         do_flip_channel_order: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
@@ -327,7 +327,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
                 Segmentation map to preprocess.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
                 Size of the image after resizing.
             resample (`int`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`, Only
@@ -338,7 +338,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
                 Whether to center crop the image.
-            crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
+            crop_size (`dict[str, int]`, *optional*, defaults to `self.crop_size`):
                 Size of the center crop if `do_center_crop` is set to `True`.
             do_flip_channel_order (`bool`, *optional*, defaults to `self.do_flip_channel_order`):
                 Whether to flip the channel order of the image.
@@ -440,19 +440,19 @@ class MobileViTImageProcessor(BaseImageProcessor):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
     # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.post_process_semantic_segmentation with Beit->MobileViT
-    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[List[Tuple]] = None):
+    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple]] = None):
         """
         Converts the output of [`MobileViTForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 
         Args:
             outputs ([`MobileViTForSemanticSegmentation`]):
                 Raw outputs of the model.
-            target_sizes (`List[Tuple]` of length `batch_size`, *optional*):
+            target_sizes (`list[Tuple]` of length `batch_size`, *optional*):
                 List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
                 predictions will not be resized.
 
         Returns:
-            semantic_segmentation: `List[torch.Tensor]` of length `batch_size`, where each item is a semantic
+            semantic_segmentation: `list[torch.Tensor]` of length `batch_size`, where each item is a semantic
             segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
             specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
         """
