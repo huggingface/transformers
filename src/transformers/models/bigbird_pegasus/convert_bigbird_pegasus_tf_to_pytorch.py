@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import argparse
-from typing import Dict
 
 import tensorflow as tf
 import torch
@@ -142,7 +141,7 @@ def convert_bigbird_pegasus(tf_weights: dict, config_update: dict) -> BigBirdPeg
     return torch_model
 
 
-def get_tf_weights_as_numpy(path) -> Dict:
+def get_tf_weights_as_numpy(path) -> dict:
     init_vars = tf.train.list_variables(path)
     tf_weights = {}
     ignore_name = ["global_step"]

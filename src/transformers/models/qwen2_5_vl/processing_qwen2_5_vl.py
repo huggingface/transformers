@@ -23,7 +23,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -35,7 +35,7 @@ from ...video_utils import VideoInput
 
 
 class Qwen2_5_VLVideosProcessorKwargs(VideosKwargs, total=False):
-    fps: Union[List[float], float]
+    fps: Union[list[float], float]
 
 
 class Qwen2_5_VLImagesKwargs(ImagesKwargs):
@@ -54,7 +54,6 @@ class Qwen2_5_VLProcessorKwargs(ProcessingKwargs, total=False):
             "padding": False,
             "return_mm_token_type_ids": False,
         },
-        "videos_kwargs": {"fps": 2.0},
     }
 
 
@@ -98,7 +97,7 @@ class Qwen2_5_VLProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         videos: VideoInput = None,
         **kwargs: Unpack[Qwen2_5_VLProcessorKwargs],
     ) -> BatchFeature:
@@ -109,14 +108,14 @@ class Qwen2_5_VLProcessor(ProcessorMixin):
         Qwen2VLImageProcessor's [`~Qwen2VLImageProcessor.__call__`] if `vision_infos` is not `None`.
 
         Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            videos (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            videos (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of videos to be prepared. Each video can be a 4D NumPy array or PyTorch
                 tensor, or a nested list of 3D frames. Both channels-first and channels-last formats are supported.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
@@ -151,9 +150,7 @@ class Qwen2_5_VLProcessor(ProcessorMixin):
             image_grid_thw = image_inputs["image_grid_thw"]
 
         if videos is not None:
-            # pop fps in advance for passing kwargs validation
-            fps = output_kwargs["videos_kwargs"].pop("fps", 2.0)
-
+            fps = output_kwargs["videos_kwargs"].get("fps", 2.0)
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
             video_grid_thw = videos_inputs["video_grid_thw"]
 
@@ -208,9 +205,9 @@ class Qwen2_5_VLProcessor(ProcessorMixin):
         """
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
         Args:
-            image_sizes (`List[List[int]]`, *optional*):
+            image_sizes (`list[list[int]]`, *optional*):
                 The input sizes formatted as (height, width) per each image.
-            video_sizes (`List[List[int]]`, *optional*):
+            video_sizes (`list[list[int]]`, *optional*):
                 The input sizes formatted as (num_frames, height, width) per each video.
         Returns:
             `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
@@ -274,7 +271,7 @@ class Qwen2_5_VLProcessor(ProcessorMixin):
                 Additional arguments to be passed to the tokenizer's `batch_decode method`.
 
         Returns:
-            `List[str]`: The decoded text.
+            `list[str]`: The decoded text.
         """
         return self.tokenizer.batch_decode(
             generated_outputs,

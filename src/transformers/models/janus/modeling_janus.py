@@ -21,7 +21,7 @@
 
 import copy
 from dataclasses import dataclass
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 import torch
 from torch import nn
@@ -58,7 +58,7 @@ class JanusPreTrainedModel(PreTrainedModel):
     config_class = JanusConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["LlamaDecoderLayer"]
+    _no_split_modules = ["LlamaDecoderLayer", "JanusVisionEncoderLayer"]
     _skip_keys_device_placement = ["past_key_values", "causal_mask"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
@@ -140,10 +140,10 @@ class JanusBaseModelOutputWithPast(ModelOutput):
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
+    image_hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -182,10 +182,10 @@ class JanusCausalLMOutputWithPast(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    past_key_values: Optional[list[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
+    image_hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 class JanusVisionEmbeddings(nn.Module):
@@ -415,7 +415,7 @@ class JanusVisionEncoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor]:
+    ) -> tuple[torch.FloatTensor]:
         """
         Args:
             hidden_states (`torch.FloatTensor`):
@@ -553,7 +553,7 @@ class JanusVisionModel(JanusPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -946,7 +946,8 @@ class JanusVQVAEDecoder(nn.Module):
     custom_intro="""
     The VQ-VAE model used in Janus for encoding/decoding images into discrete tokens.
     This model follows the "Make-a-scene: Scene-based text-to-image generation with human priors" paper from
-    [ Oran Gafni, Adam Polyak, Oron Ashual, Shelly Sheynin, Devi Parikh, and Yaniv Taigman](https://arxiv.org/abs/2203.13131).
+    [ Oran Gafni, Adam Polyak, Oron Ashual, Shelly Sheynin, Devi Parikh, and Yaniv
+    Taigman](https://huggingface.co/papers/2203.13131).
     """
 )
 class JanusVQVAE(JanusPreTrainedModel):
@@ -1002,13 +1003,12 @@ class JanusVQVAE(JanusPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-    ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
+    ) -> tuple[torch.FloatTensor, torch.FloatTensor]:
         batch_size = pixel_values.shape[0]
         quant, embedding_loss, indices = self.encode(pixel_values)
         decoded_pixel_values = self.decode(indices.view(batch_size, -1))
-        output = JanusVQVAEOutput(decoded_pixel_values, embedding_loss)
 
-        return output
+        return JanusVQVAEOutput(decoded_pixel_values, embedding_loss)
 
 
 class JanusVQVAEAlignerMLP(nn.Module):
@@ -1133,6 +1133,7 @@ class JanusModel(JanusPreTrainedModel):
             image_features = image_embeds.reshape(-1, embed_dim)
             image_attention_mask = image_attention_mask.unsqueeze(-1).expand(-1, -1, embed_dim)
 
+            image_attention_mask = image_attention_mask.to(inputs_embeds.device)
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(image_attention_mask, image_features)
 
@@ -1149,15 +1150,13 @@ class JanusModel(JanusPreTrainedModel):
             **kwargs,
         )
 
-        output = JanusBaseModelOutputWithPast(
+        return JanusBaseModelOutputWithPast(
             last_hidden_state=lm_output.last_hidden_state,
             past_key_values=lm_output.past_key_values,
             hidden_states=lm_output.hidden_states,
             attentions=lm_output.attentions,
             image_hidden_states=image_embeds if pixel_values is not None else None,
         )
-
-        return output
 
 
 class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
@@ -1247,7 +1246,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
 
-        output = JanusCausalLMOutputWithPast(
+        return JanusCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
@@ -1255,7 +1254,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
-        return output
 
     def prepare_inputs_for_generation(
         self,

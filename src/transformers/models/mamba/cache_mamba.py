@@ -1,4 +1,4 @@
-from typing import List, Union
+from typing import Union
 
 import torch
 
@@ -54,8 +54,8 @@ class MambaCache:
         self.ssm_state_size = config.state_size
         self.conv_kernel_size = config.conv_kernel
 
-        self.conv_states: List[torch.Tensor] = []
-        self.ssm_states: List[torch.Tensor] = []
+        self.conv_states: list[torch.Tensor] = []
+        self.ssm_states: list[torch.Tensor] = []
         device = torch.device(device) if device is not None else None
         for _ in range(config.num_hidden_layers):
             conv_state: torch.Tensor = torch.zeros(
