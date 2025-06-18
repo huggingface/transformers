@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -106,8 +106,8 @@ class MambaCache:
         self.ssm_state_size = config.state_size
         self.conv_kernel_size = config.conv_kernel
 
-        self.conv_states: List[torch.Tensor] = []
-        self.ssm_states: List[torch.Tensor] = []
+        self.conv_states: list[torch.Tensor] = []
+        self.ssm_states: list[torch.Tensor] = []
         device = torch.device(device) if device is not None else None
         for _ in range(config.num_hidden_layers):
             conv_state: torch.Tensor = torch.zeros(
@@ -548,7 +548,7 @@ class MambaOutput(ModelOutput):
 
     last_hidden_state: Optional[torch.FloatTensor] = None
     cache_params: Optional[MambaCache] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -576,7 +576,7 @@ class MambaCausalLMOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
     cache_params: Optional[MambaCache] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 @auto_docstring
@@ -585,7 +585,7 @@ class MambaModel(MambaPreTrainedModel):
         super().__init__(config)
 
         self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
-        self.layers = nn.ModuleList([MambaBlock(config, layer_idx=idx) for idx in range(config.num_hidden_layers)])
+        self.layers = nn.Modulelist([MambaBlock(config, layer_idx=idx) for idx in range(config.num_hidden_layers)])
 
         self.gradient_checkpointing = False
         self.norm_f = MambaRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
@@ -616,7 +616,7 @@ class MambaModel(MambaPreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, MambaOutput]:
+    ) -> Union[tuple, MambaOutput]:
         r"""
         cache_params (`MambaCache`, *optional*):
             If passed along, the model uses the previous state in all the blocks (which will give the output for the
@@ -719,8 +719,8 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
         return self.backbone.set_input_embeddings(new_embeddings)
 
     def _update_model_kwargs_for_generation(
-        self, outputs: ModelOutput, model_kwargs: Dict[str, Any], num_new_tokens: int = 1, **kwargs
-    ) -> Dict[str, Any]:
+        self, outputs: ModelOutput, model_kwargs: dict[str, Any], num_new_tokens: int = 1, **kwargs
+    ) -> dict[str, Any]:
         model_kwargs["cache_params"] = outputs.get("cache_params", None)
         if (
             model_kwargs.get("use_cache", True)
@@ -798,7 +798,7 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs,  # for now we need this for generation
-    ) -> Union[Tuple, MambaCausalLMOutput]:
+    ) -> Union[tuple, MambaCausalLMOutput]:
         r"""
         cache_params (`MambaCache`, *optional*):
             If passed along, the model uses the previous state in all the blocks (which will give the output for the

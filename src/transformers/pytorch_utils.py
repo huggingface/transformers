@@ -42,9 +42,6 @@ is_torch_greater_or_equal_than_1_12 = is_torch_greater_or_equal("1.12", accept_d
 # Cache this result has it's a C FFI call which can be pretty time-consuming
 _torch_distributed_available = torch.distributed.is_available()
 
-if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
-    pass
-
 
 def softmax_backward_data(parent, grad_output, output, dim, self):
     """
@@ -195,7 +192,7 @@ def apply_chunking_to_forward(
             The chunk size of a chunked tensor: `num_chunks = len(input_tensors[0]) / chunk_size`.
         chunk_dim (`int`):
             The dimension over which the `input_tensors` should be chunked.
-        input_tensors (`Tuple[torch.Tensor]`):
+        input_tensors (`tuple[torch.Tensor]`):
             The input tensors of `forward_fn` which will be chunked
 
     Returns:
@@ -260,13 +257,13 @@ def find_pruneable_heads_and_indices(
     Finds the heads and their indices taking `already_pruned_heads` into account.
 
     Args:
-        heads (`List[int]`): List of the indices of heads to prune.
+        heads (`list[int]`): List of the indices of heads to prune.
         n_heads (`int`): The number of heads in the model.
         head_size (`int`): The size of each head.
         already_pruned_heads (`Set[int]`): A set of already pruned heads.
 
     Returns:
-        `Tuple[Set[int], torch.LongTensor]`: A tuple with the indices of heads to prune taking `already_pruned_heads`
+        `tuple[Set[int], torch.LongTensor]`: A tuple with the indices of heads to prune taking `already_pruned_heads`
         into account and the indices of rows/columns to keep in the layer weight.
     """
     mask = torch.ones(n_heads, head_size)
@@ -296,7 +293,7 @@ def id_tensor_storage(tensor: torch.Tensor) -> tuple[torch.device, int, int]:
     guaranteed to be unique and constant for this tensor's storage during its lifetime. Two tensor storages with
     non-overlapping lifetimes may have the same id.
     """
-    if is_torch_greater_or_equal_than_2_0:
+    if _torch_distributed_available and is_torch_greater_or_equal("2.5"):
         from torch.distributed.tensor import DTensor
 
         if isinstance(tensor, DTensor):

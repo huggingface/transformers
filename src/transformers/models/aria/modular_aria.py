@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Dict, Iterable, List, Optional, Tuple, Union
+from collections.abc import Iterable
+from typing import Optional, Union
 
 import numpy as np
 
@@ -34,7 +35,7 @@ from ...image_utils import (
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils import PreTokenizedInput, TextInput
 from ...utils import LossKwargs, TensorType, auto_docstring, can_return_tuple, logging
 from ...utils.import_utils import is_torch_available
@@ -119,8 +120,8 @@ class AriaTextConfig(LlamaConfig):
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
             `num_attention_heads`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
@@ -174,11 +175,11 @@ class AriaTextConfig(LlamaConfig):
                 `beta_slow` (`float`, *optional*):
                     Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
                     ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`List[float]`, *optional*):
+                `short_factor` (`list[float]`, *optional*):
                     Only used with 'longrope'. The scaling factor to be applied to short contexts (<
                     `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
                     size divided by the number of attention heads divided by 2
-                `long_factor` (`List[float]`, *optional*):
+                `long_factor` (`list[float]`, *optional*):
                     Only used with 'longrope'. The scaling factor to be applied to long contexts (<
                     `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
                     size divided by the number of attention heads divided by 2
@@ -269,7 +270,7 @@ class AriaConfig(PretrainedConfig):
         vision_config=None,
         vision_feature_layer: int = -1,
         text_config: AriaTextConfig = None,
-        projector_patch_to_query_dict: Optional[Dict] = None,
+        projector_patch_to_query_dict: Optional[dict] = None,
         image_token_index: int = 9,
         initializer_range: float = 0.02,
         **kwargs,
@@ -490,11 +491,11 @@ class AriaImageProcessor(BaseImageProcessor):
 
     def __init__(
         self,
-        image_mean: Optional[List[float]] = None,
-        image_std: Optional[List[float]] = None,
+        image_mean: Optional[list[float]] = None,
+        image_std: Optional[list[float]] = None,
         max_image_size: int = 980,
         min_image_size: int = 336,
-        split_resolutions: Optional[List[Tuple[int, int]]] = None,
+        split_resolutions: Optional[list[tuple[int, int]]] = None,
         split_image: Optional[bool] = False,
         do_convert_rgb: Optional[bool] = True,
         do_rescale: bool = True,
@@ -526,9 +527,9 @@ class AriaImageProcessor(BaseImageProcessor):
 
     def preprocess(
         self,
-        images: Union[ImageInput, List[ImageInput]],
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        images: Union[ImageInput, list[ImageInput]],
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         max_image_size: Optional[int] = None,
         min_image_size: Optional[int] = None,
         split_image: Optional[bool] = None,
@@ -748,26 +749,30 @@ class AriaImageProcessor(BaseImageProcessor):
 
         return resized_image
 
+    def _get_padding_size(self, original_resolution: tuple, target_resolution: tuple):
+        original_height, original_width = original_resolution
+        target_height, target_width = target_resolution
+        paste_x, r_x = divmod(target_width - original_width, 2)
+        paste_y, r_y = divmod(target_height - original_height, 2)
+        return (paste_y, paste_y + r_y), (paste_x, paste_x + r_x)
+
     def _pad_for_patching(
         self, image: np.array, target_resolution: tuple, input_data_format: ChannelDimension
     ) -> np.array:
         """
         Pad an image to a target resolution while maintaining aspect ratio.
         """
-        target_height, target_width = target_resolution
-        new_height, new_width = get_patch_output_size(image, target_resolution, input_data_format)
+        new_resolution = get_patch_output_size(image, target_resolution, input_data_format)
+        padding = self._get_padding_size(new_resolution, target_resolution)
 
-        paste_x, r_x = divmod(target_width - new_width, 2)
-        paste_y, r_y = divmod(target_height - new_height, 2)
-
-        padded_image = self.pad(image, padding=((paste_y, paste_y + r_y), (paste_x, paste_x + r_x)))
+        padded_image = self.pad(image, padding=padding)
 
         return padded_image
 
     def pad(
         self,
         image: np.ndarray,
-        padding: Union[int, Tuple[int, int], Iterable[Tuple[int, int]]],
+        padding: Union[int, tuple[int, int], Iterable[tuple[int, int]]],
         mode: PaddingMode = PaddingMode.CONSTANT,
         constant_values: Union[float, Iterable[float]] = 0.0,
         data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -781,7 +786,7 @@ class AriaImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 The image to pad.
-            padding (`int` or `Tuple[int, int]` or `Iterable[Tuple[int, int]]`):
+            padding (`int` or `tuple[int, int]` or `Iterable[tuple[int, int]]`):
                 Padding to apply to the edges of the height, width axes. Can be one of three formats:
                 - `((before_height, after_height), (before_width, after_width))` unique pad widths for each axis.
                 - `((before, after),)` yields same before and after pad for height and width.
@@ -833,19 +838,19 @@ class AriaImageProcessor(BaseImageProcessor):
     def get_image_patches(
         self,
         image: np.array,
-        grid_pinpoints: List[Tuple[int, int]],
+        grid_pinpoints: list[tuple[int, int]],
         patch_size: int,
         resample: PILImageResampling,
         data_format: ChannelDimension,
         input_data_format: ChannelDimension,
-    ) -> List[np.array]:
+    ) -> list[np.array]:
         """
         Process an image with variable resolutions by dividing it into patches.
 
         Args:
             image (`np.array`):
                 The input image to be processed.
-            grid_pinpoints (List[Tuple[int, int]]):
+            grid_pinpoints (list[tuple[int, int]]):
                 A list of possible resolutions as tuples.
             patch_size (`int`):
                 Size of the patches to divide the image into.
@@ -857,7 +862,7 @@ class AriaImageProcessor(BaseImageProcessor):
                 The channel dimension format of the input image.
 
         Returns:
-            `List[np.array]`: A list of NumPy arrays containing the processed image patches.
+            `list[np.array]`: A list of NumPy arrays containing the processed image patches.
         """
         if not isinstance(grid_pinpoints, list):
             raise TypeError("grid_pinpoints must be a list of possible resolutions.")
@@ -880,11 +885,33 @@ class AriaImageProcessor(BaseImageProcessor):
         ]
         return patches
 
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
+        """
+        A utility that returns number of image patches for a given image size.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `int`: Number of patches per image.
+        """
+        split_image = images_kwargs.get("split_image", None) or self.split_image
+        max_image_size = images_kwargs.get("max_image_size", None) or self.max_image_size
+
+        resized_height, resized_width = select_best_resolution((height, width), self.split_resolutions)
+        num_patches = 1 if not split_image else resized_height // max_image_size * resized_width // max_image_size
+        return num_patches
+
 
 class AriaProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
+            "return_mm_token_type_ids": False,
         },
         "images_kwargs": {
             "max_image_size": 980,
@@ -910,7 +937,6 @@ class AriaProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template", "size_conversion"]
     image_processor_class = "AriaImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
@@ -919,7 +945,7 @@ class AriaProcessor(ProcessorMixin):
         image_processor=None,
         tokenizer: Union[AutoTokenizer, str] = None,
         chat_template: Optional[str] = None,
-        size_conversion: Optional[Dict[Union[float, int], int]] = None,
+        size_conversion: Optional[dict[Union[float, int], int]] = None,
     ):
         if size_conversion is None:
             size_conversion = {490: 128, 980: 256}
@@ -934,7 +960,7 @@ class AriaProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]],
         images: Optional[ImageInput] = None,
         audio=None,
         videos=None,
@@ -944,7 +970,7 @@ class AriaProcessor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s) and image(s).
 
         Args:
-            text (`TextInput`, `PreTokenizedInput`, `List[TextInput]`, `List[PreTokenizedInput]`):
+            text (`TextInput`, `PreTokenizedInput`, `list[TextInput]`, `list[PreTokenizedInput]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
@@ -974,10 +1000,7 @@ class AriaProcessor(ProcessorMixin):
             raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
         if images is not None:
-            image_inputs = self.image_processor(
-                images,
-                **output_kwargs["images_kwargs"],
-            )
+            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
             # expand the image_token according to the num_crops and tokens per image
             tokens_per_image = self.size_conversion[image_inputs.pixel_values.shape[2]]
             prompt_strings = []
@@ -991,10 +1014,43 @@ class AriaProcessor(ProcessorMixin):
             prompt_strings = text
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"], return_tensors=None)
         self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
 
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+            mm_token_type_ids[array_ids == self.image_token_id] = 1
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
+
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = AriaProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs.update(kwargs)
+
+            max_size = images_kwargs.get("max_image_size", None) or self.image_processor.max_image_size
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+            num_image_tokens = [self.size_conversion[max_size] * num_patches for num_patches in num_image_patches]
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
 
     def batch_decode(self, *args, **kwargs):
         """
@@ -1244,7 +1300,7 @@ class AriaPreTrainedModel(LlamaPreTrainedModel):
     config_class = AriaConfig
     base_model_prefix = ""
     _supports_static_cache = False  # MoE models don't work with torch.compile (dynamic slicing)
-    _supports_attention_backend = False
+    _supports_attention_backend = True
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -1336,7 +1392,7 @@ class AriaModel(LlavaModel):
                The tensors corresponding to the input images.
             pixel_mask (`torch.FloatTensor]`, *optional*):
                 The tensors corresponding to the input image mask.
-            vision_feature_layer (`Union[int, List[int]]`, *optional*):
+            vision_feature_layer (`Union[int, list[int]]`, *optional*):
                 The index of the layer to select the vision feature. If multiple indices are provided,
                 the vision feature of the corresponding indices will be concatenated to form the
                 vision features.
@@ -1366,7 +1422,7 @@ class AriaModel(LlavaModel):
         pixel_mask: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1374,7 +1430,7 @@ class AriaModel(LlavaModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[Tuple, AriaModelOutputWithPast]:
+    ) -> Union[tuple, AriaModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1441,6 +1497,18 @@ class AriaModel(LlavaModel):
     """
 )
 class AriaForConditionalGeneration(LlavaForConditionalGeneration):
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        pixel_mask: Optional[torch.FloatTensor] = None,
+        vision_feature_layer: int = -1,
+    ):
+        return self.model.get_image_features(
+            pixel_values=pixel_values,
+            pixel_mask=pixel_mask,
+            vision_feature_layer=vision_feature_layer,
+        )
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1450,7 +1518,7 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
         pixel_mask: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -1460,7 +1528,7 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
         logits_to_keep: Union[int, torch.Tensor] = 0,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[KwargsForCausalLM],
-    ) -> Union[Tuple, AriaCausalLMOutputWithPast]:
+    ) -> Union[tuple, AriaCausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,

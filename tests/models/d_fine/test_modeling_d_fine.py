@@ -27,7 +27,13 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import require_torch, require_torch_gpu, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    require_torch,
+    require_torch_accelerator,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import cached_property
 
 
@@ -371,7 +377,8 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -679,7 +686,7 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.assertTrue(not failed_cases, message)
 
     @parameterized.expand(["float32", "float16", "bfloat16"])
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_inference_with_different_dtypes(self, torch_dtype_str):
         torch_dtype = {
@@ -701,7 +708,7 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
     @parameterized.expand(["float32", "float16", "bfloat16"])
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_inference_equivalence_for_static_and_dynamic_anchors(self, torch_dtype_str):
         torch_dtype = {

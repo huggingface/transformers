@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 The MarkupLM model was proposed in [MarkupLM: Pre-training of Text and Markup Language for Visually-rich Document
-Understanding](https://arxiv.org/abs/2110.08518) by Junlong Li, Yiheng Xu, Lei Cui, Furu Wei. MarkupLM is BERT, but
+Understanding](https://huggingface.co/papers/2110.08518) by Junlong Li, Yiheng Xu, Lei Cui, Furu Wei. MarkupLM is BERT, but
 applied to HTML pages instead of raw text documents. The model incorporates additional embedding layers to improve
 performance, similar to [LayoutLM](layoutlm).
 
@@ -55,7 +55,7 @@ These are the XPATH tags and subscripts respectively for each token in the input
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/markuplm_architecture.jpg"
 alt="drawing" width="600"/> 
 
-<small> MarkupLM architecture. Taken from the <a href="https://arxiv.org/abs/2110.08518">original paper.</a> </small>
+<small> MarkupLM architecture. Taken from the <a href="https://huggingface.co/papers/2110.08518">original paper.</a> </small>
 
 ## Usage: MarkupLMProcessor
 

@@ -362,8 +362,8 @@ def _replace_with_bitnet_linear(
                             bias=module.bias is not None,
                             device=module.weight.device,
                             dtype=module.weight.dtype,
-                            use_rms_norm=quantization_config.use_rms_norm,
-                            rms_norm_eps=quantization_config.rms_norm_eps,
+                            use_rms_norm=quantization_config.use_rms_norm if quantization_config else False,
+                            rms_norm_eps=quantization_config.rms_norm_eps if quantization_config else 1e-6,
                         )
                         model._modules[name].requires_grad_(False)
                     has_been_replaced = True
@@ -398,10 +398,10 @@ def replace_with_bitnet_linear(
     Parameters:
         model (`torch.nn.Module`):
             Input model or `torch.nn.Module` as the function is run recursively.
-        modules_to_not_convert (`List[`str`]`, *optional*, defaults to `["lm_head"]`):
+        modules_to_not_convert (`list[`str`]`, *optional*, defaults to `["lm_head"]`):
             Names of the modules to not convert in `BitLinear`. In practice we keep the `lm_head` in full precision
             for numerical stability reasons.
-        current_key_name (`List[`str`]`, *optional*):
+        current_key_name (`list[`str`]`, *optional*):
             An array to track the current key of the recursion. This is used to check whether the current key (part of
             it) is not in the list of modules to not convert (for instances modules that are offloaded to `cpu` or
             `disk`).
