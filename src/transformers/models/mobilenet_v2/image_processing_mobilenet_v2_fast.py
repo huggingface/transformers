@@ -250,7 +250,7 @@ class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
         Args:
             outputs ([`MobileNetV2ForSemanticSegmentation`]):
                 Raw outputs of the model.
-            target_sizes (`list[Tuple]` of length `batch_size`, *optional*):
+            target_sizes (`list[tuple]` of length `batch_size`, *optional*):
                 List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
                 predictions will not be resized.
 
