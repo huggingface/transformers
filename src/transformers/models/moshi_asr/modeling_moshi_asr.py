@@ -1213,10 +1213,9 @@ class MoshiAsrForConditionalGeneration(MoshiAsrPreTrainedModel, GenerationMixin)
 
         if input_values is not None:
             cache_position = model_inputs["cache_position"]
-
-            audio_positions = cache_position - self.config.delay_in_tokens
             start, end = current_window[0]
-            if audio_positions[-1] >= end:
+
+            if cache_position[-1] >= end:
                 # we need to encode the new audio tokens
                 with torch.no_grad():
                     input_values_start_idx = start * self.config.frame_size
@@ -1237,10 +1236,9 @@ class MoshiAsrForConditionalGeneration(MoshiAsrPreTrainedModel, GenerationMixin)
                     torch.tensor([start, end], device=current_window.device).expand(current_window.shape[0], -1)
                 )
 
-            current_audio_tokens_idxs = (audio_positions - start).clamp(min=0)
+            current_audio_tokens_idxs = (cache_position - start).clamp(min=0)
             current_audio_tokens = audio_tokens[:, current_audio_tokens_idxs, :]
 
-            current_audio_tokens[:, audio_positions <= 0, :] = self.config.audio_pad_token_id
             current_audio_tokens[:, cache_position == 0, :] = self.config.audio_bos_token_id
 
             input_ids = model_inputs.pop("input_ids")
