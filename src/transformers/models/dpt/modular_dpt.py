@@ -16,7 +16,7 @@
 
 import math
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 from transformers.image_processing_base import BatchFeature
 from transformers.image_transforms import group_images_by_shape, reorder_images
@@ -271,8 +271,8 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
     def post_process_depth_estimation(
         self,
         outputs: "DepthEstimatorOutput",
-        target_sizes: Optional[Union[TensorType, List[Tuple[int, int]], None]] = None,
-    ) -> List[Dict[str, TensorType]]:
+        target_sizes: Optional[Union[TensorType, list[tuple[int, int]], None]] = None,
+    ) -> list[dict[str, TensorType]]:
         """
         Converts the raw output of [`DepthEstimatorOutput`] into final depth predictions and depth PIL images.
         Only supports PyTorch.

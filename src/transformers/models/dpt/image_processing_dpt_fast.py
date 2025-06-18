@@ -22,7 +22,7 @@
 
 import math
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 from transformers.image_processing_base import BatchFeature
 from transformers.image_transforms import group_images_by_shape, reorder_images
@@ -318,19 +318,19 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
 
         return BatchFeature(data=data)
 
-    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[List[Tuple]] = None):
+    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple]] = None):
         """
         Converts the output of [`DPTForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 
         Args:
             outputs ([`DPTForSemanticSegmentation`]):
                 Raw outputs of the model.
-            target_sizes (`List[Tuple]` of length `batch_size`, *optional*):
+            target_sizes (`list[Tuple]` of length `batch_size`, *optional*):
                 List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
                 predictions will not be resized.
 
         Returns:
-            semantic_segmentation: `List[torch.Tensor]` of length `batch_size`, where each item is a semantic
+            semantic_segmentation: `list[torch.Tensor]` of length `batch_size`, where each item is a semantic
             segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
             specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
         """
@@ -432,8 +432,8 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
     def post_process_depth_estimation(
         self,
         outputs: "DepthEstimatorOutput",
-        target_sizes: Optional[Union[TensorType, List[Tuple[int, int]], None]] = None,
-    ) -> List[Dict[str, TensorType]]:
+        target_sizes: Optional[Union[TensorType, list[tuple[int, int]], None]] = None,
+    ) -> list[dict[str, TensorType]]:
         """
         Converts the raw output of [`DepthEstimatorOutput`] into final depth predictions and depth PIL images.
         Only supports PyTorch.
