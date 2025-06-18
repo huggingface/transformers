@@ -296,10 +296,14 @@ class Glm4vConfig(PretrainedConfig):
             The image token index to encode the image prompt.
         video_token_id (`int`, *optional*, defaults to 151344):
             The video token index to encode the image prompt.
-        vision_start_token_id (`int`, *optional*, defaults to 151341):
-            The vision start token index to encode the start of vision.
-        vision_end_token_id (`int`, *optional*, defaults to 151342):
-            The vision end token index to encode the end of vision.
+        image_start_token_id (`int`, *optional*, defaults to 151339):
+            The image start token index to encode the start of image.
+        image_end_token_id (`int`, *optional*, defaults to 151340):
+            The image end token index to encode the end of image.
+        video_start_token_id (`int`, *optional*, defaults to 151341):
+            The video start token index to encode the start of video.
+        video_end_token_id (`int`, *optional*, defaults to 151342):
+            The video end token index to encode the end of video.
 
     ```python
     >>> from transformers import Glm4vForConditionalGeneration, Glm4vConfig
@@ -324,8 +328,10 @@ class Glm4vConfig(PretrainedConfig):
         vision_config=None,
         image_token_id=151343,
         video_token_id=151344,
-        vision_start_token_id=151341,
-        vision_end_token_id=151342,
+        image_start_token_id=151339,
+        image_end_token_id=151340,
+        video_start_token_id=151341,
+        video_end_token_id=151342,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -342,8 +348,10 @@ class Glm4vConfig(PretrainedConfig):
 
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
-        self.vision_start_token_id = vision_start_token_id
-        self.vision_end_token_id = vision_end_token_id
+        self.video_start_token_id = video_start_token_id
+        self.video_end_token_id = video_end_token_id
+        self.image_start_token_id = image_start_token_id
+        self.image_end_token_id = image_end_token_id
 
 
 __all__ = ["Glm4vConfig", "Glm4vTextConfig"]

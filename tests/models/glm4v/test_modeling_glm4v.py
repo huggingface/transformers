@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch GLM-4.1V model."""
 
+import copy
 import gc
 import unittest
 
@@ -61,9 +62,12 @@ class Glm4vVisionText2TextModelTester:
         num_channels=3,
         ignore_index=-100,
         image_size=112,
-        vision_start_token_id=3,
-        image_token_id=4,
-        video_token_id=5,
+        video_start_token_id=3,
+        video_end_token_id=4,
+        image_start_token_id=5,
+        image_end_token_id=6,
+        image_token_id=7,
+        video_token_id=8,
         is_training=True,
         text_config={
             "vocab_size": 99,
@@ -100,7 +104,10 @@ class Glm4vVisionText2TextModelTester:
         self.bos_token_id = text_config["bos_token_id"]
         self.eos_token_id = text_config["eos_token_id"]
         self.pad_token_id = text_config["pad_token_id"]
-        self.vision_start_token_id = vision_start_token_id
+        self.video_start_token_id = video_start_token_id
+        self.video_end_token_id = video_end_token_id
+        self.image_start_token_id = image_start_token_id
+        self.image_end_token_id = image_end_token_id
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
         self.text_config = text_config
@@ -120,9 +127,12 @@ class Glm4vVisionText2TextModelTester:
         return Glm4vConfig(
             text_config=self.text_config,
             vision_config=self.vision_config,
-            vision_start_token_id=self.vision_start_token_id,
             image_token_id=self.image_token_id,
             video_token_id=self.video_token_id,
+            video_start_token_id=self.video_start_token_id,
+            video_end_token_id=self.video_end_token_id,
+            image_start_token_id=self.image_start_token_id,
+            image_end_token_id=self.image_end_token_id,
         )
 
     def prepare_config_and_inputs(self):
@@ -146,8 +156,14 @@ class Glm4vVisionText2TextModelTester:
 
         input_ids[input_ids == self.video_token_id] = self.pad_token_id
         input_ids[input_ids == self.image_token_id] = self.pad_token_id
-        input_ids[input_ids == self.vision_start_token_id] = self.pad_token_id
-        input_ids[:, : self.num_image_tokens] = self.image_token_id
+        input_ids[input_ids == self.video_start_token_id] = self.pad_token_id
+        input_ids[input_ids == self.image_start_token_id] = self.pad_token_id
+        input_ids[input_ids == self.video_end_token_id] = self.pad_token_id
+        input_ids[input_ids == self.image_end_token_id] = self.pad_token_id
+
+        input_ids[:, 0] = self.image_start_token_id
+        input_ids[:, 1 : 1 + self.num_image_tokens] = self.image_token_id
+        input_ids[:, 1 + self.num_image_tokens] = self.image_end_token_id
         patch_size = config.vision_config.patch_size
         patches_per_side = self.image_size // patch_size
 
@@ -271,6 +287,27 @@ class Glm4vModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     # The multimodal base model embeds will not match ids, due to pixel values. We can't change base test
     # because in some models `pixel_values` are required. Will be fixed when we add support for merging `embeds+pixels`
     # TODO: @raushan
+
+    def test_inputs_embeds(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+
+            input_ids = inputs["input_ids"]
+            del inputs["input_ids"]
+            del inputs["pixel_values"]
+            del inputs["image_grid_thw"]
+
+            wte = model.get_input_embeddings()
+            inputs["inputs_embeds"] = wte(input_ids)
+            with torch.no_grad():
+                model(**inputs)[0]
+
     def test_inputs_embeds_matches_input_ids(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
