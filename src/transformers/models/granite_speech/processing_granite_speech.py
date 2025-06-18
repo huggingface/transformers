@@ -88,7 +88,9 @@ class GraniteSpeechProcessor(ProcessorMixin):
         else:
             audio_inputs = {}
 
-        text_inputs = self.tokenizer(prompt_strings, padding=True, **kwargs)
+        if "padding" not in kwargs:
+            kwargs["padding"] = True
+        text_inputs = self.tokenizer(prompt_strings, **kwargs)
         return BatchFeature(data={**text_inputs, **audio_inputs})
 
     def _get_validated_text(self, text: Union[str, list]) -> list[str]:
