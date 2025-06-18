@@ -1063,10 +1063,8 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
 
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        
+      
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if self.config.is_decoder:
@@ -1278,10 +1276,8 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         >>> outputs.keys()
         odict_keys(['text_features', 'image_features', 'pooler_output'])
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        
+      
         all_hidden_states_text = () if output_hidden_states else None
         all_hidden_states_image = () if output_hidden_states else None
         all_hidden_states_cross = () if output_hidden_states else None

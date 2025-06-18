@@ -295,7 +295,7 @@ class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        
 
         outputs = self.backbone.forward_with_filtered_kwargs(
             pixel_values, output_hidden_states=output_hidden_states, output_attentions=output_attentions

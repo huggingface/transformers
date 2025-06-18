@@ -256,7 +256,7 @@ class HubertModel(Wav2Vec2Model, HubertPreTrainedModel):
         >>> input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
         >>> hidden_states = model(input_values).last_hidden_state
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )

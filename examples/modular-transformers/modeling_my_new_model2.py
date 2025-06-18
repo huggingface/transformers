@@ -477,10 +477,8 @@ class MyNewModel2Model(MyNewModel2PreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,  # NOOP kwarg for now
     ) -> BaseModelOutputWithPast:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        
+      
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         if (input_ids is None) ^ (inputs_embeds is not None):

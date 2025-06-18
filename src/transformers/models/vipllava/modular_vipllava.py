@@ -123,7 +123,7 @@ class VipLlavaModel(LlavaModel):
             The vision feature layer, or the list of indexes of the layers to select
             the vision feature.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -239,7 +239,7 @@ class VipLlavaForConditionalGeneration(LlavaForConditionalGeneration):
         The image features a brown and white cat sitting on a green surface, with a red ball in its
         ```"""
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )

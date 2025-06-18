@@ -340,10 +340,8 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
             raise ValueError("The number of labels should be greater than one")
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+      
+        
 
         outputs = self.backbone.forward_with_filtered_kwargs(
             pixel_values, output_hidden_states=output_hidden_states, output_attentions=output_attentions

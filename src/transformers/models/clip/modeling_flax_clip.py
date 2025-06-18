@@ -532,9 +532,7 @@ class FlaxCLIPTextTransformer(nn.Module):
         return_dict: bool = True,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+      
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids)
@@ -594,9 +592,7 @@ class FlaxCLIPVisionTransformer(nn.Module):
         return_dict: bool = True,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+      
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         hidden_states = self.embeddings(pixel_values)
@@ -675,9 +671,7 @@ class FlaxCLIPTextPreTrainedModel(FlaxPreTrainedModel):
         return_dict: Optional[bool] = None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+      
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if position_ids is None:
@@ -753,9 +747,7 @@ class FlaxCLIPVisionPreTrainedModel(FlaxPreTrainedModel):
         return_dict: Optional[bool] = None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+      
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         pixel_values = jnp.transpose(pixel_values, (0, 2, 3, 1))
@@ -831,9 +823,7 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
         return_dict: Optional[bool] = None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+      
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if position_ids is None:

@@ -523,10 +523,8 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
             have to use `input_ids`. If `past_key_values` is not used and `use_cache` is set to `True`, `input_embeds`
             is used in priority instead of `input_ids`.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        
+      
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1189,10 +1187,8 @@ class BarkFineModel(BarkPreTrainedModel):
             `past_key_values`). This is useful if you want more control over how to convert `input_ids` indices into
             associated vectors than the model's internal embedding lookup matrix.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        
+      
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         loss = None

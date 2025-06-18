@@ -672,7 +672,7 @@ class Phi4MultimodalVisionModel(Phi4MultimodalVisionPreTrainedModel):
         patch_attention_mask: Optional[torch.BoolTensor] = None,
 
     ) -> BaseModelOutputWithPooling:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -1528,7 +1528,7 @@ class Phi4MultimodalModel(Phi3Model, nn.Module):
         audio_attention_mask (`torch.Tensor, *optional*):
             Attention mask for the audio inputs.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -1686,7 +1686,7 @@ class Phi4MultimodalForCausalLM(Phi3ForCausalLM, nn.Module):
         'This is an example script .\n Certainly! Below is a sample script that demonstrates a simple task, such as calculating the sum'
         ```"""
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )

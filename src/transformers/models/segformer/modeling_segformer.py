@@ -475,10 +475,8 @@ class SegformerModel(SegformerPreTrainedModel):
 
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutput]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        
+      
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         encoder_outputs = self.encoder(
@@ -709,9 +707,7 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
         [1, 150, 128, 128]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+      
 
         if labels is not None and self.config.num_labels < 1:
             raise ValueError(f"Number of labels should be >=0: {self.config.num_labels}")

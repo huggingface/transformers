@@ -747,10 +747,8 @@ class OmDetTurboHybridEncoder(nn.Module):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        
+      
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         hidden_states = inputs_embeddings
@@ -933,8 +931,8 @@ class OmDetTurboDeformableTransformerDecoderLayer(nn.Module):
         output_attentions=None,
         output_hidden_states=None,
     ):
-        output_attentions = output_attentions if output_attentions is not None else self.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
+        
+        
 
         origin_embedding_len = decoder_embeddings.shape[1]
 
@@ -1333,10 +1331,8 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
             return_dict (`bool`, *optional*): Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain
                 tuple.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        
+      
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         vision_features, vision_shapes, vision_shapes_list, level_start_index = self._get_encoder_input(
@@ -1590,10 +1586,8 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
         if labels is not None:
             raise NotImplementedError("Training is not implemented yet")
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        
+      
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         loss = None

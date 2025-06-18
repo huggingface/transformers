@@ -501,11 +501,9 @@ class RagModel(RagPreTrainedModel):
         ```"""
         n_docs = n_docs if n_docs is not None else self.config.n_docs
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        output_retrieved = output_retrieved if output_retrieved is not None else self.config.output_retrieved
+        
+      
+        
 
         # whether retriever has to be used
         has_to_retrieve = (

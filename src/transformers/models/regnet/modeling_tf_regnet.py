@@ -395,9 +395,7 @@ class TFRegNetMainLayer(keras.layers.Layer):
         return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> TFBaseModelOutputWithPoolingAndNoAttention:
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+      
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         embedding_output = self.embedder(pixel_values, training=training)
@@ -506,9 +504,7 @@ class TFRegNetModel(TFRegNetPreTrainedModel):
         return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[TFBaseModelOutputWithPoolingAndNoAttention, tuple[tf.Tensor]]:
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+      
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.regnet(
@@ -574,9 +570,7 @@ class TFRegNetForImageClassification(TFRegNetPreTrainedModel, TFSequenceClassifi
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+      
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.regnet(
