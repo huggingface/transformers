@@ -842,16 +842,17 @@ def _cast_tensor_to_float(x):
     return x.float()
 
 
-def _flatten_nested_images(nested_images):
+def _group_images_by_shape(nested_images, is_nested: bool = False):
     """Helper function to flatten a single level of nested image structures and group by shape."""
     grouped_images = defaultdict(list)
     grouped_images_index = {}
-
+    nested_images = [nested_images] if not is_nested else nested_images
     for i, sublist in enumerate(nested_images):
         for j, image in enumerate(sublist):
+            key = (i, j) if is_nested else j
             shape = image.shape[1:]
             grouped_images[shape].append(image)
-            grouped_images_index[(i, j)] = (shape, len(grouped_images[shape]) - 1)
+            grouped_images_index[key] = (shape, len(grouped_images[shape]) - 1)
 
     return grouped_images, grouped_images_index
 
@@ -900,39 +901,32 @@ def group_images_by_shape(
     Args:
         images (Union[list["torch.Tensor"], "torch.Tensor"]):
             A list of images or a single tensor
+        disable_grouping (bool):
+            Whether to disable grouping. If None, will be set to True if the images are on CPU, and False otherwise.
+            This choice is based on empirical observations, as detailed here: https://github.com/huggingface/transformers/pull/38157
+        is_nested (bool, *optional*, defaults to False):
+            Whether the images are nested.
 
     Returns:
         tuple[dict[tuple[int, int], list["torch.Tensor"]], dict[Union[int, tuple[int, int]], tuple[tuple[int, int], int]]]:
             - A dictionary with shape as key and list of images with that shape as value
             - A dictionary mapping original indices to (shape, index) tuples
     """
-    if not is_nested:
-        disable_grouping = images[0].device == "cpu" if disable_grouping is None else disable_grouping
-        if disable_grouping:
-            return {i: images[i].unsqueeze(0) for i in range(len(images))}, {i: (i, 0) for i in range(len(images))}
-
-        grouped_images = {}
-        grouped_images_index = {}
-        for i, image in enumerate(images):
-            shape = image.shape[1:]
-            if shape not in grouped_images:
-                grouped_images[shape] = []
-            grouped_images[shape].append(image)
-            grouped_images_index[i] = (shape, len(grouped_images[shape]) - 1)
-
-        # Stack images with the same shape
-        grouped_images = {shape: torch.stack(imgs, dim=0) for shape, imgs in grouped_images.items()}
-        return grouped_images, grouped_images_index
-
-    disable_grouping = images[0][0].device == "cpu" if disable_grouping is None else disable_grouping
+    # If disable grouping is not explicitely provided, we favor disabling it if the images are on CPU, and enabling it otherwise.
+    if disable_grouping is None:
+        device = images[0][0].device if is_nested else images[0].device
+        disable_grouping = device == "cpu"
 
     if disable_grouping:
-        return {(i, j): images[i][j].unsqueeze(0) for i in range(len(images)) for j in range(len(images[i]))}, {
-            (i, j): ((i, j), 0) for i in range(len(images)) for j in range(len(images[i]))
-        }
+        if is_nested:
+            return {(i, j): images[i][j].unsqueeze(0) for i in range(len(images)) for j in range(len(images[i]))}, {
+                (i, j): ((i, j), 0) for i in range(len(images)) for j in range(len(images[i]))
+            }
+        else:
+            return {i: images[i].unsqueeze(0) for i in range(len(images))}, {i: (i, 0) for i in range(len(images))}
 
     # Handle single level nested structure
-    grouped_images, grouped_images_index = _flatten_nested_images(images)
+    grouped_images, grouped_images_index = _group_images_by_shape(images, is_nested)
 
     # Stack images with the same shape
     grouped_images = {shape: torch.stack(images_list, dim=0) for shape, images_list in grouped_images.items()}
@@ -954,6 +948,10 @@ def reorder_images(
             Dictionary mapping shapes to batched processed images.
         grouped_images_index (dict[Union[int, tuple[int, int]], tuple[tuple[int, int], int]]):
             Dictionary mapping original indices to (shape, index) tuples.
+        is_nested (bool, *optional*, defaults to False):
+            Whether the images are nested. Cannot be infered from the input, as some processing functions outputs nested images.
+            even with non nested images,e.g functions splitting images into patches. We thus can't deduce is_nested from the input.
+
 
     Returns:
         Union[list["torch.Tensor"], "torch.Tensor"]:

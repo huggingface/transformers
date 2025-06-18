@@ -34,12 +34,9 @@ from ...image_utils import (
     make_nested_list_of_images,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available, is_vision_available, logging
+from ...utils import TensorType, auto_docstring, is_torchvision_available, logging
 from .image_processing_idefics2 import convert_to_rgb
 
-
-if is_vision_available():
-    pass
 
 if is_torchvision_available():
     from torchvision.transforms import functional as F
