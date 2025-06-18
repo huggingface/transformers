@@ -75,7 +75,7 @@ print(outputs.last_hidden_state)
 <hfoption id="transformers-cli">
 
 ```bash
-echo -e "Plants create [MASK] through a process known as photosynthesis." | transformers run --task fill-mask --model microsoft/deberta-v2-xlarge --device 0
+echo -e "Plants create [MASK] through a process known as photosynthesis." | transformers-cli run --task fill-mask --model microsoft/deberta-v2-xlarge --device 0
 ```
 </hfoption>
 </hfoptions>
