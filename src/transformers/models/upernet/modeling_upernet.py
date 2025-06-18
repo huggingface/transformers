@@ -14,7 +14,7 @@
 # limitations under the License.
 """PyTorch UperNet model. Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation."""
 
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -37,10 +37,10 @@ class UperNetConvModule(nn.Module):
         self,
         in_channels: int,
         out_channels: int,
-        kernel_size: Union[int, Tuple[int, int]],
-        padding: Union[int, Tuple[int, int], str] = 0,
+        kernel_size: Union[int, tuple[int, int]],
+        padding: Union[int, tuple[int, int], str] = 0,
         bias: bool = False,
-        dilation: Union[int, Tuple[int, int]] = 1,
+        dilation: Union[int, tuple[int, int]] = 1,
     ) -> None:
         super().__init__()
         self.conv = nn.Conv2d(
@@ -84,7 +84,7 @@ class UperNetPyramidPoolingModule(nn.Module):
     Pyramid Pooling Module (PPM) used in PSPNet.
 
     Args:
-        pool_scales (`Tuple[int]`):
+        pool_scales (`tuple[int]`):
             Pooling scales used in Pooling Pyramid Module.
         in_channels (`int`):
             Input channels.
@@ -94,7 +94,7 @@ class UperNetPyramidPoolingModule(nn.Module):
             align_corners argument of F.interpolate.
     """
 
-    def __init__(self, pool_scales: Tuple[int, ...], in_channels: int, channels: int, align_corners: bool) -> None:
+    def __init__(self, pool_scales: tuple[int, ...], in_channels: int, channels: int, align_corners: bool) -> None:
         super().__init__()
         self.pool_scales = pool_scales
         self.align_corners = align_corners
@@ -106,7 +106,7 @@ class UperNetPyramidPoolingModule(nn.Module):
             self.blocks.append(block)
             self.add_module(str(i), block)
 
-    def forward(self, x: torch.Tensor) -> List[torch.Tensor]:
+    def forward(self, x: torch.Tensor) -> list[torch.Tensor]:
         ppm_outs = []
         for ppm in self.blocks:
             ppm_out = ppm(x)
@@ -218,7 +218,7 @@ class UperNetFCNHead(nn.Module):
     """
 
     def __init__(
-        self, config, in_channels, in_index: int = 2, kernel_size: int = 3, dilation: Union[int, Tuple[int, int]] = 1
+        self, config, in_channels, in_index: int = 2, kernel_size: int = 3, dilation: Union[int, tuple[int, int]] = 1
     ) -> None:
         super().__init__()
 

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import importlib
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 from packaging import version
 
@@ -126,7 +126,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
                 " make sure you have the latest version of `bitsandbytes` installed"
             )
 
-    def adjust_max_memory(self, max_memory: Dict[str, Union[int, str]]) -> Dict[str, Union[int, str]]:
+    def adjust_max_memory(self, max_memory: dict[str, Union[int, str]]) -> dict[str, Union[int, str]]:
         # need more space for buffers that are created during quantization
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}
         return max_memory
@@ -169,7 +169,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         param_value: "torch.Tensor",
         param_name: str,
-        state_dict: Dict[str, Any],
+        state_dict: dict[str, Any],
         **kwargs,
     ):
         import bitsandbytes as bnb
@@ -192,8 +192,8 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         param_value: "torch.Tensor",
         param_name: str,
         target_device: "torch.device",
-        state_dict: Dict[str, Any],
-        unexpected_keys: Optional[List[str]] = None,
+        state_dict: dict[str, Any],
+        unexpected_keys: Optional[list[str]] = None,
     ):
         """
         combines logic from _load_state_dict_into_meta_model and .integrations.bitsandbytes.py::set_module_quantized_tensor_to_device()
@@ -258,7 +258,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         self,
         model: "PreTrainedModel",
         device_map,
-        keep_in_fp32_modules: Optional[List[str]] = None,
+        keep_in_fp32_modules: Optional[list[str]] = None,
         **kwargs,
     ):
         from ..integrations import replace_with_bnb_linear

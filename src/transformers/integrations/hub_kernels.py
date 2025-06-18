@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Dict, Union
+from typing import Union
 
 from ..utils import is_torchdynamo_compiling
 
@@ -29,7 +29,7 @@ try:
 
     _hub_kernels_available = True
 
-    _KERNEL_MAPPING: Dict[str, Dict[Union[Device, str], LayerRepository]] = {
+    _KERNEL_MAPPING: dict[str, dict[Union[Device, str], LayerRepository]] = {
         "MultiScaleDeformableAttention": {
             "cuda": LayerRepository(
                 repo_id="kernels-community/deformable-detr",
