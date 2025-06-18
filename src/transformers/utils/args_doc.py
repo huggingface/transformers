@@ -664,6 +664,9 @@ class ClassAttrs:
     _skip_keys_device_placement = r"""
     A list of keys to ignore when moving inputs or outputs between devices when using the `accelerate` library.
     """
+    _supports_flash_attn_3 = r"""
+    Whether the model's attention implementation supports FlashAttention 3.0.
+    """
     _supports_flash_attn_2 = r"""
     Whether the model's attention implementation supports FlashAttention 2.0.
     """

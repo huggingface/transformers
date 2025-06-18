@@ -47,7 +47,7 @@ from transformers import (
     is_torch_available,
     logging,
 )
-from transformers.modeling_flash_attention_utils import is_flash_attn_available
+from transformers.modeling_flash_attention_utils import is_flash_attn_available, is_flash_attn_3_available
 from transformers.testing_utils import (
     TOKEN,
     CaptureLogger,
@@ -75,6 +75,7 @@ from transformers.utils import (
     check_torch_load_is_safe,
 )
 from transformers.utils.import_utils import (
+    is_flash_attn_3_available,
     is_flash_attn_2_available,
     is_flax_available,
     is_tf_available,
@@ -675,6 +676,9 @@ class ModelUtilsTest(TestCasePlus):
         if is_flash_attn_available():
             attn_implementation_available.append("flash_attention_2")
 
+        if is_flash_attn_3_available():
+            attn_implementation_available.append("flash_attention_3")
+
         for requested_attn_implementation in attn_implementation_available:
             model = AutoModelForCausalLM.from_pretrained(
                 TINY_MISTRAL, attn_implementation=requested_attn_implementation
@@ -698,6 +702,9 @@ class ModelUtilsTest(TestCasePlus):
 
         if is_flash_attn_available():
             attn_implementation_available.append("flash_attention_2")
+
+        if is_flash_attn_3_available():
+            attn_implementation_available.append("flash_attention_3")
 
         for requested_attn_implementation in attn_implementation_available:
             config = AutoConfig.from_pretrained(TINY_MISTRAL, attn_implementation=requested_attn_implementation)

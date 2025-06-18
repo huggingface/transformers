@@ -1075,6 +1075,24 @@ def is_flash_attn_2_available():
         return False
 
 
+@lru_cache()
+def is_flash_attn_3_available():
+    if not is_torch_available():
+        return False
+
+    if not _is_package_available("flash_attn_3"):
+        return False
+
+    import torch
+    if not torch.cuda.is_available():
+        return False
+
+    # TODO: Check for a minimum version when FA3 is stable
+    # return version.parse(importlib.metadata.version("flash_attn_3")) >= version.parse("3.0.0")
+
+    return True
+
+
 @lru_cache
 def is_flash_attn_greater_or_equal_2_10():
     if not _is_package_available("flash_attn"):
