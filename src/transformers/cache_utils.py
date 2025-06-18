@@ -1254,15 +1254,31 @@ def _flatten_with_keys_static_cache(cache: StaticCache):
     return torch.utils._pytree._dict_flatten_with_keys(dictionary)
 
 
+def _make_static_cache(key_value_pairs):
+    class _config:
+        def __init__(self):
+            self.head_dim = key_value_pairs[0][0].shape[-1]
+            self.num_attention_heads = key_value_pairs[0][0].shape[1]
+            self.num_hidden_layers = len(key_value_pairs)
+
+    cache = StaticCache(
+        _config(),
+        max_batch_size=key_value_pairs[0][0].shape[0],
+        device=key_value_pairs[0][0].device,
+        dtype=key_value_pairs[0][0].dtype,
+        max_cache_len=key_value_pairs[0][0].shape[2],
+    )
+    for i in range(len(key_value_pairs)):
+        cache.key_cache[i][:, :, :, :] = key_value_pairs[i][0]
+        cache.value_cache[i][:, :, :, :] = key_value_pairs[i][1]
+    return cache
+
+
 def _unflatten_static_cache(
     values,
     context: torch.utils._pytree.Context,
 ) -> StaticCache:
-    dictionary = torch.utils._pytree._dict_unflatten(values, context)
-    cache = StaticCache()
-    for k, v in dictionary.items():
-        setattr(cache, k, v)
-    return cache
+    return _make_static_cache(list(zip(values[0], values[1])))
 
 
 if is_torch_greater_or_equal("2.7"):
