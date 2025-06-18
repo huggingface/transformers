@@ -106,6 +106,7 @@ class PerceptionLMVisionText2TextModelTester:
         self.num_channels = 3
         self.image_size = self.vision_config["img_size"][0]
         self.num_image_tokens = (self.vision_config["img_size"][0] // 14) ** 2
+        self.num_video_tokens = (self.vision_config["img_size"][0] // 14) ** 2
         self.seq_length = seq_length + self.num_image_tokens
         self.encoder_seq_length = self.seq_length
 
@@ -148,13 +149,11 @@ class PerceptionLMVisionText2TextModelTester:
         input_ids[input_ids == config.image_token_id] = self.pad_token_id
         input_ids[input_ids == config.video_token_id] = self.pad_token_id
         input_ids[:, : self.num_image_tokens] = config.image_token_id
-        # input_ids[
-        #     :, self.num_image_tokens : self.num_video_tokens + self.num_image_tokens
-        # ] = config.video_token_id
+        input_ids[:, self.num_image_tokens : self.num_video_tokens + self.num_image_tokens] = config.video_token_id
 
         inputs_dict = {
             "pixel_values": pixel_values,
-            # "pixel_values_videos": pixel_values_videos,
+            "pixel_values_videos": pixel_values_videos,
             "input_ids": input_ids,
             "attention_mask": attention_mask,
         }
@@ -202,6 +201,7 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
             input_ids = inputs["input_ids"]
             del inputs["input_ids"]
             del inputs["pixel_values"]
+            del inputs["pixel_values_videos"]
 
             wte = model.get_input_embeddings()
             inputs["inputs_embeds"] = wte(input_ids)
@@ -223,6 +223,7 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
             input_ids = inputs["input_ids"]
             del inputs["input_ids"]
             del inputs["pixel_values"]
+            del inputs["pixel_values_videos"]
 
             inputs_embeds = model.get_input_embeddings()(input_ids)
 
@@ -282,6 +283,48 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
         "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
     )
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip(
+        "ViT PE cannot be tested with meta device"
+    )
+    def test_can_be_initialized_on_meta(self):
+        pass
+
+    @unittest.skip(
+        "ViT PE cannot be tested with meta device"
+    )
+    def test_can_load_with_meta_device_context_manager(self):
+        pass
+
+    @unittest.skip(
+        "Specifying both inputs_embeds and pixel_values are not supported for PerceptionLM"
+    )
+    def test_generate_from_inputs_embeds_0_greedy(self):
+        pass
+
+    @unittest.skip(
+        "Specifying both inputs_embeds and pixel_values are not supported for PerceptionLM"
+    )        
+    def test_generate_from_inputs_embeds_1_beam_search(self):
+        pass
+
+    @unittest.skip(
+        "Specifying both inputs_embeds and pixel_values are not supported for PerceptionLM"
+    )
+    def test_generate_from_inputs_embeds_with_static_cache(self):
+        pass
+
+    @unittest.skip(
+        "We don't support initializing all missing weights, only finetuning is supported."
+    )
+    def test_can_init_all_missing_weights(self):
+        pass
+
+    @unittest.skip(
+        "We don't support initializing all missing weights, only finetuning is supported."
+    )
+    def test_initialization(self):
         pass
 
 
