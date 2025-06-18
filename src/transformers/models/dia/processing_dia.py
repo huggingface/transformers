@@ -23,7 +23,7 @@ from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, U
 from ...utils import is_torch_available
 
 
-if is_torch_available:
+if is_torch_available():
     import torch
 
     from ...models.dac.modeling_dac import DacModel
