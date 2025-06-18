@@ -391,7 +391,7 @@ class TrainingArguments:
             installation](https://github.com/intel/intel-extension-for-pytorch).
         bf16 (`bool`, *optional*, defaults to `False`):
             Whether to use bf16 16-bit (mixed) precision training instead of 32-bit training. Requires Ampere or higher
-            NVIDIA architecture or using CPU (use_cpu) or Ascend NPU. This is an experimental API and it may change.
+            NVIDIA architecture or Intel XPU or using CPU (use_cpu) or Ascend NPU. This is an experimental API and it may change.
         fp16 (`bool`, *optional*, defaults to `False`):
             Whether to use fp16 16-bit (mixed) precision training instead of 32-bit training.
         fp16_opt_level (`str`, *optional*, defaults to 'O1'):
@@ -1753,6 +1753,11 @@ class TrainingArguments:
                     )
                 else:
                     self.accelerator_config = AcceleratorConfig.from_json_file(self.accelerator_config)
+            if self.accelerator_config.split_batches:
+                logger.info(
+                    "Using `split_batches=True` in `accelerator_config` will override the `per_device_train_batch_size` "
+                    "Batches will be split across all processes equally when using `split_batches=True`."
+                )
 
         # Initialize device before we proceed
         if self.framework == "pt" and is_torch_available():

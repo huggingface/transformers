@@ -65,7 +65,7 @@ class GLPNDropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
 # Copied from transformers.models.segformer.modeling_segformer.SegformerOverlapPatchEmbeddings

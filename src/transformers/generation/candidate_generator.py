@@ -710,8 +710,8 @@ class AssistantToTargetTranslator:
         assistant_model: Optional["PreTrainedModel"] = None,
         assistant_prune_lm_head: bool = False,
     ):
-        self._target_tokenizer: "PreTrainedTokenizerBase" = target_tokenizer
-        self._assistant_tokenizer: "PreTrainedTokenizerBase" = assistant_tokenizer
+        self._target_tokenizer: PreTrainedTokenizerBase = target_tokenizer
+        self._assistant_tokenizer: PreTrainedTokenizerBase = assistant_tokenizer
         self._assistant_model_device: str = (
             assistant_model_device if assistant_model is None else assistant_model.device
         )
