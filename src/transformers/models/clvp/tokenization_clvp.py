@@ -34,7 +34,7 @@ VOCAB_FILES_NAMES = {
 }
 
 
-@lru_cache()
+@lru_cache
 # Copied from transformers.models.gpt2.tokenization_gpt2.bytes_to_unicode
 def bytes_to_unicode():
     """

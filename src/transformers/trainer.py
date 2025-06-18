@@ -31,10 +31,10 @@ import sys
 import tempfile
 import time
 import warnings
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Iterator, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 
 # Integrations must be imported before ML frameworks:

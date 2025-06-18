@@ -1626,8 +1626,8 @@ class NeptuneCallback(TrainerCallback):
                 target_path = consistent_checkpoint_path
             except OSError as e:
                 logger.warning(
-                    "NeptuneCallback was unable to made a copy of checkpoint due to I/O exception: '{}'. "
-                    "Could fail trying to upload.".format(e)
+                    f"NeptuneCallback was unable to made a copy of checkpoint due to I/O exception: '{e}'. "
+                    "Could fail trying to upload."
                 )
 
         self._metadata_namespace[self._target_checkpoints_namespace].upload_files(target_path)
@@ -1976,9 +1976,7 @@ class ClearMLCallback(TrainerCallback):
                     )
                 except Exception as e:
                     logger.warning(
-                        "Could not remove checkpoint `{}` after going over the `save_total_limit`. Error is: {}".format(
-                            self._checkpoints_saved[0].name, e
-                        )
+                        f"Could not remove checkpoint `{self._checkpoints_saved[0].name}` after going over the `save_total_limit`. Error is: {e}"
                     )
                     break
                 self._checkpoints_saved = self._checkpoints_saved[1:]

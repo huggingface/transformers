@@ -307,7 +307,7 @@ class SwitchTransformersSparseMLP(nn.Module):
             0
         ].tolist()  # length: number of "activated" expert / value: index
         for idx in idx_mask:
-            next_states[router_mask[:, :, idx]] = getattr(self.experts, "expert_{}".format(idx))(
+            next_states[router_mask[:, :, idx]] = getattr(self.experts, f"expert_{idx}")(
                 hidden_states[router_mask[:, :, idx]]
             )
 

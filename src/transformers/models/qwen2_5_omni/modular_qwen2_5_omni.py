@@ -4134,7 +4134,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         check_torch_load_is_safe()
         for key, value in torch.load(path, weights_only=True).items():
             self.speaker_map[key] = value
-        logger.info("Speaker {} loaded".format(list(self.speaker_map.keys())))
+        logger.info(f"Speaker {list(self.speaker_map.keys())} loaded")
 
     def disable_talker(self):
         if hasattr(self, "talker"):

@@ -795,8 +795,8 @@ class TFSwinLayer(keras.layers.Layer):
         mask_windows = window_partition(img_mask, window_size)
         mask_windows = tf.reshape(mask_windows, (-1, window_size * window_size))
         attn_mask = tf.expand_dims(mask_windows, 1) - tf.expand_dims(mask_windows, 2)
-        attn_mask = tf.where(attn_mask != 0, float(-100.0), attn_mask)
-        attn_mask = tf.where(attn_mask == 0, float(0.0), attn_mask)
+        attn_mask = tf.where(attn_mask != 0, -100.0, attn_mask)
+        attn_mask = tf.where(attn_mask == 0, 0.0, attn_mask)
         return attn_mask
 
     def maybe_pad(
