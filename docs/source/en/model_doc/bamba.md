@@ -29,6 +29,8 @@ rendered properly in your Markdown viewer.
 You can find all the original Bamba checkpoints under the [Bamba](https://huggingface.co/collections/ibm-ai-platform/bamba-674f1388b9bbc98b413c7bab) collection.
 
 > [!TIP]
+> This model was contributed by [ani300](https://github.com/ani300) and [fabianlim](https://github.com/fabianlim).
+>
 > Click on the Bamba models in the right sidebar for more examples of how to apply Bamba to different text generation tasks.
 
 The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line.
@@ -115,9 +117,6 @@ python -m fms_mo.run_quant \
 
 ## BambaConfig
 
-| Model | Params     | # Layers | Hidden Dim. | Attention Heads | GQA | KV Heads | Context Length | Tied Embeddings |
-| ----- | ---------- | -------- | ----------- | --------------- | --- | -------- | -------------- | --------------- |
-| Bamba | 9B (9.78B) | 32       | 4096        | 32              | Yes | 8        | 4096           | False           |
 
 [[autodoc]] BambaConfig
 
@@ -125,4 +124,3 @@ python -m fms_mo.run_quant \
 
 [[autodoc]] BambaForCausalLM - forward
 
-This HF implementation is contributed by [ani300](https://github.com/ani300) and [fabianlim](https://github.com/fabianlim).
