@@ -1623,9 +1623,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertFalse(is_any_loss_nan_or_inf(log_history_filter))
 
     def test_train_and_eval_dataloaders(self):
-        if torch_device in ["cuda", "xpu"]:
+        if torch_device in ["cuda"]:
             n_gpu = max(1, backend_device_count(torch_device))
         else:
+            # DP is decprecated by PyTorch, accelerators like XPU doesn't support DP
             n_gpu = 1
 
         tmp_dir = self.get_auto_remove_tmp_dir()
@@ -3939,7 +3940,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         from torch import _dynamo as torchdynamo
 
         class CustomTrainer(Trainer):
-            def compute_loss(self, model, inputs, return_outputs=False):
+            def compute_loss(self, model, inputs, num_items_in_batch=None, return_outputs=False):
                 x = inputs["x"]
                 output = model(x)
                 if self.args.n_gpu == 1:

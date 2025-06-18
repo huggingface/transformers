@@ -618,7 +618,7 @@ class Adafactor(Optimizer):
             Iterable of parameters to optimize or dictionaries defining parameter groups.
         lr (`float`, *optional*):
             The external learning rate.
-        eps (`Tuple[float, float]`, *optional*, defaults to `(1e-30, 0.001)`):
+        eps (`tuple[float, float]`, *optional*, defaults to `(1e-30, 0.001)`):
             Regularization constants for square gradient and parameter scale respectively
         clip_threshold (`float`, *optional*, defaults to 1.0):
             Threshold of root mean square of final gradient update
