@@ -17,7 +17,7 @@ import unittest
 
 import requests
 
-from transformers import AutoImageProcessor, EoMTConfig, EoMTForUniversalSegmentation
+from transformers import AutoImageProcessor, EomtConfig, EomtForUniversalSegmentation
 from transformers.testing_utils import require_torch, require_torch_accelerator, require_torch_fp16, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -33,7 +33,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class EoMTForUniversalSegmentationTester:
+class EomtForUniversalSegmentationTester:
     def __init__(
         self,
         parent,
@@ -75,7 +75,7 @@ class EoMTForUniversalSegmentationTester:
             "num_queries": self.num_queries,
             "num_blocks": 1,
         }
-        return EoMTConfig(**config)
+        return EomtConfig(**config)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, 3, self.image_size, self.image_size]).to(torch_device)
@@ -100,8 +100,8 @@ class EoMTForUniversalSegmentationTester:
 
 
 @require_torch
-class EoMTForUniversalSegmentationTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (EoMTForUniversalSegmentation,) if is_torch_available() else ()
+class EomtForUniversalSegmentationTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (EomtForUniversalSegmentation,) if is_torch_available() else ()
     is_encoder_decoder = False
     test_pruning = False
     test_head_masking = False
@@ -109,8 +109,8 @@ class EoMTForUniversalSegmentationTest(ModelTesterMixin, unittest.TestCase):
     test_torch_exportable = False
 
     def setUp(self):
-        self.model_tester = EoMTForUniversalSegmentationTester(self)
-        self.config_tester = ConfigTester(self, config_class=EoMTConfig, has_text_modality=False)
+        self.model_tester = EomtForUniversalSegmentationTester(self)
+        self.config_tester = ConfigTester(self, config_class=EomtConfig, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -124,7 +124,7 @@ class EoMTForUniversalSegmentationTest(ModelTesterMixin, unittest.TestCase):
         }
         config = self.model_tester.get_config()
 
-        model = EoMTForUniversalSegmentation(config).to(torch_device)
+        model = EomtForUniversalSegmentation(config).to(torch_device)
         outputs = model(**inputs)
         self.assertTrue(outputs.loss is not None)
 
@@ -267,13 +267,13 @@ class EoMTForUniversalSegmentationTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class EoMTForUniversalSegmentationIntegrationTest(unittest.TestCase):
+class EomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.model_id = "yaswanthgali/coco_panoptic_eomt_large_640-hf"
 
     @slow
     def test_inference(self):
-        model = EoMTForUniversalSegmentation.from_pretrained(self.model_id, device_map="auto")
+        model = EomtForUniversalSegmentation.from_pretrained(self.model_id, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(self.model_id)
 
         image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
@@ -316,7 +316,7 @@ class EoMTForUniversalSegmentationIntegrationTest(unittest.TestCase):
     @require_torch_fp16
     @slow
     def test_inference_fp16(self):
-        model = EoMTForUniversalSegmentation.from_pretrained(
+        model = EomtForUniversalSegmentation.from_pretrained(
             self.model_id, torch_dtype=torch.float16, device_map="auto"
         )
         processor = AutoImageProcessor.from_pretrained(self.model_id)
@@ -334,7 +334,7 @@ class EoMTForUniversalSegmentationIntegrationTest(unittest.TestCase):
     @slow
     def test_semantic_segmentation_inference(self):
         model_id = "yaswanthgali/ade20k_semantic_eomt_large_512-hf"
-        model = EoMTForUniversalSegmentation.from_pretrained(model_id, device_map="auto")
+        model = EomtForUniversalSegmentation.from_pretrained(model_id, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(model_id)
 
         image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
@@ -374,7 +374,7 @@ class EoMTForUniversalSegmentationIntegrationTest(unittest.TestCase):
 
     @slow
     def test_panoptic_segmentation_inference(self):
-        model = EoMTForUniversalSegmentation.from_pretrained(self.model_id, device_map="auto")
+        model = EomtForUniversalSegmentation.from_pretrained(self.model_id, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(self.model_id)
 
         image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
@@ -425,7 +425,7 @@ class EoMTForUniversalSegmentationIntegrationTest(unittest.TestCase):
     @slow
     def test_instance_segmentation_inference(self):
         model_id = "yaswanthgali/coco_instance_eomt_large_640-hf"
-        model = EoMTForUniversalSegmentation.from_pretrained(model_id, device_map="auto")
+        model = EomtForUniversalSegmentation.from_pretrained(model_id, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(model_id)
 
         image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)

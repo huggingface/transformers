@@ -33,7 +33,7 @@ from ...activations import ACT2FN
 from ...file_utils import ModelOutput, is_scipy_available, requires_backends
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import auto_docstring, can_return_tuple, is_accelerate_available, logging
-from .configuration_eomt import EoMTConfig
+from .configuration_eomt import EomtConfig
 
 
 if is_scipy_available():
@@ -48,14 +48,14 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class EoMTForUniversalSegmentationOutput(ModelOutput):
+class EomtForUniversalSegmentationOutput(ModelOutput):
     """
-    Class for outputs of [`EoMTForUniversalSegmentationOutput`].
+    Class for outputs of [`EomtForUniversalSegmentationOutput`].
 
-    This output can be directly passed to [`~EoMTFormerImageProcessor.post_process_semantic_segmentation`] or
-    [`~EoMTFormerImageProcessor.post_process_instance_segmentation`] or
-    [`~EoMTFormerImageProcessor.post_process_panoptic_segmentation`] to compute final segmentation maps. Please, see
-    [`~EoMTFormerImageProcessor] for details regarding usage.
+    This output can be directly passed to [`~EomtFormerImageProcessor.post_process_semantic_segmentation`] or
+    [`~EomtFormerImageProcessor.post_process_instance_segmentation`] or
+    [`~EomtFormerImageProcessor.post_process_panoptic_segmentation`] to compute final segmentation maps. Please, see
+    [`~EomtFormerImageProcessor] for details regarding usage.
 
     Args:
         loss (`torch.Tensor`, *optional*):
@@ -166,8 +166,8 @@ def pair_wise_sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Ten
     return loss
 
 
-# Adapted from https://github.com/facebookresearch/EoMT/blob/main/eomt/modeling/matcher.py
-class EoMTHungarianMatcher(nn.Module):
+# Adapted from https://github.com/facebookresearch/Eomt/blob/main/eomt/modeling/matcher.py
+class EomtHungarianMatcher(nn.Module):
     """This class computes an assignment between the labels and the predictions of the network.
 
     For efficiency reasons, the labels don't include the no_object. Because of this, in general, there are more
@@ -322,17 +322,17 @@ def sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Tensor, num_m
     return loss
 
 
-# Adapted from https://github.com/facebookresearch/EoMT/blob/main/eomt/modeling/criterion.py
-class EoMTLoss(nn.Module):
-    def __init__(self, config: EoMTConfig, weight_dict: Dict[str, float]):
+# Adapted from https://github.com/facebookresearch/Eomt/blob/main/eomt/modeling/criterion.py
+class EomtLoss(nn.Module):
+    def __init__(self, config: EomtConfig, weight_dict: Dict[str, float]):
         """
-        The EoMT Loss. The loss is computed very similar to DETR. The process happens in two steps: 1) we
+        The Eomt Loss. The loss is computed very similar to DETR. The process happens in two steps: 1) we
         compute hungarian assignment between ground truth masks and the outputs of the model 2) we supervise each pair
         of matched ground-truth / prediction (supervise class and mask)
 
         Args:
-            config (`EoMTConfig`):
-                The configuration for EoMT model also containing loss calculation specific parameters.
+            config (`EomtConfig`):
+                The configuration for Eomt model also containing loss calculation specific parameters.
             weight_dict (`Dict[str, float]`):
                 A dictionary of weights to be applied to the different losses.
         """
@@ -352,7 +352,7 @@ class EoMTLoss(nn.Module):
         self.oversample_ratio = config.oversample_ratio
         self.importance_sample_ratio = config.importance_sample_ratio
 
-        self.matcher = EoMTHungarianMatcher(
+        self.matcher = EomtHungarianMatcher(
             cost_class=config.class_weight,
             cost_dice=config.dice_weight,
             cost_mask=config.mask_weight,
@@ -494,7 +494,7 @@ class EoMTLoss(nn.Module):
 
     def calculate_uncertainty(self, logits: torch.Tensor) -> torch.Tensor:
         """
-        In EoMT paper, uncertainty is estimated as L1 distance between 0.0 and the logit prediction in 'logits'
+        In Eomt paper, uncertainty is estimated as L1 distance between 0.0 and the logit prediction in 'logits'
         for the foreground class in `classes`.
 
         Args:
@@ -585,8 +585,8 @@ class EoMTLoss(nn.Module):
             class_labels (`List[torch.Tensor]`):
                 List of class labels of shape `(labels)`.
             auxiliary_predictions (`Dict[str, torch.Tensor]`, *optional*):
-                if `use_auxiliary_loss` was set to `true` in [`EoMTConfig`], then it contains the logits from
-                the inner layers of the EoMTMaskedAttentionDecoder.
+                if `use_auxiliary_loss` was set to `true` in [`EomtConfig`], then it contains the logits from
+                the inner layers of the EomtMaskedAttentionDecoder.
 
         Returns:
             losses (`Dict[str, Tensor]`): A dict of `torch.Tensor` containing three keys:
@@ -595,7 +595,7 @@ class EoMTLoss(nn.Module):
               masks.
             - **loss_dice** -- The loss computed using dice loss on the predicted on the predicted and ground truth
               masks.
-            if `use_auxiliary_loss` was set to `true` in [`EoMTConfig`], the dictionary contains additional
+            if `use_auxiliary_loss` was set to `true` in [`EomtConfig`], the dictionary contains additional
             losses for each auxiliary predictions.
         """
 
@@ -635,7 +635,7 @@ class EoMTLoss(nn.Module):
         return num_masks
 
 
-class EoMTPatchEmbeddings(nn.Module):
+class EomtPatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
     `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
@@ -668,12 +668,12 @@ class EoMTPatchEmbeddings(nn.Module):
         return embeddings
 
 
-class EoMTEmbeddings(nn.Module):
+class EomtEmbeddings(nn.Module):
     """
     Construct the CLS token, mask token, position and patch embeddings.
     """
 
-    def __init__(self, config: EoMTConfig) -> None:
+    def __init__(self, config: EomtConfig) -> None:
         super().__init__()
 
         self.config = config
@@ -682,7 +682,7 @@ class EoMTEmbeddings(nn.Module):
         self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
         self.register_tokens = nn.Parameter(torch.zeros(1, config.num_register_tokens, config.hidden_size))
 
-        self.patch_embeddings = EoMTPatchEmbeddings(config)
+        self.patch_embeddings = EomtPatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.num_prefix_tokens = 1 + config.num_register_tokens  # 1 for [CLS]
@@ -728,7 +728,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-class EoMTAttention(nn.Module):
+class EomtAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config):
@@ -799,7 +799,7 @@ class EoMTAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class EoMTLayerScale(nn.Module):
+class EomtLayerScale(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
         self.lambda1 = nn.Parameter(config.layerscale_value * torch.ones(config.hidden_size))
@@ -828,7 +828,7 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     return output
 
 
-class EoMTDropPath(nn.Module):
+class EomtDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob: Optional[float] = None) -> None:
@@ -842,7 +842,7 @@ class EoMTDropPath(nn.Module):
         return "p={}".format(self.drop_prob)
 
 
-class EoMTMLP(nn.Module):
+class EomtMLP(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
         in_features = out_features = config.hidden_size
@@ -861,7 +861,7 @@ class EoMTMLP(nn.Module):
         return hidden_state
 
 
-class EoMTSwiGLUFFN(nn.Module):
+class EomtSwiGLUFFN(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
         in_features = out_features = config.hidden_size
@@ -878,24 +878,24 @@ class EoMTSwiGLUFFN(nn.Module):
         return self.weights_out(hidden)
 
 
-class EoMTLayer(nn.Module):
+class EomtLayer(nn.Module):
     """This corresponds to the Block class in the original implementation."""
 
-    def __init__(self, config: EoMTConfig) -> None:
+    def __init__(self, config: EomtConfig) -> None:
         super().__init__()
 
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attention = EoMTAttention(config)
-        self.layer_scale1 = EoMTLayerScale(config)
-        self.drop_path = EoMTDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+        self.attention = EomtAttention(config)
+        self.layer_scale1 = EomtLayerScale(config)
+        self.drop_path = EomtDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         if config.use_swiglu_ffn:
-            self.mlp = EoMTSwiGLUFFN(config)
+            self.mlp = EomtSwiGLUFFN(config)
         else:
-            self.mlp = EoMTMLP(config)
-        self.layer_scale2 = EoMTLayerScale(config)
+            self.mlp = EomtMLP(config)
+        self.layer_scale2 = EomtLayerScale(config)
 
     def forward(
         self,
@@ -904,7 +904,7 @@ class EoMTLayer(nn.Module):
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         self_attention_outputs = self.attention(
-            self.norm1(hidden_states),  # in EoMT, layernorm is applied before self-attention
+            self.norm1(hidden_states),  # in Eomt, layernorm is applied before self-attention
             head_mask,
             output_attentions=output_attentions,
         )
@@ -916,7 +916,7 @@ class EoMTLayer(nn.Module):
         # first residual connection
         hidden_states = self.drop_path(attention_output) + hidden_states
 
-        # in EoMT, layernorm is also applied after self-attention
+        # in Eomt, layernorm is also applied after self-attention
         layer_output = self.norm2(hidden_states)
         layer_output = self.mlp(layer_output)
         layer_output = self.layer_scale2(layer_output)
@@ -929,7 +929,7 @@ class EoMTLayer(nn.Module):
         return outputs
 
 
-class EoMTLayerNorm2d(nn.LayerNorm):
+class EomtLayerNorm2d(nn.LayerNorm):
     def __init__(self, num_channels, eps=1e-6, affine=True):
         super().__init__(num_channels, eps=eps, elementwise_affine=affine)
 
@@ -940,8 +940,8 @@ class EoMTLayerNorm2d(nn.LayerNorm):
         return hidden_state
 
 
-class EoMTScaleLayer(nn.Module):
-    def __init__(self, config: EoMTConfig):
+class EomtScaleLayer(nn.Module):
+    def __init__(self, config: EomtConfig):
         super().__init__()
         hidden_size = config.hidden_size
         self.conv1 = nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=2, stride=2)
@@ -955,7 +955,7 @@ class EoMTScaleLayer(nn.Module):
             bias=False,
         )
 
-        self.layernorm2d = EoMTLayerNorm2d(hidden_size)
+        self.layernorm2d = EomtLayerNorm2d(hidden_size)
 
     def forward(self, hidden_states: torch.tensor) -> torch.Tensor:
         hidden_states = self.conv1(hidden_states)
@@ -965,11 +965,11 @@ class EoMTScaleLayer(nn.Module):
         return hidden_states
 
 
-class EoMTScaleBlock(nn.Module):
-    def __init__(self, config: EoMTConfig):
+class EomtScaleBlock(nn.Module):
+    def __init__(self, config: EomtConfig):
         super().__init__()
         self.num_blocks = config.num_upscale_blocks
-        self.block = nn.ModuleList([EoMTScaleLayer(config) for _ in range(self.num_blocks)])
+        self.block = nn.ModuleList([EomtScaleLayer(config) for _ in range(self.num_blocks)])
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         for block in self.block:
@@ -977,8 +977,8 @@ class EoMTScaleBlock(nn.Module):
         return hidden_states
 
 
-class EoMTMaskHead(nn.Module):
-    def __init__(self, config: EoMTConfig):
+class EomtMaskHead(nn.Module):
+    def __init__(self, config: EomtConfig):
         super().__init__()
 
         hidden_size = config.hidden_size
@@ -995,17 +995,17 @@ class EoMTMaskHead(nn.Module):
 
 
 @auto_docstring
-class EoMTPreTrainedModel(PreTrainedModel):
+class EomtPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = EoMTConfig
+    config_class = EomtConfig
     base_model_prefix = "eomt"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
-    _no_split_modules = ["EoMTMLP"]
+    _no_split_modules = ["EomtMLP"]
     _supports_sdpa = True
     _supports_flash_attn_2 = True
 
@@ -1024,10 +1024,10 @@ class EoMTPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=1)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, EoMTLayerScale):
+        elif isinstance(module, EomtLayerScale):
             if hasattr(module, "lambda1"):
                 module.lambda1.data.fill_(self.config.layerscale_value)
-        elif isinstance(module, EoMTEmbeddings):
+        elif isinstance(module, EomtEmbeddings):
             module.cls_token.data = nn.init.trunc_normal_(
                 module.cls_token.data.to(torch.float32), mean=0.0, std=std
             ).to(module.cls_token.dtype)
@@ -1039,21 +1039,21 @@ class EoMTPreTrainedModel(PreTrainedModel):
     The EoMT Model with head on top for instance/semantic/panoptic segmentation.
     """
 )
-class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
+class EomtForUniversalSegmentation(EomtPreTrainedModel):
     main_input_name = "pixel_values"
 
-    def __init__(self, config: EoMTConfig) -> None:
+    def __init__(self, config: EomtConfig) -> None:
         super().__init__(config)
         self.config = config
         self.num_hidden_layers = config.num_hidden_layers
-        self.embeddings = EoMTEmbeddings(config)
+        self.embeddings = EomtEmbeddings(config)
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         self.query = nn.Embedding(config.num_queries, config.hidden_size)
-        self.layers = nn.ModuleList([EoMTLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([EomtLayer(config) for _ in range(config.num_hidden_layers)])
 
-        self.upscale_block = EoMTScaleBlock(config)
-        self.mask_head = EoMTMaskHead(config)
+        self.upscale_block = EomtScaleBlock(config)
+        self.mask_head = EomtMaskHead(config)
 
         self.class_predictor = nn.Linear(config.hidden_size, config.num_labels + 1)
 
@@ -1064,7 +1064,7 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
             "loss_dice": config.dice_weight,
         }
 
-        self.criterion = EoMTLoss(config=config, weight_dict=self.weight_dict)
+        self.criterion = EomtLoss(config=config, weight_dict=self.weight_dict)
 
         self.register_buffer("attn_mask_probs", torch.ones(config.num_blocks))
 
@@ -1106,7 +1106,7 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
         class_labels: Optional[List[Tensor]] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
-    ) -> EoMTForUniversalSegmentationOutput:
+    ) -> EomtForUniversalSegmentationOutput:
         r"""
         mask_labels (`List[torch.Tensor]`, *optional*):
             List of mask labels of shape `(num_labels, height, width)` to be fed to a model
@@ -1206,7 +1206,7 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
                 )
                 loss += self.get_loss(loss_dict)
 
-        return EoMTForUniversalSegmentationOutput(
+        return EomtForUniversalSegmentationOutput(
             loss=loss,
             masks_queries_logits=masks_queries_logits,
             class_queries_logits=class_queries_logits,
@@ -1246,4 +1246,4 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
         return attn_mask
 
 
-__all__ = ["EoMTPreTrainedModel", "EoMTForUniversalSegmentation"]
+__all__ = ["EomtPreTrainedModel", "EomtForUniversalSegmentation"]

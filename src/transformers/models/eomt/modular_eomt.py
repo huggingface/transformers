@@ -46,9 +46,9 @@ from ..vit.configuration_vit import ViTConfig
 logger = logging.get_logger(__name__)
 
 
-class EoMTConfig(ViTConfig):
+class EomtConfig(ViTConfig):
     r"""
-    This is the configuration class to store the configuration of a [`EoMTModel`]. It is used to instantiate an EoMT model
+    This is the configuration class to store the configuration of a [`EomtForUniversalSegmentation`]. It is used to instantiate an EoMT model
     according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the EoMT
     [tue-mps/coco_panoptic_eomt_large_640](https://huggingface.co/tue-mps/coco_panoptic_eomt_large_640)
@@ -114,13 +114,13 @@ class EoMTConfig(ViTConfig):
     Example:
 
     ```python
-    >>> from transformers import EoMTConfig, EoMTForUniversalSegmentation
+    >>> from transformers import EomtConfig, EomtForUniversalSegmentation
 
     >>> # Initialize configuration
-    >>> config = EoMTConfig()
+    >>> config = EomtConfig()
 
     >>> # Initialize model
-    >>> model = EoMTForUniversalSegmentation(config)
+    >>> model = EomtForUniversalSegmentation(config)
 
     >>> # Access config
     >>> config = model.config
@@ -198,14 +198,14 @@ class EoMTConfig(ViTConfig):
 
 
 @dataclass
-class EoMTForUniversalSegmentationOutput(ModelOutput):
+class EomtForUniversalSegmentationOutput(ModelOutput):
     """
-    Class for outputs of [`EoMTForUniversalSegmentationOutput`].
+    Class for outputs of [`EomtForUniversalSegmentationOutput`].
 
-    This output can be directly passed to [`~EoMTFormerImageProcessor.post_process_semantic_segmentation`] or
-    [`~EoMTFormerImageProcessor.post_process_instance_segmentation`] or
-    [`~EoMTFormerImageProcessor.post_process_panoptic_segmentation`] to compute final segmentation maps. Please, see
-    [`~EoMTFormerImageProcessor] for details regarding usage.
+    This output can be directly passed to [`~EomtFormerImageProcessor.post_process_semantic_segmentation`] or
+    [`~EomtFormerImageProcessor.post_process_instance_segmentation`] or
+    [`~EomtFormerImageProcessor.post_process_panoptic_segmentation`] to compute final segmentation maps. Please, see
+    [`~EomtFormerImageProcessor] for details regarding usage.
 
     Args:
         loss (`torch.Tensor`, *optional*):
@@ -234,16 +234,16 @@ class EoMTForUniversalSegmentationOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-class EoMTLoss(Mask2FormerLoss):
+class EomtLoss(Mask2FormerLoss):
     pass
 
 
-class EoMTPatchEmbeddings(Dinov2PatchEmbeddings):
+class EomtPatchEmbeddings(Dinov2PatchEmbeddings):
     pass
 
 
-class EoMTEmbeddings(Dinov2Embeddings, nn.Module):
-    def __init__(self, config: EoMTConfig) -> None:
+class EomtEmbeddings(Dinov2Embeddings, nn.Module):
+    def __init__(self, config: EomtConfig) -> None:
         Dinov2Embeddings().__init__()
 
         self.config = config
@@ -252,7 +252,7 @@ class EoMTEmbeddings(Dinov2Embeddings, nn.Module):
         self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
         self.register_tokens = nn.Parameter(torch.zeros(1, config.num_register_tokens, config.hidden_size))
 
-        self.patch_embeddings = EoMTPatchEmbeddings(config)
+        self.patch_embeddings = EomtPatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.num_prefix_tokens = 1 + config.num_register_tokens  # 1 for [CLS]
@@ -260,7 +260,7 @@ class EoMTEmbeddings(Dinov2Embeddings, nn.Module):
         self.register_buffer("position_ids", torch.arange(num_patches).expand((1, -1)), persistent=False)
 
     def interpolate_pos_encoding(self):
-        raise AttributeError("Not needed for EoMT")
+        raise AttributeError("Not needed for Eomt Model")
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         batch_size, _, _, _ = pixel_values.shape
@@ -278,19 +278,19 @@ class EoMTEmbeddings(Dinov2Embeddings, nn.Module):
         return embeddings
 
 
-class EoMTAttention(SiglipAttention):
+class EomtAttention(SiglipAttention):
     pass
 
 
-class EoMTLayerScale(Dinov2LayerScale):
+class EomtLayerScale(Dinov2LayerScale):
     pass
 
 
-class EoMTLayer(Dinov2Layer):
+class EomtLayer(Dinov2Layer):
     pass
 
 
-class EoMTLayerNorm2d(nn.LayerNorm):
+class EomtLayerNorm2d(nn.LayerNorm):
     def __init__(self, num_channels, eps=1e-6, affine=True):
         super().__init__(num_channels, eps=eps, elementwise_affine=affine)
 
@@ -301,8 +301,8 @@ class EoMTLayerNorm2d(nn.LayerNorm):
         return hidden_state
 
 
-class EoMTScaleLayer(nn.Module):
-    def __init__(self, config: EoMTConfig):
+class EomtScaleLayer(nn.Module):
+    def __init__(self, config: EomtConfig):
         super().__init__()
         hidden_size = config.hidden_size
         self.conv1 = nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=2, stride=2)
@@ -316,7 +316,7 @@ class EoMTScaleLayer(nn.Module):
             bias=False,
         )
 
-        self.layernorm2d = EoMTLayerNorm2d(hidden_size)
+        self.layernorm2d = EomtLayerNorm2d(hidden_size)
 
     def forward(self, hidden_states: torch.tensor) -> torch.Tensor:
         hidden_states = self.conv1(hidden_states)
@@ -326,11 +326,11 @@ class EoMTScaleLayer(nn.Module):
         return hidden_states
 
 
-class EoMTScaleBlock(nn.Module):
-    def __init__(self, config: EoMTConfig):
+class EomtScaleBlock(nn.Module):
+    def __init__(self, config: EomtConfig):
         super().__init__()
         self.num_blocks = config.num_upscale_blocks
-        self.block = nn.ModuleList([EoMTScaleLayer(config) for _ in range(self.num_blocks)])
+        self.block = nn.ModuleList([EomtScaleLayer(config) for _ in range(self.num_blocks)])
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         for block in self.block:
@@ -338,8 +338,8 @@ class EoMTScaleBlock(nn.Module):
         return hidden_states
 
 
-class EoMTMaskHead(nn.Module):
-    def __init__(self, config: EoMTConfig):
+class EomtMaskHead(nn.Module):
+    def __init__(self, config: EomtConfig):
         super().__init__()
 
         hidden_size = config.hidden_size
@@ -356,17 +356,17 @@ class EoMTMaskHead(nn.Module):
 
 
 @auto_docstring
-class EoMTPreTrainedModel(PreTrainedModel):
+class EomtPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = EoMTConfig
+    config_class = EomtConfig
     base_model_prefix = "eomt"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
-    _no_split_modules = ["EoMTMLP"]
+    _no_split_modules = ["EomtMLP"]
     _supports_sdpa = True
     _supports_flash_attn_2 = True
 
@@ -385,10 +385,10 @@ class EoMTPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=1)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, EoMTLayerScale):
+        elif isinstance(module, EomtLayerScale):
             if hasattr(module, "lambda1"):
                 module.lambda1.data.fill_(self.config.layerscale_value)
-        elif isinstance(module, EoMTEmbeddings):
+        elif isinstance(module, EomtEmbeddings):
             module.cls_token.data = nn.init.trunc_normal_(
                 module.cls_token.data.to(torch.float32), mean=0.0, std=std
             ).to(module.cls_token.dtype)
@@ -400,19 +400,19 @@ class EoMTPreTrainedModel(PreTrainedModel):
     The EoMT Model with head on top for instance/semantic/panoptic segmentation.
     """
 )
-class EoMTForUniversalSegmentation(Mask2FormerForUniversalSegmentation, nn.Module):
-    def __init__(self, config: EoMTConfig) -> None:
+class EomtForUniversalSegmentation(Mask2FormerForUniversalSegmentation, nn.Module):
+    def __init__(self, config: EomtConfig) -> None:
         nn.Module().__init__(config)
         self.config = config
         self.num_hidden_layers = config.num_hidden_layers
-        self.embeddings = EoMTEmbeddings(config)
+        self.embeddings = EomtEmbeddings(config)
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         self.query = nn.Embedding(config.num_queries, config.hidden_size)
-        self.layers = nn.ModuleList([EoMTLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([EomtLayer(config) for _ in range(config.num_hidden_layers)])
 
-        self.upscale_block = EoMTScaleBlock(config)
-        self.mask_head = EoMTMaskHead(config)
+        self.upscale_block = EomtScaleBlock(config)
+        self.mask_head = EomtMaskHead(config)
 
         self.class_predictor = nn.Linear(config.hidden_size, config.num_labels + 1)
 
@@ -423,7 +423,7 @@ class EoMTForUniversalSegmentation(Mask2FormerForUniversalSegmentation, nn.Modul
             "loss_dice": config.dice_weight,
         }
 
-        self.criterion = EoMTLoss(config=config, weight_dict=self.weight_dict)
+        self.criterion = EomtLoss(config=config, weight_dict=self.weight_dict)
 
         self.register_buffer("attn_mask_probs", torch.ones(config.num_blocks))
 
@@ -433,7 +433,7 @@ class EoMTForUniversalSegmentation(Mask2FormerForUniversalSegmentation, nn.Modul
         return self.embeddings.patch_embeddings
 
     def get_auxiliary_logits(self):
-        raise AttributeError("Note needed for EoMT")
+        raise AttributeError("Note needed for Eomt Model.")
 
     def predict(self, logits: torch.Tensor):
         query_tokens = logits[:, : self.config.num_queries, :]
@@ -571,7 +571,7 @@ class EoMTForUniversalSegmentation(Mask2FormerForUniversalSegmentation, nn.Modul
                 )
                 loss += self.get_loss(loss_dict)
 
-        return EoMTForUniversalSegmentationOutput(
+        return EomtForUniversalSegmentationOutput(
             loss=loss,
             masks_queries_logits=masks_queries_logits,
             class_queries_logits=class_queries_logits,
@@ -581,4 +581,4 @@ class EoMTForUniversalSegmentation(Mask2FormerForUniversalSegmentation, nn.Modul
         )
 
 
-__all__ = ["EoMTConfig", "EoMTPreTrainedModel", "EoMTForUniversalSegmentation"]
+__all__ = ["EomtConfig", "EomtPreTrainedModel", "EomtForUniversalSegmentation"]

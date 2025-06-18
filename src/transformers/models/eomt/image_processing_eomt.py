@@ -244,7 +244,7 @@ def get_target_size(size_dict: Dict[str, int]) -> Tuple[int, int]:
     return target_height, target_width
 
 
-class EoMTImageProcessor(BaseImageProcessor):
+class EomtImageProcessor(BaseImageProcessor):
     r"""
     Constructs a EoMT image processor. The image processor can be used to prepare image(s) and optional targets
     for the model.
@@ -969,4 +969,4 @@ class EoMTImageProcessor(BaseImageProcessor):
         return results
 
 
-__all__ = ["EoMTImageProcessor"]
+__all__ = ["EomtImageProcessor"]

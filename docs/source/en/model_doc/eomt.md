@@ -60,12 +60,12 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import EoMTForUniversalSegmentation, AutoImageProcessor
+from transformers import EomtForUniversalSegmentation, AutoImageProcessor
 
 
 model_id = "yaswanthgali/ade20k_semantic_eomt_large_512-hf"
 processor = AutoImageProcessor.from_pretrained(model_id)
-model = EoMTForUniversalSegmentation.from_pretrained(model_id)
+model = EomtForUniversalSegmentation.from_pretrained(model_id)
 
 image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
@@ -113,12 +113,12 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import EoMTForUniversalSegmentation, AutoImageProcessor
+from transformers import EomtForUniversalSegmentation, AutoImageProcessor
 
 
 model_id = "yaswanthgali/coco_instance_eomt_large_640-hf"
 processor = AutoImageProcessor.from_pretrained(model_id)
-model = EoMTForUniversalSegmentation.from_pretrained(model_id)
+model = EomtForUniversalSegmentation.from_pretrained(model_id)
 
 image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
@@ -157,12 +157,12 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import EoMTForUniversalSegmentation, AutoImageProcessor
+from transformers import EomtForUniversalSegmentation, AutoImageProcessor
 
 
 model_id = "yaswanthgali/coco_panoptic_eomt_large_640-hf"
 processor = AutoImageProcessor.from_pretrained(model_id)
-model = EoMTForUniversalSegmentation.from_pretrained(model_id)
+model = EomtForUniversalSegmentation.from_pretrained(model_id)
 
 image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
@@ -191,27 +191,27 @@ plt.title("Panoptic Segmentation")
 plt.show()
 ```
 
-## EoMTImageProcessor
+## EomtImageProcessor
 
-[[autodoc]] EoMTImageProcessor
+[[autodoc]] EomtImageProcessor
     - preprocess
     - post_process_semantic_segmentation
     - post_process_instance_segmentation
     - post_process_panoptic_segmentation
 
-## EoMTImageProcessorFast
+## EomtImageProcessorFast
 
-[[autodoc]] EoMTImageProcessorFast
+[[autodoc]] EomtImageProcessorFast
     - preprocess
     - post_process_semantic_segmentation
     - post_process_instance_segmentation
     - post_process_panoptic_segmentation
 
-## EoMTConfig
+## EomtConfig
 
-[[autodoc]] EoMTConfig
+[[autodoc]] EomtConfig
 
-## EoMTForUniversalSegmentation
+## EomtForUniversalSegmentation
 
-[[autodoc]] EoMTForUniversalSegmentation
+[[autodoc]] EomtForUniversalSegmentation
     - forward

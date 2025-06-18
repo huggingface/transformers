@@ -22,9 +22,9 @@
 from ...configuration_utils import PretrainedConfig
 
 
-class EoMTConfig(PretrainedConfig):
+class EomtConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`EoMTModel`]. It is used to instantiate an EoMT model
+    This is the configuration class to store the configuration of a [`EomtForUniversalSegmentation`]. It is used to instantiate an EoMT model
     according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the EoMT
     [tue-mps/coco_panoptic_eomt_large_640](https://huggingface.co/tue-mps/coco_panoptic_eomt_large_640)
@@ -90,13 +90,13 @@ class EoMTConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import EoMTConfig, EoMTForUniversalSegmentation
+    >>> from transformers import EomtConfig, EomtForUniversalSegmentation
 
     >>> # Initialize configuration
-    >>> config = EoMTConfig()
+    >>> config = EomtConfig()
 
     >>> # Initialize model
-    >>> model = EoMTForUniversalSegmentation(config)
+    >>> model = EomtForUniversalSegmentation(config)
 
     >>> # Access config
     >>> config = model.config
@@ -165,4 +165,4 @@ class EoMTConfig(PretrainedConfig):
         self.num_register_tokens = num_register_tokens
 
 
-__all__ = ["EoMTConfig"]
+__all__ = ["EomtConfig"]

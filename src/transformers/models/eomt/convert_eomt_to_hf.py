@@ -24,7 +24,7 @@ import torch
 from accelerate import init_empty_weights
 from huggingface_hub import snapshot_download
 
-from transformers import EoMTConfig, EoMTForUniversalSegmentation, EoMTImageProcessorFast
+from transformers import EomtConfig, EomtForUniversalSegmentation, EomtImageProcessorFast
 
 
 # fmt: off
@@ -218,7 +218,7 @@ def convert_model(
     # Pop off unwanted keys
     _ = config_data.pop("backbone", None)
 
-    config = EoMTConfig(
+    config = EomtConfig(
         **{
             **config_data,
             "layerscale_value": 1e-5,
@@ -244,7 +244,7 @@ def convert_model(
     else:
         MAPPINGS.update(MLP_MAPPINGS["vanilla_mlp"])
 
-    processor = EoMTImageProcessorFast(size=size, do_split_image=do_split_image, do_pad=do_pad)
+    processor = EomtImageProcessorFast(size=size, do_split_image=do_split_image, do_pad=do_pad)
 
     # Save the config and processor
     if output_dir:
@@ -257,7 +257,7 @@ def convert_model(
     # Initialize model with empty weights
     print("Creating empty model...")
     with init_empty_weights():
-        model = EoMTForUniversalSegmentation(config)
+        model = EomtForUniversalSegmentation(config)
 
     # Load and convert state dict
     print("Loading state dict...")
@@ -282,7 +282,7 @@ def convert_model(
     # Validate the saved model if saved locally
     if output_dir:
         print("Reloading the local model to check if it's saved correctly...")
-        EoMTForUniversalSegmentation.from_pretrained(output_dir, device_map="auto")
+        EomtForUniversalSegmentation.from_pretrained(output_dir, device_map="auto")
         print("Local model reloaded successfully.")
 
 

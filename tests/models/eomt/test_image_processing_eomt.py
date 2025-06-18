@@ -16,14 +16,14 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import EoMTImageProcessor
+    from transformers import EomtImageProcessor
 
     if is_torchvision_available():
-        from transformers import EoMTImageProcessorFast
-    from transformers.models.eomt.modeling_eomt import EoMTForUniversalSegmentationOutput
+        from transformers import EomtImageProcessorFast
+    from transformers.models.eomt.modeling_eomt import EomtForUniversalSegmentationOutput
 
 
-class EoMTImageProcessingTester:
+class EomtImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -70,7 +70,7 @@ class EoMTImageProcessingTester:
         }
 
     def prepare_fake_eomt_outputs(self, batch_size):
-        return EoMTForUniversalSegmentationOutput(
+        return EomtForUniversalSegmentationOutput(
             masks_queries_logits=torch.randn((batch_size, self.num_queries, self.height, self.width)),
             class_queries_logits=torch.randn((batch_size, self.num_queries, self.num_classes + 1)),
         )
@@ -109,13 +109,13 @@ def prepare_semantic_batch_inputs():
 
 @require_torch
 @require_vision
-class EoMTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = EoMTImageProcessor if is_vision_available() else None
-    fast_image_processing_class = EoMTImageProcessorFast if is_torchvision_available() else None
+class EomtImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    image_processing_class = EomtImageProcessor if is_vision_available() else None
+    fast_image_processing_class = EomtImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
-        self.image_processor_tester = EoMTImageProcessingTester(self)
+        self.image_processor_tester = EomtImageProcessingTester(self)
         self.model_id = "tue-mps/coco_panoptic_eomt_large_640"
 
     @property

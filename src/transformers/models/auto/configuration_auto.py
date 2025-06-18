@@ -119,7 +119,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("emu3", "Emu3Config"),
         ("encodec", "EncodecConfig"),
         ("encoder-decoder", "EncoderDecoderConfig"),
-        ("eomt", "EoMTConfig"),
+        ("eomt", "EomtConfig"),
         ("ernie", "ErnieConfig"),
         ("ernie_m", "ErnieMConfig"),
         ("esm", "EsmConfig"),

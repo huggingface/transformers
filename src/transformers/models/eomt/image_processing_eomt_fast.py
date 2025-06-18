@@ -63,7 +63,7 @@ if is_torchvision_available():
         from torchvision.transforms import functional as F
 
 
-class EoMTImageProcessorFastKwargs(DefaultFastImageProcessorKwargs):
+class EomtImageProcessorFastKwargs(DefaultFastImageProcessorKwargs):
     """
     do_split_image (`bool`, *optional*, defaults to `False`):
             Whether to split the input images into overlapping patches for semantic segmentation. If set to `True`, the
@@ -103,7 +103,7 @@ def reorder_patches_and_offsets(
 
 
 @auto_docstring
-class EoMTImageProcessorFast(BaseImageProcessorFast):
+class EomtImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
@@ -115,9 +115,9 @@ class EoMTImageProcessorFast(BaseImageProcessorFast):
     do_split_image = False
     do_pad = False
     ignore_index = None
-    valid_kwargs = EoMTImageProcessorFastKwargs
+    valid_kwargs = EomtImageProcessorFastKwargs
 
-    def __init__(self, **kwargs: Unpack[EoMTImageProcessorFastKwargs]):
+    def __init__(self, **kwargs: Unpack[EomtImageProcessorFastKwargs]):
         super().__init__(**kwargs)
 
     def _split_image(self, images: torch.Tensor, size: Dict, image_indices: int) -> Tuple[List, List]:
@@ -262,7 +262,7 @@ class EoMTImageProcessorFast(BaseImageProcessorFast):
         images: ImageInput,
         segmentation_maps: Optional[List[torch.Tensor]] = None,
         instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
-        **kwargs: Unpack[EoMTImageProcessorFastKwargs],
+        **kwargs: Unpack[EomtImageProcessorFastKwargs],
     ) -> BatchFeature:
         r"""
         segmentation_maps (`ImageInput`, *optional*):
@@ -576,4 +576,4 @@ class EoMTImageProcessorFast(BaseImageProcessorFast):
         return results
 
 
-__all__ = ["EoMTImageProcessorFast"]
+__all__ = ["EomtImageProcessorFast"]
