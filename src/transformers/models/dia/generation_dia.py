@@ -15,7 +15,7 @@
 
 import inspect
 import warnings
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Optional, Union
 
 import torch
 import torch.distributed as dist
@@ -48,10 +48,10 @@ class DiaGenerationMixin(GenerationMixin):
         generation_config: GenerationConfig,
         input_ids_seq_length: Optional[int] = None,
         encoder_input_ids: torch.LongTensor = None,
-        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
+        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], list[int]]] = None,
         logits_processor: Optional[LogitsProcessorList] = None,
         device: Optional[str] = None,
-        model_kwargs: Optional[Dict[str, Any]] = None,
+        model_kwargs: Optional[dict[str, Any]] = None,
         negative_prompt_ids: Optional[torch.Tensor] = None,
         negative_prompt_attention_mask: Optional[torch.Tensor] = None,
     ) -> LogitsProcessorList:
@@ -111,8 +111,8 @@ class DiaGenerationMixin(GenerationMixin):
         return merged_processors
 
     def _prepare_generation_config(
-        self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool] = None, **kwargs: Dict
-    ) -> Tuple[GenerationConfig, Dict]:
+        self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool] = None, **kwargs: dict
+    ) -> tuple[GenerationConfig, dict]:
         generation_config, model_kwargs = super()._prepare_generation_config(
             generation_config, use_model_defaults, **kwargs
         )
@@ -130,8 +130,8 @@ class DiaGenerationMixin(GenerationMixin):
         self,
         inputs: Optional[torch.Tensor] = None,
         bos_token_id: Optional[torch.Tensor] = None,
-        model_kwargs: Optional[Dict[str, torch.Tensor]] = None,
-    ) -> Tuple[torch.Tensor, Optional[str], Dict[str, torch.Tensor]]:
+        model_kwargs: Optional[dict[str, torch.Tensor]] = None,
+    ) -> tuple[torch.Tensor, Optional[str], dict[str, torch.Tensor]]:
         inputs, input_name, model_kwargs = super()._prepare_model_inputs(
             inputs=inputs,
             bos_token_id=bos_token_id,
@@ -152,10 +152,10 @@ class DiaGenerationMixin(GenerationMixin):
         self,
         batch_size: int,
         model_input_name: str,
-        model_kwargs: Dict[str, torch.Tensor],
+        model_kwargs: dict[str, torch.Tensor],
         decoder_start_token_id: torch.Tensor,
         device: Optional[torch.device] = None,
-    ) -> Tuple[torch.LongTensor, Dict[str, torch.Tensor]]:
+    ) -> tuple[torch.LongTensor, dict[str, torch.Tensor]]:
         """Prepares `decoder_input_ids` for generation with encoder-decoder models"""
         # 1. Check whether the user has defined `decoder_input_ids` and `decoder_attention_mask`; if not error out
         decoder_input_ids = decoder_attention_mask = None
@@ -255,7 +255,7 @@ class DiaGenerationMixin(GenerationMixin):
         generation_config: Optional[GenerationConfig] = None,
         logits_processor: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
-        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
+        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], list[int]]] = None,
         synced_gpus: Optional[bool] = None,
         assistant_model: Optional["PreTrainedModel"] = None,
         streamer: Optional["BaseStreamer"] = None,
@@ -457,7 +457,7 @@ class DiaGenerationMixin(GenerationMixin):
         generation_config: Optional[GenerationConfig] = None,
         logits_processor: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
-        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
+        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], list[int]]] = None,
         synced_gpus: Optional[bool] = None,
         assistant_model: Optional["PreTrainedModel"] = None,
         streamer: Optional["BaseStreamer"] = None,

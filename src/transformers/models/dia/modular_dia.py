@@ -14,7 +14,7 @@
 # limitations under the License.
 """PyTorch Dia model."""
 
-from typing import Callable, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 import torch
 from torch import nn
@@ -156,7 +156,7 @@ class DiaCrossAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[EncoderDecoderCache] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
         cross_shape = (*cross_attention_states.shape[:-1], -1, self.head_dim)
@@ -212,10 +212,10 @@ class DiaEncoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         residual = hidden_states
         normed_states = self.pre_sa_norm(hidden_states)
         self_attn_output, self_attn_weights = self.self_attention(
@@ -255,7 +255,7 @@ class DiaEncoder(DiaPreTrainedModel):
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[BaseModelOutput, Tuple]:
+    ) -> Union[BaseModelOutput, tuple]:
         hidden_states = self.embedding(input_ids)
 
         # RoPE
@@ -311,14 +311,14 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[EncoderDecoderCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
         self_attn_cache = (
             past_key_values.self_attention_cache
             if isinstance(past_key_values, EncoderDecoderCache)
@@ -386,7 +386,7 @@ class DiaDecoder(DiaPreTrainedModel):
         output_hidden_states: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
-    ) -> Union[BaseModelOutputWithPastAndCrossAttentions, Tuple]:
+    ) -> Union[BaseModelOutputWithPastAndCrossAttentions, tuple]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length, num_codebooks)`):
             The original `decoder_input_ids` in 3D shape to facilitate more efficient computations.
@@ -499,14 +499,14 @@ class DiaModel(DiaPreTrainedModel):
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_position_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
-        encoder_outputs: Optional[Union[BaseModelOutput, Tuple]] = None,
+        encoder_outputs: Optional[Union[BaseModelOutput, tuple]] = None,
         past_key_values: Optional[EncoderDecoderCache] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
-    ) -> Union[Tuple, Seq2SeqModelOutput]:
+    ) -> Union[tuple, Seq2SeqModelOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size * num_codebooks, target_sequence_length)
         or (batch_size, target_sequence_length, num_codebooks)`, *optional*):
@@ -642,7 +642,7 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, DiaGenerationMixin):
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_position_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
-        encoder_outputs: Optional[Union[BaseModelOutput, Tuple]] = None,
+        encoder_outputs: Optional[Union[BaseModelOutput, tuple]] = None,
         past_key_values: Optional[EncoderDecoderCache] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -650,7 +650,7 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, DiaGenerationMixin):
         labels: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
-    ) -> Union[Tuple, Seq2SeqLMOutput]:
+    ) -> Union[tuple, Seq2SeqLMOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size * num_codebooks, target_sequence_length)
         or (batch_size, target_sequence_length, num_codebooks)`, *optional*):

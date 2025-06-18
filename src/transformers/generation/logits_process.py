@@ -3075,6 +3075,7 @@ class DiaEOSChannelFilterLogitsProcessor(LogitsProcessor):
         self.num_channels = num_channels
         self.eos_id = eos_token_id
 
+    @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         # Reshape for easier channel indexing [B, C, V]
         scores = scores.reshape(-1, self.num_channels, scores.shape[-1])
@@ -3160,6 +3161,7 @@ class DiaEOSDelayPatternLogitsProcessor(LogitsProcessor):
         self.max_generation_len = max_generation_len - max(delay_pattern) - 1
         self.device = device
 
+    @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         # Reshape for easier channel indexing [B, C, V]
         scores = scores.reshape(-1, self.num_channels, scores.shape[-1])

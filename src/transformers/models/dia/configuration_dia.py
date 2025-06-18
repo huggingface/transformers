@@ -14,7 +14,7 @@
 # limitations under the License.
 """Dia model configuration"""
 
-from typing import Dict, List, Optional
+from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
@@ -57,7 +57,7 @@ class DiaEncoderConfig(PretrainedConfig):
             `"relu"`, `"swish"` and `"gelu_new"` are supported.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
-        rope_scaling (`Dict`, *optional*):
+        rope_scaling (`dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
             accordingly.
@@ -113,7 +113,7 @@ class DiaEncoderConfig(PretrainedConfig):
         vocab_size: int = 256,
         hidden_act: str = "silu",
         rope_theta: float = 10000.0,
-        rope_scaling: Optional[Dict] = None,
+        rope_scaling: Optional[dict] = None,
         initializer_range: float = 0.02,
         **kwargs,
     ):
@@ -181,7 +181,7 @@ class DiaDecoderConfig(PretrainedConfig):
             Number of channels for the Dia decoder.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
-        rope_scaling (`Dict`, *optional*):
+        rope_scaling (`dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
             accordingly.
@@ -246,7 +246,7 @@ class DiaDecoderConfig(PretrainedConfig):
         hidden_act: str = "silu",
         num_channels: int = 9,
         rope_theta: float = 10000.0,
-        rope_scaling: Optional[Dict] = None,
+        rope_scaling: Optional[dict] = None,
         initializer_range: float = 0.02,
         use_cache: bool = True,
         is_encoder_decoder: bool = True,
@@ -304,7 +304,7 @@ class DiaConfig(PretrainedConfig):
             End of stream token id.
         bos_token_id (`int`, *optional*, defaults to 1026):
             Beginning of stream token id.
-        delay_pattern (`List[int]`, *optional*, defaults to `[0, 8, 9, 10, 11, 12, 13, 14, 15]`):
+        delay_pattern (`list[int]`, *optional*, defaults to `[0, 8, 9, 10, 11, 12, 13, 14, 15]`):
             The delay pattern for the decoder. The length of this list must match `decoder_config.num_channels`.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -340,7 +340,7 @@ class DiaConfig(PretrainedConfig):
         pad_token_id: int = 1025,
         eos_token_id: int = 1024,
         bos_token_id: int = 1026,
-        delay_pattern: Optional[List[int]] = None,
+        delay_pattern: Optional[list[int]] = None,
         initializer_range: float = 0.02,
         use_cache: bool = True,
         **kwargs,
