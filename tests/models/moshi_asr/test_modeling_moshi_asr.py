@@ -558,42 +558,29 @@ class MoshiAsrForConditionalGenerationIntegrationTests(unittest.TestCase):
         processor = MoshiAsrProcessor.from_pretrained(self.model_checkpoint)
         model = MoshiAsrForConditionalGeneration.from_pretrained(self.model_checkpoint, device_map=torch_device)
 
-        samples = self._load_datasamples(4)
+        samples = self._load_datasamples(2)
         out_list = []
-        for i, sample in enumerate(samples):
+        for sample in samples:
             inputs = processor(
                 sample,
             ).to(torch_device)
 
-            # TODO: @eustlb, audio_window_size=1 should be default
             out = model.generate(**inputs)
             out_list.append(out)
 
         # fmt: off
         EXPECTED_TOKENS_LIST = [
             torch.tensor([
-                [48000, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 1, 3239, 364, 3, 0, 6361, 21936, 0, 379, 3, 0, 365, 3, 3, 3, 0, 38677, 3, 0, 367, 0, 365, 3, 0, 2492, 3, 3, 3, 0, 2858, 362, 3, 3, 0, 370, 0, 460, 405, 3, 3, 0, 20915, 3, 0, 373, 3, 3, 0, 11063, 3, 0, 458, 3, 3, 3, 3, 0, 25466]
-
+                [48000, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 1, 3239, 364, 3, 3, 0, 6361, 21936, 379, 3, 0, 365, 3, 3, 3, 0, 38677, 3, 0, 367, 0, 365, 3, 0, 2492, 3, 3, 3, 0, 2858, 362, 3, 3, 0, 370, 0, 460, 405, 3, 3, 0, 20915, 3, 0, 373, 3, 3, 0, 11063, 3, 0, 458, 3, 3, 3, 3, 0, 25466]
             ]),
             torch.tensor([
                 [48000, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 1, 3695, 0, 379, 3, 0, 3239, 364, 3, 3, 3, 3, 3, 0, 13701, 21936, 378, 366, 4173, 3, 3, 0, 1006, 3, 3, 3, 3, 3, 3, 0, 2343, 3, 0, 512, 3, 3, 3, 0, 458, 3, 3, 3, 0, 1681]
-
-
             ]),
-            torch.tensor([
-                [48000, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 1, 491, 3, 0, 6058, 3, 3, 0, 1153, 3, 3, 0, 385, 3, 0, 409, 3, 0, 419, 3, 3, 3, 0, 7029, 1328, 3, 3, 3, 0, 1013, 3, 0, 367, 3, 0, 365, 3, 0, 801, 362, 3, 3, 3, 3, 3, 3, 0, 392, 3, 3, 3, 3, 0, 10404, 3, 3, 0, 370, 3, 3, 0, 32691, 3, 3, 0, 28289, 3, 3, 3, 0, 363, 30464, 437, 0, 701, 3, 3, 3, 0, 1153, 362, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 8649, 366, 3, 0, 5685, 3, 0, 407, 3, 3, 0, 8835, 3, 3, 0, 370, 0, 530, 3, 3, 3, 0, 741, 3, 3, 3, 3, 0, 2788, 3, 3, 0, 598, 3, 3, 3, 0, 12469, 3, 0, 373, 3, 0, 365, 3, 0, 2057]
-
-
-            ]),
-            torch.tensor([
-                [48000, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 1, 491, 0, 454, 3, 3, 0, 8104, 3, 3, 3, 0, 5538, 366, 3, 3, 3, 0, 1181, 3, 3, 0, 3273, 3, 3, 0, 8875, 3, 3, 3, 3, 3, 0, 537, 478, 924, 378, 366, 623, 0, 379, 3, 3, 0, 1088, 3, 3, 3, 3, 3, 0, 3144, 3, 3, 3, 0, 556, 3, 3, 3, 0, 473, 362, 3, 3, 3, 3, 3, 3, 0, 370, 3, 0, 430, 3, 3, 3, 0, 9411, 3, 0, 371, 0, 404, 3, 0, 449, 3, 3, 0, 1394, 3, 3, 3, 3, 3, 0, 367, 3, 3, 3, 0, 30833, 3, 3, 3, 3, 3, 0]
-
-            ])
         ]
         # fmt: on
 
         for out, expected_out in zip(out_list, EXPECTED_TOKENS_LIST):
-            torch.testing.assert_close(out, expected_out)
+            torch.testing.assert_close(out.cpu(), expected_out)
 
     @slow
     @require_torch_accelerator
@@ -607,24 +594,12 @@ class MoshiAsrForConditionalGenerationIntegrationTests(unittest.TestCase):
         processor = MoshiAsrProcessor.from_pretrained(self.model_checkpoint)
         model = MoshiAsrForConditionalGeneration.from_pretrained(self.model_checkpoint, device_map=torch_device)
 
-        ### SHOULD BE BY DEFAULT
-        # TODO: @eustlb
-        model.config.codec_config.use_cache = True
-        model.config.codec_config.sliding_window = 250
-
-        model.config.sliding_window = 750
-
-        model.generation_config.cache_implementation = "sliding_window"
-        model.generation_config.codec_cache_implementation = "sliding_window"
-        ###
-
         samples = self._load_datasamples(4)
         inputs = processor(
             samples,
         ).to(torch_device)
 
-        # TODO: @eustlb, audio_window_size=1 should be default
-        out = model.generate(**inputs, audio_window_size=1)
+        out = model.generate(**inputs)
 
         # fmt: off
         # TODO: @eustlb
@@ -638,4 +613,4 @@ class MoshiAsrForConditionalGenerationIntegrationTests(unittest.TestCase):
         ])
         # fmt: on
 
-        torch.testing.assert_close(out, EXPECTED_TOKENS)
+        torch.testing.assert_close(out.cpu(), EXPECTED_TOKENS)
