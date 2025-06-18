@@ -15,7 +15,7 @@
 """Tokenization classes for ESM."""
 
 import os
-from typing import List, Optional
+from typing import Optional
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
@@ -89,8 +89,8 @@ class EsmTokenizer(PreTrainedTokenizer):
         return self._id_to_token.get(index, self.unk_token)
 
     def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         cls = [self.cls_token_id]
         sep = [self.eos_token_id]  # No sep token in ESM vocabulary
         if token_ids_1 is None:
@@ -103,16 +103,16 @@ class EsmTokenizer(PreTrainedTokenizer):
         return cls + token_ids_0 + sep + token_ids_1 + sep  # Multiple inputs always have an EOS token
 
     def get_special_tokens_mask(
-        self, token_ids_0: List, token_ids_1: Optional[List] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
+        self, token_ids_0: list, token_ids_1: Optional[list] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
         """
         Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` or `encode_plus` methods.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of ids of the first sequence.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 List of ids of the second sequence.
             already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.

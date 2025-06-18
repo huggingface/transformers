@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Optional
 
 import torch
 
@@ -30,7 +30,7 @@ def sdpa_attention_forward(
     scaling: Optional[float] = None,
     is_causal: Optional[bool] = None,
     **kwargs,
-) -> Tuple[torch.Tensor, None]:
+) -> tuple[torch.Tensor, None]:
     if kwargs.get("output_attentions", False) or kwargs.get("head_mask", None) is not None:
         logger.warning_once(
             "`sdpa` attention does not support `output_attentions=True` or `head_mask`."

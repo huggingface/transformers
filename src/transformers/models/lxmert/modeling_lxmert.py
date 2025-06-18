@@ -18,7 +18,7 @@ import math
 import os
 import warnings
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -80,11 +80,11 @@ class LxmertModelOutput(ModelOutput):
     language_output: Optional[torch.FloatTensor] = None
     vision_output: Optional[torch.FloatTensor] = None
     pooled_output: Optional[torch.FloatTensor] = None
-    language_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    vision_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    language_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    vision_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    language_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    vision_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    language_attentions: Optional[tuple[torch.FloatTensor]] = None
+    vision_attentions: Optional[tuple[torch.FloatTensor]] = None
+    cross_encoder_attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -120,11 +120,11 @@ class LxmertForQuestionAnsweringOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     question_answering_score: Optional[torch.FloatTensor] = None
-    language_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    vision_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    language_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    vision_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    language_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    vision_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    language_attentions: Optional[tuple[torch.FloatTensor]] = None
+    vision_attentions: Optional[tuple[torch.FloatTensor]] = None
+    cross_encoder_attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -168,11 +168,11 @@ class LxmertForPreTrainingOutput(ModelOutput):
     prediction_logits: Optional[torch.FloatTensor] = None
     cross_relationship_score: Optional[torch.FloatTensor] = None
     question_answering_score: Optional[torch.FloatTensor] = None
-    language_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    vision_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    language_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    vision_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    language_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    vision_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    language_attentions: Optional[tuple[torch.FloatTensor]] = None
+    vision_attentions: Optional[tuple[torch.FloatTensor]] = None
+    cross_encoder_attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 def load_tf_weights_in_lxmert(model, config, tf_checkpoint_path):
@@ -809,7 +809,7 @@ class LxmertModel(LxmertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[LxmertModelOutput, Tuple[torch.FloatTensor]]:
+    ) -> Union[LxmertModelOutput, tuple[torch.FloatTensor]]:
         r"""
         visual_feats (`torch.FloatTensor` of shape `(batch_size, num_visual_features, visual_feat_dim)`):
             This input represents visual features. They ROI pooled object features from bounding boxes using a
@@ -1092,14 +1092,14 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
         token_type_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        obj_labels: Optional[Dict[str, Tuple[torch.FloatTensor, torch.FloatTensor]]] = None,
+        obj_labels: Optional[dict[str, tuple[torch.FloatTensor, torch.FloatTensor]]] = None,
         matched_label: Optional[torch.LongTensor] = None,
         ans: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[LxmertForPreTrainingOutput, Tuple[torch.FloatTensor]]:
+    ) -> Union[LxmertForPreTrainingOutput, tuple[torch.FloatTensor]]:
         r"""
         visual_feats (`torch.FloatTensor` of shape `(batch_size, num_visual_features, visual_feat_dim)`):
             This input represents visual features. They ROI pooled object features from bounding boxes using a
@@ -1123,7 +1123,7 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        obj_labels (`Dict[Str: Tuple[Torch.FloatTensor, Torch.FloatTensor]]`, *optional*):
+        obj_labels (`dict[Str: tuple[Torch.FloatTensor, Torch.FloatTensor]]`, *optional*):
             each key is named after each one of the visual losses and each element of the tuple is of the shape
             `(batch_size, num_features)` and `(batch_size, num_features, visual_feature_dim)` for each the label id and
             the label score respectively
@@ -1342,7 +1342,7 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[LxmertForQuestionAnsweringOutput, Tuple[torch.FloatTensor]]:
+    ) -> Union[LxmertForQuestionAnsweringOutput, tuple[torch.FloatTensor]]:
         r"""
         visual_feats (`torch.FloatTensor` of shape `(batch_size, num_visual_features, visual_feat_dim)`):
             This input represents visual features. They ROI pooled object features from bounding boxes using a

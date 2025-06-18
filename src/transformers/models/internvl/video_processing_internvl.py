@@ -14,7 +14,7 @@
 # limitations under the License.
 """Fast Video processor class for InternVL."""
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import (
@@ -127,8 +127,8 @@ class InternVLVideoProcessor(BaseVideoProcessor):
 
     def _preprocess(
         self,
-        videos: List["torch.Tensor"],
-        video_metadata: Union[List[VideoMetadata], List[dict]],
+        videos: list["torch.Tensor"],
+        video_metadata: Union[list[VideoMetadata], list[dict]],
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
@@ -140,8 +140,8 @@ class InternVLVideoProcessor(BaseVideoProcessor):
         do_pad: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
         do_sample_frames: Optional[bool] = None,
         fps: Optional[int] = None,
         num_frames: Optional[int] = None,
