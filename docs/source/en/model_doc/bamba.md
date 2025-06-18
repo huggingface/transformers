@@ -69,7 +69,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 </hfoption>
 
-<hfoption id="transformers-cli">
+<hfoption id="transformers CLI">
 ```bash
 echo "Plants create energy through a process known as" | transformers run --task text-generation --model ibm-ai-platform/Bamba-9B-v2 --device 0
 ```
@@ -131,4 +131,5 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ## BambaForCausalLM
 
-[[autodoc]] BambaForCausalLM - forward
+[[autodoc]] BambaForCausalLM
+    - forward
