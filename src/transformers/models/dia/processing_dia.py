@@ -19,13 +19,14 @@ from typing import Optional, Union
 
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
-from ...models.dac.modeling_dac import DacModel
 from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import is_torch_available
 
 
 if is_torch_available:
     import torch
+
+    from ...models.dac.modeling_dac import DacModel
 
 
 class DiaAudioKwargs(AudioKwargs, total=False):
