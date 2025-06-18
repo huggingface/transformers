@@ -293,7 +293,7 @@ class FocalNetDropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
 class FocalNetModulation(nn.Module):
@@ -431,8 +431,8 @@ class FocalNetLayer(nn.Module):
         self.gamma_1 = 1.0
         self.gamma_2 = 1.0
         if config.use_layerscale:
-            self.gamma_1 = nn.Parameter(config.layerscale_value * torch.ones((dim)), requires_grad=True)
-            self.gamma_2 = nn.Parameter(config.layerscale_value * torch.ones((dim)), requires_grad=True)
+            self.gamma_1 = nn.Parameter(config.layerscale_value * torch.ones(dim), requires_grad=True)
+            self.gamma_2 = nn.Parameter(config.layerscale_value * torch.ones(dim), requires_grad=True)
 
     def forward(self, hidden_state, input_dimensions):
         height, width = input_dimensions

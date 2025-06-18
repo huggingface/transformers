@@ -1409,10 +1409,10 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
 
     def prepare_tf_dataset(
         self,
-        dataset: "datasets.Dataset",  # noqa:F821
+        dataset: datasets.Dataset,  # noqa:F821
         batch_size: int = 8,
         shuffle: bool = True,
-        tokenizer: Optional["PreTrainedTokenizerBase"] = None,
+        tokenizer: Optional[PreTrainedTokenizerBase] = None,
         collate_fn: Optional[Callable] = None,
         collate_fn_args: Optional[dict[str, Any]] = None,
         drop_remainder: Optional[bool] = None,

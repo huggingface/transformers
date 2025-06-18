@@ -306,7 +306,7 @@ class TFData2VecVisionSelfAttention(keras.layers.Layer):
         hidden_states: tf.Tensor,
         head_mask: tf.Tensor,
         output_attentions: bool,
-        relative_position_bias: Optional["TFData2VecVisionRelativePositionBias"] = None,
+        relative_position_bias: Optional[TFData2VecVisionRelativePositionBias] = None,
         training: bool = False,
     ) -> tuple[tf.Tensor]:
         batch_size = shape_list(hidden_states)[0]
@@ -416,7 +416,7 @@ class TFData2VecVisionAttention(keras.layers.Layer):
         input_tensor: tf.Tensor,
         head_mask: tf.Tensor,
         output_attentions: bool,
-        relative_position_bias: Optional["TFData2VecVisionRelativePositionBias"] = None,
+        relative_position_bias: Optional[TFData2VecVisionRelativePositionBias] = None,
         training: bool = False,
     ) -> tuple[tf.Tensor]:
         self_outputs = self.attention(
@@ -538,8 +538,8 @@ class TFData2VecVisionLayer(keras.layers.Layer):
                 trainable=True,
                 name="lambda_2",
             )
-            self.lambda_1.assign(self.init_values * tf.ones((self.config.hidden_size)))
-            self.lambda_2.assign(self.init_values * tf.ones((self.config.hidden_size)))
+            self.lambda_1.assign(self.init_values * tf.ones(self.config.hidden_size))
+            self.lambda_2.assign(self.init_values * tf.ones(self.config.hidden_size))
         else:
             self.lambda_1, self.lambda_2 = None, None
 
@@ -570,7 +570,7 @@ class TFData2VecVisionLayer(keras.layers.Layer):
         hidden_states: tf.Tensor,
         head_mask: tf.Tensor,
         output_attentions: bool,
-        relative_position_bias: Optional["TFData2VecVisionRelativePositionBias"] = None,
+        relative_position_bias: Optional[TFData2VecVisionRelativePositionBias] = None,
         training: bool = False,
     ) -> tuple[tf.Tensor]:
         self_attention_outputs = self.attention(
