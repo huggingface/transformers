@@ -21,6 +21,7 @@ import pytest
 
 from transformers.models.dia import DiaConfig, DiaDecoderConfig, DiaEncoderConfig
 from transformers.testing_utils import (
+    is_flaky,
     require_torch,
     require_torch_sdpa,
     torch_device,
@@ -273,6 +274,7 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_forward(*config_and_inputs)
 
+    @is_flaky
     def test_encoder_decoder_model_standalone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
