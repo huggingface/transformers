@@ -115,35 +115,38 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
     ):
         total_frames = video.shape[0]
         video_fps = getattr(metadata, "fps", 2.0)
-        timestamps = [i / video_fps for i in range(total_frames)]
-        duration = math.floor(max(timestamps))
+        meta_frames = getattr(metadata, "total_num_frames", total_frames)
+        max_frame_idx = meta_frames - 1
+        duration = getattr(metadata, "duration", None)
+        if duration is None:
+            duration = round(max_frame_idx / video_fps) + 1
 
         if duration <= self.max_duration:
-            target_seconds = np.arange(0, duration + 1, 1.0 / self.fps)
+            n = int(math.floor(duration * self.fps))
+            frame_indices = [min(max_frame_idx, int(math.ceil(i * video_fps / self.fps))) for i in range(n)]
         else:
             num_samples = int(self.max_duration * self.fps)
-            target_seconds = np.linspace(0, duration, num_samples, endpoint=True)
+            if num_samples >= meta_frames:
+                frame_indices = list(range(meta_frames))
+            else:
+                target_seconds = np.linspace(0, duration, num_samples, endpoint=True)
+                frame_indices = [min(max_frame_idx, int(math.ceil(t * video_fps))) for t in target_seconds]
 
-        frame_indices = []
-        for t in target_seconds:
-            closest_idx = min(range(total_frames), key=lambda i: abs(timestamps[i] - t))
-            frame_indices.append(closest_idx)
-
-        seen = set()
-        unique_frame_indices = []
+        seen, uniq = set(), []
         for idx in frame_indices:
             if idx not in seen:
                 seen.add(idx)
-                unique_frame_indices.append(idx)
+                uniq.append(idx)
 
-        frame_indices = unique_frame_indices
+        if len(uniq) & 1:
+            uniq.append(uniq[-1])
 
-        if len(frame_indices) % 2 != 0:
-            frame_indices.append(frame_indices[-1])
+        frame_indices = uniq
+        sampled_video = video[frame_indices]
+        second_idxs = [int(idx / video_fps) for idx in frame_indices]
 
-        sampled_video = video[frame_indices].contiguous()
-        second_idxs = [int(math.floor(timestamps[i])) for i in frame_indices]
-
+        print("===========")
+        print("frame_indices:", frame_indices, "\nsecond_idxs:", second_idxs)
         return sampled_video, second_idxs
 
     def _preprocess(
