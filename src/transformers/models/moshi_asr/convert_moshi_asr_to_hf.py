@@ -104,7 +104,7 @@ def convert_moshi_asr_state_dict(state_dict, config, unwanted_prefix="transforme
 
     embed_tokens_weight = torch.cat(embed_tokens_weight, dim=0)
     embed_tokens_weight = torch.cat([state_dict.pop("text_emb.weight"), embed_tokens_weight])
-    embed_tokens_weight = torch.cat([embed_tokens_weight, torch.zeros(1, 1024)], dim=0)
+    embed_tokens_weight = torch.cat([embed_tokens_weight, torch.zeros(1, config.hidden_size)], dim=0)
     state_dict["embed_tokens.embed_tokens.weight"] = embed_tokens_weight
 
     for key, value in list(state_dict.items()):
@@ -227,7 +227,7 @@ def write_model(
     linear_weight = state_dict.pop("text_linear.weight")
     model.model.load_state_dict(state_dict, strict=True, assign=True)
 
-    linear_weight = torch.cat([linear_weight, torch.zeros(1, 1024)])
+    linear_weight = torch.cat([linear_weight, torch.zeros(1, config.hidden_size)])
     model.lm_head.load_state_dict({"weight": linear_weight}, strict=True, assign=True)
 
     model.codec_model.load_state_dict(codec_state_dict, strict=True, assign=True)
@@ -334,17 +334,17 @@ if __name__ == "__main__":
     # main()
     # TODO: @eustlb, update
     write_model(
-        "kmhf/asr",
-        "asr300m-pytorch-7b8d3416@150.safetensors",
-        "kmhf/asr",
+        "kmhf/stt-202506",
+        "model.safetensors",
+        "kmhf/stt-202506",
         "mimi-pytorch-e351c8d8@125.safetensors",
-        "/Users/eustachelebihan/dev/add-moshi-asr/tmp",
+        "/Users/eustachelebihan/dev/add-moshi-asr/new-model",
         safe_serialization=True,
     )
 
     write_processor(
-        "kmhf/asr",
-        "tokenizer_spm_48k_multi6_2.model",
+        "kmhf/stt-202506",
+        "tokenizer_en_audio_4000.model",
         "kyutai/mimi",
-        "/Users/eustachelebihan/dev/add-moshi-asr/tmp",
+        "/Users/eustachelebihan/dev/add-moshi-asr/new-model",
     )
