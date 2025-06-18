@@ -15,7 +15,7 @@ import argparse
 import json
 import os
 import re
-from typing import Dict, Optional
+from typing import Optional
 
 import requests
 import torch
@@ -66,7 +66,7 @@ def token_bytes_to_string(b):
 
 
 # Adapted from https://github.com/openai/tiktoken/issues/60#issuecomment-1499977960
-def bpe(mergeable_ranks: Dict[bytes, int], token: bytes, max_rank: Optional[int] = None):
+def bpe(mergeable_ranks: dict[bytes, int], token: bytes, max_rank: Optional[int] = None):
     parts = [bytes([b]) for b in token]
     while True:
         min_idx = None

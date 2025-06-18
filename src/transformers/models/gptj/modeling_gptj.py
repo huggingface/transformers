@@ -15,7 +15,7 @@
 """PyTorch GPT-J model."""
 
 import warnings
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.fx
@@ -196,8 +196,8 @@ class GPTJAttention(nn.Module):
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[
-        Tuple[torch.Tensor, Tuple[torch.Tensor]],
-        Optional[Tuple[torch.Tensor, Tuple[torch.Tensor], Tuple[torch.Tensor, ...]]],
+        tuple[torch.Tensor, tuple[torch.Tensor]],
+        Optional[tuple[torch.Tensor, tuple[torch.Tensor], tuple[torch.Tensor, ...]]],
     ]:
         query = self.q_proj(hidden_states)
         key = self.k_proj(hidden_states)
@@ -286,8 +286,8 @@ class GPTJFlashAttention2(GPTJAttention):
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[
-        Tuple[torch.Tensor, Tuple[torch.Tensor]],
-        Optional[Tuple[torch.Tensor, Tuple[torch.Tensor], Tuple[torch.Tensor, ...]]],
+        tuple[torch.Tensor, tuple[torch.Tensor]],
+        Optional[tuple[torch.Tensor, tuple[torch.Tensor], tuple[torch.Tensor, ...]]],
     ]:
         query = self.q_proj(hidden_states)
         key = self.k_proj(hidden_states)
@@ -447,7 +447,7 @@ class GPTJBlock(nn.Module):
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple[torch.Tensor], Optional[Tuple[torch.Tensor, Tuple[torch.FloatTensor, ...]]]]:
+    ) -> Union[tuple[torch.Tensor], Optional[tuple[torch.Tensor, tuple[torch.FloatTensor, ...]]]]:
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
         attn_outputs = self.attn(
@@ -514,7 +514,7 @@ PARALLELIZE_DOCSTRING = r"""
     across all devices.
 
     Args:
-        device_map (`Dict[int, list]`, *optional*):
+        device_map (`dict[int, list]`, *optional*):
             A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are always
             automatically mapped to the first device (for esoteric reasons). That means that the first device should
             have fewer attention modules mapped to it than other devices. For reference, the GPT-J models have the
@@ -631,7 +631,7 @@ class GPTJModel(GPTJPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, Tuple[Tuple[torch.Tensor]]]] = None,
+        past_key_values: Optional[Union[Cache, tuple[tuple[torch.Tensor]]]] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -642,7 +642,7 @@ class GPTJModel(GPTJPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    ) -> Union[tuple, BaseModelOutputWithPast]:
         r"""
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_dim)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
@@ -978,7 +978,7 @@ class GPTJForCausalLM(GPTJPreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, Tuple[Tuple[torch.Tensor]]]] = None,
+        past_key_values: Optional[Union[Cache, tuple[tuple[torch.Tensor]]]] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -991,7 +991,7 @@ class GPTJForCausalLM(GPTJPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_dim)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
@@ -1058,8 +1058,8 @@ class GPTJForCausalLM(GPTJPreTrainedModel, GenerationMixin):
 
     @staticmethod
     def _reorder_cache(
-        past_key_values: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor
-    ) -> Tuple[Tuple[torch.Tensor]]:
+        past_key_values: tuple[tuple[torch.Tensor]], beam_idx: torch.Tensor
+    ) -> tuple[tuple[torch.Tensor]]:
         """
         This function is used to re-order the `past_key_values` cache if [`~PretrainedModel.beam_search`] or
         [`~PretrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
@@ -1103,7 +1103,7 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -1114,7 +1114,7 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
+    ) -> Union[tuple, SequenceClassifierOutputWithPast]:
         r"""
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_dim)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
@@ -1231,7 +1231,7 @@ class GPTJForQuestionAnswering(GPTJPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, QuestionAnsweringModelOutput]:
+    ) -> Union[tuple, QuestionAnsweringModelOutput]:
         r"""
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_dim)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This

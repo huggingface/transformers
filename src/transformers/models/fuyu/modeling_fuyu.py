@@ -14,7 +14,7 @@
 # limitations under the License.
 """PyTorch Fuyu model."""
 
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -89,7 +89,7 @@ class FuyuModel(FuyuPreTrainedModel):
     def gather_continuous_embeddings(
         self,
         word_embeddings: torch.Tensor,
-        continuous_embeddings: List[torch.Tensor],
+        continuous_embeddings: list[torch.Tensor],
         image_patch_input_indices: torch.Tensor,
     ) -> torch.Tensor:
         """This function places the continuous_embeddings into the word_embeddings at the locations
@@ -152,14 +152,14 @@ class FuyuModel(FuyuPreTrainedModel):
         image_patches_indices: torch.Tensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
         image_patches (`torch.FloatTensor` of shape `(batch_size, num_total_patches, patch_size_ x patch_size x num_channels)`, *optional*):
             Image patches to be used as continuous embeddings. The patches are flattened and then projected to the
@@ -270,7 +270,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         image_patches_indices: torch.Tensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
@@ -279,7 +279,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         logits_to_keep: Optional[int] = 0,
         **kwargs,
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
         image_patches (`torch.FloatTensor` of shape `(batch_size, num_total_patches, patch_size_ x patch_size x num_channels)`, *optional*):
             Image patches to be used as continuous embeddings. The patches are flattened and then projected to the
