@@ -647,7 +647,7 @@ class SequenceParallel(TensorParallelLayer):
     `RMSNorm python implementation <https://github.com/facebookresearch/llama/blob/main/llama/model.py#L34>`__
 
     This style implements the operation that is described in the paper
-    `Reducing Activation Recomputation in Large Transformer Models <https://arxiv.org/abs/2205.05198>`__
+    `Reducing Activation Recomputation in Large Transformer Models <https://huggingface.co/papers/2205.05198>`__
 
     If the input passed in to this ``nn.Module`` is a :class:`torch.Tensor`, it assumes that the input is already sharded
     on the sequence dimension and converts the input to a :class:`DTensor` sharded on the sequence dimension. If the input

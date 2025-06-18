@@ -120,7 +120,7 @@ class UperNetPyramidPoolingModule(nn.Module):
 class UperNetHead(nn.Module):
     """
     Unified Perceptual Parsing for Scene Understanding. This head is the implementation of
-    [UPerNet](https://arxiv.org/abs/1807.10221).
+    [UPerNet](https://huggingface.co/papers/1807.10221).
     """
 
     def __init__(self, config, in_channels):
@@ -204,7 +204,7 @@ class UperNetHead(nn.Module):
 class UperNetFCNHead(nn.Module):
     """
     Fully Convolution Networks for Semantic Segmentation. This head is the implementation of
-    [FCNNet](https://arxiv.org/abs/1411.4038>).
+    [FCNNet](https://huggingface.co/papers/1411.4038>).
 
     Args:
         config:
@@ -218,12 +218,14 @@ class UperNetFCNHead(nn.Module):
     """
 
     def __init__(
-        self, config, in_index: int = 2, kernel_size: int = 3, dilation: Union[int, Tuple[int, int]] = 1
+        self, config, in_channels, in_index: int = 2, kernel_size: int = 3, dilation: Union[int, Tuple[int, int]] = 1
     ) -> None:
         super().__init__()
 
         self.config = config
-        self.in_channels = config.auxiliary_in_channels
+        self.in_channels = (
+            in_channels[in_index] if config.auxiliary_in_channels is None else config.auxiliary_in_channels
+        )
         self.channels = config.auxiliary_channels
         self.num_convs = config.auxiliary_num_convs
         self.concat_input = config.auxiliary_concat_input
@@ -292,7 +294,9 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
 
         # Semantic segmentation head(s)
         self.decode_head = UperNetHead(config, in_channels=self.backbone.channels)
-        self.auxiliary_head = UperNetFCNHead(config) if config.use_auxiliary_head else None
+        self.auxiliary_head = (
+            UperNetFCNHead(config, in_channels=self.backbone.channels) if config.use_auxiliary_head else None
+        )
 
         # Initialize weights and apply final processing
         self.post_init()

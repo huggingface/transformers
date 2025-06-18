@@ -26,7 +26,6 @@ rendered properly in your Markdown viewer.
 
 [BigBird](https://huggingface.co/papers/2007.14062) is a transformer model built to handle sequence lengths up to 4096 compared to 512 for [BERT](./bert). Traditional transformers struggle with long inputs because attention gets really expensive as the sequence length grows. BigBird fixes this by using a sparse attention mechanism, which means it doesn’t try to look at everything at once. Instead, it mixes in local attention, random attention, and a few global tokens to process the whole input. This combination gives it the best of both worlds. It keeps the computation efficient while still capturing enough of the sequence to understand it well. Because of this, BigBird is great at tasks involving long documents, like question answering, summarization, and genomic applications.
 
-
 You can find all the original BigBird checkpoints under the [Google](https://huggingface.co/google?search_models=bigbird) organization.
 
 > [!TIP]

@@ -484,6 +484,24 @@ def is_torch_cuda_available():
         return False
 
 
+def is_cuda_platform():
+    if is_torch_available():
+        import torch
+
+        return torch.version.cuda is not None
+    else:
+        return False
+
+
+def is_rocm_platform():
+    if is_torch_available():
+        import torch
+
+        return torch.version.hip is not None
+    else:
+        return False
+
+
 def is_mamba_ssm_available():
     if is_torch_available():
         import torch
