@@ -17,6 +17,7 @@ import unittest
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, HeliumConfig, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
     require_read_token,
     require_torch,
     slow,
@@ -79,26 +80,21 @@ class HeliumModelTest(GemmaModelTest, unittest.TestCase):
 # @require_torch_gpu
 class HeliumIntegrationTest(unittest.TestCase):
     input_text = ["Hello, today is a great day to"]
-    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
-    # Depending on the hardware we get different logits / generations
-    cuda_compute_capability_major_version = None
-
-    @classmethod
-    def setUpClass(cls):
-        if is_torch_available() and torch.cuda.is_available():
-            # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
 
     @require_read_token
     def test_model_2b(self):
         model_id = "kyutai/helium-1-preview"
-        EXPECTED_TEXTS = [
-            "Hello, today is a great day to start a new project. I have been working on a new project for a while now and I have"
-        ]
+        expected_texts = Expectations(
+            {
+                ("rocm", (9, 5)): ["Hello, today is a great day to start a new project. I have been working on a new project for a while now, and I"],
+                ("cuda", None): ["Hello, today is a great day to start a new project. I have been working on a new project for a while now and I have"],
+            }
+        )  # fmt: skip
+        EXPECTED_TEXTS = expected_texts.get_expectation()
 
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, revision="refs/pr/1"
-        ).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, revision="refs/pr/1").to(
+            torch_device
+        )
         tokenizer = AutoTokenizer.from_pretrained(model_id, revision="refs/pr/1")
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 

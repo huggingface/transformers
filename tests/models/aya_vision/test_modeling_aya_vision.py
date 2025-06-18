@@ -27,6 +27,7 @@ from transformers import (
 from transformers.testing_utils import (
     Expectations,
     cleanup,
+    get_device_properties,
     require_deterministic_for_xpu,
     require_read_token,
     require_torch,
@@ -297,10 +298,6 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    @unittest.skip("Cohere2's eager attn/sdpa attn outputs are expected to be different")
-    def test_sdpa_equivalence(self):
-        pass
-
     @unittest.skip(reason="SiglipVisionModel does not support standalone training")
     def test_training(self):
         pass
@@ -334,19 +331,40 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 @require_read_token
 @require_torch
 class AyaVisionIntegrationTest(unittest.TestCase):
-    def setUp(self):
-        self.model_checkpoint = "CohereForAI/aya-vision-8b"
+    @classmethod
+    def setUpClass(cls):
+        cls.model_checkpoint = "CohereForAI/aya-vision-8b"
+        cls.model = None
+
+    @classmethod
+    def tearDownClass(cls):
+        del cls.model_checkpoint
+        cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
+
+    @classmethod
+    def get_model(cls):
+        # Use 4-bit on T4
+        device_type, major, _ = get_device_properties()
+        load_in_4bit = (device_type == "cuda") and (major < 8)
+        torch_dtype = None if load_in_4bit else torch.float16
+
+        if cls.model is None:
+            cls.model = AyaVisionForConditionalGeneration.from_pretrained(
+                cls.model_checkpoint,
+                device_map=torch_device,
+                torch_dtype=torch_dtype,
+                load_in_4bit=load_in_4bit,
+            )
+        return cls.model
 
     @slow
     @require_torch_accelerator
     def test_small_model_integration_forward(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
-        model = AyaVisionForConditionalGeneration.from_pretrained(
-            self.model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
-        )
+        model = self.get_model()
         messages = [
             {
                 "role": "user",
@@ -365,7 +383,17 @@ class AyaVisionIntegrationTest(unittest.TestCase):
             output = model(**inputs)
 
         actual_logits = output.logits[0, -1, :5].cpu()
-        expected_logits = torch.tensor([0.4109, 0.1532, 0.8018, 2.1328, 0.5483], dtype=torch.float16)
+
+        EXPECTED_LOGITS = Expectations(
+            {
+                ("xpu", 3): [0.4109, 0.1532, 0.8018, 2.1328, 0.5483],
+                # 4-bit
+                ("cuda", 7): [0.1097, 0.3481, 3.8340, 9.7969, 2.0488],
+                ("cuda", 8): [1.6396, 0.6094, 3.1992, 8.5234, 2.1875],
+            }
+        )  # fmt: skip
+        expected_logits = torch.tensor(EXPECTED_LOGITS.get_expectation(), dtype=torch.float16)
+
         self.assertTrue(
             torch.allclose(actual_logits, expected_logits, atol=0.1),
             f"Actual logits: {actual_logits}"
@@ -378,9 +406,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
     @require_deterministic_for_xpu
     def test_small_model_integration_generate_text_only(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
-        model = AyaVisionForConditionalGeneration.from_pretrained(
-            self.model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
-        )
+        model = self.get_model()
         messages = [
             {
                 "role": "user",
@@ -402,7 +428,9 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "Whispers on the breeze,\nLeaves dance under moonlit sky,\nNature's quiet song.",
-                ("cuda", 7): "Whispers on the breeze,\nLeaves dance under moonlit skies,\nNature's quiet song.",
+                # 4-bit
+                ("cuda", 7): "Sure, here's a haiku for you:\n\nMorning dew sparkles,\nPetals unfold in sunlight,\n",
+                ("cuda", 8): "Whispers on the breeze,\nLeaves dance under moonlit skies,\nNature's quiet song.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -413,9 +441,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     def test_small_model_integration_generate_chat_template(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
-        model = AyaVisionForConditionalGeneration.from_pretrained(
-            self.model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
-        )
+        model = self.get_model()
         messages = [
             {
                 "role": "user",
@@ -434,16 +460,24 @@ class AyaVisionIntegrationTest(unittest.TestCase):
             decoded_output = processor.decode(
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
-        expected_output = "The image depicts a cozy scene of two cats resting on a bright pink blanket. The cats,"  # fmt: skip
+
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): "The image depicts a cozy scene of two cats resting on a bright pink blanket. The cats,",
+                # 4-bit
+                ("cuda", 7): 'The image depicts two cats comfortably resting on a pink blanket spread across a sofa. The cats,',
+                ("cuda", 8): 'The image depicts a cozy scene of two cats resting on a bright pink blanket. The cats,',
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
+
         self.assertEqual(decoded_output, expected_output)
 
     @slow
     @require_torch_accelerator
     def test_small_model_integration_batched_generate(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
-        model = AyaVisionForConditionalGeneration.from_pretrained(
-            self.model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
-        )
+        model = self.get_model()
         # Prepare inputs
         messages = [
             [
@@ -476,7 +510,9 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest lake.",
-                ("cuda", 7): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene.",
+                # 4-bit
+                ("cuda", 7): "Wooden bridge stretches\nMirrored lake below, mountains rise\nPeaceful, serene",
+                ("cuda", 8): 'Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene.',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -489,7 +525,16 @@ class AyaVisionIntegrationTest(unittest.TestCase):
 
         # Check second output
         decoded_output = processor.decode(output[1, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        expected_output = 'This image captures a vibrant street scene in a bustling urban area, likely in an Asian city. The focal point is a'  # fmt: skip
+
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): 'This image captures a vibrant street scene in a bustling urban area, likely in an Asian city. The focal point is a',
+                # 4-bit
+                ("cuda", 7): 'This vibrant image captures a bustling street scene in a multicultural urban area, featuring a traditional Chinese gate adorned with intricate red and',
+                ("cuda", 8): 'This image captures a vibrant street scene in a bustling urban area, likely in an Asian city. The focal point is a',
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
 
         self.assertEqual(
             decoded_output,
@@ -502,9 +547,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
     @require_deterministic_for_xpu
     def test_small_model_integration_batched_generate_multi_image(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
-        model = AyaVisionForConditionalGeneration.from_pretrained(
-            self.model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
-        )
+        model = self.get_model()
         # Prepare inputs
         messages = [
             [
@@ -547,7 +590,8 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest lake.",
-                ("cuda", 7): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene.",
+                ("cuda", 7): 'Wooden bridge stretches\nMirrored lake below, mountains rise\nPeaceful, serene',
+                ("cuda", 8): 'Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene.',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -563,10 +607,12 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "The first image showcases the Statue of Liberty, a colossal neoclassical sculpture on Liberty Island in New York Harbor. Standing at ",
-                ("cuda", 7): "The first image showcases the Statue of Liberty, a colossal neoclassical sculpture on Liberty Island in New York Harbor. Standing at a",
+                ("cuda", 7): 'The first image showcases the Statue of Liberty, a monumental sculpture located on Liberty Island in New York Harbor. Standing atop a',
+                ("cuda", 8): 'The first image showcases the Statue of Liberty, a colossal neoclassical sculpture on Liberty Island in New York Harbor. Standing at ',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
+
         self.assertEqual(
             decoded_output,
             expected_output,

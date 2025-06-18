@@ -30,12 +30,13 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
-    require_torch_multi_gpu,
+    require_torch_multi_accelerator,
     require_torch_sdpa,
     slow,
     torch_device,
@@ -583,7 +584,7 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     @slow
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_integration_test(self):
         model = Idefics2ForConditionalGeneration.from_pretrained(
             "HuggingFaceM4/idefics2-8b-base",
@@ -621,8 +622,14 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=10)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        expected_generated_text = "In this image, we see the Statue of Liberty, the Hudson River,"
-        self.assertEqual(generated_texts[0], expected_generated_text)
+        expected_generated_texts = Expectations(
+            {
+                ("cuda", None): "In this image, we see the Statue of Liberty, the Hudson River,",
+                ("rocm", (9, 5)): "In this image, we see the Statue of Liberty, the New York City",
+            }
+        )
+        EXPECTED_GENERATED_TEXT = expected_generated_texts.get_expectation()
+        self.assertEqual(generated_texts[0], EXPECTED_GENERATED_TEXT)
 
     @slow
     @require_bitsandbytes

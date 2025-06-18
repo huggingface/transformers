@@ -28,6 +28,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    backend_empty_cache,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
@@ -300,10 +301,6 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         pass
 
     @unittest.skip(reason="Compile not yet supported because in Qwen2VL models")
-    def test_sdpa_can_compile_dynamic(self):
-        pass
-
-    @unittest.skip(reason="Compile not yet supported because in Qwen2VL models")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
@@ -319,10 +316,6 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         reason="VLMs can't generate from inputs embeds and pixels. This can be tested as part of bacbone LM, no need to run the test for VLMs"
     )
     def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip(reason="The base class is LM only and cannot be init with XModelConfig`")
-    def test_save_load_fast_init_from_base(self):
         pass
 
     # The multimodal base model embeds will not match ids, due to pixel values. We can't change base test
@@ -367,7 +360,7 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
 
     @slow
     def test_small_model_integration_test(self):

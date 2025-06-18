@@ -14,7 +14,7 @@
 # limitations under the License.
 import os
 from shutil import copyfile
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 import sentencepiece as spm
 
@@ -65,12 +65,12 @@ class PegasusTokenizer(PreTrainedTokenizer):
             The token used for masking single token values. This is the token used when training this model with masked
             language modeling (MLM). This is the token that the PEGASUS encoder will try to predict during pretraining.
             It corresponds to *[MASK2]* in [PEGASUS: Pre-training with Extracted Gap-sentences for Abstractive
-            Summarization](https://arxiv.org/pdf/1912.08777.pdf).
+            Summarization](https://huggingface.co/papers/1912.08777).
         mask_token_sent (`str`, *optional*, defaults to `"<mask_1>"`):
             The token used for masking whole target sentences. This is the token used when training this model with gap
             sentences generation (GSG). This is the sentence that the PEGASUS decoder will try to predict during
             pretraining. It corresponds to *[MASK1]* in [PEGASUS: Pre-training with Extracted Gap-sentences for
-            Abstractive Summarization](https://arxiv.org/pdf/1912.08777.pdf).
+            Abstractive Summarization](https://huggingface.co/papers/1912.08777).
         additional_special_tokens (`List[str]`, *optional*):
             Additional special tokens used by the tokenizer. If no additional_special_tokens are provided <mask_2> and
             <unk_2, ..., unk_102> are used as additional special tokens corresponding to the [original PEGASUS
@@ -106,7 +106,7 @@ class PegasusTokenizer(PreTrainedTokenizer):
         mask_token_sent="<mask_1>",
         additional_special_tokens=None,
         offset=103,  # entries 2 - 104 are only used for pretraining
-        sp_model_kwargs: Optional[Dict[str, Any]] = None,
+        sp_model_kwargs: Optional[dict[str, Any]] = None,
         **kwargs,
     ) -> None:
         self.offset = offset
@@ -175,7 +175,7 @@ class PegasusTokenizer(PreTrainedTokenizer):
     def vocab_size(self) -> int:
         return len(self.sp_model) + self.offset
 
-    def get_vocab(self) -> Dict[str, int]:
+    def get_vocab(self) -> dict[str, int]:
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
         vocab.update(self.added_tokens_encoder)
         return vocab
@@ -195,7 +195,7 @@ class PegasusTokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(self.vocab_file)
 
-    def _tokenize(self, text: str) -> List[str]:
+    def _tokenize(self, text: str) -> list[str]:
         """Take as input a string and return a list of strings (tokens) for words/sub-words"""
         return self.sp_model.encode(text, out_type=str)
 
@@ -236,8 +236,8 @@ class PegasusTokenizer(PreTrainedTokenizer):
         return [1 if x in all_special_ids else 0 for x in seq]
 
     def get_special_tokens_mask(
-        self, token_ids_0: List, token_ids_1: Optional[List] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
+        self, token_ids_0: list, token_ids_1: Optional[list] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
         """Get list where entries are [1] if a token is [eos] or [pad] else 0."""
         if already_has_special_tokens:
             return self._special_token_mask(token_ids_0)
@@ -246,7 +246,7 @@ class PegasusTokenizer(PreTrainedTokenizer):
         else:
             return self._special_token_mask(token_ids_0 + token_ids_1) + [1]
 
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
+    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequences for sequence classification tasks by concatenating
         and adding special tokens. A PEGASUS sequence has the following format, where `X` represents the sequence:
@@ -271,7 +271,7 @@ class PegasusTokenizer(PreTrainedTokenizer):
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return token_ids_0 + token_ids_1 + [self.eos_token_id]
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
