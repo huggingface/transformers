@@ -32,25 +32,49 @@ tiny_config_url = "https://raw.githubusercontent.com/czczup/FAST/main/config/fas
 small_config_url = "https://raw.githubusercontent.com/czczup/FAST/main/config/fast/nas-configs/fast_small.config"
 base_config_url = "https://raw.githubusercontent.com/czczup/FAST/main/config/fast/nas-configs/fast_base.config"
 
-rename_key_mappings = {
-    "module.backbone": "backbone.textnet",
-    "first_conv": "stem",
-    "bn": "batch_norm",
-    "ver": "vertical",
-    "hor": "horizontal",
-    "module.neck": "neck",
-    "module.det_head": "text_detection_head",
-    "neck.reduce_layer1": "neck.reduce_layers.0",
-    "neck.reduce_layer2": "neck.reduce_layers.1",
-    "neck.reduce_layer3": "neck.reduce_layers.2",
-    "neck.reduce_layer4": "neck.reduce_layers.3",
-    "final.conv.weight": "final_conv.weight",
-    "neck.reduce_layers.1.rbr_identity.weight": "neck.reduce_layers.1.identity.weight",
-    "neck.reduce_layers.1.rbr_identity.bias": "neck.reduce_layers.1.identity.bias",
-    "neck.reduce_layers.1.rbr_identity.running_mean": "neck.reduce_layers.1.identity.running_mean",
-    "neck.reduce_layers.1.rbr_identity.running_var": "neck.reduce_layers.1.identity.running_var",
-    "neck.reduce_layers.1.rbr_identity.num_batches_tracked": "neck.reduce_layers.1.identity.num_batches_tracked",
+ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
+    r"module.backbone":                                         r"backbone.textnet",
+    r"first_conv":                                              r"stem",
+    r"bn":                                                      r"batch_norm",
+    r"ver":                                                     r"vertical",
+    r"hor":                                                     r"horizontal",
+    r"module.neck":                                             r"neck",
+    r"module.det_head":                                         r"text_detection_head",
+
+    r"neck.reduce_layer1":                                      r"neck.reduce_layers.0",
+    r"neck.reduce_layer2":                                      r"neck.reduce_layers.1",
+    r"neck.reduce_layer3":                                      r"neck.reduce_layers.2",
+    r"neck.reduce_layer4":                                      r"neck.reduce_layers.3",
+
+    r"final.conv.weight":                                       r"final_conv.weight",
+    r"neck.reduce_layers.1.rbr_identity.weight":                r"neck.reduce_layers.1.identity.weight",
+    r"neck.reduce_layers.1.rbr_identity.bias":                  r"neck.reduce_layers.1.identity.bias",
+    r"neck.reduce_layers.1.rbr_identity.running_mean":          r"neck.reduce_layers.1.identity.running_mean",
+    r"neck.reduce_layers.1.rbr_identity.running_var":           r"neck.reduce_layers.1.identity.running_var",
+    r"neck.reduce_layers.1.rbr_identity.num_batches_tracked":   r"neck.reduce_layers.1.identity.num_batches_tracked",
+
+    r"textnet.stage1":                                          r"textnet.encoder.stages.0.stage",
+    r"textnet.stage2":                                          r"textnet.encoder.stages.1.stage",
+    r"textnet.stage3":                                          r"textnet.encoder.stages.2.stage",
+    r"textnet.stage4":                                          r"textnet.encoder.stages.3.stage",
 }
+
+def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
+    """
+    This function should be applied only once, on the concatenated keys to efficiently rename using
+    the key mappings.
+    """
+    output_dict = {}
+    if state_dict_keys is not None:
+        old_text = "\n".join(state_dict_keys)
+        new_text = old_text
+        for pattern, replacement in ORIGINAL_TO_CONVERTED_KEY_MAPPING.items():
+            if replacement is None:
+                new_text = re.sub(pattern, "", new_text)  # an empty line
+                continue
+            new_text = re.sub(pattern, replacement, new_text)
+        output_dict = dict(zip(old_text.split("\n"), new_text.split("\n")))
+    return output_dict
 
 
 def get_model_config(model_config, model_type, size, min_area, bounding_box_type, loss_bg):
@@ -254,23 +278,16 @@ def convert_fast_checkpoint(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location=device, check_hash=True)["ema"]
     state_dict_changed = OrderedDict()
-    for key in state_dict:
-        if "backbone" or "textnet" in key:
-            val = state_dict[key]
-            new_key = key
-            for search, replacement in rename_key_mappings.items():
-                if search in new_key:
-                    new_key = new_key.replace(search, replacement)
+    
+    old_keys = list(state_dict.keys())
+    new_key_mapping = convert_old_keys_to_new_keys(old_keys)
 
-            pattern = r"textnet\.stage(\d)"
+    for key, value in state_dict.items():
+        new_key = new_key_mapping.get(key, key)          
+        if new_key == "":                  
+            continue
 
-            def adjust_stage(match):
-                stage_number = int(match.group(1)) - 1
-                return f"textnet.encoder.stages.{stage_number}.stage"
-
-            # using regex to find and replace the pattern in the string
-            new_key = re.sub(pattern, adjust_stage, new_key)
-            state_dict_changed[new_key] = val
+        state_dict_changed[new_key] = value
 
     model.load_state_dict(state_dict_changed)
     model.eval()
@@ -289,7 +306,7 @@ def convert_fast_checkpoint(
         target_sizes = [(image.height, image.width)]
         threshold = 0.88
         text_locations = fast_image_processor.post_process_text_detection(
-            output, target_sizes, threshold, bounding_box_type="boxes"
+            output, target_sizes, threshold
         )
         if text_locations[0]["boxes"][0] != expected_slice_boxes:
             raise ValueError(f"Expected {expected_slice_boxes}, but got {text_locations[0]['boxes'][0]}")
