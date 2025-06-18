@@ -510,6 +510,54 @@ VIDEO_DECODERS = {
     "torchcodec": read_video_torchcodec,
 }
 
+def process_video_object(
+        video_obj: "VideoInput",
+        num_frames: Optional[int] = None,
+        fps: Optional[int] = None,
+        backend: str = "pyav",
+        sample_indices_fn: Optional[Callable] = None,
+        **kwargs,):
+
+    if not valid_videos(video_obj):
+        raise ValueError(
+            f"Invalid video input. Expected either a list of video frames or an input of 4 or 5 dimensions, but got"
+            f" type {type(video_obj)}."
+        )
+    
+    # If `sample_indices_fn` is given, we can accept any args as those might be needed by custom `sample_indices_fn`
+    if fps is not None and num_frames is not None and sample_indices_fn is None:
+        raise ValueError(
+            "`num_frames`, `fps`, and `sample_indices_fn` are mutually exclusive arguments, please use only one!"
+        )
+
+    # If user didn't pass a sampling function, create one on the fly with default logic
+    if sample_indices_fn is None:
+        def sample_indices_fn_func(metadata, **fn_kwargs):
+            return default_sample_indices_fn(metadata, num_frames=num_frames, fps=fps, **fn_kwargs)
+
+        sample_indices_fn = sample_indices_fn_func
+
+    # If the video is a list of frames where each frame is a ndarray, convert it to a numpy array
+    if isinstance(video_obj, (list, tuple)):
+        video = make_batched_videos(video_obj)
+
+    # If the video is a numpy array or torch tensor, we assume it is already in the right format
+    if is_numpy_array(video_obj) or is_torch_tensor(video_obj):
+        if video.ndim == 5:
+            # Batched video
+            video = np.array([video_obj[i] for i in range(video_obj.shape[0])])
+        elif video.ndim == 4:
+            # Single video
+            video = np.array(video_obj)
+        else:
+            raise ValueError(f"Invalid video shape: {video_obj.shape}")
+    logger.warning("When loading the video from array/tensor, we cannot infer metadata such as `fps` or `duration`. "),
+    metadata = VideoMetadata(
+        total_num_frames=video.shape[0],
+        fps=0,
+        video_backend="numpy",
+    )
+    return video, metadata
 
 def load_video(
     video: Union[str, "VideoInput"],
@@ -563,86 +611,126 @@ def load_video(
 
         sample_indices_fn = sample_indices_fn_func
     
-    # if isinstance(video, VideoInput):
-    #     return process_video_object(
-    #         video)
-    # else:
-    if isinstance(video, str):
-        # video is a path to a file or a URL, you need to actually load it
+    
+    
+    # video is a path to a file or a URL, you need to actually load it
+    if urlparse(video).netloc in ["www.youtube.com", "youtube.com"]:
+        if not is_yt_dlp_available():
+            raise ImportError("To load a video from YouTube url you have  to install `yt_dlp` first.")
+        # Lazy import from yt_dlp
+        requires_backends(load_video, ["yt_dlp"])
+        from yt_dlp import YoutubeDL
 
-        if urlparse(video).netloc in ["www.youtube.com", "youtube.com"]:
-            if not is_yt_dlp_available():
-                raise ImportError("To load a video from YouTube url you have  to install `yt_dlp` first.")
-            # Lazy import from yt_dlp
-            requires_backends(load_video, ["yt_dlp"])
-            from yt_dlp import YoutubeDL
-
-            buffer = BytesIO()
-            with redirect_stdout(buffer), YoutubeDL() as f:
-                f.download([video])
-            bytes_obj = buffer.getvalue()
-            file_obj = BytesIO(bytes_obj)
-        elif video.startswith("http://") or video.startswith("https://"):
-            file_obj = BytesIO(requests.get(video).content)
-        elif os.path.isfile(video):
-            file_obj = video
-        else:
-            raise TypeError("Video is a string but it is not a local path or URL")
-
-        # can also load with decord, but not cv2/torchvision
-        # both will fail in case of url links
-        video_is_url = video.startswith("http://") or video.startswith("https://")
-        if video_is_url and backend in ["opencv", "torchvision"]:
-            raise ValueError(
-                "If you are trying to load a video from URL, you can decode the video only with `pyav` or `decord` as backend"
-            )
-
-        if file_obj is None:
-            return video
-
-        if (
-            (not is_decord_available() and backend == "decord")
-            or (not is_av_available() and backend == "pyav")
-            or (not is_cv2_available() and backend == "opencv")
-            or (not is_torchvision_available() and backend == "torchvision")
-        ):
-            raise ImportError(
-                f"You chose backend={backend} for loading the video but the required library is not found in your environment "
-                f"Make sure to install {backend} before loading the video."
-            )
-
-        video_decoder = VIDEO_DECODERS[backend]
-        video, metadata = video_decoder(file_obj, sample_indices_fn, **kwargs)
+        buffer = BytesIO()
+        with redirect_stdout(buffer), YoutubeDL() as f:
+            f.download([video])
+        bytes_obj = buffer.getvalue()
+        file_obj = BytesIO(bytes_obj)
+    elif video.startswith("http://") or video.startswith("https://"):
+        file_obj = BytesIO(requests.get(video).content)
+    elif os.path.isfile(video):
+        file_obj = video
     else:
-        # video is a list of frames or a numpy array, we assume it is already loaded
-        if not valid_videos(video):
-            raise ValueError(
-                f"Invalid video input. Expected either a list of video frames or an input of 4 or 5 dimensions, but got"
-                f" type {type(video)}."
-            )
+        raise TypeError("Provided video path is a string but it is not a local path or URL")
 
-        # If the video is a list of frames, convert it to a numpy array
-        if isinstance(video, (list, tuple)):
-            video = make_batched_videos(video)
-
-        # If the video is a numpy array or torch tensor, we assume it is already in the right format
-        if is_numpy_array(video) or is_torch_tensor(video):
-            if video.ndim == 5:
-                # Batched video
-                video = np.array([video[i] for i in range(video.shape[0])])
-            elif video.ndim == 4:
-                # Single video
-                video = np.array(video)
-            else:
-                raise ValueError(f"Invalid video shape: {video.shape}")
-
-        metadata = VideoMetadata(
-            total_num_frames=video.shape[0],
-            fps=fps if fps is not None else 30.0,
-            duration=video.shape[0] / (fps if fps is not None else 30.0),
-            video_backend="numpy",
+    # can also load with decord, but not cv2/torchvision
+    # both will fail in case of url links
+    video_is_url = video.startswith("http://") or video.startswith("https://")
+    if video_is_url and backend in ["opencv", "torchvision"]:
+        raise ValueError(
+            "If you are trying to load a video from URL, you can decode the video only with `pyav` or `decord` as backend"
         )
+    
+    if (
+        (not is_decord_available() and backend == "decord")
+        or (not is_av_available() and backend == "pyav")
+        or (not is_cv2_available() and backend == "opencv")
+        or (not is_torchvision_available() and backend == "torchvision")
+    ):
+        raise ImportError(
+            f"You chose backend={backend} for loading the video but the required library is not found in your environment "
+            f"Make sure to install {backend} before loading the video."
+        )
+
+    video_decoder = VIDEO_DECODERS[backend]
+    video, metadata = video_decoder(file_obj, sample_indices_fn, **kwargs)
     return video, metadata
+
+# # Case 3: A 3D or 4D video tensor (NumPy or Torch)
+#                         elif isinstance(fname, (np.ndarray, torch.Tensor)):
+#                             video = fname
+#                             if isinstance(video, torch.Tensor):
+#                                 video = video.cpu().numpy()
+#                             if video.ndim == 3:
+#                                 video = np.expand_dims(video, axis=0)  # [H, W, C] → [1, H, W, C]
+#                             metadata = None
+#                             logger.warning(
+#                                 "When loading the video from array/tensor, we cannot infer metadata such as `fps` or `duration`. "
+#                             )
+
+#                         # Case 4: List of NumPy arrays (frames)
+#                         elif isinstance(fname, list) and all(isinstance(f, np.ndarray) for f in fname):
+#                             video = np.stack(fname)
+#                             metadata = None
+#                             logger.warning(
+#                                 "When loading the video from list of NumPy arrays, we cannot infer metadata such as `fps` or `duration`."
+#                             )
+
+#                         # Case 5: List of torch.Tensor frames
+#                         elif isinstance(fname, list) and all(isinstance(f, torch.Tensor) for f in fname):
+#                             video = np.stack([f.cpu().numpy() for f in fname])
+#                             metadata = None
+#                             logger.warning(
+#                                 "When loading the video from list of PyTorch tensors, we cannot infer metadata such as `fps` or `duration`."
+#                             )
+
+#                         # Case 6: List of PIL.Image frames
+#                         elif isinstance(fname, list) and all(isinstance(f, Image.Image) for f in fname):
+#                             video = np.stack([np.array(f) for f in fname])
+#                             metadata = None
+#                             logger.warning(
+#                                 "When loading the video from list of PIL images, we cannot infer metadata such as `fps` or `duration`."
+#                             )
+
+#                         # (Optional) Case 7: List of list of frames → batch of videos (could raise error or recurse)
+#                         elif isinstance(fname, list) and all(isinstance(sub, list) for sub in fname):
+#                             raise ValueError("Nested list (batch of videos) not supported in this loop. Unroll them first.")
+
+#                         else:
+#                             raise TypeError(f"Unsupported video input format: {type(fname)}")
+
+#                         videos.append(video)
+#                         video_metadata.append(metadata)
+
+
+
+#                         if isinstance(fname, (list, tuple)) and isinstance(fname[0], str):
+#                             video = [np.array(load_image(image_fname)) for image_fname in fname]
+#                             # create a 4D video because `load_video` always returns a 4D array
+#                             video = np.stack(video)
+#                             metadata = None
+#                             logger.warning(
+#                                 "When loading the video from list of images, we cannot infer metadata such as `fps` or `duration`. "
+#                                 "If your model requires metadata during processing, please load the whole video and let the processor sample frames instead."
+#                             )
+#                         elif isinstance(fname, str):
+#                             # video is a file path or URL
+#                             video, metadata = load_video(
+#                                 fname,
+#                                 backend=mm_load_kwargs["video_load_backend"],
+#                             )
+#                         elif isinstance(fname, np.ndarray) or isinstance(fname, torch.Tensor):
+#                             video = fname
+#                             if video.ndim == 3:
+#                                 # If the video is 3D (height, width, color), we assume it is a single frame
+#                                 # we expand it to 4D (1, height, width, color)
+#                                 video = np.expand_dims(video, axis=0)
+#                             metadata = None
+#                             logger.warning(
+#                                 "When loading the video from numpy array, we cannot infer metadata such as `fps` or `duration`. "
+#                                 "If your model requires metadata during processing, please load the whole video and let the processor sample frames instead."
+#                             )
+#                         elif isinstance(fname, list) and all(isinstance(frame, np.ndarray) for frame in fname):
 
 
 def convert_to_rgb(
