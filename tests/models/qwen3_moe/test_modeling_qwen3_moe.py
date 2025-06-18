@@ -22,6 +22,7 @@ import pytest
 from transformers import AutoTokenizer, Qwen3MoeConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
     backend_empty_cache,
+    cleanup,
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
@@ -146,6 +147,7 @@ class Qwen3MoeModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertNotAlmostEqual(include_padding_result.aux_loss.item(), result.aux_loss.item())
 
 
+# Run on runners with larger accelerators (for example A10 instead of T4) with a lot of CPU RAM (e.g. g5-12xlarge)
 @require_torch_multi_accelerator
 @require_torch_large_accelerator
 @require_torch
@@ -153,6 +155,14 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.model = None
+
+    @classmethod
+    def tearDownClass(cls):
+        del cls.model
+        cleanup(torch_device, gc_collect=True)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
 
     @classmethod
     def get_model(cls):
@@ -210,18 +220,6 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
-        # Assisted generation
-        assistant_model = model
-        assistant_model.generation_config.num_assistant_tokens = 2
-        assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
-        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
-        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
-
-        del assistant_model
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
-
     @slow
     @require_torch_sdpa
     def test_model_15b_a2b_long_prompt_sdpa(self):
@@ -232,17 +230,6 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
-
-        orig_generation_config = copy.deepcopy(model.generation_config)
-
-        # Assisted generation
-        assistant_model = model
-        assistant_model.generation_config.num_assistant_tokens = 2
-        assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
-        generated_ids = assistant_model.generate(input_ids, max_new_tokens=4, temperature=0)
-        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
-
-        model.generation_config = orig_generation_config
 
         EXPECTED_TEXT_COMPLETION = "To be or not to be: the role of the cell cycle in the regulation of apoptosis.\nThe cell cycle is a highly"
         prompt = "To be or not to"
