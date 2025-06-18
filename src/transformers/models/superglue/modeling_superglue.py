@@ -749,7 +749,6 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         labels: Optional[torch.LongTensor] = None,
-
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, KeypointMatchingOutput]:
         r"""

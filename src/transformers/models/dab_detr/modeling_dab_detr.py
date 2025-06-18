@@ -923,7 +923,6 @@ class DabDetrEncoder(DabDetrPreTrainedModel):
         inputs_embeds,
         attention_mask,
         object_queries,
-
         return_dict: Optional[bool] = None,
     ):
         r"""
@@ -1061,7 +1060,6 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
         memory_key_padding_mask,
         object_queries,
         query_position_embeddings,
-
         return_dict: Optional[bool] = None,
     ):
         r"""
@@ -1285,7 +1283,6 @@ class DabDetrModel(DabDetrPreTrainedModel):
         encoder_outputs: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.FloatTensor], DabDetrModelOutput]:
         r"""
