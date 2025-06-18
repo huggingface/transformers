@@ -79,7 +79,7 @@ class MoshiAsrForConditionalGeneration(LlamaForCausalLM, GenerationMixin, PreTra
         self.codec_model = AutoModel.from_config(config.codec_config)
 
     def _prepare_generation_config(self, *args, **kwargs):
-        generation_config, model_kwargs = super()._prepare_generation_config(*args, **kwargs)
+        generation_config, model_kwargs = GenerationMixin._prepare_generation_config(*args, **kwargs)
         # this should be passed to the model kwargs for the input preparation
         model_kwargs["audio_window_size"] = (
             generation_config.audio_window_size if hasattr(generation_config, "audio_window_size") else None
@@ -92,7 +92,7 @@ class MoshiAsrForConditionalGeneration(LlamaForCausalLM, GenerationMixin, PreTra
         bos_token_id: Optional[torch.Tensor] = None,
         model_kwargs: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Tuple[torch.Tensor, Optional[str], Dict[str, torch.Tensor]]:
-        inputs, input_name, model_kwargs = super()._prepare_model_inputs(
+        inputs, input_name, model_kwargs = GenerationMixin._prepare_model_inputs(
             inputs=inputs,
             bos_token_id=bos_token_id,
             model_kwargs=model_kwargs,
@@ -161,14 +161,13 @@ class MoshiAsrForConditionalGeneration(LlamaForCausalLM, GenerationMixin, PreTra
         padding_cache: Optional[MimiConv1dPaddingCache] = None,
         **kwargs,
     ):
-        model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
+        model_inputs = GenerationMixin.prepare_inputs_for_generation(*args, **kwargs)
 
         if input_values is not None:
             cache_position = model_inputs["cache_position"]
-
-            audio_positions = cache_position - self.config.delay_in_tokens
             start, end = current_window[0]
-            if audio_positions[-1] >= end:
+
+            if cache_position[-1] >= end:
                 # we need to encode the new audio tokens
                 with torch.no_grad():
                     input_values_start_idx = start * self.config.frame_size
@@ -189,10 +188,9 @@ class MoshiAsrForConditionalGeneration(LlamaForCausalLM, GenerationMixin, PreTra
                     torch.tensor([start, end], device=current_window.device).expand(current_window.shape[0], -1)
                 )
 
-            current_audio_tokens_idxs = (audio_positions - start).clamp(min=0)
+            current_audio_tokens_idxs = (cache_position - start).clamp(min=0)
             current_audio_tokens = audio_tokens[:, current_audio_tokens_idxs, :]
 
-            current_audio_tokens[:, audio_positions <= 0, :] = self.config.audio_pad_token_id
             current_audio_tokens[:, cache_position == 0, :] = self.config.audio_bos_token_id
 
             input_ids = model_inputs.pop("input_ids")
@@ -208,7 +206,7 @@ class MoshiAsrForConditionalGeneration(LlamaForCausalLM, GenerationMixin, PreTra
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         if kwargs.get("output_loading_info", False):
-            model, loading_info = super().from_pretrained(*args, **kwargs)
+            model, loading_info = PreTrainedModel.from_pretrained(*args, **kwargs)
         else:
             model = PreTrainedModel.from_pretrained(*args, **kwargs)
 
