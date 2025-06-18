@@ -19,6 +19,7 @@ from typing import Optional, Union
 
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
+from ...models.dac.modeling_dac import DacModel
 from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import is_torch_available
 
@@ -55,7 +56,6 @@ class DiaProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-# TODO: check for correctness
 class DiaProcessor(ProcessorMixin):
     r"""
     Constructs a Dia processor which wraps a [`DiaFeatureExtractor`], [`DiaTokenizer`], and a [`DacModel`] into
@@ -69,7 +69,7 @@ class DiaProcessor(ProcessorMixin):
         tokenizer (`DiaTokenizer`):
             An instance of [`DiaTokenizer`]. The tokenizer is a required input.
         audio_tokenizer (`DacModel`):
-            An instance of [`DacModel`] used to encode and decode audio into codebooks. It is is a required input
+            An instance of [`DacModel`] used to encode/decode audio into/from codebooks. It is is a required input.
     """
 
     feature_extractor_class = "DiaFeatureExtractor"
@@ -77,6 +77,16 @@ class DiaProcessor(ProcessorMixin):
 
     def __init__(self, feature_extractor, tokenizer, audio_tokenizer):
         super().__init__(feature_extractor, tokenizer, audio_tokenizer=audio_tokenizer)
+
+    @property
+    def model_input_names(self):
+        """
+        We no longer pass the raw audio values but the codebooks encoded by the `audio_tokenizer`.
+        Conventions may differ between audio models due to architectural choices.
+        """
+        tokenizer_input_names = self.tokenizer.model_input_names
+        audio_tokenizer_input_names = ["decoder_input_ids", "decoder_attention_mask"]
+        return list(dict.fromkeys(tokenizer_input_names + audio_tokenizer_input_names))
 
     def __call__(
         self,
@@ -118,8 +128,14 @@ class DiaProcessor(ProcessorMixin):
         encodings = self.tokenizer(text, **text_kwargs)
         data.update(encodings)
 
-        # TODO: check for correctness
         # Audio
+        if not isinstance(self.audio_tokenizer, DacModel):
+            raise ValueError(
+                f"Using the `DiaProcessor` requires `DacModel` as `audio_tokenizer`, "
+                f"found `{type(self.audio_tokenizer)}` instead. "
+                f"Make sure to properly initialize the processor."
+            )
+
         delay_pattern = audio_kwargs.pop("delay_pattern", None)
         audio_bos_token_id = audio_kwargs.pop("bos_token_id", None)
         audio_eos_token_id = audio_kwargs.pop("eos_token_id", None)
@@ -132,12 +148,13 @@ class DiaProcessor(ProcessorMixin):
             or delay_pattern is None
         ):
             raise ValueError(
-                "To enable processing for Dia, we need the `bos_token_id`, `eos_token_id`, `pad_token_id`, and `delay_pattern`. You may have accidentally overwritten one of those."
+                "To enable processing for Dia, we need the `bos_token_id`, `eos_token_id`, "
+                "`pad_token_id`, and `delay_pattern`. You may have accidentally overwritten one of those."
             )
 
         if generation and output_labels:
             raise ValueError(
-                f"Labels with `generation` is incompatible, got generation={generation}, output_labels={output_labels}"
+                f"Labels with `generation` is incompatible, got generation={generation}, output_labels={output_labels}."
             )
 
         batch_size = data["input_ids"].shape[0]
@@ -146,6 +163,8 @@ class DiaProcessor(ProcessorMixin):
 
         # Voice cloning generation / general training
         if audio is not None:
+            # TODO: check for proper correctness on the audio path via generate comp
+
             audio = make_list_of_audio(audio)
             input_audios = self.feature_extractor(audio, **audio_kwargs)
 
@@ -239,6 +258,7 @@ class DiaProcessor(ProcessorMixin):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
+    # TODO: check for proper correctness
     def decode(
         self,
         input_ids,

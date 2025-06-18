@@ -746,14 +746,16 @@ class ProcessorMixin(PushToHubMixin):
         if self.audio_tokenizer is not None:
             if not isinstance(self.audio_tokenizer, PreTrainedModel):
                 raise ValueError(
-                    f"`audio_tokenizer` can only be a `PreTrainedModel` but received {type(self.audio_tokenizer)} instead."
+                    f"`audio_tokenizer` can only be a `PreTrainedModel` but received {type(self.audio_tokenizer)}"
+                    " instead."
                 )
             else:
                 audio_tokenizer_class = self.audio_tokenizer.__class__.__name__
                 audio_tokenizer_name_or_path = self.audio_tokenizer.name_or_path
                 if audio_tokenizer_class not in MODEL_FOR_AUDIO_TOKENIZATION_NAMES.values():
                     raise ValueError(
-                        f"Tried to use {audio_tokenizer_class} for audio tokenization. However, this class is not registered for audio tokenization."
+                        f"Tried to use `{audio_tokenizer_class}` for audio tokenization. However, this class is not"
+                        " registered for audio tokenization."
                     )
 
             audio_tokenizer_dict = {
@@ -993,7 +995,9 @@ class ProcessorMixin(PushToHubMixin):
             with open(resolved_audio_tokenizer_file, "r", encoding="utf-8") as reader:
                 # The json contains the references we need to init the correct model
                 audio_tokenizer_references = json.load(reader)
-                audio_tokenizer_class = cls.get_possibly_dynamic_module(audio_tokenizer_references["audio_tokenizer_class"])
+                audio_tokenizer_class = cls.get_possibly_dynamic_module(
+                    audio_tokenizer_references["audio_tokenizer_class"]
+                )
                 audio_tokenizer_path = audio_tokenizer_references["audio_tokenizer_name_or_path"]
 
             # TODO: kwargs that could clash here? allow separate kwargs for these?

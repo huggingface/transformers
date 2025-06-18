@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# TODO: completely --> tests and the class itself
-
 import shutil
 import tempfile
 import unittest
@@ -30,31 +28,51 @@ if is_torch_available:
     import torch
 
 
+# Copied from tests.utils.test_modeling_utils.check_models_equal
+def check_models_equal(model1, model2):
+    models_are_equal = True
+    for model1_p, model2_p in zip(model1.parameters(), model2.parameters()):
+        if model1_p.data.ne(model2_p.data).sum() > 0:
+            models_are_equal = False
+
+    return models_are_equal
+
+
 @require_torch
 class DiaProcessorTest(unittest.TestCase):
     def setUp(self):
-        # TODO: checkpoints + save/load pretrained with audio tokenizer
         self.checkpoint = "AntonV/Dia-1.6B"
-        self.audio_tokenizer_checkpoint = "descript/dac_44khz"  # imo should be within the processor as ref
+        self.audio_tokenizer_checkpoint = "descript/dac_44khz"
         self.tmpdirname = tempfile.mkdtemp()
+
+        # Audio tokenizer is a bigger model so we will reuse this if possible
+        self.processor = DiaProcessor(
+            tokenizer=self.get_tokenizer(),
+            feature_extractor=self.get_feature_extractor(),
+            audio_tokenizer=self.get_audio_tokenizer(),
+        )
 
     def get_tokenizer(self, **kwargs):
         return DiaTokenizer.from_pretrained(self.checkpoint, **kwargs)
 
-    def get_audio_tokenizer(self, **kwargs):
-        return DacModel.from_pretrained(self.audio_tokenizer_checkpoint, **kwargs)
-
     def get_feature_extractor(self, **kwargs):
         return DiaFeatureExtractor.from_pretrained(self.checkpoint, **kwargs)
 
+    def get_audio_tokenizer(self, **kwargs):
+        return DacModel.from_pretrained(self.audio_tokenizer_checkpoint, **kwargs)
+
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
+        del self.processor
 
     def test_save_load_pretrained_default(self):
         tokenizer = self.get_tokenizer()
         feature_extractor = self.get_feature_extractor()
+        audio_tokenizer = self.get_audio_tokenizer()
 
-        processor = DiaProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = DiaProcessor(
+            tokenizer=tokenizer, feature_extractor=feature_extractor, audio_tokenizer=audio_tokenizer
+        )
 
         processor.save_pretrained(self.tmpdirname)
         processor = DiaProcessor.from_pretrained(self.tmpdirname)
@@ -65,12 +83,22 @@ class DiaProcessorTest(unittest.TestCase):
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
         self.assertIsInstance(processor.feature_extractor, DiaFeatureExtractor)
 
+        self.assertEqual(processor.audio_tokenizer.__class__.__name__, audio_tokenizer.__class__.__name__)
+        self.assertEqual(processor.audio_tokenizer.name_or_path, audio_tokenizer.name_or_path)
+        self.assertTrue(check_models_equal(processor.audio_tokenizer, audio_tokenizer))
+        self.assertIsInstance(processor.audio_tokenizer, DacModel)
+
     def test_save_load_pretrained_additional_features(self):
-        processor = DiaProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
+        processor = DiaProcessor(
+            tokenizer=self.get_tokenizer(),
+            feature_extractor=self.get_feature_extractor(),
+            audio_tokenizer=self.get_audio_tokenizer(),
+        )
         processor.save_pretrained(self.tmpdirname)
 
         tokenizer_add_kwargs = self.get_tokenizer()
         feature_extractor_add_kwargs = self.get_feature_extractor()
+        audio_tokenizer_add_kwargs = self.get_audio_tokenizer()
 
         processor = DiaProcessor.from_pretrained(self.tmpdirname)
 
@@ -80,50 +108,96 @@ class DiaProcessorTest(unittest.TestCase):
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.feature_extractor, DiaFeatureExtractor)
 
-    # TODO: not valid anymore since we do more than just feat extract
-    def test_feature_extractor(self):
-        feature_extractor = self.get_feature_extractor()
-        tokenizer = self.get_tokenizer()
-
-        processor = DiaProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
-
-        raw_speech = np.random.rand(1000).astype(np.float32)
-
-        input_feat_extract = feature_extractor(raw_speech, sampling_rate=44100, return_tensors="pt")
-        input_processor = processor(raw_speech)
-
-        for key in input_feat_extract.keys():
-            self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
-
-    # TODO: decode will be the audio tokenizer
-    def test_tokenizer_decode(self):
-        feature_extractor = self.get_feature_extractor()
-        tokenizer = self.get_tokenizer()
-
-        processor = DiaProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
-
-        predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
-
-        decoded_processor = processor.batch_decode(predicted_ids)
-        decoded_tok = tokenizer.batch_decode(predicted_ids)
-
-        self.assertListEqual(decoded_tok, decoded_processor)
+        self.assertEqual(processor.audio_tokenizer.__class__.__name__, audio_tokenizer_add_kwargs.__class__.__name__)
+        self.assertEqual(processor.audio_tokenizer.name_or_path, audio_tokenizer_add_kwargs.name_or_path)
+        self.assertTrue(check_models_equal(processor.audio_tokenizer, audio_tokenizer_add_kwargs))
+        self.assertIsInstance(processor.audio_tokenizer, DacModel)
 
     def test_model_input_names(self):
-        feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = DiaProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
-
         self.assertListEqual(
-            processor.model_input_names,
-            feature_extractor.model_input_names,
-            msg="`processor` and `feature_extractor` model input names do not match",
+            self.processor.model_input_names,
+            list(dict.fromkeys(tokenizer.model_input_names + ["decoder_input_ids", "decoder_attention_mask"])),
+            msg="`processor` model input names do not match the expected names.",
         )
 
-    @require_torch
+    def test_tokenize(self):
+        tokenizer = self.get_tokenizer()
+        random_text = ["This is a processing test for tokenization", "[S1] Dia template style [S2] Nice"]
+
+        input_tokenizer = tokenizer(random_text, padding=True, return_tensors="pt")
+        input_processor = self.processor(random_text)
+
+        for key in input_tokenizer.keys():
+            self.assertTrue((input_tokenizer[key] == input_processor[key]).all())
+
+    def test_no_audio(self):
+        # default audio kwargs
+        pad_id = 1025
+        bos_id = 1026
+        delay_pattern = [0, 8, 9, 10, 11, 12, 13, 14, 15]
+
+        random_text = ["This is a processing test for tokenization", "[S1] Dia template style [S2] Nice"]
+        input_processor = self.processor(random_text)
+        audio_tokens, audio_mask = input_processor["decoder_input_ids"], input_processor["decoder_attention_mask"]
+
+        # full mask with +1 for bos
+        self.assertTrue(audio_mask.sum() == (max(delay_pattern) + 1) * len(random_text))
+        self.assertTrue(
+            audio_tokens.shape
+            == (
+                len(random_text),
+                max(delay_pattern) + 1,
+                len(delay_pattern),
+            )
+        )
+
+        for channel_idx, delay in enumerate(delay_pattern):
+            expected_sequence = torch.ones(size=(audio_tokens.shape[:-1])) * pad_id
+            expected_sequence[:, : delay + 1] = bos_id
+            self.assertTrue((audio_tokens[..., channel_idx] == expected_sequence).all())
+
+    def test_audio(self):
+        # default audio kwargs
+        pad_id = 1025
+        bos_id = 1026
+        delay_pattern = [0, 8, 9, 10, 11, 12, 13, 14, 15]
+
+        audio_tokenizer = self.get_audio_tokenizer()
+        feature_extractor = self.get_feature_extractor()
+
+        random_text = ["This is a processing test for tokenization", "[S1] Dia template style [S2] Nice"]
+        # Dac only starts accepting audio from a certain length (ensured via >=1000)
+        raw_speeches = [np.random.rand(2000).astype(np.float32), np.random.rand(1000).astype(np.float32)]
+        input_processor = self.processor(random_text, raw_speeches)
+        audio_tokens, audio_mask = input_processor["decoder_input_ids"], input_processor["decoder_attention_mask"]
+
+        sequence_len = audio_mask.shape[1]
+        for batch_idx, speech in enumerate(raw_speeches):
+            raw_audio = feature_extractor(speech, return_tensors="pt")["input_values"]
+            codebooks = audio_tokenizer(raw_audio).audio_codes.transpose(1, 2)
+
+            pad_len = sequence_len - audio_mask.sum(dim=-1)[batch_idx]
+            for channel_idx, delay in enumerate(delay_pattern):
+                # Left padding filled bos, right padding (delay) are pad
+                start_idx = pad_len + delay + 1
+                end_idx = start_idx + codebooks.shape[1]
+
+                encoded_sequence = audio_tokens[batch_idx, :, channel_idx]
+                expected_sequence = torch.ones(size=(sequence_len,)) * pad_id
+                expected_sequence[:start_idx] = bos_id
+                expected_sequence[start_idx:end_idx] = codebooks[0, :, channel_idx]
+
+                self.assertTrue((encoded_sequence == expected_sequence).all())
+
+        # Just to make sure the masking correctly only ignores bos tokens
+        self.assertTrue((audio_tokens[~audio_mask.bool()] == bos_id).all())
+
+    # TODO: test decode
+
     @parameterized.expand([(1, 2, [0, 1, 4]), (2, 4, [1, 3, 2]), (4, 8, [0, 5, 7])])
-    def test_audio_delay(self, bsz, seq_len, delay_pattern):
+    def test_delay_in_audio(self, bsz, seq_len, delay_pattern):
         # static functions which are crucial, hence we also test them here
         build_indices_fn = DiaProcessor.build_indices
         delay_fn = DiaProcessor.apply_audio_delay
