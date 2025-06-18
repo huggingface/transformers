@@ -314,6 +314,6 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             model, self.modules_to_not_convert, quantization_config=self.quantization_config
         )
         return model
-    
+
     def is_compileable(self) -> bool:
         return version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.46.0")
