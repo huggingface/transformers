@@ -133,10 +133,19 @@ if __name__ == "__main__":
     # Assuming there is a topological sort on the dependency mapping: if the file being checked and its dependencies
     # are not in the diff, then there it is guaranteed to have no differences. If no models are in the diff, then this
     # script will do nothing.
-    models_in_diff = get_models_in_diff()
-    if not models_in_diff:
-        console.print("[bold green]No models files or model tests in the diff, skipping modular checks[/bold green]")
-        exit(0)
+    current_branch = subprocess.check_output(["git", "branch", "--show-current"], text=True).strip()
+    if current_branch == "main":
+        console.print(
+            "[bold red]You are developing on the main branch. We cannot identify the list of changed files and will have to check all files. This may take a while.[/bold red]"
+        )
+        models_in_diff = args.files
+    else:
+        models_in_diff = get_models_in_diff()
+        if not models_in_diff:
+            console.print(
+                "[bold green]No models files or model tests in the diff, skipping modular checks[/bold green]"
+            )
+            exit(0)
 
     skipped_models = set()
     non_matching_files = 0
