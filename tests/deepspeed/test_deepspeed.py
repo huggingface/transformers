@@ -1366,7 +1366,6 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
 
         return output_dir
 
-
     @parameterized.expand(params, name_func=parameterized_custom_name_func)
     @run_first
     def test_clm(self, stage, dtype):
