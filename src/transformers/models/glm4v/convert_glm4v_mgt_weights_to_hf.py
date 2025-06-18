@@ -583,7 +583,6 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         "initializer_range": 0.02,
         "intermediate_size": model_config.get("ffn_hidden_size", 13696),
         "max_position_embeddings": model_config.get("seq_length", 32768),
-        "max_window_layers": model_config.get("num_layers", 40),
         "num_attention_heads": model_config.get("num_attention_heads", 32),
         "num_hidden_layers": model_config.get("num_layers", 40),
         "num_key_value_heads": model_config.get("multi_query_group_num", 2),
@@ -593,7 +592,6 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         "torch_dtype": model_config.get("torch_dtype", "bfloat16"),
         "transformers_version": "4.53.0dev",
         "use_cache": model_config.get("use_cache", True),
-        "use_sliding_window": False,
         "vocab_size": model_config.get("vocab_size", 151552),
         "partial_rotary_factor": 0.5,
     }
