@@ -14,7 +14,7 @@
 # limitations under the License.
 """Tokenization class for Dia."""
 
-from typing import List, Optional, Tuple
+from typing import Optional
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
@@ -75,7 +75,7 @@ class DiaTokenizer(PreTrainedTokenizer):
         vocab.update(self.added_tokens_encoder)
         return vocab
 
-    def _tokenize(self, text: str) -> List[str]:
+    def _tokenize(self, text: str) -> list[str]:
         """Take as input a string and return a list of strings (tokens) for words/sub-words"""
         tokens = [chr(i) for i in text.encode("utf-8")]
         return tokens
@@ -95,7 +95,7 @@ class DiaTokenizer(PreTrainedTokenizer):
         token = chr(index - self.offset)
         return token
 
-    def convert_tokens_to_string(self, tokens: List[str]) -> str:
+    def convert_tokens_to_string(self, tokens: list[str]) -> str:
         """Converts a sequence of tokens (string) in a single string."""
         bstring = b""
         for token in tokens:
@@ -111,7 +111,7 @@ class DiaTokenizer(PreTrainedTokenizer):
         return string
 
     # No vocab file
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         return ()
 
 

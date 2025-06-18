@@ -16,7 +16,6 @@
 import copy
 import tempfile
 import unittest
-from typing import Tuple
 
 import pytest
 
@@ -141,7 +140,7 @@ class DiaModelTester:
 
         return config
 
-    def prepare_config_and_inputs(self) -> Tuple[DiaConfig, dict]:
+    def prepare_config_and_inputs(self) -> tuple[DiaConfig, dict]:
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         attention_mask = input_ids.ne(self.pad_token_id)
 
@@ -157,7 +156,7 @@ class DiaModelTester:
         }
         return config, inputs_dict
 
-    def prepare_config_and_inputs_for_common(self) -> Tuple[DiaConfig, dict]:
+    def prepare_config_and_inputs_for_common(self) -> tuple[DiaConfig, dict]:
         config, inputs_dict = self.prepare_config_and_inputs()
         return config, inputs_dict
 

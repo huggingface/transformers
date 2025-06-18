@@ -15,7 +15,7 @@
 """Processor class for Dia"""
 
 import math
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
@@ -32,7 +32,7 @@ class DiaAudioKwargs(AudioKwargs, total=False):
     bos_token_id: int
     eos_token_id: int
     pad_token_id: int
-    delay_pattern: List[int]
+    delay_pattern: list[int]
     generation: bool
 
 
@@ -82,7 +82,7 @@ class DiaProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[str, List[str]],
+        text: Union[str, list[str]],
         audio: Optional[AudioInput] = None,
         output_labels: Optional[bool] = False,
         **kwargs: Unpack[DiaProcessorKwargs],
@@ -288,9 +288,9 @@ class DiaProcessor(ProcessorMixin):
         bsz: int,
         seq_len: int,
         num_channels: int,
-        delay_pattern: List[int],
+        delay_pattern: list[int],
         revert: bool = False,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Precompute (sequence_idx, all_idx) so that out[seq, channel] = in[seq - delay[channel], channel]
         or in[seq, channel] = out[seq + delay[channel], channel] if `revert`.
@@ -323,7 +323,7 @@ class DiaProcessor(ProcessorMixin):
         audio: torch.Tensor,
         pad_token_id: int,
         bos_token_id: int,
-        precomputed_idx: Tuple[torch.Tensor, torch.Tensor],
+        precomputed_idx: tuple[torch.Tensor, torch.Tensor],
     ) -> torch.Tensor:
         """
         Applies or reverts the delay pattern to batched audio tokens using precomputed indices,

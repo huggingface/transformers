@@ -3152,7 +3152,7 @@ class DiaEOSDelayPatternLogitsProcessor(LogitsProcessor):
             The device to allocate the tensors on.
     """
 
-    def __init__(self, delay_pattern: List[int], eos_token_id: int, max_generation_len: int, device: str = "cpu"):
+    def __init__(self, delay_pattern: list[int], eos_token_id: int, max_generation_len: int, device: str = "cpu"):
         self.num_channels = len(delay_pattern)
         # Update during first iteration
         self.active_batches = None
