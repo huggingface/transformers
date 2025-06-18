@@ -315,7 +315,7 @@ class DiaProcessor(ProcessorMixin):
         num_channels: int,
         delay_pattern: list[int],
         revert: bool = False,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple["torch.Tensor", "torch.Tensor"]:
         """
         Precompute (sequence_idx, all_idx) so that out[seq, channel] = in[seq - delay[channel], channel]
         or in[seq, channel] = out[seq + delay[channel], channel] if `revert`.
@@ -348,7 +348,7 @@ class DiaProcessor(ProcessorMixin):
         audio: torch.Tensor,
         pad_token_id: int,
         bos_token_id: int,
-        precomputed_idx: tuple[torch.Tensor, torch.Tensor],
+        precomputed_idx: tuple["torch.Tensor", "torch.Tensor"],
     ) -> torch.Tensor:
         """
         Applies or reverts the delay pattern to batched audio tokens using precomputed indices,
