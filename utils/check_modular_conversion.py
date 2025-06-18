@@ -138,7 +138,7 @@ if __name__ == "__main__":
         console.print(
             "[bold red]You are developing on the main branch. We cannot identify the list of changed files and will have to check all files. This may take a while.[/bold red]"
         )
-        models_in_diff = args.files
+        models_in_diff = {file_path.split("/")[-2] for file_path in args.files}
     else:
         models_in_diff = get_models_in_diff()
         if not models_in_diff:
@@ -158,7 +158,8 @@ if __name__ == "__main__":
                 skipped_models.add(model_name)
                 continue
             non_matching_files += compare_files(modular_file_path, args.fix_and_overwrite)
-            models_in_diff = get_models_in_diff()  # When overwriting, the diff changes
+            if current_branch != "main":
+                models_in_diff = get_models_in_diff()  # When overwriting, the diff changes
     else:
         new_ordered_files = []
         for modular_file_path in ordered_files:
