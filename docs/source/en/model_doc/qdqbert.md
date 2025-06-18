@@ -31,7 +31,7 @@ You can do so by running the following command: `pip install -U transformers==4.
 ## Overview
 
 The QDQBERT model can be referenced in [Integer Quantization for Deep Learning Inference: Principles and Empirical
-Evaluation](https://arxiv.org/abs/2004.09602) by Hao Wu, Patrick Judd, Xiaojie Zhang, Mikhail Isaev and Paulius
+Evaluation](https://huggingface.co/papers/2004.09602) by Hao Wu, Patrick Judd, Xiaojie Zhang, Mikhail Isaev and Paulius
 Micikevicius.
 
 The abstract from the paper is the following:

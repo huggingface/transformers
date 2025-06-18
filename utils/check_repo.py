@@ -40,7 +40,6 @@ from collections import OrderedDict
 from difflib import get_close_matches
 from importlib.machinery import ModuleSpec
 from pathlib import Path
-from typing import List, Tuple
 
 from transformers import is_flax_available, is_tf_available, is_torch_available
 from transformers.models.auto.auto_factory import get_values
@@ -470,7 +469,7 @@ def check_model_list():
 
 # If some modeling modules should be ignored for all checks, they should be added in the nested list
 # _ignore_modules of this function.
-def get_model_modules() -> List[str]:
+def get_model_modules() -> list[str]:
     """Get all the model modules inside the transformers library (except deprecated models)."""
     _ignore_modules = [
         "modeling_auto",
@@ -502,7 +501,7 @@ def get_model_modules() -> List[str]:
     return modules
 
 
-def get_models(module: types.ModuleType, include_pretrained: bool = False) -> List[Tuple[str, type]]:
+def get_models(module: types.ModuleType, include_pretrained: bool = False) -> list[tuple[str, type]]:
     """
     Get the objects in a module that are models.
 
@@ -564,7 +563,7 @@ def check_models_are_in_init():
 
 # If some test_modeling files should be ignored when checking models are all tested, they should be added in the
 # nested list _ignore_files of this function.
-def get_model_test_files() -> List[str]:
+def get_model_test_files() -> list[str]:
     """
     Get the model test files.
 
@@ -605,7 +604,7 @@ def get_model_test_files() -> List[str]:
 
 # This is a bit hacky but I didn't find a way to import the test_file as a module and read inside the tester class
 # for the all_model_classes variable.
-def find_tested_models(test_file: str) -> List[str]:
+def find_tested_models(test_file: str) -> list[str]:
     """
     Parse the content of test_file to detect what's in `all_model_classes`. This detects the models that inherit from
     the common test class.
@@ -640,7 +639,7 @@ def should_be_tested(model_name: str) -> bool:
     return not is_building_block(model_name)
 
 
-def check_models_are_tested(module: types.ModuleType, test_file: str) -> List[str]:
+def check_models_are_tested(module: types.ModuleType, test_file: str) -> list[str]:
     """Check models defined in a module are all tested in a given file.
 
     Args:
@@ -682,7 +681,9 @@ def check_all_models_are_tested():
         # Matches a module to its test file.
         test_file = [file for file in test_files if f"test_{module.__name__.split('.')[-1]}.py" in file]
         if len(test_file) == 0:
-            failures.append(f"{module.__name__} does not have its corresponding test file {test_file}.")
+            # We do not test TF or Flax models anymore because they're deprecated.
+            if not ("modeling_tf" in module.__name__ or "modeling_flax" in module.__name__):
+                failures.append(f"{module.__name__} does not have its corresponding test file {test_file}.")
         elif len(test_file) > 1:
             failures.append(f"{module.__name__} has several test files: {test_file}.")
         else:
@@ -694,7 +695,7 @@ def check_all_models_are_tested():
         raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
 
 
-def get_all_auto_configured_models() -> List[str]:
+def get_all_auto_configured_models() -> list[str]:
     """Return the list of all models in at least one auto class."""
     result = set()  # To avoid duplicates we concatenate all model classes in a set.
     if is_torch_available():
@@ -723,7 +724,7 @@ def ignore_unautoclassed(model_name: str) -> bool:
     return False
 
 
-def check_models_are_auto_configured(module: types.ModuleType, all_auto_models: List[str]) -> List[str]:
+def check_models_are_auto_configured(module: types.ModuleType, all_auto_models: list[str]) -> list[str]:
     """
     Check models defined in module are each in an auto class.
 
@@ -914,7 +915,7 @@ def check_objects_being_equally_in_main_init():
 _re_decorator = re.compile(r"^\s*@(\S+)\s+$")
 
 
-def check_decorator_order(filename: str) -> List[int]:
+def check_decorator_order(filename: str) -> list[int]:
     """
     Check that in a given test file, the slow decorator is always last.
 
@@ -956,7 +957,7 @@ def check_all_decorator_order():
         )
 
 
-def find_all_documented_objects() -> List[str]:
+def find_all_documented_objects() -> list[str]:
     """
     Parse the content of all doc files to detect which classes and functions it documents.
 

@@ -187,7 +187,6 @@ def load_original_state_dict(input_base_path):
     model = AutoModel.from_pretrained(
         input_base_path,
         torch_dtype=torch.bfloat16,
-        low_cpu_mem_usage=True,
         use_flash_attn=False,
         trust_remote_code=True,
     ).eval()
