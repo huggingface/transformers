@@ -1257,6 +1257,9 @@ class XCLIPModel(XCLIPPreTrainedModel):
             return_dict=return_dict,
         )
 
+        if output_hidden_states:
+            return text_outputs
+
         text_embeds = text_outputs[1]
         text_embeds = self.text_projection(text_embeds)
 
@@ -1373,6 +1376,10 @@ class XCLIPModel(XCLIPPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+
+        if output_hidden_states:
+            return mit_outputs
+
         video_embeds = mit_outputs[1]
 
         return video_embeds
