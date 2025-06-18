@@ -806,7 +806,6 @@ def is_torch_musa_available(check_device=False):
 
 @lru_cache
 def is_torch_hpu_available():
-    "Checks if `torch.hpu` is available and potentially if a HPU is in the environment"
     if (
         not _torch_available
         or importlib.util.find_spec("habana_frameworks") is None
@@ -819,7 +818,7 @@ def is_torch_hpu_available():
         return False
 
     import torch
-
+    print(f"Checking if torch.hpu is available with version {torch.__version__}")
     if os.environ.get("PT_HPU_LAZY_MODE", "1") == "1":
         # import habana_frameworks.torch in case of lazy mode to patch torch with torch.hpu
         import habana_frameworks.torch  # noqa: F401
@@ -848,7 +847,60 @@ def is_torch_hpu_available():
                 original_masked_fill_(self, mask, value)
 
         torch.Tensor.masked_fill_ = patched_masked_fill_
+    
+    print(f"!!!!!!!!!!!!!!!!!Patched torch.Tensor.gather for int64 tensors on Gaudi.")
+    original_gather = torch.Tensor.gather
+    def patched_gather(input, dim, index):
+        if input.dtype == torch.int64:
+            logger.warning_once(
+                "torch.gather is not supported for int64 tensors on Gaudi. "
+                "This operation will be performed out-of-place using tensor.index_select(dim, index)."
+            )
 
+            idx = [torch.arange(size, device=input.device, dtype=input.dtype) for size in input.shape]
+            print(f"idx before gather: {idx}")
+            idx[dim] = index
+            print(f"idx after gather: {idx}")
+            idx = tuple(idx)
+            print(f"idx after tuple: {idx}")
+            return input[idx]
+        else:
+            return original_gather(input, dim, index)
+    
+    # def patched_gather(input_tensor, dim, index):
+    #     print(f"Patched gather for int64 tensors on Gaudi: input_tensor={input_tensor.shape}, dim={dim}, index={index.shape}")
+    #     if input_tensor.dtype == torch.int64:
+    #         logger.warning_once(
+    #             "torch.gather is not supported for int64 tensors on Gaudi. "
+    #             "This operation will be performed out-of-place using tensor.index_select(dim, index)."
+    #         )
+
+    #         assert isinstance(input_tensor, torch.Tensor)
+    #         assert isinstance(index, torch.Tensor)
+    #         assert index.dim() == input_tensor.dim()
+
+    #         for i in range(input_tensor.dim()):
+    #             if i != dim:
+    #                 assert index.size(i) == input_tensor.size(i), f"Size mismatch at dim {i}"
+            
+    #         output = torch.zeros_like(index, dtype=input_tensor.dtype)
+    #         print(f"Gathering tensor of shape {input_tensor.shape} along dim {dim} with index {index.shape}") 
+    #         indices = []
+    #         for i in range(input_tensor.dim()):
+    #             if i == dim:
+    #                 indices.append(index)
+    #             else:
+    #                 shape = [1] * input_tensor.dim()
+    #                 shape[i] = input_tensor.size(i)
+    #                 indices.append(torch.arange(input_tensor.size(i), device=input_tensor.device).view(shape).expand_as(index))
+            
+    #         output = input_tensor[tuple(indices)]
+    #         return output
+    #     else:
+    #         return original_gather(input_tensor, dim, index) 
+
+    torch.Tensor.gather = patched_gather
+    print(f"Patched torch.Tensor.masked_fill_ and torch.Tensor.gather for int64 tensors on Gaudi1.") 
     return True
 
 
