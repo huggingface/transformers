@@ -16,7 +16,7 @@
 
 import collections
 import math
-from typing import Optional, Tuple
+from typing import Optional
 
 import numpy as np
 import torch
@@ -40,7 +40,7 @@ from .configuration_bit import BitConfig
 logger = logging.get_logger(__name__)
 
 
-def get_padding_value(padding=None, kernel_size=7, stride=1, dilation=1) -> Tuple[Tuple, bool]:
+def get_padding_value(padding=None, kernel_size=7, stride=1, dilation=1) -> tuple[tuple, bool]:
     r"""
     Utility function to get the tuple padding value given the kernel_size and padding.
 

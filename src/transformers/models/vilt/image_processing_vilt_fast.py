@@ -14,7 +14,7 @@
 # limitations under the License.
 """Fast Image processor class for Vilt."""
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -91,8 +91,8 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> BatchFeature:
@@ -149,7 +149,7 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
 
         Args:
             images (`torch.Tensor`): Image or batch of images to resize.
-            size (`Dict[str, int]`): Size dictionary with shortest_edge key.
+            size (`dict[str, int]`): Size dictionary with shortest_edge key.
             interpolation (`F.InterpolationMode`, *optional*): Interpolation method to use.
             size_divisor (`int`, *optional*): Value to ensure height/width are divisible by.
 
