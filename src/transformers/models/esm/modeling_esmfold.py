@@ -1420,7 +1420,7 @@ class EsmFoldInvariantPointAttention(nn.Module):
 
         self.linear_b = EsmFoldLinear(c_z, config.num_heads_ipa)
 
-        self.head_weights = nn.Parameter(torch.zeros((config.num_heads_ipa)))
+        self.head_weights = nn.Parameter(torch.zeros(config.num_heads_ipa))
 
         concat_out_dim = config.num_heads_ipa * (c_z + config.ipa_dim + config.num_v_points * 4)
         self.linear_out = EsmFoldLinear(concat_out_dim, c_s, init="final")

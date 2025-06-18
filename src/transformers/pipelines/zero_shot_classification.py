@@ -27,10 +27,8 @@ class ZeroShotClassificationArgumentHandler(ArgumentHandler):
             raise ValueError("You must include at least one label and at least one sequence.")
         if hypothesis_template.format(labels[0]) == hypothesis_template:
             raise ValueError(
-                (
-                    'The provided hypothesis_template "{}" was not able to be formatted with the target labels. '
-                    "Make sure the passed template includes formatting syntax such as {{}} where the label should go."
-                ).format(hypothesis_template)
+                f'The provided hypothesis_template "{hypothesis_template}" was not able to be formatted with the target labels. '
+                "Make sure the passed template includes formatting syntax such as {} where the label should go."
             )
 
         if isinstance(sequences, str):

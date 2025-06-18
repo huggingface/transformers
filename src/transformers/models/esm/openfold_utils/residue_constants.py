@@ -398,7 +398,7 @@ def map_structure_with_atom_order(in_list: list, first_call: bool = True) -> lis
     return in_list
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def load_stereo_chemical_props() -> tuple[
     Mapping[str, list[Bond]],
     Mapping[str, list[Bond]],

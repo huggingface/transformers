@@ -185,7 +185,7 @@ class PoolFormerImageProcessor(BaseImageProcessor):
                 else:
                     scale_size = (int(size["height"] / crop_pct), int(size["width"] / crop_pct))
             else:
-                raise ValueError("Invalid size for resize: {}".format(size))
+                raise ValueError(f"Invalid size for resize: {size}")
 
             output_size = get_resize_output_image_size(
                 image, size=scale_size, default_to_square=False, input_data_format=input_data_format
@@ -198,7 +198,7 @@ class PoolFormerImageProcessor(BaseImageProcessor):
             elif "height" in size and "width" in size:
                 output_size = (size["height"], size["width"])
             else:
-                raise ValueError("Invalid size for resize: {}".format(size))
+                raise ValueError(f"Invalid size for resize: {size}")
 
         return resize(
             image,

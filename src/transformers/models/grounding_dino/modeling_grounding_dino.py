@@ -921,7 +921,7 @@ class GroundingDinoDropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
 class GroundingDinoFusionLayer(nn.Module):
@@ -937,8 +937,8 @@ class GroundingDinoFusionLayer(nn.Module):
         # add layer scale for training stability
         self.drop_path = GroundingDinoDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         init_values = 1e-4
-        self.vision_param = nn.Parameter(init_values * torch.ones((config.d_model)), requires_grad=True)
-        self.text_param = nn.Parameter(init_values * torch.ones((config.d_model)), requires_grad=True)
+        self.vision_param = nn.Parameter(init_values * torch.ones(config.d_model), requires_grad=True)
+        self.text_param = nn.Parameter(init_values * torch.ones(config.d_model), requires_grad=True)
 
     def forward(
         self,
