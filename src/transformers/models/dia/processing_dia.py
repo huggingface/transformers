@@ -349,7 +349,7 @@ class DiaProcessor(ProcessorMixin):
         pad_token_id: int,
         bos_token_id: int,
         precomputed_idx: tuple["torch.Tensor", "torch.Tensor"],
-    ) -> torch.Tensor:
+    ) -> "torch.Tensor":
         """
         Applies or reverts the delay pattern to batched audio tokens using precomputed indices,
         inserting BOS where sequence_idx < 0 and PAD where sequence_idx >= seq_len.
