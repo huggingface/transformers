@@ -70,8 +70,7 @@ from .utils import (
 from .utils.deprecation import deprecate_kwarg
 
 
-_is_torch_available = is_torch_available()
-if _is_torch_available:
+if is_torch_available():
     from .modeling_utils import PreTrainedModel
 
 
@@ -749,7 +748,7 @@ class ProcessorMixin(PushToHubMixin):
                 )
 
         if self.audio_tokenizer is not None:
-            if not _is_torch_available:
+            if not is_torch_available():
                 raise ValueError(
                     "`audio_tokenizer` requires `torch` but we couldn't find it in your environment. "
                     "You can install torch via `pip install torch`."

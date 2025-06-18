@@ -102,6 +102,12 @@ class DiaProcessor(ProcessorMixin):
         DacModel's [`~DacModel.encode`]. The `text` argument to [`~DiaTokenizer.__call__`]. Please refer
         to the docstring of the above methods for more information.
         """
+        if not is_torch_available():
+            raise ValueError(
+                "The `DiaProcessor` relies on the `audio_tokenizer` which requires `torch` but we couldn't "
+                "find it in your environment. You can install torch via `pip install torch`."
+            )
+
         if text is None:
             raise ValueError("You need to specify the `text` input to process.")
 
