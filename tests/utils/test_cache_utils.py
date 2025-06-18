@@ -203,7 +203,7 @@ class CacheTest(unittest.TestCase):
                     self.num_attention_heads = key_value_pairs[0][0].shape[1]
                     self.num_hidden_layers = len(key_value_pairs)
 
-            cache = transformers.cache_utils.StaticCache(
+            cache = StaticCache(
                 _config(),
                 max_batch_size=key_value_pairs[0][0].shape[0],
                 device=key_value_pairs[0][0].device,
@@ -222,7 +222,7 @@ class CacheTest(unittest.TestCase):
                 (torch.rand((4, 5, 6, 7)), torch.rand((4, 5, 6, 7))),
             ]
         )
-        flat, _spec = torch.utils._pytree.tree_flatten(cache)
+        flat, spec = torch.utils._pytree.tree_flatten(cache)
         self.assertIsInstance(flat, list)
         self.assertEqual(len(flat), 6)
         cache2 = torch.utils._pytree.tree_unflatten(flat, spec)
