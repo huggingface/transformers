@@ -308,7 +308,7 @@ class AutoVideoProcessor:
 
         # If we still don't have the video processor class, check if we're loading from a previous image processor config
         # and if so, infer the video processor class from there.
-        if video_processor_class is None and video_processor_auto_map is None:
+        if video_processor_class not in VIDEO_PROCESSOR_MAPPING_NAMES.values() and video_processor_auto_map is None:
             image_processor_class = config_dict.pop("image_processor_type", None)
             if image_processor_class is not None:
                 video_processor_class = image_processor_class.replace("ImageProcessor", "VideoProcessor")
@@ -317,7 +317,7 @@ class AutoVideoProcessor:
                 video_processor_auto_map = image_processor_auto_map.replace("ImageProcessor", "VideoProcessor")
 
         # If we don't find the video processor class in the video processor config, let's try the model config.
-        if video_processor_class is None and video_processor_auto_map is None:
+        if video_processor_class not in VIDEO_PROCESSOR_MAPPING_NAMES.values() and video_processor_auto_map is None:
             if not isinstance(config, PretrainedConfig):
                 config = AutoConfig.from_pretrained(
                     pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
