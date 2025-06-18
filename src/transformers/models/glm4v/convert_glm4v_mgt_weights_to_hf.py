@@ -611,7 +611,7 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
             "out_hidden_size": model_config.get("hidden_size", 4096),
             "rms_norm_eps": model_config["vision_config"].get("layernorm_epsilon", 1e-05),
             "spatial_merge_size": model_config["vision_config"].get("downsample_ratio", 2),
-            "temporal_patch_size": model_config["vision_config"].get("patch_size", 1),
+            "temporal_patch_size": model_config["vision_config"].get("t_patch", 2),
         }
         hf_config["vision_config"] = vision_config
 
