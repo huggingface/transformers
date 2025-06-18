@@ -308,16 +308,21 @@ class AutoVideoProcessor:
 
         # If we still don't have the video processor class, check if we're loading from a previous image processor config
         # and if so, infer the video processor class from there.
-        if video_processor_class not in VIDEO_PROCESSOR_MAPPING_NAMES.values() and video_processor_auto_map is None:
+        if video_processor_class is None and video_processor_auto_map is None:
             image_processor_class = config_dict.pop("image_processor_type", None)
             if image_processor_class is not None:
-                video_processor_class = image_processor_class.replace("ImageProcessor", "VideoProcessor")
+                video_processor_class_inferred = image_processor_class.replace("ImageProcessor", "VideoProcessor")
+
+                # Some models have different image processors, e.g. InternVL uses GotOCRImageProcessor
+                # We cannot use GotOCRVideoProcessor when falling back for BC and should try to infer from config later on
+                if video_processor_class_inferred in VIDEO_PROCESSOR_MAPPING_NAMES.values():
+                    video_processor_class = video_processor_class_inferred
             if "AutoImageProcessor" in config_dict.get("auto_map", {}):
                 image_processor_auto_map = config_dict["auto_map"]["AutoImageProcessor"]
                 video_processor_auto_map = image_processor_auto_map.replace("ImageProcessor", "VideoProcessor")
 
         # If we don't find the video processor class in the video processor config, let's try the model config.
-        if video_processor_class not in VIDEO_PROCESSOR_MAPPING_NAMES.values() and video_processor_auto_map is None:
+        if video_processor_class is None and video_processor_auto_map is None:
             if not isinstance(config, PretrainedConfig):
                 config = AutoConfig.from_pretrained(
                     pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
