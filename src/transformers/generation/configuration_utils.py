@@ -66,6 +66,8 @@ if is_torch_available():
 
     CACHE_CONFIG_MAPPING["quantized"] = QuantizedCacheConfig
     CACHE_CONFIG_MAPPING["static"] = StaticCacheConfig
+    CACHE_CONFIG_MAPPING["sliding_window"] = StaticCacheConfig
+    CACHE_CONFIG_MAPPING["hybrid"] = StaticCacheConfig
     NEED_SETUP_CACHE_CLASSES_MAPPING = {
         "static": StaticCache,
         "offloaded_static": OffloadedStaticCache,
@@ -77,7 +79,7 @@ if is_torch_available():
     }
     QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
     ALL_CACHE_IMPLEMENTATIONS = (
-        list(NEED_SETUP_CACHE_CLASSES_MAPPING.keys()) + list(CACHE_CONFIG_MAPPING.keys()) + ["offloaded", "dynamic"]
+        list(NEED_SETUP_CACHE_CLASSES_MAPPING.keys()) + ["offloaded", "dynamic", "quantized"]
     )
 
 
