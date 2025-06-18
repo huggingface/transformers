@@ -34,20 +34,43 @@ You can find all the original Bamba checkpoints under the [Bamba](https://huggin
 The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line.
 
 <hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```python
+import torch
+from transformers import pipeline
+
+pipeline = pipeline(
+    task="text-generation",
+    model="ibm-ai-platform/Bamba-9B-v2",
+    torch_dtype=torch.bfloat16,
+    device=0
+)
+pipeline("Plants create energy through a process known as")
+```
+
+</hfoption>
+
 <hfoption id="AutoModel">
 
 ```python
+import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model = AutoModelForCausalLM.from_pretrained("ibm-fms/Bamba-9B")
-tokenizer = AutoTokenizer.from_pretrained("ibm-fms/Bamba-9B")
+tokenizer = AutoTokenizer.from_pretrained("ibm-ai-platform/Bamba-9B-v2")
+model = AutoModelForCausalLM.from_pretrained("ibm-ai-platform/Bamba-9B-v2", torch_dtype=torch.bfloat16, device_map="auto", attn_implementation="sdpa")
+input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to("cuda")
 
-message = ["Mamba is a snake with following properties  "]
-inputs = tokenizer(message, return_tensors='pt', return_token_type_ids=False)
-response = model.generate(**inputs, max_new_tokens=64)
-print(tokenizer.batch_decode(response, skip_special_tokens=True)[0])
+output = model.generate(**input_ids)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
+</hfoption>
+
+<hfoption id="transformers-cli">
+```bash
+echo "Plants create energy through a process known as" | transformers run --task text-generation --model ibm-ai-platform/Bamba-9B-v2 --device 0
+```
 </hfoption>
 </hfoptions>
 
@@ -67,28 +90,28 @@ python -m fms_mo.run_quant \
 
 - Bamba supports padding-free training which concatenates distinct training examples while still processing inputs as separate batches. It can significantly accelerate inference by [~2x](https://github.com/huggingface/transformers/pull/35861#issue-2807873129) (depending on model and data distribution) and reduce memory-usage if there are examples of varying lengths by avoiding unnecessary compute and memory overhead from padding tokens.
 
-   Padding-free training requires the `flash-attn`, `mamba-ssm`, and `causal-conv1d` packages and the following arguments must be passed to the model in addition to `input_ids` and `labels`.
+  Padding-free training requires the `flash-attn`, `mamba-ssm`, and `causal-conv1d` packages and the following arguments must be passed to the model in addition to `input_ids` and `labels`.
 
-   - `position_ids: torch.LongTensor`: the position index of each token in each sequence.
-   - `seq_idx: torch.IntTensor`: the index of each sequence in the batch.
-   - Each of the [`FlashAttentionKwargs`]
-     - `cu_seq_lens_q: torch.LongTensor`: the cumulative sequence lengths of all queries.
-     - `cu_seq_lens_k: torch.LongTensor`: the cumulative sequence lengths of all keys.
-     - `max_length_q: int`: the longest query length in the batch.
-     - `max_length_k: int`: the longest key length in the batch.
+  - `position_ids: torch.LongTensor`: the position index of each token in each sequence.
+  - `seq_idx: torch.IntTensor`: the index of each sequence in the batch.
+  - Each of the [`FlashAttentionKwargs`]
+    - `cu_seq_lens_q: torch.LongTensor`: the cumulative sequence lengths of all queries.
+    - `cu_seq_lens_k: torch.LongTensor`: the cumulative sequence lengths of all keys.
+    - `max_length_q: int`: the longest query length in the batch.
+    - `max_length_k: int`: the longest key length in the batch.
 
-   The `attention_mask` inputs should not be provided. The [`DataCollatorWithFlattening`] programmatically generates the set of additional arguments above using `return_seq_idx=True` and `return_flash_attn_kwargs=True`. See the [Improving Hugging Face Training Efficiency Through Packing with Flash Attention](https://huggingface.co/blog/packing-with-FA2) blog post for additional information.
+  The `attention_mask` inputs should not be provided. The [`DataCollatorWithFlattening`] programmatically generates the set of additional arguments above using `return_seq_idx=True` and `return_flash_attn_kwargs=True`. See the [Improving Hugging Face Training Efficiency Through Packing with Flash Attention](https://huggingface.co/blog/packing-with-FA2) blog post for additional information.
 
-```python
-from transformers import DataCollatorWithFlattening
+  ```python
+  from transformers import DataCollatorWithFlattening
 
-# Example of using padding-free training
-data_collator = DataCollatorWithFlattening(
-    tokenizer=tokenizer,
-    return_seq_idx=True,
-    return_flash_attn_kwargs=True
-)
-```
+  # Example of using padding-free training
+  data_collator = DataCollatorWithFlattening(
+      tokenizer=tokenizer,
+      return_seq_idx=True,
+      return_flash_attn_kwargs=True
+  )
+  ```
 
 ## BambaConfig
 
