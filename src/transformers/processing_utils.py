@@ -34,7 +34,6 @@ from .audio_utils import load_audio
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
 from .image_utils import ChannelDimension, is_valid_image, is_vision_available, load_image
-from .modeling_utils import PreTrainedModel
 from .models.auto.modeling_auto import MODEL_FOR_AUDIO_TOKENIZATION_NAMES
 from .utils.chat_template_utils import render_jinja_template
 from .video_utils import VideoMetadata, load_video
@@ -64,10 +63,16 @@ from .utils import (
     download_url,
     is_offline_mode,
     is_remote_url,
+    is_torch_available,
     list_repo_templates,
     logging,
 )
 from .utils.deprecation import deprecate_kwarg
+
+
+_is_torch_available = is_torch_available()
+if _is_torch_available:
+    from .modeling_utils import PreTrainedModel
 
 
 logger = logging.get_logger(__name__)
@@ -744,7 +749,12 @@ class ProcessorMixin(PushToHubMixin):
                 )
 
         if self.audio_tokenizer is not None:
-            if not isinstance(self.audio_tokenizer, PreTrainedModel):
+            if not _is_torch_available:
+                raise ValueError(
+                    "`audio_tokenizer` requires `torch` but we couldn't find it in your environment. "
+                    "You can install torch via `pip install torch`."
+                )
+            elif not isinstance(self.audio_tokenizer, PreTrainedModel):
                 raise ValueError(
                     f"`audio_tokenizer` can only be a `PreTrainedModel` but received {type(self.audio_tokenizer)}"
                     " instead."
