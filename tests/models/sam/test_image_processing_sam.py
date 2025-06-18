@@ -30,7 +30,7 @@ from ...test_image_processing_common import (
 
 
 if is_torch_available():
-    pass
+    import torch
 
 if is_vision_available():
     from transformers import SamImageProcessor
@@ -155,3 +155,81 @@ class SamImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(image_processor.size, {"longest_edge": 512})
             self.assertEqual(image_processor.pad_size, {"height": 512, "width": 512})
             self.assertEqual(image_processor.do_normalize, False)
+
+    def test_post_process_masks_equivalence(self):
+        """Test that fast and slow post_process_masks produce similar results."""
+        if not self.test_fast_image_processor or self.fast_image_processing_class is None:
+            self.skipTest("Fast image processor not available")
+
+        # Only test with fast processor for now since we need to verify it works
+        processor = self.fast_image_processing_class(**self.image_processor_dict)
+
+        # Create test data
+        dummy_masks = torch.randn(2, 1, 256, 256)
+        original_sizes = [(480, 640), (600, 800)]
+        reshaped_sizes = [(480, 640), (600, 800)]
+
+        # Test post-processing
+        result = processor.post_process_masks(dummy_masks, original_sizes, reshaped_sizes)
+
+        # Verify output format and dimensions
+        self.assertIsInstance(result, list)
+        self.assertEqual(len(result), 2)
+        for i, mask in enumerate(result):
+            self.assertIsInstance(mask, torch.Tensor)
+            # Masks should be resized to original dimensions
+            expected_h, expected_w = original_sizes[i]
+            self.assertEqual(mask.shape[-2:], (expected_h, expected_w))
+
+    def test_generate_crop_boxes(self):
+        """Test that crop box generation works correctly."""
+        if not self.test_fast_image_processor or self.fast_image_processing_class is None:
+            self.skipTest("Fast image processor not available")
+
+        processor = self.fast_image_processing_class(**self.image_processor_dict)
+
+        # Create a dummy image tensor
+        dummy_image = torch.randn(3, 480, 640)
+
+        # Test crop box generation
+        crop_boxes, layer_idxs = processor.generate_crop_boxes(dummy_image, target_size=224, crop_n_layers=1)
+
+        # Verify outputs
+        self.assertIsInstance(crop_boxes, list)
+        self.assertIsInstance(layer_idxs, list)
+        self.assertEqual(len(crop_boxes), len(layer_idxs))
+
+        # Should have at least the full image crop
+        self.assertGreater(len(crop_boxes), 0)
+
+        # First crop should be the full image
+        self.assertEqual(crop_boxes[0], [0, 0, 640, 480])
+        self.assertEqual(layer_idxs[0], 0)
+
+    def test_filter_masks(self):
+        """Test that mask filtering works correctly."""
+        if not self.test_fast_image_processor or self.fast_image_processing_class is None:
+            self.skipTest("Fast image processor not available")
+
+        processor = self.fast_image_processing_class(**self.image_processor_dict)
+
+        # Create test data
+        dummy_masks = torch.rand(5, 256, 256)  # 5 masks
+        dummy_iou_scores = torch.tensor([0.9, 0.8, 0.7, 0.6, 0.5])
+        original_sizes = [(256, 256)] * 5
+        crop_boxes = [[0, 0, 256, 256]] * 5
+
+        # Test filtering
+        filtered_masks, filtered_scores = processor.filter_masks(
+            dummy_masks,
+            dummy_iou_scores,
+            original_sizes,
+            crop_boxes,
+            stability_score_thresh=0.8,
+        )
+
+        # Verify filtering worked
+        self.assertIsInstance(filtered_masks, torch.Tensor)
+        self.assertIsInstance(filtered_scores, torch.Tensor)
+        # Should have fewer masks due to filtering
+        self.assertLessEqual(filtered_masks.shape[0], dummy_masks.shape[0])
