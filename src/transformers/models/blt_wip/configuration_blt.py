@@ -514,6 +514,19 @@ class BLTConfig(PretrainedConfig):
                 int(x) for x in self.encoder_hash_byte_group_size.split(",") if len(x) > 0
             ]
 
+        # Rope
+        self.rope_scaling={
+            "type": "dynamic",
+            "factor": 2.0,
+            "rope_type": "dynamic"
+        }
+
+        self.num_key_value_heads=n_heads_local_encoder
+        self.max_position_embeddings=max_seqlen
+        self.hidden_size=dim_local_encoder
+        self.num_attention_heads=n_heads_local_encoder
+     #   self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
+
         super().__init__(
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
