@@ -199,29 +199,25 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
         Given an image width, height and target number of chunks
         this function will find the closest supported aspect ratio.
         """
-        tgt_ar = img_width / img_height
+        target_aspect_ratio = img_width / img_height
         asp_dict = self._find_supported_aspect_ratios()
-        cl_p = None
-        if tgt_ar >= 1:
-            cl_p = min(
-                [k for k in asp_dict.keys() if k <= tgt_ar],
-                key=lambda x: abs(x - tgt_ar),
+        closest_aspect_ratio = None
+        if target_aspect_ratio >= 1:
+            closest_aspect_ratio = min(
+                [k for k in asp_dict.keys() if k <= target_aspect_ratio],
+                key=lambda x: abs(x - target_aspect_ratio),
             )
-            v = asp_dict[cl_p]
-            # select width
-            widths = [(idx, tile_size * vv[0]) for idx, vv in enumerate(v)]
-            tgt_idx = max(widths, key=lambda x: x[1])[0]
+            tiles_given_aspect_ratio = asp_dict[closest_aspect_ratio]
+            # select largest width
+            return max(tiles_given_aspect_ratio, key=lambda x: x[0])
         else:
-            cl_p = min(
-                [k for k in asp_dict.keys() if k > tgt_ar],
-                key=lambda x: abs(1 / x - 1 / tgt_ar),
+            closest_aspect_ratio = min(
+                [k for k in asp_dict.keys() if k > target_aspect_ratio],
+                key=lambda x: abs(1 / x - 1 / target_aspect_ratio),
             )
-            v = asp_dict[cl_p]
-            # select height
-            heights = [(idx, tile_size * vv[1]) for idx, vv in enumerate(v)]
-            tgt_idx = max(heights, key=lambda x: x[1])[0]
-        out = v[tgt_idx]
-        return out
+            tiles_given_aspect_ratio = asp_dict[closest_aspect_ratio]
+            # select largest height
+            return max(tiles_given_aspect_ratio, key=lambda x: x[1])
 
     def _split(self, image: torch.Tensor, ncw: int, nch: int) -> torch.Tensor:
         # Split image into number of required tiles (width x height)
