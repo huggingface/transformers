@@ -364,6 +364,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         )
         return model
 
+    @property
     def is_compileable(self) -> bool:
         # Compatible with PyTorch 2.4+ for fullgraph=False.
         # Requires PyTorch 2.8 nightly for fullgraph=True.

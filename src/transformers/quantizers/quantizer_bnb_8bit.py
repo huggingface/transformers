@@ -315,5 +315,6 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         )
         return model
 
+    @property
     def is_compileable(self) -> bool:
         return version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.46.0")
