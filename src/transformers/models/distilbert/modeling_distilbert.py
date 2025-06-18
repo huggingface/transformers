@@ -289,11 +289,7 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
         # This might slowdown training & inference so it is recommended to not cast the LayerNorms
         # in fp32. (LlamaRMSNorm handles it correctly)
 
-        device_type = (
-            query_states.device.type
-            if query_states.device.type != "mps"
-            else "cpu"
-        )
+        device_type = query_states.device.type if query_states.device.type != "mps" else "cpu"
         if query_states.dtype == torch.float32:
             if torch.is_autocast_enabled():
                 target_dtype = (

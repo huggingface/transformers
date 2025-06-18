@@ -387,11 +387,7 @@ class DbrxFlashAttention2(DbrxAttention):
         # This might slowdown training & inference so it is recommended to not cast the LayerNorms
         # in fp32. (LlamaRMSNorm handles it correctly)
         input_dtype = query_states.dtype
-        device_type = (
-            query_states.device.type
-            if query_states.device.type != "mps"
-            else "cpu"
-        )
+        device_type = query_states.device.type if query_states.device.type != "mps" else "cpu"
         if input_dtype == torch.float32:
             if torch.is_autocast_enabled():
                 target_dtype = (

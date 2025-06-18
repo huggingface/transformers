@@ -353,11 +353,7 @@ class NemotronFlashAttention2(NemotronAttention):
         # in fp32. (NemotronRMSNorm handles it correctly)
 
         input_dtype = query_states.dtype
-        device_type = (
-            query_states.device.type
-            if query_states.device.type != "mps"
-            else "cpu"
-        )
+        device_type = query_states.device.type if query_states.device.type != "mps" else "cpu"
         if input_dtype == torch.float32:
             if torch.is_autocast_enabled():
                 # NOTE: `torch.get_autocast_dtype` is there starting from PyTorch 2.4

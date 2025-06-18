@@ -459,11 +459,7 @@ class EsmFlashAttention2(EsmSelfAttention):
         # This might slowdown training & inference so it is recommended to not cast the LayerNorms
         # in fp32.
         input_dtype = query_layer.dtype
-        device_type = (
-            query_layer.device.type
-            if query_layer.device.type != "mps"
-            else "cpu"
-        )
+        device_type = query_layer.device.type if query_layer.device.type != "mps" else "cpu"
         if input_dtype == torch.float32:
             if torch.is_autocast_enabled():
                 target_dtype = (
