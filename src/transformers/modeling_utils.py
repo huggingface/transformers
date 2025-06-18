@@ -4424,10 +4424,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 raise ValueError("DeepSpeed Zero-3 is not compatible with passing a `device_map`.")
             if not is_accelerate_available():
                 raise ValueError(
-                    (
-                        "Using a `device_map`, `tp_plan`, `torch.device` context manager or setting `torch.set_default_device(device)` "
-                        "requires `accelerate`. You can install it with `pip install accelerate`"
-                    )
+                    "Using a `device_map`, `tp_plan`, `torch.device` context manager or setting `torch.set_default_device(device)` "
+                    "requires `accelerate`. You can install it with `pip install accelerate`"
                 )
 
         # handling bnb config from kwargs, remove after `load_in_{4/8}bit` deprecation.

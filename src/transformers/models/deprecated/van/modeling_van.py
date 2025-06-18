@@ -79,7 +79,7 @@ class VanDropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
 class VanOverlappingPatchEmbedder(nn.Module):
@@ -204,7 +204,7 @@ class VanLayerScaling(nn.Module):
 
     def __init__(self, hidden_size: int, initial_value: float = 1e-2):
         super().__init__()
-        self.weight = nn.Parameter(initial_value * torch.ones((hidden_size)), requires_grad=True)
+        self.weight = nn.Parameter(initial_value * torch.ones(hidden_size), requires_grad=True)
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         # unsqueezing for broadcasting
