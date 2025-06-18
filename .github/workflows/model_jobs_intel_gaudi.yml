@@ -89,9 +89,9 @@ jobs:
         shell: bash
         run: |
           if [ "${{ inputs.machine_type }}" = "1gaudi" ]; then
-            machine_type=single-gaudi
+            machine_type=single-gpu
           elif [ "${{ inputs.machine_type }}" = "2gaudi" ]; then
-            machine_type=multi-gaudi
+            machine_type=multi-gpu
           else
             machine_type=${{ inputs.machine_type }}
           fi
