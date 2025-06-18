@@ -179,7 +179,7 @@ class TimeSformerDropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
 # Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit.py#L57
@@ -309,7 +309,7 @@ class TimesformerLayer(nn.Module):
         self.config = config
         self.attention_type = attention_type
         if attention_type not in ["divided_space_time", "space_only", "joint_space_time"]:
-            raise ValueError("Unknown attention type: {}".format(attention_type))
+            raise ValueError(f"Unknown attention type: {attention_type}")
 
         # Temporal Attention Parameters
         if self.attention_type == "divided_space_time":

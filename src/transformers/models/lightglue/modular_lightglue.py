@@ -871,22 +871,18 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
                     # Remove image pairs that have been early stopped from the forward pass
                     num_points_per_pair = num_points_per_pair[~early_stopped_pairs]
                     descriptors, keypoints_0, keypoint_1, mask, image_indices = tuple(
-                        (
-                            tensor[~early_stops]
-                            for tensor in [descriptors, keypoints[0], keypoints[1], mask, image_indices]
-                        )
+                        tensor[~early_stops]
+                        for tensor in [descriptors, keypoints[0], keypoints[1], mask, image_indices]
                     )
                     keypoints = (keypoints_0, keypoint_1)
                     if do_keypoint_pruning:
                         pruned_keypoints_indices, pruned_keypoints_iterations, keypoint_confidences = tuple(
-                            (
-                                tensor[~early_stops]
-                                for tensor in [
-                                    pruned_keypoints_indices,
-                                    pruned_keypoints_iterations,
-                                    keypoint_confidences,
-                                ]
-                            )
+                            tensor[~early_stops]
+                            for tensor in [
+                                pruned_keypoints_indices,
+                                pruned_keypoints_iterations,
+                                keypoint_confidences,
+                            ]
                         )
                 # If all pairs of images are early stopped, we stop the forward pass through the transformer
                 # layers for all pairs of images.

@@ -175,11 +175,6 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
         processed_segmentation_maps = processed_segmentation_maps.to(torch.int64)
         return processed_segmentation_maps
 
-    def __call__(self, images, segmentation_maps=None, **kwargs):
-        # Overrides the `__call__` method of the `Preprocessor` class such that the images and segmentation maps can both
-        # be passed in as positional arguments.
-        return super().__call__(images, segmentation_maps=segmentation_maps, **kwargs)
-
     @auto_docstring
     def preprocess(
         self,

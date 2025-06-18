@@ -132,7 +132,7 @@ class PoolFormerImageProcessorFast(BaseImageProcessorFast):
                 else:
                     scale_size = (int(size.height / crop_pct), int(size.width / crop_pct))
             else:
-                raise ValueError("Invalid size for resize: {}".format(size))
+                raise ValueError(f"Invalid size for resize: {size}")
 
             new_size = get_resize_output_image_size(
                 image,

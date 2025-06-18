@@ -70,7 +70,7 @@ class ConvNextDropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
 class ConvNextLayerNorm(nn.Module):
@@ -149,7 +149,7 @@ class ConvNextLayer(nn.Module):
         self.act = ACT2FN[config.hidden_act]
         self.pwconv2 = nn.Linear(4 * dim, dim)
         self.layer_scale_parameter = (
-            nn.Parameter(config.layer_scale_init_value * torch.ones((dim)), requires_grad=True)
+            nn.Parameter(config.layer_scale_init_value * torch.ones(dim), requires_grad=True)
             if config.layer_scale_init_value > 0
             else None
         )

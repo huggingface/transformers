@@ -868,7 +868,7 @@ def format_args_docstring(args, model_name):
     deducted from the model name and the auto modules.
     """
     # first check if there are any placeholders in the args, if not return them as is
-    placeholders = set(re.findall(r"{(.*?)}", "".join((args[arg]["description"] for arg in args))))
+    placeholders = set(re.findall(r"{(.*?)}", "".join(args[arg]["description"] for arg in args)))
     if not placeholders:
         return args
 
