@@ -64,7 +64,7 @@ class DbrxRotaryEmbedding(nn.Module):
         # Force float32 since bfloat16 loses precision on long contexts
         # See https://github.com/huggingface/transformers/pull/29285
         device_type = x.device.type
-        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
+        device_type = device_type if device_type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
@@ -389,7 +389,7 @@ class DbrxFlashAttention2(DbrxAttention):
         input_dtype = query_states.dtype
         device_type = (
             query_states.device.type
-            if isinstance(query_states.device.type, str) and query_states.device.type != "mps"
+            if query_states.device.type != "mps"
             else "cpu"
         )
         if input_dtype == torch.float32:

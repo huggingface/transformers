@@ -890,7 +890,7 @@ class EsmFoldTriangleMultiplicativeUpdate(nn.Module):
         b = b * self.sigmoid(self.linear_b_g(z))
         b = b * self.linear_b_p(z)
 
-        device_type = a.device.type if isinstance(a.device.type, str) and a.device.type != "mps" else "cpu"
+        device_type = a.device.type if a.device.type != "mps" else "cpu"
         if is_fp16_enabled(device_type):
             with torch.autocast(device_type=device_type, enabled=False):
                 x = self._combine_projections(a.float(), b.float())
@@ -1505,7 +1505,7 @@ class EsmFoldInvariantPointAttention(nn.Module):
             z[0] = z[0].cpu()
 
         # [*, H, N_res, N_res]
-        device_type = q.device.type if isinstance(q.device.type, str) and q.device.type != "mps" else "cpu"
+        device_type = q.device.type if q.device.type != "mps" else "cpu"
         if is_fp16_enabled(device_type):
             with torch.autocast(device_type=device_type, enabled=False):
                 a = torch.matmul(

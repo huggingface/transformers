@@ -461,7 +461,7 @@ class EsmFlashAttention2(EsmSelfAttention):
         input_dtype = query_layer.dtype
         device_type = (
             query_layer.device.type
-            if isinstance(query_layer.device.type, str) and query_layer.device.type != "mps"
+            if query_layer.device.type != "mps"
             else "cpu"
         )
         if input_dtype == torch.float32:

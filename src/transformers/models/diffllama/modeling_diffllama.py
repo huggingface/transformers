@@ -308,7 +308,7 @@ class DiffLlamaFlashAttention2(DiffLlamaAttention):
         input_dtype = query_states.dtype
         device_type = (
             query_states.device.type
-            if isinstance(query_states.device.type, str) and query_states.device.type != "mps"
+            if query_states.device.type != "mps"
             else "cpu"
         )
         if input_dtype == torch.float32:

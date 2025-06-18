@@ -291,7 +291,7 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
 
         device_type = (
             query_states.device.type
-            if isinstance(query_states.device.type, str) and query_states.device.type != "mps"
+            if query_states.device.type != "mps"
             else "cpu"
         )
         if query_states.dtype == torch.float32:
