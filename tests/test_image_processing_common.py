@@ -575,7 +575,7 @@ class ImageProcessingTestMixin:
 
         image_processor = torch.compile(image_processor, mode="reduce-overhead")
         output_compiled = image_processor(input_image, device=torch_device, return_tensors="pt")
-
+        print(output_eager.pixel_values.dtype, output_compiled.pixel_values.dtype)
         self._assert_slow_fast_tensors_equivalence(
             output_eager.pixel_values, output_compiled.pixel_values, atol=1e-4, rtol=1e-4, mean_atol=1e-5
         )

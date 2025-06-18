@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections import defaultdict
 from collections.abc import Collection, Iterable
 from math import ceil
 from typing import Optional, Union
@@ -843,14 +844,12 @@ def _cast_tensor_to_float(x):
 
 def _flatten_nested_images(nested_images):
     """Helper function to flatten a single level of nested image structures and group by shape."""
-    grouped_images = {}
+    grouped_images = defaultdict(list)
     grouped_images_index = {}
 
     for i, sublist in enumerate(nested_images):
         for j, image in enumerate(sublist):
             shape = image.shape[1:]
-            if shape not in grouped_images:
-                grouped_images[shape] = []
             grouped_images[shape].append(image)
             grouped_images_index[(i, j)] = (shape, len(grouped_images[shape]) - 1)
 
@@ -866,10 +865,8 @@ def _reconstruct_nested_structure(indices, processed_images):
     result = [None] * (max_outer_idx + 1)
 
     # Group indices by outer index
-    nested_indices = {}
+    nested_indices = defaultdict(list)
     for i, j in indices.keys():
-        if i not in nested_indices:
-            nested_indices[i] = []
         nested_indices[i].append(j)
 
     for i in range(max_outer_idx + 1):
@@ -938,7 +935,7 @@ def group_images_by_shape(
     grouped_images, grouped_images_index = _flatten_nested_images(images)
 
     # Stack images with the same shape
-    grouped_images = {shape: torch.stack(imgs, dim=0) for shape, imgs in grouped_images.items()}
+    grouped_images = {shape: torch.stack(images_list, dim=0) for shape, images_list in grouped_images.items()}
 
     return grouped_images, grouped_images_index
 

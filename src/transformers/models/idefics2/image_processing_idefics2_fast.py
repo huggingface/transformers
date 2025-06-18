@@ -14,7 +14,7 @@
 # limitations under the License.
 
 
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 
@@ -48,7 +48,7 @@ if is_torchvision_available():
 logger = logging.get_logger(__name__)
 
 
-def get_resize_output_image_size(image: "torch.Tensor", size: SizeDict) -> Tuple[int, int]:
+def get_resize_output_image_size(image: "torch.Tensor", size: SizeDict) -> tuple[int, int]:
     """
     Get the output size of the image after resizing given a dictionary specifying the max and min sizes.
 
@@ -78,7 +78,7 @@ def get_resize_output_image_size(image: "torch.Tensor", size: SizeDict) -> Tuple
     return height, width
 
 
-def get_max_height_width(images_list: List[List["torch.Tensor"]]) -> Tuple[int, int]:
+def get_max_height_width(images_list: list[list["torch.Tensor"]]) -> tuple[int, int]:
     """
     Get the maximum height and width across all images in a batch.
     """
@@ -92,7 +92,7 @@ def get_max_height_width(images_list: List[List["torch.Tensor"]]) -> Tuple[int, 
     return (max_height, max_width)
 
 
-def make_pixel_mask(image: "torch.Tensor", output_size: Tuple[int, int]) -> "torch.Tensor":
+def make_pixel_mask(image: "torch.Tensor", output_size: tuple[int, int]) -> "torch.Tensor":
     """
     Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
 
@@ -172,7 +172,7 @@ class Idefics2ImageProcessorFast(BaseImageProcessorFast):
     def split_images(
         self,
         images: "torch.Tensor",
-    ) -> List["torch.Tensor"]:
+    ) -> list["torch.Tensor"]:
         """
         Split a batch of images into 4 equal sub-images, and concatenate that sequence with the original image.
         """
@@ -194,8 +194,8 @@ class Idefics2ImageProcessorFast(BaseImageProcessorFast):
         return batch_split_images
 
     def pad(
-        self, image: "torch.Tensor", padded_size: Tuple[int, int], fill: int = 0
-    ) -> Tuple["torch.Tensor", "torch.Tensor"]:
+        self, image: "torch.Tensor", padded_size: tuple[int, int], fill: int = 0
+    ) -> tuple["torch.Tensor", "torch.Tensor"]:
         """
         Pad an image to the specified size and create the corresponding pixel mask.
         """
@@ -228,7 +228,7 @@ class Idefics2ImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: List[List["torch.Tensor"]],
+        images: list[list["torch.Tensor"]],
         do_resize: bool,
         size: SizeDict,
         interpolation: Optional["F.InterpolationMode"],

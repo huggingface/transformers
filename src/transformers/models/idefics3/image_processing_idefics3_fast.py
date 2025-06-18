@@ -15,7 +15,7 @@
 
 
 import math
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 
@@ -49,7 +49,7 @@ MAX_IMAGE_SIZE = 4096  # 4k resolution as absolute maximum
 
 def _resize_output_size_rescale_to_max_len(
     height: int, width: int, min_len: Optional[int] = 1, max_len: Optional[int] = None
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     """
     Get the output size of the image after resizing given a dictionary specifying the max and min sizes.
     Args:
@@ -85,8 +85,8 @@ def _resize_output_size_rescale_to_max_len(
 
 
 def _resize_output_size_scale_below_upper_bound(
-    height: int, width: int, max_len: Optional[Dict[str, int]] = None
-) -> Tuple[int, int]:
+    height: int, width: int, max_len: Optional[dict[str, int]] = None
+) -> tuple[int, int]:
     """
     Get the output size of the image after resizing given a dictionary specifying the max and min sizes.
     Args:
@@ -118,7 +118,7 @@ def _resize_output_size_scale_below_upper_bound(
 def get_resize_output_image_size(
     image,
     resolution_max_side: int,
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     """
     Get the output size of the image after resizing given a dictionary specifying the max and min sizes.
     Args:
@@ -139,7 +139,7 @@ def get_resize_output_image_size(
     return height, width
 
 
-def get_max_height_width(images_list: List[List["torch.Tensor"]]) -> Tuple[int, int]:
+def get_max_height_width(images_list: list[list["torch.Tensor"]]) -> tuple[int, int]:
     """
     Get the maximum height and width across all images in a batch.
     """
@@ -153,7 +153,7 @@ def get_max_height_width(images_list: List[List["torch.Tensor"]]) -> Tuple[int, 
     return (max_height, max_width)
 
 
-def make_pixel_mask(image: "torch.Tensor", output_size: Tuple[int, int]) -> "torch.Tensor":
+def make_pixel_mask(image: "torch.Tensor", output_size: tuple[int, int]) -> "torch.Tensor":
     """
     Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
 
@@ -185,7 +185,7 @@ class Idefics3FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
 
     do_pad: Optional[bool]
     do_image_splitting: Optional[bool]
-    max_image_size: Optional[Dict[str, int]]
+    max_image_size: Optional[dict[str, int]]
     return_row_col_info: Optional[bool]
 
 
@@ -256,7 +256,7 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
     def split_images(
         self,
         images: torch.Tensor,
-        max_image_size: Dict[str, int],
+        max_image_size: dict[str, int],
         interpolation: "F.InterpolationMode" = None,
     ):
         """
@@ -346,7 +346,7 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
     def pad(
         self,
         image: torch.Tensor,
-        padded_size: Tuple[int, int],
+        padded_size: tuple[int, int],
         fill: int = 0,
         return_pixel_mask: bool = True,
     ):
@@ -379,7 +379,7 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: List[List["torch.Tensor"]],
+        images: list[list["torch.Tensor"]],
         do_resize: bool,
         size: SizeDict,
         interpolation: Optional["F.InterpolationMode"],
@@ -390,7 +390,7 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
         image_std: Optional[Union[float, list[float]]],
         do_pad: Optional[bool],
         do_image_splitting: Optional[bool],
-        max_image_size: Optional[Dict[str, int]],
+        max_image_size: Optional[dict[str, int]],
         return_row_col_info: Optional[bool],
         disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
