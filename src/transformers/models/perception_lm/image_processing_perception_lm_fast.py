@@ -237,17 +237,17 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
-        h, w = get_image_size(image, channel_dim=input_data_format)
+        height, width = get_image_size(image, channel_dim=input_data_format)
         if max_num_tiles > 1:
-            ar = self._fit_image_to_canvas(img_width=w, img_height=h, tile_size=tile_size)
-            if ar is None:
+            aspect_ratio = self._fit_image_to_canvas(img_width=width, img_height=height, tile_size=tile_size)
+            if aspect_ratio is None:
                 # If we did not find a canvas, we have to find the closest aspect ratio and downsample the image
-                ar = self._find_closest_aspect_ratio(img_width=w, img_height=h, tile_size=tile_size)
+                aspect_ratio = self._find_closest_aspect_ratio(img_width=width, img_height=height, tile_size=tile_size)
         else:
-            ar = (1, 1)
-        new_w, new_h = ar[0] * tile_size, ar[1] * tile_size
-        image = F.resize(image, (new_h, new_w), interpolation=resample)
-        return image, ar
+            aspect_ratio = (1, 1)
+        new_width, new_height = aspect_ratio[0] * tile_size, aspect_ratio[1] * tile_size
+        image = F.resize(image, (new_height, new_width), interpolation=resample)
+        return image, aspect_ratio
 
     def _preprocess(
         self,
@@ -258,6 +258,8 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
         do_normalize: Optional[bool],
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
+        tile_size: int,
+        max_num_tiles: int,
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs: Unpack[PerceptionLMFastImageProcessorKwargs],
     ) -> BatchFeature:
@@ -267,14 +269,14 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
         for shape, stacked_images in grouped_images.items():
             if do_resize:
                 if self.vision_input_type == "thumb+tile":
-                    thumbnails, _ = self.resize(stacked_images, self.tile_size, max_num_tiles=1)
+                    thumbnails, _ = self.resize(stacked_images, tile_size, max_num_tiles=1)
                     images_for_tiling, (tiles_w, tiles_h) = self.resize(
-                        stacked_images, self.tile_size, max_num_tiles=self.max_num_tiles
+                        stacked_images, tile_size, max_num_tiles=max_num_tiles
                     )
                     image_tiles = self._split(images_for_tiling, tiles_w, tiles_h)
                     stacked_images = torch.cat([thumbnails.unsqueeze(1), image_tiles], dim=1)
                 else: # vanilla single tile for low memory devices
-                    stacked_images, _ = self.resize(stacked_images, self.tile_size, max_num_tiles=1)
+                    stacked_images, _ = self.resize(stacked_images, tile_size, max_num_tiles=1)
 
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
