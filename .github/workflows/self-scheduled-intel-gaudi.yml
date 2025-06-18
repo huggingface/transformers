@@ -123,6 +123,7 @@ jobs:
         --env OMPI_MCA_btl_vader_single_copy_mechanism=none
         --env HABANA_VISIBLE_DEVICES
         --env HABANA_VISIBLE_MODULES
+        --cap-add=sys_nice
         --shm-size=64G
     steps:
       - name: Checkout
@@ -191,6 +192,7 @@ jobs:
         --env OMPI_MCA_btl_vader_single_copy_mechanism=none
         --env HABANA_VISIBLE_DEVICES
         --env HABANA_VISIBLE_MODULES
+        --cap-add=sys_nice
         --shm-size=64G
     steps:
       - name: Checkout
@@ -262,6 +264,7 @@ jobs:
         --env OMPI_MCA_btl_vader_single_copy_mechanism=none
         --env HABANA_VISIBLE_DEVICES
         --env HABANA_VISIBLE_MODULES
+        --cap-add=sys_nice
         --shm-size=64G
     steps:
       - name: Checkout
