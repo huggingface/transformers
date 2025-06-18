@@ -23,6 +23,7 @@ from huggingface_hub import snapshot_download
 from safetensors.torch import load_file
 
 from transformers import (
+    DacModel,
     DiaConfig,
     DiaFeatureExtractor,
     DiaForConditionalGeneration,
@@ -186,8 +187,11 @@ if __name__ == "__main__":
         except Exception as e:
             print(e)
         else:
-            # TODO: :)
-            processor = DiaProcessor(DiaFeatureExtractor(sampling_rate=44100, hop_length=1), DiaTokenizer())
+            processor = DiaProcessor(
+                DiaFeatureExtractor(sampling_rate=44100, hop_length=1),
+                DiaTokenizer(),
+                DacModel.from_pretrained("descript/dac_44khz"),
+            )
             processor.save_pretrained(args.pytorch_dump_folder_path)
 
     model.save_pretrained(args.pytorch_dump_folder_path)

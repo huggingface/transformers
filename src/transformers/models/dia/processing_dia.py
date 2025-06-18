@@ -21,7 +21,6 @@ from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import is_torch_available
-from ..auto import AutoModel
 
 
 if is_torch_available:
@@ -69,15 +68,14 @@ class DiaProcessor(ProcessorMixin):
             An instance of [`DiaFeatureExtractor`]. The feature extractor is a required input.
         tokenizer (`DiaTokenizer`):
             An instance of [`DiaTokenizer`]. The tokenizer is a required input.
-        audio_model (`str`, *optional*, defaults to `"descript/dac_44khz"`):
-            The model to use for audio encoding and decoding.
+        audio_tokenizer (`DacModel`):
+            An instance of [`DacModel`] used to encode and decode audio into codebooks. It is is a required input
     """
 
     feature_extractor_class = "DiaFeatureExtractor"
     tokenizer_class = "DiaTokenizer"
 
-    def __init__(self, feature_extractor, tokenizer, audio_tokenizer="descript/dac_44khz"):
-        audio_tokenizer = AutoModel.from_pretrained(audio_tokenizer)  # TODO: move outside of init
+    def __init__(self, feature_extractor, tokenizer, audio_tokenizer):
         super().__init__(feature_extractor, tokenizer, audio_tokenizer=audio_tokenizer)
 
     def __call__(

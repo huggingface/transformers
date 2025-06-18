@@ -530,8 +530,6 @@ class ProcessorMixin(PushToHubMixin):
                 f"{len(args)} arguments instead."
             )
 
-        # TODO: check audio tokenizer class?
-
         # Check each arg is of the proper class (this will also catch a user initializing in the wrong order)
         for attribute_name, arg in kwargs.items():
             class_name = getattr(self, f"{attribute_name}_class")
@@ -745,12 +743,16 @@ class ProcessorMixin(PushToHubMixin):
                 )
 
         if self.audio_tokenizer is not None:
+            # TODO: do we want this to be stricter? Own mapping?
             if not isinstance(self.audio_tokenizer, PreTrainedModel):
-                raise ValueError(f"`audio_tokenizer` can only be a `PreTrainedModel` but received {type(self.audio_tokenizer)}")
+                raise ValueError(
+                    f"`audio_tokenizer` can only be a `PreTrainedModel` but received {type(self.audio_tokenizer)}"
+                )
 
+            # TODO: do we want to allow to keep revisions and similar things here? pop later and take these as kwarg
             audio_tokenizer_dict = {
-                "model_type": self.audio_tokenizer.__class__.__name__,
-                "model_path": self.audio_tokenizer.name_or_path
+                "model_class": self.audio_tokenizer.__class__.__name__,
+                "model_path": self.audio_tokenizer.name_or_path,
             }
             audio_tokenizer_json = json.dumps(audio_tokenizer_dict, indent=2, sort_keys=True) + "\n"
 
@@ -794,6 +796,9 @@ class ProcessorMixin(PushToHubMixin):
         Returns:
             `tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the processor object.
         """
+        # holding a copy for optionally loading the audio tokenizer (if available)
+        audio_tokenizer_kwargs = copy.deepcopy(kwargs)
+
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", None)
@@ -823,16 +828,18 @@ class ProcessorMixin(PushToHubMixin):
         resolved_additional_chat_template_files = {}
         if os.path.isfile(pretrained_model_name_or_path):
             resolved_processor_file = pretrained_model_name_or_path
-            # can't load chat-template when given a file as pretrained_model_name_or_path
+            # can't load chat-template and audio tokenizer when given a file as pretrained_model_name_or_path
             resolved_chat_template_file = None
             resolved_raw_chat_template_file = None
+            resolved_audio_tokenizer_file = None
             is_local = True
         elif is_remote_url(pretrained_model_name_or_path):
             processor_file = pretrained_model_name_or_path
             resolved_processor_file = download_url(pretrained_model_name_or_path)
-            # can't load chat-template when given a file url as pretrained_model_name_or_path
+            # can't load chat-template and audio tokenizer when given a file url as pretrained_model_name_or_path
             resolved_chat_template_file = None
             resolved_raw_chat_template_file = None
+            resolved_audio_tokenizer_file = None
         else:
             if is_local:
                 template_dir = Path(pretrained_model_name_or_path, CHAT_TEMPLATE_DIR)
@@ -919,6 +926,21 @@ class ProcessorMixin(PushToHubMixin):
                     )
                     for template_name, template_file in additional_chat_template_files.items()
                 }
+
+                resolved_audio_tokenizer_file = cached_file(
+                    pretrained_model_name_or_path,
+                    AUDIO_TOKENIZER_NAME,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    proxies=proxies,
+                    resume_download=resume_download,
+                    local_files_only=local_files_only,
+                    token=token,
+                    user_agent=user_agent,
+                    revision=revision,
+                    subfolder=subfolder,
+                    _raise_exceptions_for_missing_entries=False,
+                )
             except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
@@ -959,6 +981,21 @@ class ProcessorMixin(PushToHubMixin):
         if chat_templates:
             kwargs["chat_template"] = chat_templates
 
+        # Same as chat template, adding as kwarg after loading the model
+        audio_tokenizer = None
+        if resolved_audio_tokenizer_file is not None:
+            with open(resolved_audio_tokenizer_file, "r", encoding="utf-8") as reader:
+                # The json contains the references we need to init the correct model
+                audio_tokenizer_references = json.load(reader)
+                audio_tokenizer_class = cls.get_possibly_dynamic_module(audio_tokenizer_references["model_class"])
+                audio_tokenizer_path = audio_tokenizer_references["model_path"]
+
+            # TODO: kwargs that could clash here?
+            audio_tokenizer = audio_tokenizer_class.from_pretrained(audio_tokenizer_path, **audio_tokenizer_kwargs)
+
+        if audio_tokenizer is not None:
+            kwargs["audio_tokenizer"] = audio_tokenizer
+
         # Existing processors on the Hub created before #27761 being merged don't have `processor_config.json` (if not
         # updated afterward), and we need to keep `from_pretrained` work. So here it fallbacks to the empty dict.
         # (`cached_file` called using `_raise_exceptions_for_missing_entries=False` to avoid exception)
@@ -967,7 +1004,9 @@ class ProcessorMixin(PushToHubMixin):
             # In any case we need to pass `chat_template` if it is available
             processor_dict = {}
             if "chat_template" in kwargs:
-                processor_dict = {"chat_template": kwargs.pop("chat_template")}
+                processor_dict["chat_template"] = kwargs.pop("chat_template")
+            if "audio_tokenizer" in kwargs:
+                processor_dict["audio_tokenizer"] = kwargs.pop("audio_tokenizer")
             return processor_dict, kwargs
 
         try:
@@ -992,6 +1031,8 @@ class ProcessorMixin(PushToHubMixin):
 
         if "chat_template" in kwargs:
             processor_dict["chat_template"] = kwargs.pop("chat_template")
+        if "audio_tokenizer" in kwargs:
+            processor_dict["audio_tokenizer"] = kwargs.pop("audio_tokenizer")
 
         return processor_dict, kwargs
 
@@ -1297,15 +1338,6 @@ class ProcessorMixin(PushToHubMixin):
 
             args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
 
-        for optional_attribute in cls.optional_attributes:
-            if "audio_tokenizer" in optional_attribute:
-                # TODO: save class + full model in same dir to make dynamic inference here as well
-                output_audio_tokenizer_file = os.path.join(pretrained_model_name_or_path, AUDIO_TOKENIZER_NAME)
-                if os.path.isfile(output_audio_tokenizer_file):
-                    with open(output_audio_tokenizer_file, "r", encoding="utf-8") as f:
-                        audio_tokenizer_json = json.load(f)
-                        # TODO: load logic
-
         return args
 
     @staticmethod
@@ -1317,6 +1349,7 @@ class ProcessorMixin(PushToHubMixin):
             transformers_module.VIDEO_PROCESSOR_MAPPING,
             transformers_module.TOKENIZER_MAPPING,
             transformers_module.FEATURE_EXTRACTOR_MAPPING,
+            transformers_module.MODEL_MAPPING,  # TODO: custom mapping?
         ]
         for lookup_location in lookup_locations:
             for custom_class in lookup_location._extra_content.values():
