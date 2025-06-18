@@ -241,27 +241,6 @@ class Glm4vVisionEmbeddings(nn.Module):
         return embeddings
 
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-def apply_rotary_pos_emb_vision(
-    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    orig_q_dtype = q.dtype
-    orig_k_dtype = k.dtype
-    q, k = q.float(), k.float()
-    cos, sin = cos.unsqueeze(-2).float(), sin.unsqueeze(-2).float()
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    q_embed = q_embed.to(orig_q_dtype)
-    k_embed = k_embed.to(orig_k_dtype)
-    return q_embed, k_embed
-
-
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -298,6 +277,27 @@ def eager_attention_forward(
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
+
+
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+def apply_rotary_pos_emb_vision(
+    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    orig_q_dtype = q.dtype
+    orig_k_dtype = k.dtype
+    q, k = q.float(), k.float()
+    cos, sin = cos.unsqueeze(-2).float(), sin.unsqueeze(-2).float()
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    q_embed = q_embed.to(orig_q_dtype)
+    k_embed = k_embed.to(orig_k_dtype)
+    return q_embed, k_embed
 
 
 class Glm4vVisionAttention(nn.Module):
@@ -1288,45 +1288,41 @@ class Glm4vModel(Glm4vPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
+            if pixel_values is not None:
+                image_embeds = self.get_image_features(pixel_values, image_grid_thw)
+                image_embeds = torch.cat(image_embeds, dim=0)
+                n_image_tokens = (input_ids == self.config.image_token_id).sum()
+                n_image_features = image_embeds.shape[0]
+                if not is_torchdynamo_compiling() and n_image_tokens != n_image_features:
+                    raise ValueError(
+                        f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+                    )
 
-        if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw)
-            image_embeds = torch.cat(image_embeds, dim=0)
-            n_image_tokens = (input_ids == self.config.image_token_id).sum()
-            n_image_features = image_embeds.shape[0]
-            if not is_torchdynamo_compiling() and n_image_tokens != n_image_features:
-                raise ValueError(
-                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-                )
+                mask = input_ids == self.config.image_token_id
+                mask_unsqueezed = mask.unsqueeze(-1)
+                mask_expanded = mask_unsqueezed.expand_as(inputs_embeds)
+                image_mask = mask_expanded.to(inputs_embeds.device)
+                image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+                inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-            mask = input_ids == self.config.image_token_id
-            mask_unsqueezed = mask.unsqueeze(-1)
-            mask_expanded = mask_unsqueezed.expand_as(inputs_embeds)
-            image_mask = mask_expanded.to(inputs_embeds.device)
-            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+            if pixel_values_videos is not None:
+                video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw)
+                video_embeds = torch.cat(video_embeds, dim=0)
+                n_video_tokens = (input_ids == self.config.image_token_id).sum()
+                n_video_features = video_embeds.shape[0]
+                if not is_torchdynamo_compiling() and n_video_tokens != n_video_features:
+                    raise ValueError(
+                        f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
+                    )
 
-        if pixel_values_videos is not None:
-            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw)
-            video_embeds = torch.cat(video_embeds, dim=0)
-            n_video_tokens = (input_ids == self.config.image_token_id).sum()
-            n_video_features = video_embeds.shape[0]
-            if not is_torchdynamo_compiling() and n_video_tokens != n_video_features:
-                raise ValueError(
-                    f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
-                )
-
-            mask = input_ids == self.config.image_token_id  # GLM-4.1V use image_token_id for video
-            mask_unsqueezed = mask.unsqueeze(-1)
-            mask_expanded = mask_unsqueezed.expand_as(inputs_embeds)
-            video_mask = mask_expanded.to(inputs_embeds.device)
-            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
+                mask = input_ids == self.config.image_token_id  # GLM-4.1V use image_token_id for video
+                mask_unsqueezed = mask.unsqueeze(-1)
+                mask_expanded = mask_unsqueezed.expand_as(inputs_embeds)
+                video_mask = mask_expanded.to(inputs_embeds.device)
+                video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+                inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
         if position_ids is None:
             attention_mask_tensor = (

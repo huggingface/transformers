@@ -144,9 +144,6 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
         frame_indices = uniq
         sampled_video = video[frame_indices]
         second_idxs = [int(idx / video_fps) for idx in frame_indices]
-
-        print("===========")
-        print("frame_indices:", frame_indices, "\nsecond_idxs:", second_idxs)
         return sampled_video, second_idxs
 
     def _preprocess(
