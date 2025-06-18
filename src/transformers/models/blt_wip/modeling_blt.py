@@ -3,6 +3,7 @@
 import logging
 import os
 from typing import List, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 import torch.nn
@@ -10,7 +11,9 @@ import torch.nn as nn
 from torch.nn import functional as F
 from torch.nn.attention.flex_attention import BlockMask, create_block_mask, flex_attention
 
-from ...modeling_utils import PreTrainedModel
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from .configuration_blt import (
     BLTConfig,
     PatchingModeEnum,
@@ -149,156 +152,6 @@ def apply_rotary_emb(
     return xq_out.type_as(xq), xk_out.type_as(xk)
 
 
-# Rotary embedding as in xformer, see if torchtrain implementation is not better. Also might be usefull to make it work with batch*seqlen collapsed.
-class RotaryEmbedding(torch.nn.Module):
-    """
-    RotaryEmbedding Module
-    """
-
-    def __init__(
-        self,
-        theta: float,
-        head_dim: int,
-        max_seqlen: int = 1024,
-        rope_use_fp32_in_outer_product: bool = False,
-    ):
-        super().__init__()
-
-        self.theta = theta
-        self.head_dim = head_dim
-        self.max_seqlen = max_seqlen
-        self.rope_use_fp32_in_outer_product = rope_use_fp32_in_outer_product
-
-        self.register_buffer(
-            "freqs_cis",
-            precompute_freqs_cis(
-                dim=head_dim,
-                end=max_seqlen,
-                theta=theta,
-                rope_use_fp32_in_outer_product=self.rope_use_fp32_in_outer_product,
-            ),
-            persistent=False,
-        )
-
-
-    def forward(self, seqlen: Optional[int] = None, tok_idx: Optional[torch.Tensor] = None):
-        """
-        Return freqs_cis corresponding to consecutive seqlen positions or the corresponding tok_idx positions
-        Args:
-            seqlen (int): Contiguous sequence length
-            tok_idx (torch.Tensor[int]): Position indices of each token this overrides seqlen
-
-        Returns:
-            Tuple(torch.Tensor, torch.Tensor): Embedded input tensor and freqs_cis
-        """
-        test = (seqlen is not None) or (tok_idx is not None)
-        assert test, "Should provide atleast seqlen or tok_idx"
-        if tok_idx is not None:
-            return self.freqs_cis[tok_idx]
-        elif seqlen is not None:
-            return self.freqs_cis[0:seqlen]
-
-
-class BLTAttention(nn.Module):
-    def __init__(
-        self,
-        dim: int,
-        head_dim: int,
-        n_heads: int,
-        n_kv_heads: int,
-        rope_theta: float,
-    ):
-        super().__init__()
-
-        self.dim = dim
-        self.head_dim = head_dim
-        self.rope_theta = rope_theta
-
-        self.n_heads = n_heads
-        self.n_kv_heads = n_kv_heads
-        self.heads_per_group = self.n_heads // self.n_kv_heads
-
-        self.wq = nn.Linear(
-            dim,
-            n_heads * head_dim,
-            bias=False,
-        )
-        self.wk = nn.Linear(
-            dim,
-            n_kv_heads * head_dim,
-            bias=False,
-        )
-        self.wv = nn.Linear(
-            dim,
-            n_kv_heads * head_dim,
-            bias=False,
-        )
-
-        self.wo = nn.Linear(
-            n_heads * head_dim,
-            dim,
-            bias=False,
-        )
-
-    def forward(
-        self,
-        x: torch.Tensor,
-        freq_cis: torch.Tensor,
-        tok_idx: Optional[torch.Tensor] = None,
-        mask: Optional[Union[BlockMask, str]] = None,
-        attn_impl: str = "sdpa",
-    ) -> torch.Tensor:
-        # B S D
-        bsz, seq_len, dim = x.shape
-        xq = self.wq(x.view_as(x))
-        xk = self.wk(x.view_as(x))
-        xv = self.wv(x.view_as(x))
-
-        output_shape = xq.shape
-        # B S D -> B S H D
-        xq = xq.view(bsz, seq_len, self.n_heads, self.head_dim)
-        xk = xk.view(bsz, seq_len, self.n_kv_heads, self.head_dim)
-        xv = xv.view(bsz, seq_len, self.n_kv_heads, self.head_dim)
-
-        xq, xk = apply_rotary_emb(xq, xk, 1, freq_cis[0:seq_len])
-
-        # This condition helps us be easily compatible
-        # with inference by adding a pluggable KVCache
-        if hasattr(self, "kv_cache"):
-            xk, xv = self.kv_cache.update(xk, xv, tok_idx)
-
-        xk = repeat_kv(xk, self.heads_per_group, dim=2)
-        xv = repeat_kv(xv, self.heads_per_group, dim=2)
-
-        if attn_impl == "flex_attention":
-            assert mask is None or isinstance(mask, BlockMask)
-            xq, xk, xv = (e.transpose(1, 2) for e in (xq, xk, xv))
-            output = flex_attention_comp(xq, xk, xv, block_mask=mask)
-            output = output.transpose(1, 2).contiguous()  # B H S D -> B S H D
-
-        elif attn_impl == "sdpa":
-            xq, xk, xv = (e.transpose(1, 2) for e in (xq, xk, xv))
-            assert mask is None or isinstance(mask, (str, torch.Tensor))
-            is_causal = (mask == "causal") if isinstance(mask, str) else False
-            mask = mask.to(xq.device) if isinstance(mask, torch.Tensor) else None
-            output = F.scaled_dot_product_attention(
-                xq,
-                xk,
-                xv,
-                is_causal=is_causal,
-                attn_mask=mask,
-            )
-            output = output.transpose(1, 2).contiguous()  # B H S D -> B S H D
-        else:
-            raise NotImplementedError(f"Attention implementation {attn_impl} not supported")
-
-        output_reshaped = output.reshape(output_shape)
-
-        output = self.wo(output_reshaped)
-
-        return output
-
-
 class BLTMLP(nn.Module):
     def __init__(
         self,
@@ -343,37 +196,177 @@ class BLTMLP(nn.Module):
         return output
 
 
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2:]
+    return torch.cat((-x2, x1), dim=-1)
 
+
+def eager_attention_forward(
+        module: nn.Module,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        attention_mask: Optional[torch.Tensor],
+        scaling: float,
+        dropout: float = 0.0,
+        **kwargs,
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+        attn_weights = attn_weights + causal_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+    # TODO: not exactly equivalent to other transformers implementations,, need feedback
+    # Extract first head_dim//2 elements which correspond to the unique frequencies
+    # This matches the original BLT approach which uses head_dim//2 frequency pairs
+    head_dim = q.shape[-1]
+    cos_freqs = cos[..., :head_dim//2]  # [B, S, D/2]
+    sin_freqs = sin[..., :head_dim//2]  # [B, S, D/2]
+    
+    # Expand cos/sin to match query/key tensor format [B, H, S, D/2]
+    cos_freqs = cos_freqs.unsqueeze(1).expand(-1, q.shape[1], -1, -1)  # [B, 1, S, D/2] -> [B, H, S, D/2]
+    sin_freqs = sin_freqs.unsqueeze(1).expand(-1, q.shape[1], -1, -1)  # [B, 1, S, D/2] -> [B, H, S, D/2]
+    
+    # Split q and k into pairs for rotation: (d0, d1), (d2, d3), ...
+    q_pairs = q.view(*q.shape[:-1], head_dim//2, 2)  # [B, H, S, D/2, 2]
+    k_pairs = k.view(*k.shape[:-1], head_dim//2, 2)  # [B, H, S, D/2, 2]
+    
+    # Extract real and i parts
+    q_real, q_imag = q_pairs[..., 0], q_pairs[..., 1]  # [B, H, S, D/2]
+    k_real, k_imag = k_pairs[..., 0], k_pairs[..., 1]  # [B, H, S, D/2]
+    
+    # Apply rotation: [real', imag'] = [cos*real - sin*imag, sin*real + cos*imag]
+    q_real_rot = cos_freqs * q_real - sin_freqs * q_imag
+    q_imag_rot = sin_freqs * q_real + cos_freqs * q_imag
+    k_real_rot = cos_freqs * k_real - sin_freqs * k_imag
+    k_imag_rot = sin_freqs * k_real + cos_freqs * k_imag
+    
+    # Recombine pairs and reshape back to original format
+    q_rot = torch.stack([q_real_rot, q_imag_rot], dim=-1).view(*q.shape)  # [B, H, S, D]
+    k_rot = torch.stack([k_real_rot, k_imag_rot], dim=-1).view(*k.shape)  # [B, H, S, D]
+    
+    return q_rot.type_as(q), k_rot.type_as(k)
+
+
+
+class BLTSelfAttention(nn.Module):
+    def __init__(self, config: BLTConfig, layer_idx: int):
+        super().__init__()
+        self.config = config
+        self.num_heads = config.num_attention_heads
+        self.dropout = config.dropout
+        self.hidden_size = config.hidden_size
+        self.num_key_value_heads = config.num_key_value_heads
+        self.head_dim = config.hidden_size // self.num_heads
+        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
+        self.scaling = self.head_dim ** -0.5
+        self.rope_theta = config.rope_theta
+        self.layer_idx = layer_idx
+
+        self.wq = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
+        self.wk = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.wv = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.wo = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
+
+    def forward(
+            self,
+            hidden_states: torch.Tensor,
+            attention_mask: torch.Tensor,
+            position_embeddings: torch.Tensor,
+            output_attentions: bool = False,
+            use_cache: bool = False,
+            past_key_value=None,
+            cache_position=None,
+            **kwargs,
+    ):
+        bsz, q_len, _ = hidden_states.size()
+
+        query_states = self.wq(hidden_states)
+        key_states = self.wk(hidden_states)
+        value_states = self.wv(hidden_states)
+        
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        
+        if past_key_value is not None:
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        attention_interface: Callable = eager_attention_forward
+        output_attentions = False
+        self.config._attn_implementation = "sdpa"
+        self.scaling = None
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and output_attentions:
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
+        attn_output = self.wo(attn_output)
+
+        if not output_attentions:
+            attn_weights = None
+
+        return attn_output, attn_weights, past_key_value
 
 class BLTTransformerLayer(nn.Module):
-    def __init__(self, args):
+    def __init__(self, dim, n_heads, config, layer_idx=0):
         super().__init__()
 
         # Extract parameters from dictionary
-        dim = args["dim"]
-        n_heads = args["n_heads"]
-        head_dim = args["head_dim"]
-        n_kv_heads = args["n_kv_heads"]
-        rope_theta = args["rope_theta"]
-        multiple_of = args["multiple_of"]
-        ffn_dim_multiplier = args["ffn_dim_multiplier"]
-        norm_eps = args["norm_eps"]
+        dim = dim
+        n_heads = n_heads
+        head_dim = getattr(config, "head_dim", None)
+        n_kv_heads = getattr(config, "n_kv_heads", None)
+        rope_theta = getattr(config, "rope_theta", None)
+        multiple_of = getattr(config, "multiple_of", 256)
+        ffn_dim_multiplier = getattr(config, "ffn_dim_multiplier", None)
+        norm_eps = getattr(config, "norm_eps", None)
 
-        assert (head_dim is not None) or (n_heads is not None), "Should specify at least head_dim or n_heads"
         self.head_dim = head_dim or dim // n_heads
         self.n_heads = n_heads or dim // head_dim
         self.n_kv_heads = n_kv_heads or self.n_heads
 
-        assert n_heads % self.n_kv_heads == 0
-        assert dim % n_heads == 0
+        config.hidden_size = dim
 
-        self.attention = BLTAttention(
-            dim=dim,
-            head_dim=self.head_dim,
-            n_heads=self.n_heads,
-            n_kv_heads=self.n_kv_heads,
-            rope_theta=rope_theta,
-        )
+        self.attention = BLTSelfAttention(config=config, layer_idx=layer_idx)
+
         self.feed_forward = BLTMLP(
             dim=dim,
             hidden_dim=4 * dim,
@@ -385,21 +378,33 @@ class BLTTransformerLayer(nn.Module):
 
     def forward(
         self,
-        x: torch.Tensor,
-        freq_cis: torch.Tensor,
-        tok_idx: Optional[torch.Tensor] = None,
-        mask: Optional[Union[BlockMask, str]] = None,
-        attn_impl: str = "sdpa",
+        hidden_states: torch.Tensor,
+        past_key_value: Optional[bool] = None,
+        position_embeddings: Optional[torch.Tensor] = None,
+
+        attention_mask: Optional[torch.Tensor] = None,
+        layer_head_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = False,
+        cache_position: Optional[torch.LongTensor] = None,
+
     ) -> torch.Tensor:
-        norm_x = self.attention_norm(x)
-        attn_out = self.attention(
-            norm_x,
-            freq_cis,
-            tok_idx=tok_idx,
-            mask=mask,
-            attn_impl=attn_impl,
+
+        residual = hidden_states
+        norm_hidden_states = self.attention_norm(hidden_states)
+
+
+        hidden_states, self_attn_weights, present_key_value = self.attention(
+            hidden_states=norm_hidden_states,
+            # TODO: = BLT, attn_out = self.attention(self.attention_norm(x), in TransformerBlock.forward,
+            past_key_value=past_key_value,
+            attention_mask=attention_mask,
+            layer_head_mask=layer_head_mask,
+            output_attentions=output_attentions,
+            cache_position=cache_position,
+            position_embeddings=position_embeddings
         )
-        h = x + attn_out
+
+        h = residual + hidden_states
         h_norm = self.ffn_norm(h)
         out = h + self.feed_forward(h_norm)
         return out
@@ -568,156 +573,109 @@ def process_patch_lengths(patch_lengths: torch.Tensor, max_patch_length: int) ->
 
     return padded
 
-class BLTLocalModelBase(nn.Module):
-    def __init__(self, config: BLTConfig, component_type: str = "encoder"):
+
+def create_causal_mask_for_blt(
+    seqlen: int,
+    batch_size: int,
+    device: torch.device,
+    dtype: torch.dtype,
+    sliding_window: Optional[int] = None,
+) -> torch.Tensor:
+    """
+    Creates a causal mask for BLT local encoder.
+    """
+    min_value = torch.finfo(dtype).min
+    mask = torch.full(
+        (batch_size, 1, seqlen, seqlen),  # Note: using seqlen, not total_seqlen
+        min_value,
+        dtype=dtype,
+        device=device,
+    )
+    
+    if sliding_window is not None:
+        # Create local causal mask with sliding window
+        for i in range(seqlen):
+            start_idx = max(0, i - sliding_window + 1)
+            mask[:, :, i, start_idx:i + 1] = 0
+    else:
+        # Create full causal mask
+        mask = torch.triu(mask, diagonal=0)
+        mask = mask.masked_fill(mask == 0, min_value)
+    
+    return mask
+
+
+class BLTRotaryEmbedding(nn.Module):
+    def __init__(self, config: BLTConfig, device=None):
         super().__init__()
+        self.rope_type = config.rope_scaling["rope_type"]
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = self.inv_freq
 
-        if component_type == "encoder":
-            self.dim = config.dim_local_encoder
-            self.n_layers = config.n_layers_local_encoder
-            self.n_heads = config.n_heads_local_encoder
-            self.max_seqlen = config.max_encoder_seq_length or config.max_seqlen
-            self.attn_bias_type = "local_block_causal"
-            self.sliding_window = config.local_attention_window_len
-        elif component_type == "decoder":
-            self.dim = config.dim_local_decoder
-            self.n_layers = config.n_layers_local_decoder
-            self.n_heads = config.n_heads_local_decoder
-            self.max_seqlen = config.max_encoder_seq_length or config.max_seqlen
-            self.attn_bias_type = "local_block_causal"
-            self.sliding_window = config.local_attention_window_len
-        else:
-            raise ValueError(f"Unknown component_type: {component_type}")
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
+
+class BLTLocalEncoder(nn.Module):
+    def __init__(self, config: BLTConfig):
+        super().__init__()
+        self.config = config #TODO: rm this
 
         self.dropout = config.dropout
-        self.vocab_size = config.vocab_size + config.pm_size
-        self.patch_size = config.patch_size
+        
+        self.layers = nn.ModuleList([BLTTransformerLayer(config.dim_local_encoder, config.n_heads_local_encoder, config) for _ in range(config.n_layers_local_encoder)])
 
-        self.attn_impl = config.attn_impl
-        self.use_rope = config.use_rope
-        self.init_std_factor = config.init_std_factor
-        self.init_base_std = config.init_base_std
-        self.cross_attn_encoder = getattr(config, "cross_attn_encoder", None)
-        self.cross_attn_decoder = getattr(config, "cross_attn_decoder", None)
-        self.cross_attn_k = getattr(config, "cross_attn_k", None)
-        self.eos_id = config.eos_token_id
-
-        self.boe_id = config.boe_id
-
-        # Initialize cross attention layers as None (will be set by subclasses if needed)
-        self.cross_attn_layers = None
-
-        # Create parameter dict for BLTTransformerLayers
-        layer_params = {
-            "dim": self.dim,
-            "n_heads": self.n_heads,
-            "head_dim": config.head_dim,
-            "n_kv_heads": getattr(config, "n_kv_heads", None),
-            "rope_theta": config.rope_theta,
-            "multiple_of": getattr(config, "multiple_of", 256),
-            "ffn_dim_multiplier": getattr(config, "ffn_dim_multiplier", None),
-            "norm_eps": config.norm_eps,
-        }
-
-        self.layers = nn.ModuleList([BLTTransformerLayer(layer_params) for _ in range(self.n_layers)])
-
-        if not self.use_rope:
-            self.pos_embeddings = nn.Embedding(2048, self.dim)  # fallback max_length
-        else:
-            self.rope = RotaryEmbedding(
-                theta=config.rope_theta,
-                head_dim=config.head_dim or self.dim // self.n_heads,
-                max_seqlen=self.max_seqlen,
-                rope_use_fp32_in_outer_product=config.rope_use_fp32_in_outer_product,
-            )
-            self.pos_embeddings = None
-
-        # Set dimension-specific embedding dimensions
-        if component_type == "encoder":
-            self.dim_token_emb = config.encoder_dim_token_emb
-            self.dim_patch_emb = config.encoder_dim_patch_emb
-        elif component_type == "decoder":
-            self.dim_token_emb = config.decoder_dim_token_emb
-            self.dim_patch_emb = config.dim_global
+        self.rotary_emb = BLTRotaryEmbedding(config=config)
+        self.pos_embeddings = None
 
         self.token_embedding_projection = (
-            nn.Linear(self.dim_token_emb, self.dim, bias=False)
-            if self.dim_token_emb is not None and self.dim_token_emb != self.dim
+            nn.Linear(config.encoder_dim_token_emb, config.dim_local_encoder, bias=False)
+            if config.encoder_dim_token_emb is not None and config.encoder_dim_token_emb != config.dim_local_encoder
             else None
         )
 
         self.patch_embedding_projection = self._create_patch_projection(config)
 
-    def _should_create_patch_projection(self, config: BLTConfig):
-        dimension_mismatch = self.dim_patch_emb is not None and self.dim_patch_emb != self.dim
+        self.tok_embeddings = nn.Embedding(config.vocab_size + config.pm_size, config.dim_local_encoder)
 
-        # Check cross attention conditions
-        cross_attn_conditions = (config.cross_attn_encoder and config.cross_attn_init_by_pooling) or (
-            config.cross_attn_decoder and config.cross_attn_init_by_pooling
-        )
-
-        return dimension_mismatch or cross_attn_conditions
-
-    def _create_patch_projection(self, config):
-        if not self._should_create_patch_projection(config):
-            return None
-
-        output_dim = self.dim_token_emb * (self.cross_attn_k or 1)
-
-        return nn.Linear(
-            in_features=self.dim_patch_emb,
-            out_features=output_dim,
-            bias=False,
-        )
-
-    def apply_embedding(self, tokens, embeds):
-        if embeds is not None:
-            return embeds
-        else:
-            return self.tok_embeddings(tokens)
-
-
-class BLTLocalEncoder(BLTLocalModelBase):
-    def __init__(self, config: BLTConfig):
-        super().__init__(config, component_type="encoder")
-
-        self.apply_transformer = config.use_local_encoder_transformer
-        self.downsampling_by_pooling = config.downsampling_by_pooling
-        self.expects_hash_embeddings = config.encoder_hash_byte_group_size is not None
-        self.cross_attn_encoder = config.cross_attn_encoder
-        self.cross_attn_all_layers_encoder = config.cross_attn_all_layers_encoder
-        self.cross_attn_init_by_pooling = config.cross_attn_init_by_pooling
-        self.cross_attn_nheads = config.cross_attn_nheads
-
-        self.tok_embeddings = nn.Embedding(self.vocab_size, self.dim)
-
-        if self.cross_attn_encoder:
-            self.cross_attn_layers = torch.nn.ModuleList()
-            layers_to_add = self.n_layers if self.cross_attn_all_layers_encoder else 1
-            for _ in range(layers_to_add):
-                self.cross_attn_layers.append(
-                    BLTCrossAttention(
-                        dim=self.dim,
-                        head_dim=self.dim // self.cross_attn_nheads,
-                        n_heads=self.cross_attn_nheads,
-                        n_kv_heads=self.cross_attn_nheads,
-                        norm_eps=config.norm_eps,
-                    )
+        # Initialize cross attention layers as None (will be set if needed)
+        self.cross_attn_layers = None
+        self.cross_attn_layers = torch.nn.ModuleList()
+        layers_to_add = config.n_layers_local_encoder if config.cross_attn_all_layers_encoder else 1
+        for _ in range(layers_to_add):
+            self.cross_attn_layers.append(
+                BLTCrossAttention(
+                    dim=config.dim_local_encoder,
+                    head_dim=config.dim_local_encoder // config.cross_attn_nheads,
+                    n_heads=config.cross_attn_nheads,
+                    n_kv_heads=config.cross_attn_nheads,
+                    norm_eps=config.norm_eps,
                 )
-
-    def apply_embedding(self, tokens, embeds):
-        if embeds is not None:
-            assert self.expects_hash_embeddings, "Not expecting embeddings to be passed."
-            return embeds
-        else:
-            return self.tok_embeddings(tokens)
+            )
 
     def forward(
         self,
-        tokens: torch.Tensor,
-        embeds: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor,
+        input_embeds: Optional[torch.Tensor] = None,
         patch_embeds: Optional[torch.Tensor] = None,
         mask: Optional[Union["BlockMask", torch.Tensor, str]] = None,
         cross_mask: Optional[torch.Tensor] = None,
@@ -726,34 +684,52 @@ class BLTLocalEncoder(BLTLocalModelBase):
         cache: Optional[List[Tuple[torch.Tensor, torch.Tensor, int]]] = None,
     ):
         """ """
-        bs, seqlen = tokens.shape
+        bs, seqlen = input_ids.shape
         if mask is None:
             mask = create_causal_mask(
                 seqlen,
-                self.attn_impl,
+                self.config.attn_impl,
                 "local_block_causal",
-                sliding_window=self.sliding_window,
-                tokens=tokens,
-                eos_id=self.eos_id,
+                sliding_window=self.config.local_attention_window_len,
+                tokens=input_ids,
+                eos_id=self.config.eos_token_id,
             )
 
-        h = self.apply_embedding(tokens, embeds)
-        freqs_cis = self.rope(seqlen=seqlen) if self.use_rope else None
+        if input_embeds is None:
+            input_embeds = self.embed_tokens(input_ids)
 
-        h = F.dropout(h, p=self.dropout, training=self.training)
+        batch_size, seq_length, _ = input_embeds.shape
 
-        for i, layer in enumerate(self.layers):
-            h = layer(h, mask=mask, freq_cis=freqs_cis, attn_impl=self.attn_impl)
-            # check if cross attention should be applied to either all layer or only the last layer
-            if self.cross_attn_encoder and (i == len(self.layers) - 1 or self.cross_attn_all_layers_encoder):
-                # apply pooling and project
-                if self.cross_attn_init_by_pooling and patch_embeds is None:
+        if mask is None:
+            attention_mask = create_causal_mask_for_blt(
+                seqlen=seq_length,
+                batch_size=batch_size,
+                device=input_embeds.device,
+                dtype=input_embeds.dtype,
+                sliding_window=self.config.sliding_window,
+            )
+
+        h = input_embeds
+
+        h_residual = input_embeds
+        h = nn.functional.dropout(h, p=self.dropout, training=self.training) 
+
+        position_ids = torch.arange(input_ids.shape[1], device=input_embeds.device).unsqueeze(0).expand(batch_size, -1)
+        position_embeddings = self.rotary_emb(h, position_ids)  
+
+        h = F.dropout(h, p=self.config.dropout, training=self.training)
+
+        for idx, layer in enumerate(self.layers):
+            h = layer(h, position_embeddings=position_embeddings, attention_mask=None)
+
+            if getattr(self.config, "cross_attn_encoder", None) and (idx == len(self.layers) - 1 or self.config.cross_attn_all_layers_encoder):
+                if self.config.cross_attn_init_by_pooling and patch_embeds is None:
                     patch_embeds = self.patch_reduce(h, num_patches, "amax", patch_ids)
                     if self.patch_embedding_projection is not None:
                         patch_embeds = self.patch_embedding_projection(patch_embeds)
-                        patch_embeds = patch_embeds.reshape(bs, patch_embeds.shape[1] * self.cross_attn_k, self.dim)
+                        patch_embeds = patch_embeds.reshape(bs, patch_embeds.shape[1] * getattr(self.config, "cross_attn_k", 1), self.config.dim_local_encoder)
 
-                layer_idx = i if self.cross_attn_all_layers_encoder else 0
+                layer_idx = idx if self.config.cross_attn_all_layers_encoder else 0
                 patch_embeds_cross = self.cross_attn_layers[layer_idx](
                     x=patch_embeds,
                     kv=h,
@@ -761,8 +737,33 @@ class BLTLocalEncoder(BLTLocalModelBase):
                 )
                 patch_embeds = patch_embeds + patch_embeds_cross
 
-        h_residual = patch_embeds if self.cross_attn_encoder else None
+        h_residual = patch_embeds if getattr(self.config, "cross_attn_encoder", None) else None
         return (h, h_residual), cache
+    
+    def _create_patch_projection(self, config):
+        dimension_mismatch = config.encoder_dim_patch_emb is not None and config.encoder_dim_patch_emb != config.dim_local_encoder
+
+        cross_attn_conditions = (config.cross_attn_encoder and config.cross_attn_init_by_pooling) or (
+            config.cross_attn_decoder and config.cross_attn_init_by_pooling
+        )
+
+        if not (dimension_mismatch or cross_attn_conditions):
+            return None
+
+        output_dim = config.encoder_dim_token_emb * (getattr(config, "cross_attn_k", None) or 1)
+
+        return nn.Linear(
+            in_features=config.encoder_dim_patch_emb,
+            out_features=output_dim,
+            bias=False,
+        )
+
+    def embed_tokens(self, tokens, embeds):
+        if embeds is not None:
+            assert self.config.encoder_hash_byte_group_size is not None, "Not expecting embeddings to be passed."
+            return embeds
+        else:
+            return self.tok_embeddings(tokens)
 
     def patch_reduce(self, h, max_num_patches, reduction, patch_ids):
         """
@@ -792,37 +793,69 @@ class BLTLocalEncoder(BLTLocalModelBase):
         return reduced_embs
 
 
-class BLTLocalDecoder(BLTLocalModelBase):
+class BLTLocalDecoder(nn.Module):
     def __init__(self, config: BLTConfig):
-        super().__init__(config, component_type="decoder")
+        super().__init__()
 
-        # Model configuration flags
-        self.cross_attn_decoder = config.cross_attn_decoder
-        self.cross_attn_all_layers_decoder = config.cross_attn_all_layers_decoder
-        self.cross_attn_init_by_pooling = config.cross_attn_init_by_pooling
-        self.cross_attn_nheads = config.cross_attn_nheads
+        self.config = config
 
-        self.norm = RMSNorm(self.dim, eps=config.norm_eps)
+        self.layers = nn.ModuleList([BLTTransformerLayer(config.dim_local_decoder, config.n_heads_local_decoder, config) for _ in range(config.n_layers_local_decoder)])
 
-        if self.cross_attn_decoder:
-            self.cross_attn_layers = torch.nn.ModuleList()
-            layers_to_add = self.n_layers if self.cross_attn_all_layers_decoder else 1
-            for _ in range(layers_to_add):
-                self.cross_attn_layers.append(
-                    BLTCrossAttention(
-                        dim=self.dim,
-                        head_dim=self.dim // self.cross_attn_nheads,
-                        n_heads=self.cross_attn_nheads,
-                        n_kv_heads=self.cross_attn_nheads,
-                        norm_eps=config.norm_eps,
-                    )
+        self.rotary_emb = BLTRotaryEmbedding(config=config)
+
+        self.pos_embeddings = None
+
+        self.token_embedding_projection = (
+            nn.Linear(config.decoder_dim_token_emb, config.dim_local_decoder, bias=False)
+            if config.decoder_dim_token_emb is not None and config.decoder_dim_token_emb != config.dim_local_decoder
+            else None
+        )
+
+        self.patch_embedding_projection = self._create_patch_projection(config)
+
+        self.norm = RMSNorm(config.dim_local_decoder, eps=config.norm_eps)
+
+        # Initialize cross attention layers as None (will be set if needed)
+        self.cross_attn_layers = None
+        self.cross_attn_layers = torch.nn.ModuleList()
+        layers_to_add = config.n_layers_local_decoder if config.cross_attn_all_layers_decoder else 1
+        for _ in range(layers_to_add):
+            self.cross_attn_layers.append(
+                BLTCrossAttention(
+                    dim=config.dim_local_decoder,
+                    head_dim=config.dim_local_decoder // config.cross_attn_nheads,
+                    n_heads=config.cross_attn_nheads,
+                    n_kv_heads=config.cross_attn_nheads,
+                    norm_eps=config.norm_eps,
                 )
+            )
 
-        self.output = nn.Linear(
-            self.dim,
-            config.vocab_size,
+        self.output = nn.Linear(config.dim_local_decoder, config.vocab_size, bias=False)
+
+    def _create_patch_projection(self, config):
+        dimension_mismatch = config.dim_global is not None and config.dim_global != config.dim_local_decoder
+
+        # Check cross attention conditions
+        cross_attn_conditions = (config.cross_attn_encoder and config.cross_attn_init_by_pooling) or (
+            config.cross_attn_decoder and config.cross_attn_init_by_pooling
+        )
+
+        if not (dimension_mismatch or cross_attn_conditions):
+            return None
+
+        output_dim = config.decoder_dim_token_emb * (getattr(config, "cross_attn_k", None) or 1)
+
+        return nn.Linear(
+            in_features=config.dim_global,
+            out_features=output_dim,
             bias=False,
         )
+
+    def apply_embedding(self, tokens, embeds):
+        if embeds is not None:
+            return embeds
+        else:
+            return self.tok_embeddings(tokens)
 
     def forward(
         self,
@@ -839,29 +872,33 @@ class BLTLocalDecoder(BLTLocalModelBase):
         if mask is None:
             mask = create_causal_mask(
                 seqlen,
-                self.attn_impl,
+                self.config.attn_impl,
                 "local_block_causal",
-                sliding_window=self.sliding_window,
+                sliding_window=self.config.local_attention_window_len,
                 tokens=tokens,
-                eos_id=self.eos_id,
+                eos_id=self.config.eos_token_id,
             )
 
         h = embeds
 
+        batch_size, seq_length, _ = embeds.shape
+
+
         if self.patch_embedding_projection is not None:
             assert patch_embeds is not None, "Patch embeddings must be passed."
             patch_embeds = self.patch_embedding_projection(patch_embeds)
-            if self.cross_attn_k is not None:
-                patch_embeds = patch_embeds.reshape(bs, patch_embeds.shape[1] * self.cross_attn_k, self.dim)
+            if getattr(self.config, "cross_attn_k", None) is not None:
+                patch_embeds = patch_embeds.reshape(bs, patch_embeds.shape[1] * self.config.cross_attn_k, self.config.dim_local_decoder)
 
-        if patch_embeds is not None and not self.cross_attn_decoder:
+        if patch_embeds is not None and not getattr(self.config, "cross_attn_decoder", None):
             h = h + patch_embeds
 
-        freqs_cis = self.rope(seqlen=seqlen) if self.use_rope else None
+        position_ids = torch.arange(tokens.shape[1], device=embeds.device).unsqueeze(0).expand(batch_size, -1)
+        position_embeddings = self.rotary_emb(h, position_ids)  
 
-        h = F.dropout(h, p=self.dropout, training=self.training)
+        h = F.dropout(h, p=self.config.dropout, training=self.training)
         for i, layer in enumerate(self.layers):
-            if self.cross_attn_decoder and (i == 0 or self.cross_attn_all_layers_decoder):
+            if getattr(self.config, "cross_attn_decoder", None) and (i == 0 or self.config.cross_attn_all_layers_decoder):
                 # Use cross attention to extract info from patch_embeds into h
                 h_cross = self.cross_attn_layers[i](
                     x=h,
@@ -870,10 +907,11 @@ class BLTLocalDecoder(BLTLocalModelBase):
                 )
                 h = h + h_cross
 
-            h = layer(h, mask=mask, freq_cis=freqs_cis, attn_impl=self.attn_impl)
+            h = layer(h, position_embeddings=position_embeddings, attention_mask=None)
+
 
         h_preds = self.norm(h)
-        h_preds = F.dropout(h_preds, p=self.dropout, training=self.training)
+        h_preds = F.dropout(h_preds, p=self.config.dropout, training=self.training)
         h_preds = self.output(h_preds)
         h_preds = h_preds.float()
         return h_preds, cache
@@ -973,34 +1011,17 @@ class BLTGlobalTransformer(nn.Module):
 
         self.config = config
 
-        self.dim = config.dim_global
-        self.rope_embeddings = RotaryEmbedding(
-            theta=config.rope_theta,
-            head_dim=config.head_dim or self.config.dim_global // config.n_heads_global,
-            max_seqlen=config.max_seqlen,
-            rope_use_fp32_in_outer_product=config.rope_use_fp32_in_outer_product,
-        )
-        # Handle both eos_id and eos_token_id for compatibility
-        self.eos_id = getattr(config, "eos_id", getattr(config, "eos_token_id", 2))
-
-        # Create parameter dict for BLTTransformerLayers
-        layer_params = {
-            "dim": self.dim,
-            "n_heads": config.n_heads_global,
-            "head_dim": config.head_dim,
-            "n_kv_heads": getattr(config, "n_kv_heads_global", None),
-            "rope_theta": config.rope_theta,
-            "multiple_of": getattr(config, "multiple_of", 256),
-            "ffn_dim_multiplier": getattr(config, "ffn_dim_multiplier", None),
-            "norm_eps": config.norm_eps,
-        }
-
         self.layers = nn.ModuleList()
+        old = config.n_kv_heads 
+        config.n_kv_heads = config.n_kv_heads_global
         for _ in range(config.n_layers_global):
-            self.layers.append(BLTTransformerLayer(layer_params))
+            self.layers.append(BLTTransformerLayer(self.config.dim_global, self.config.n_heads_global, config))
+        config.n_kv_heads = old
+
+        self.rotary_emb = BLTRotaryEmbedding(config=config)
 
         self.token_embedding_projection = None
-        if config.global_dim_patch_emb is not None and config.global_dim_patch_emb != self.dim:
+        if config.global_dim_patch_emb is not None and config.global_dim_patch_emb != config.dim_global:
             self.token_embedding_projection = nn.Linear(
                 config.global_dim_patch_emb,
                 config.dim_global,
@@ -1027,11 +1048,11 @@ class BLTGlobalTransformer(nn.Module):
                 self.config.attn_impl,
                 self.config.attn_bias_type,
                 tokens=tokens,
-                eos_id=self.eos_id,
+                eos_id=self.config.eos_id,
             )
         )
 
-        if self.token_embedding_projection is not None and h.shape[-1] != self.dim:
+        if self.token_embedding_projection is not None and h.shape[-1] != self.config.dim_global:
             h = self.token_embedding_projection(h)
 
         h = F.dropout(h, p=self.config.dropout, training=self.training)
@@ -1123,10 +1144,10 @@ class BLTPreTrainedModel(PreTrainedModel):
                 b=3 * std,
             )
             
-        elif isinstance(module, (nn.RMSNorm, nn.LayerNorm)):
-            nn.init.ones_(module.weight)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
+        # elif isinstance(module, (nn.RMSNorm, nn.LayerNorm)):
+        #     nn.init.ones_(module.weight)
+        #     if module.bias is not None:
+        #         nn.init.zeros_(module.bias)
                 
         elif isinstance(module, RotaryEmbedding):
             module.freqs_cis[...] = precompute_freqs_cis(
@@ -1138,16 +1159,23 @@ class BLTPreTrainedModel(PreTrainedModel):
             
         elif isinstance(module, BLTModel):
             if module.encoder_hash_tok_embedding is not None:
-                emb_std = module.local_encoder.dim ** (-0.5)
+                emb_std = module.config.dim_local_encoder ** (-0.5)
                 for emb in module.encoder_hash_tok_embedding:
                     emb._custom_std = emb_std
                     
-        elif isinstance(module, (BLTLocalEncoder, BLTLocalDecoder)):
+        elif isinstance(module, BLTLocalEncoder):
             if module.token_embedding_projection is not None:
-                module.token_embedding_projection._custom_std = module.dim ** (-0.5)
+                module.token_embedding_projection._custom_std = module.config.dim_local_encoder ** (-0.5)
                 
             if module.patch_embedding_projection is not None:
-                module.patch_embedding_projection._custom_std = module.dim_patch_emb ** (-0.5)
+                module.patch_embedding_projection._custom_std = module.config.encoder_dim_patch_emb ** (-0.5)
+                
+        elif isinstance(module, BLTLocalDecoder):
+            if module.token_embedding_projection is not None:
+                module.token_embedding_projection._custom_std = module.config.dim_local_decoder ** (-0.5)
+                
+            if module.patch_embedding_projection is not None:
+                module.patch_embedding_projection._custom_std = module.config.dim_global ** (-0.5)
                 
         elif isinstance(module, BLTGlobalTransformer):
             if module.token_embedding_projection is not None:
@@ -1170,7 +1198,7 @@ class BLTModel(BLTPreTrainedModel):
 
         self.encoder_hash_tok_embedding = init_hash_embeddings(
             config,
-            local_encoder_dim=self.local_encoder.dim,
+            local_encoder_dim=config.dim_local_encoder,
             encoder_hash_byte_group_size=config.encoder_hash_byte_group_size,
         )
 
@@ -1256,8 +1284,8 @@ class BLTModel(BLTPreTrainedModel):
 
         # Local encoder
         (h_encoder, h_cross), cache_encoder = self.local_encoder(
-            tokens=local_encoder_tokens,
-            embeds=local_encoder_embeds,
+            input_ids=local_encoder_tokens,
+            input_embeds=local_encoder_embeds,
             patch_embeds=None,
             cross_mask=cross_attn_mask_enc,
             num_patches=patch_lengths.shape[1],
@@ -1359,31 +1387,32 @@ class BLTModel(BLTPreTrainedModel):
 
 class BLTPatcher(BLTPreTrainedModel):
     def __init__(self, config):
+        config.num_attention_heads = config.patcher_n_heads
+        config.hidden_size = config.patcher_dim
+
+
+        config.n_heads = config.patcher_n_heads 
+
+
+        config.num_key_value_heads = 12 # config.num_key_value_heads  #TODO: add patcher_n_kv_heads
+
+        config.head_dim = 64 #self.config.patcher_head_dim #TODO: add
         super().__init__(config)
 
-        self.rope_embeddings = RotaryEmbedding(
-            theta=config.patcher_rope_theta,
-            head_dim=config.patcher_head_dim or config.patcher_dim // config.patcher_n_heads,
-            max_seqlen=config.patcher_max_seqlen,
-            rope_use_fp32_in_outer_product=config.patcher_rope_use_fp32_in_outer_product,
-        )
+        self.config.hidden_size = self.config.patcher_dim
+        self.config.n_heads = self.config.patcher_n_heads 
+        self.config.head_dim = 64 #self.config.patcher_head_dim #TODO: add
+
+        # Create a patcher-specific config copy to use patcher_rope_theta and simple rope
+        import copy
+        patcher_config = copy.deepcopy(config)
+        patcher_config.rope_theta = config.patcher_rope_theta
+        patcher_config.rope_scaling = {"rope_type": "default"}  # Use simple default rope for patcher
+        self.rotary_emb = BLTRotaryEmbedding(config=patcher_config)
 
         self.layers = nn.ModuleList()
         for _ in range(config.patcher_n_layers):
-            self.layers.append(
-                BLTTransformerLayer(
-                    {
-                        "dim": config.patcher_dim,
-                        "n_heads": config.patcher_n_heads,
-                        "head_dim": config.patcher_head_dim,
-                        "n_kv_heads": config.patcher_n_kv_heads,
-                        "rope_theta": config.patcher_rope_theta,
-                        "multiple_of": config.patcher_multiple_of,
-                        "ffn_dim_multiplier": config.patcher_ffn_dim_multiplier,
-                        "norm_eps": config.patcher_norm_eps,
-                    }
-                )
-            )
+            self.layers.append(BLTTransformerLayer(config.patcher_dim, config.patcher_n_heads, config))
 
         #assert config.patcher_vocab_size > 0
 
@@ -1425,21 +1454,21 @@ class BLTPatcher(BLTPreTrainedModel):
 
             # Process chunk: embeddings -> layers -> output
             bsz, seqlen = split.shape
-            h = self.tok_embeddings(split)
-            chunk_mask = create_causal_mask(
-                seqlen,
-                self.config.patcher_attn_impl ,
-                self.config.patcher_attn_bias_type,
-                sliding_window=self.config.patcher_sliding_window,
-                tokens=split,
-                eos_id=self.config.eos_id,
-            )
-            freq_cis = self.rope_embeddings(seqlen=seqlen, tok_idx=None)
+            input_embeds = self.tok_embeddings(split)
 
+            hidden_states = input_embeds
+
+
+            batch_size, seq_length, _ = input_embeds.shape
+
+            position_ids = torch.arange(split.shape[1], device=input_embeds.device).unsqueeze(0).expand(batch_size, -1)
+            
+            position_embeddings = self.rotary_emb(hidden_states, position_ids)  # = BLT self.rope
+            
             for i, layer in enumerate(self.layers):
-                h = layer(h, freq_cis, tok_idx=None, mask=chunk_mask, attn_impl=self.config.patcher_attn_impl )
+                hidden_states = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None) #, attn_impl=self.config.patcher_attn_impl )
 
-            pred = self.output(self.norm(h))
+            pred = self.output(self.norm(hidden_states))
             pred = pred.reshape(-1, pred.shape[-1])[: split.numel() - pad_size, :]  # [batch_size * seq_len, vocab]
             preds.append(pred)
             pred_entropies = self.entropy(pred)

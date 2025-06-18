@@ -3,7 +3,7 @@ import os
 
 import torch
 
-from transformers.models.blt_wip.modeling_blt import BLTModel
+from transformers.models.blt_wip.modeling_blt_modellike import BLTModel
 from transformers.models.blt_wip.tokenization_blt import BLTTokenizer
 
 
@@ -11,6 +11,9 @@ logger = logging.getLogger()
 
 os.environ["BLT_SUPPRESS_ATTN_ERROR"] = "1"
 
+import gc
+gc.collect()
+torch.cuda.empty_cache()
 
 def get_generation_range(prompt_tokens: list[list[int]] | None, max_gen_len: int) -> tuple[int, int]:
     batch_min_prompt_length = min([len(t) for t in prompt_tokens])
