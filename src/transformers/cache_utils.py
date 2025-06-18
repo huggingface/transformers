@@ -651,9 +651,7 @@ class DynamicCache(Cache):
 
 
 # Utilities for `DynamicCache` <> torch.export support
-def _flatten_dynamic_cache(
-    dynamic_cache: DynamicCache,
-):
+def _flatten_dynamic_cache(dynamic_cache: DynamicCache):
     """Flattens DynamicCache into flat list of tensors for `torch.export.export` to consume"""
     if not isinstance(dynamic_cache, DynamicCache):
         raise RuntimeError("This pytree flattening function should only be applied to DynamicCache")
@@ -682,7 +680,7 @@ def _flatten_with_keys_dynamic_cache(dynamic_cache: DynamicCache):
 def _unflatten_dynamic_cache(
     values,
     context: torch.utils._pytree.Context,
-):
+) -> DynamicCache:
     dictionary = torch.utils._pytree._dict_unflatten(values, context)
     cache = DynamicCache()
     for k, v in dictionary.items():
@@ -698,6 +696,43 @@ def _flatten_dynamic_cache_for_fx(cache, spec):
     return torch.utils._pytree.tree_flatten(dictionary)[0]
 
 
+# Utilities for `StaticCache` <> torch.export support
+def _flatten_static_cache(cache: StaticCache):
+    """Flattens DynamicCache into flat list of tensors for `torch.export.export` to consume"""
+    if not isinstance(cache, StaticCache):
+        raise RuntimeError("This pytree flattening function should only be applied to StaticCache")
+
+    if not is_torch_greater_or_equal_than_2_7:
+        logger.warning_once(
+            "StaticCache + torch.export is tested on torch 2.7.0+ and may not work on earlier versions."
+        )
+
+    dictionary = {
+        "key_cache": getattr(cache, "key_cache"),
+        "value_cache": getattr(cache, "value_cache"),
+    }
+    return torch.utils._pytree._dict_flatten(dictionary)
+
+
+def _flatten_with_keys_static_cache(cache: StaticCache):
+    dictionary = {
+        "key_cache": getattr(cache, "key_cache"),
+        "value_cache": getattr(cache, "value_cache"),
+    }
+    return torch.utils._pytree._dict_flatten_with_keys(dictionary)
+
+
+def _unflatten_static_cache(
+    values,
+    context: torch.utils._pytree.Context,
+) -> StaticCache:
+    dictionary = torch.utils._pytree._dict_unflatten(values, context)
+    cache = StaticCache()
+    for k, v in dictionary.items():
+        setattr(cache, k, v)
+    return cache
+
+
 if is_torch_greater_or_equal("2.3"):
     torch.utils._pytree.register_pytree_node(
         DynamicCache,
@@ -708,6 +743,15 @@ if is_torch_greater_or_equal("2.3"):
     )
     # TODO (tmanlaibaatar) This won't be needed in torch 2.7.
     torch.fx._pytree.register_pytree_flatten_spec(DynamicCache, _flatten_dynamic_cache_for_fx)
+
+if is_torch_greater_or_equal("2.7"):
+    torch.utils._pytree.register_pytree_node(
+        StaticCache,
+        _flatten_static_cache,
+        _unflatten_static_cache,
+        serialized_type_name=f"{StaticCache.__module__}.{StaticCache.__name__}",
+        flatten_with_keys_fn=_flatten_with_keys_static_cache,
+    )
 
 
 class OffloadedCache(DynamicCache):

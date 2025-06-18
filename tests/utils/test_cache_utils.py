@@ -194,6 +194,40 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(cached_keys.shape == (1, 1, 10, 128))
         self.assertTrue(cached_values.shape == (1, 1, 10, 128))
 
+    def test_unflatten_flatten_static_cache(self):
+
+        def make_static_cache(key_value_pairs):
+            class _config:
+                def __init__(self):
+                    self.head_dim = key_value_pairs[0][0].shape[-1]
+                    self.num_attention_heads = key_value_pairs[0][0].shape[1]
+                    self.num_hidden_layers = len(key_value_pairs)
+
+            cache = transformers.cache_utils.StaticCache(
+                _config(),
+                max_batch_size=key_value_pairs[0][0].shape[0],
+                device=key_value_pairs[0][0].device,
+                dtype=key_value_pairs[0][0].dtype,
+                max_cache_len=key_value_pairs[0][0].shape[2],
+            )
+            for i in range(len(key_value_pairs)):
+                cache.key_cache[i][:, :, :, :] = key_value_pairs[i][0]
+                cache.value_cache[i][:, :, :, :] = key_value_pairs[i][1]
+            return cache
+
+        cache = make_static_cache(
+            [
+                (torch.rand((4, 5, 6, 7)), torch.rand((4, 5, 6, 7))),
+                (torch.rand((4, 5, 6, 7)), torch.rand((4, 5, 6, 7))),
+                (torch.rand((4, 5, 6, 7)), torch.rand((4, 5, 6, 7))),
+            ]
+        )
+        flat, _spec = torch.utils._pytree.tree_flatten(cache)
+        self.assertIsInstance(flat, list)
+        self.assertEqual(len(flat), 6)
+        cache2 = torch.utils._pytree.tree_unflatten(flat, spec)
+        self.assertTrue(isinstance(cache2, StaticCache))
+
 
 def _skip_on_failed_cache_prerequisites(test, cache_implementation):
     """Function to skip tests on failed cache prerequisites, given a cache implementation"""
@@ -630,6 +664,8 @@ class CacheExportIntegrationTest(unittest.TestCase):
         """
         Tests that static cache works with `torch.export()`
         """
+        # TODO: Another test should be implemented to follow the same pattern
+        # as the one implemented for DynamicCache.
         if not is_torch_greater_or_equal("2.3"):
             self.skipTest(reason="This test requires torch >= 2.3 to run.")
 
