@@ -31,7 +31,7 @@ from enum import Enum
 from functools import lru_cache
 from itertools import chain
 from types import ModuleType
-from typing import Any, Dict, FrozenSet, List, Optional, Set, Tuple, Union
+from typing import Any, Optional, Union
 
 from packaging import version
 
@@ -42,7 +42,7 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
 # TODO: This doesn't work for all packages (`bs4`, `faiss`, etc.) Talk to Sylvain to see how to do with it better.
-def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[Tuple[bool, str], bool]:
+def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[tuple[bool, str], bool]:
     # Check if the package spec exists and grab its version to avoid importing a local directory
     package_exists = importlib.util.find_spec(pkg_name) is not None
     package_version = "N/A"
@@ -225,6 +225,7 @@ _triton_available = _is_package_available("triton")
 _spqr_available = _is_package_available("spqr_quant")
 _rich_available = _is_package_available("rich")
 _kernels_available = _is_package_available("kernels")
+_matplotlib_available = _is_package_available("matplotlib")
 
 _torch_version = "N/A"
 _torch_available = False
@@ -393,6 +394,13 @@ def get_torch_version():
     return _torch_version
 
 
+def get_torch_major_and_minor_version() -> str:
+    if _torch_version == "N/A":
+        return "N/A"
+    parsed_version = version.parse(_torch_version)
+    return str(parsed_version.major) + "." + str(parsed_version.minor)
+
+
 def is_torch_sdpa_available():
     if not is_torch_available():
         return False
@@ -473,6 +481,24 @@ def is_torch_cuda_available():
         import torch
 
         return torch.cuda.is_available()
+    else:
+        return False
+
+
+def is_cuda_platform():
+    if is_torch_available():
+        import torch
+
+        return torch.version.cuda is not None
+    else:
+        return False
+
+
+def is_rocm_platform():
+    if is_torch_available():
+        import torch
+
+        return torch.version.hip is not None
     else:
         return False
 
@@ -1418,6 +1444,10 @@ def is_rich_available():
     return _rich_available
 
 
+def is_matplotlib_available():
+    return _matplotlib_available
+
+
 def check_torch_load_is_safe():
     if not is_torch_greater_or_equal("2.6"):
         raise ValueError(
@@ -1899,8 +1929,8 @@ def is_torch_fx_proxy(x):
     return False
 
 
-BACKENDS_T = FrozenSet[str]
-IMPORT_STRUCTURE_T = Dict[BACKENDS_T, Dict[str, Set[str]]]
+BACKENDS_T = frozenset[str]
+IMPORT_STRUCTURE_T = dict[BACKENDS_T, dict[str, set[str]]]
 
 
 class _LazyModule(ModuleType):
@@ -1916,8 +1946,8 @@ class _LazyModule(ModuleType):
         module_file: str,
         import_structure: IMPORT_STRUCTURE_T,
         module_spec: Optional[importlib.machinery.ModuleSpec] = None,
-        extra_objects: Optional[Dict[str, object]] = None,
-        explicit_import_shortcut: Optional[Dict[str, List[str]]] = None,
+        extra_objects: Optional[dict[str, object]] = None,
+        explicit_import_shortcut: Optional[dict[str, list[str]]] = None,
     ):
         super().__init__(name)
 
@@ -2131,7 +2161,7 @@ class VersionComparison(Enum):
 
 
 @lru_cache()
-def split_package_version(package_version_str) -> Tuple[str, str, str]:
+def split_package_version(package_version_str) -> tuple[str, str, str]:
     pattern = r"([a-zA-Z0-9_-]+)([!<>=~]+)([0-9.]+)"
     match = re.match(pattern, package_version_str)
     if match:

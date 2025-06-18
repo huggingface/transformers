@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -73,8 +73,8 @@ class MimiOutput(ModelOutput):
 
     audio_codes: Optional[torch.LongTensor] = None
     audio_values: Optional[torch.FloatTensor] = None
-    encoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None
-    decoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None
+    encoder_past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None
+    decoder_past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None
 
 
 @dataclass
@@ -94,7 +94,7 @@ class MimiEncoderOutput(ModelOutput):
     """
 
     audio_codes: Optional[torch.LongTensor] = None
-    encoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None
+    encoder_past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None
 
 
 @dataclass
@@ -114,7 +114,7 @@ class MimiDecoderOutput(ModelOutput):
     """
 
     audio_values: Optional[torch.FloatTensor] = None
-    decoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None
+    decoder_past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None
 
 
 class MimiConv1d(nn.Module):
@@ -187,7 +187,7 @@ class MimiConv1d(nn.Module):
 
     @staticmethod
     # Copied from transformers.models.encodec.modeling_encodec.EncodecConv1d._pad1d
-    def _pad1d(hidden_states: torch.Tensor, paddings: Tuple[int, int], mode: str = "zero", value: float = 0.0):
+    def _pad1d(hidden_states: torch.Tensor, paddings: tuple[int, int], mode: str = "zero", value: float = 0.0):
         """Tiny wrapper around torch.nn.functional.pad, just to allow for reflect padding on small input.
         If this is the case, we insert extra 0 padding to the right before the reflection happens.
         """
@@ -310,7 +310,7 @@ class MimiResnetBlock(nn.Module):
     Residual block from SEANet model as used by Mimi.
     """
 
-    def __init__(self, config: MimiConfig, dim: int, dilations: List[int]):
+    def __init__(self, config: MimiConfig, dim: int, dilations: list[int]):
         super().__init__()
         kernel_sizes = (config.residual_kernel_size, 1)
         if len(kernel_sizes) != len(dilations):
@@ -377,7 +377,7 @@ class MimiEncoder(nn.Module):
 
 
 class MimiLayerScale(nn.Module):
-    """Layer scale from [Touvron et al 2021] (https://arxiv.org/pdf/2103.17239.pdf).
+    """Layer scale from [Touvron et al 2021] (https://huggingface.co/papers/2103.17239).
     This rescales diagonally the residual outputs close to 0, with a learnt scale.
     """
 
@@ -540,7 +540,7 @@ class MimiAttention(nn.Module):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)
@@ -616,7 +616,7 @@ class MimiFlashAttention2(MimiAttention):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         if isinstance(past_key_value, StaticCache):
             raise ValueError(
                 "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
@@ -722,7 +722,7 @@ class MimiSdpaAttention(MimiAttention):
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
             logger.warning_once(
@@ -822,7 +822,7 @@ class MimiTransformerLayer(nn.Module):
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -900,13 +900,13 @@ class MimiTransformerModel(nn.Module):
         hidden_states: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    ) -> Union[tuple, BaseModelOutputWithPast]:
         """
         Args:
             hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -926,7 +926,7 @@ class MimiTransformerModel(nn.Module):
                 `past_key_values`).
 
                 If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
-                and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+                and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
                 information on the default strategy.
 
                 - 1 indicates the head is **not masked**,
@@ -1517,9 +1517,9 @@ class MimiModel(MimiPreTrainedModel):
         input_values: torch.Tensor,
         num_quantizers: int,
         padding_mask: int,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
         return_dict: Optional[bool] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """
         Encodes the given input using the underlying VQVAE. The padding mask is required to compute the correct scale.
         """
@@ -1575,9 +1575,9 @@ class MimiModel(MimiPreTrainedModel):
         input_values: torch.Tensor,
         padding_mask: Optional[torch.Tensor] = None,
         num_quantizers: Optional[float] = None,
-        encoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        encoder_past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor, Optional[torch.Tensor]], MimiEncoderOutput]:
+    ) -> Union[tuple[torch.Tensor, Optional[torch.Tensor]], MimiEncoderOutput]:
         """
         Encodes the input audio waveform into discrete codes.
 
@@ -1639,7 +1639,7 @@ class MimiModel(MimiPreTrainedModel):
     def _decode_frame(
         self,
         codes: torch.Tensor,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
         return_dict: Optional[bool] = None,
     ) -> torch.Tensor:
         embeddings = self.quantizer.decode(codes)
@@ -1660,9 +1660,9 @@ class MimiModel(MimiPreTrainedModel):
         self,
         audio_codes: torch.Tensor,
         padding_mask: Optional[torch.Tensor] = None,
-        decoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        decoder_past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], MimiDecoderOutput]:
+    ) -> Union[tuple[torch.Tensor, torch.Tensor], MimiDecoderOutput]:
         """
         Decodes the given frames into an output audio waveform.
 
@@ -1711,10 +1711,10 @@ class MimiModel(MimiPreTrainedModel):
         padding_mask: Optional[torch.Tensor] = None,
         num_quantizers: Optional[int] = None,
         audio_codes: Optional[torch.Tensor] = None,
-        encoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
-        decoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        encoder_past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
+        decoder_past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], MimiOutput]:
+    ) -> Union[tuple[torch.Tensor, torch.Tensor], MimiOutput]:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
             Raw audio input converted to Float.

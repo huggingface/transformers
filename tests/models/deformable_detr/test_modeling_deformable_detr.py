@@ -590,32 +590,19 @@ class DeformableDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad:
-                    if param.requires_grad:
-                        if (
-                            "level_embed" in name
-                            or "sampling_offsets.bias" in name
-                            or "value_proj" in name
-                            or "output_proj" in name
-                            or "reference_points" in name
-                        ):
-                            continue
+                    if (
+                        "level_embed" in name
+                        or "sampling_offsets.bias" in name
+                        or "value_proj" in name
+                        or "output_proj" in name
+                        or "reference_points" in name
+                    ):
+                        continue
                     self.assertIn(
                         ((param.data.mean() * 1e9).round() / 1e9).item(),
                         [0.0, 1.0],
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
-
-    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
-    def test_save_load_low_cpu_mem_usage(self):
-        pass
-
-    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
-    def test_save_load_low_cpu_mem_usage_checkpoints(self):
-        pass
-
-    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
-    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
-        pass
 
     def test_two_stage_training(self):
         model_class = DeformableDetrForObjectDetection

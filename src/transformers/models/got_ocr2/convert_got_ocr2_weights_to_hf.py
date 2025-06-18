@@ -16,7 +16,7 @@ import argparse
 import gc
 import glob
 import os
-from typing import List, Optional
+from typing import Optional
 
 import regex as re
 import torch
@@ -161,7 +161,7 @@ class GotOcr2Converter(TikTokenConverter):
     def __init__(
         self,
         vocab_file,
-        special_tokens: List[str],
+        special_tokens: list[str],
         pattern: str,
         model_max_length: int,
         chat_template: Optional[str] = None,

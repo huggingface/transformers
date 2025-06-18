@@ -138,7 +138,11 @@ class QAPipelineTests(unittest.TestCase):
             question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris.", top_k=20
         )
         self.assertEqual(
-            outputs, [{"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)} for i in range(20)]
+            outputs,
+            [
+                {"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)}
+                for i in range(len(outputs))
+            ],
         )
         for single_output in outputs:
             compare_pipeline_output_to_hub_spec(single_output, QuestionAnsweringOutputElement)
@@ -278,6 +282,19 @@ class QAPipelineTests(unittest.TestCase):
             context="""London is the capital and largest city of England and the United Kingdom. It stands on the River Thames in south-east England at the head of a 50-mile (80 km) estuary down to the North Sea, and has been a major settlement for two millennia. The City of London, its ancient core and financial centre, was founded by the Romans as Londinium and retains boundaries close to its medieval ones. Since the 19th century, \"London\" has also referred to the metropolis around this core, historically split between the counties of Middlesex, Essex, Surrey, Kent, and Hertfordshire, which largely comprises Greater London, governed by the Greater London Authority. The City of Westminster, to the west of the City of London, has for centuries held the national government and parliament. As one of the world's global cities, London exerts strong influence on its arts, commerce, education, entertainment, fashion, finance, health care, media, tourism, and communications, and has sometimes been called the capital of the world. Its GDP (€801.66 billion in 2017) makes it the biggest urban economy in Europe, and it is one of the major financial centres in the world. In 2019 it had the second-highest number of ultra high-net-worth individuals in Europe after Paris and the second-highest number of billionaires in Europe after Moscow. As of 2021, London has the most millionaires of any city. With Europe's largest concentration of higher education institutions, it includes Imperial College London in natural and applied sciences, the London School of Economics in social sciences, and the comprehensive University College London. The city is home to the most 5-star hotels of any city in the world. In 2012, London became the first city to host three Summer Olympic Games. London is the capital and largest city of England and the United Kingdom. It stands on the River Thames in south-east England at the head of a 50-mile (80 km) estuary down to the North Sea, and has been a major settlement for two millennia. The City of London, its ancient core and financial centre, was founded by the Romans as Londinium and retains boundaries close to its medieval ones. Since the 19th century, \"London\" has also referred to the metropolis around this core, historically split between the counties of Middlesex, Essex, Surrey, Kent, and Hertfordshire, which largely comprises Greater London, governed by the Greater London Authority. The City of Westminster, to the west of the City of London, has for centuries held the national government and parliament. As one of the world's global cities, London exerts strong influence on its arts, commerce, education, entertainment, fashion, finance, health care, media, tourism, and communications, and has sometimes been called the capital of the world. Its GDP (€801.66 billion in 2017) makes it the biggest urban economy in Europe, and it is one of the major financial centres in the world. In 2019 it had the second-highest number of ultra high-net-worth individuals in Europe after Paris and the second-highest number of billionaires in Europe after Moscow. As of 2021, London has the most millionaires of any city. With Europe's largest concentration of higher education institutions, it includes Imperial College London in natural and applied sciences, the London School of Economics in social sciences, and the comprehensive University College London. The city is home to the most 5-star hotels of any city in the world. In 2012, London became the first city to host three Summer Olympic Games.""",
         )
         self.assertEqual(nested_simplify(outputs), {"score": 0.988, "start": 0, "end": 0, "answer": ""})
+
+    @require_torch
+    def test_duplicate_handling(self):
+        question_answerer = pipeline("question-answering", model="deepset/tinyroberta-squad2")
+
+        outputs = question_answerer(
+            question="Who is the chancellor of Germany?",
+            context="Angela Merkel was the chancellor of Germany.",
+            top_k=10,
+        )
+
+        answers = [output["answer"] for output in outputs]
+        self.assertEqual(len(answers), len(set(answers)), "There are duplicate answers in the outputs.")
 
     @require_tf
     def test_small_model_tf(self):
