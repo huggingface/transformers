@@ -345,7 +345,7 @@ class DiaProcessor(ProcessorMixin):
 
     @staticmethod
     def apply_audio_delay(
-        audio: torch.Tensor,
+        audio: "torch.Tensor",
         pad_token_id: int,
         bos_token_id: int,
         precomputed_idx: tuple["torch.Tensor", "torch.Tensor"],
