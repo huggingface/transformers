@@ -16,7 +16,7 @@
 
 from collections import OrderedDict
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
@@ -74,9 +74,9 @@ class LongformerConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        attention_window (`int` or `List[int]`, *optional*, defaults to 512):
+        attention_window (`int` or `list[int]`, *optional*, defaults to 512):
             Size of an attention window around each token. If an `int`, use the same size for all layers. To specify a
-            different window size for each layer, use a `List[int]` where `len(attention_window) == num_hidden_layers`.
+            different window size for each layer, use a `list[int]` where `len(attention_window) == num_hidden_layers`.
 
     Example:
 
@@ -97,7 +97,7 @@ class LongformerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        attention_window: Union[List[int], int] = 512,
+        attention_window: Union[list[int], int] = 512,
         sep_token_id: int = 2,
         pad_token_id: int = 1,
         bos_token_id: int = 0,
@@ -141,7 +141,7 @@ class LongformerConfig(PretrainedConfig):
 
 class LongformerOnnxConfig(OnnxConfig):
     def __init__(
-        self, config: "PretrainedConfig", task: str = "default", patching_specs: "Optional[List[PatchingSpec]]" = None
+        self, config: "PretrainedConfig", task: str = "default", patching_specs: "Optional[list[PatchingSpec]]" = None
     ):
         super().__init__(config, task, patching_specs)
         config.onnx_export = True
