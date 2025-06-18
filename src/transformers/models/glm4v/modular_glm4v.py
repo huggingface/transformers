@@ -68,17 +68,15 @@ class Glm4vVisionConfig(PretrainedConfig):
     GLM-4.1V-9B-Thinking [THUDM/GLM-4.1V-9B-Thinking](https://huggingface.co/THUDM/GLM-4.1V-9B-Thinking).
 
     Args:
-        hidden_size (`int`, *optional*, defaults to 1024):
+        hidden_size (`int`, *optional*, defaults to 1536):
             Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 24):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer encoder.
+        depth (`int`, *optional*, defaults to 24):
+            Number of layers (depth) in the model.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to add a bias to the queries, keys and values.
-        intermediate_size (`int`, *optional*, defaults to 4096):
+        intermediate_size (`int`, *optional*, defaults to 13696):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+        hidden_act (`str` or `function`, *optional*, defaults to `"selu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
@@ -89,15 +87,20 @@ class Glm4vVisionConfig(PretrainedConfig):
             Dropout probability for the projection layer.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        image_size (`int` or `list[int]`, *optional*, defaults to `[448, 448]`):
+        image_size (`int` or `list[int]`, *optional*, defaults to `[336, 336]`):
             The size (resolution) of each image.
-        patch_size (`int` or `list[int]`, *optional*, defaults to `[14, 14]`):
+        patch_size (`int`, *optional*, defaults to `14`):
             The size (resolution) of each patch.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-
+        out_hidden_size (`int`, *optional*, defaults to 4096):
+            The output hidden size of the vision model.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon used by the rms normalization layers.
+        spatial_merge_size (`int`, *optional*, defaults to 2):
+            The size used for merging spatial dimensions.
+        temporal_patch_size (`int`, *optional*, defaults to 2):
+            The size used for patches along the temporal dimension.
     Example:
 
     ```python

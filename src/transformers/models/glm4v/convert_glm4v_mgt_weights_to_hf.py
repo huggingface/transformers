@@ -565,7 +565,6 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         vision_num_layers=vision_num_layers,
     )
 
-    # Save configuration file
     hf_config = {
         "architectures": ["Glm4vForConditionalGeneration"],
         "model_type": "glm4v",
@@ -573,8 +572,10 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         "attention_dropout": 0.0,
         "pad_token_id": model_config.get("pad_token_id", 151329),
         "eos_token_id": model_config.get("eos_token_id", [151329, 151336, 151338]),
-        "vision_start_token_id": model_config.get("vision_start_token_id", 151341),
-        "vision_end_token_id": model_config.get("vision_end_token_id", 151342),
+        "image_start_token_id": model_config.get("image_start_token_id", 151339),
+        "image_end_token_id": model_config.get("image_end_token_id", 151340),
+        "video_start_token_id": model_config.get("video_start_token_id", 151341),
+        "video_end_token_id": model_config.get("video_end_token_id", 151342),
         "image_token_id": model_config.get("image_token_id", 151343),
         "video_token_id": model_config.get("video_token_id", 151344),
         "hidden_act": model_config.get("hidden_act", "silu"),
@@ -599,16 +600,18 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
 
     if "vision_config" in model_config:
         vision_config = {
-            "image_size": model_config["vision_config"].get("image_size", 336),
-            "depth": model_config["vision_config"].get("num_layers", 24),
-            "out_hidden_size": model_config.get("hidden_size", 4096),
-            "hidden_act": model_config["vision_config"].get("hidden_act", "silu"),
-            "rms_norm_eps": model_config["vision_config"].get("layernorm_epsilon", 1e-05),
-            "num_heads": model_config["vision_config"].get("num_attention_heads", 12),
-            "in_chans": 3,
             "hidden_size": model_config["vision_config"].get("hidden_size", 1536),
+            "depth": model_config["vision_config"].get("num_layers", 24),
+            "num_heads": model_config["vision_config"].get("num_attention_heads", 12),
+            "attention_bias": model_config["vision_config"].get("attention_bias", False),
             "intermediate_size": model_config.get("ffn_hidden_size", 13696),
+            "hidden_act": model_config["vision_config"].get("hidden_act", "silu"),
+            "hidden_dropout_prob": model_config["vision_config"].get("hidden_dropout_prob", 0.0),
+            "initializer_range": 0.02,
+            "image_size": model_config["vision_config"].get("image_size", 336),
             "patch_size": model_config["vision_config"].get("patch_size", 14),
+            "out_hidden_size": model_config.get("hidden_size", 4096),
+            "rms_norm_eps": model_config["vision_config"].get("layernorm_epsilon", 1e-05),
             "spatial_merge_size": model_config["vision_config"].get("downsample_ratio", 2),
             "temporal_patch_size": model_config["vision_config"].get("patch_size", 1),
         }
