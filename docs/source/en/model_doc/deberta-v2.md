@@ -14,58 +14,83 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# DeBERTa-v2
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+           <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white" >
+           <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
+    </div>
 </div>
 
-## Overview
 
-The DeBERTa model was proposed in [DeBERTa: Decoding-enhanced BERT with Disentangled Attention](https://huggingface.co/papers/2006.03654) by Pengcheng He, Xiaodong Liu, Jianfeng Gao, Weizhu Chen It is based on Google's
-BERT model released in 2018 and Facebook's RoBERTa model released in 2019.
+# DeBERTa-v2
 
-It builds on RoBERTa with disentangled attention and enhanced mask decoder training with half of the data used in
-RoBERTa.
+[DeBERTa-v2](https://huggingface.co/papers/2006.03654) is an advanced language model that builds on the original DeBERTa architecture, which itself is an evolution of BERT and RoBERTa. What makes DeBERTa-v2 special is its unique way of handling the meaning and position of words separately, using a disentangled attention mechanism—this helps it better understand context and relationships in language. The v2 version introduces a new, larger vocabulary, a sentencepiece-based tokenizer, nGram Induced Input Encoding (nGiE) for better local dependency learning, and more efficient parameter sharing in the attention layers. It also comes in larger sizes (900M and 1.5B parameters), which means it can tackle even more complex language tasks with higher accuracy.
 
-The abstract from the paper is the following:
-
-*Recent progress in pre-trained neural language models has significantly improved the performance of many natural
-language processing (NLP) tasks. In this paper we propose a new model architecture DeBERTa (Decoding-enhanced BERT with
-disentangled attention) that improves the BERT and RoBERTa models using two novel techniques. The first is the
-disentangled attention mechanism, where each word is represented using two vectors that encode its content and
-position, respectively, and the attention weights among words are computed using disentangled matrices on their
-contents and relative positions. Second, an enhanced mask decoder is used to replace the output softmax layer to
-predict the masked tokens for model pretraining. We show that these two techniques significantly improve the efficiency
-of model pretraining and performance of downstream tasks. Compared to RoBERTa-Large, a DeBERTa model trained on half of
-the training data performs consistently better on a wide range of NLP tasks, achieving improvements on MNLI by +0.9%
-(90.2% vs. 91.1%), on SQuAD v2.0 by +2.3% (88.4% vs. 90.7%) and RACE by +3.6% (83.2% vs. 86.8%). The DeBERTa code and
-pre-trained models will be made publicly available at https://github.com/microsoft/DeBERTa.*
+You can find all the original [DeBERTa-v2] checkpoints under the [DeBERTa-v2](https://huggingface.co/microsoft?search_models=deberta-v2) collection.
 
 
-The following information is visible directly on the [original implementation
-repository](https://github.com/microsoft/DeBERTa). DeBERTa v2 is the second version of the DeBERTa model. It includes
-the 1.5B model used for the SuperGLUE single-model submission and achieving 89.9, versus human baseline 89.8. You can
-find more details about this submission in the authors'
-[blog](https://www.microsoft.com/en-us/research/blog/microsoft-deberta-surpasses-human-performance-on-the-superglue-benchmark/)
+> [!TIP]
+> Click on the [DeBERTa-v2] models in the right sidebar for more examples of how to apply [DeBERTa-v2] to different text classification, token classification, question answering, and multiple choice tasks.
 
-New in v2:
+The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
 
-- **Vocabulary** In v2 the tokenizer is changed to use a new vocabulary of size 128K built from the training data.
-  Instead of a GPT2-based tokenizer, the tokenizer is now
-  [sentencepiece-based](https://github.com/google/sentencepiece) tokenizer.
-- **nGiE(nGram Induced Input Encoding)** The DeBERTa-v2 model uses an additional convolution layer aside with the first
-  transformer layer to better learn the local dependency of input tokens.
-- **Sharing position projection matrix with content projection matrix in attention layer** Based on previous
-  experiments, this can save parameters without affecting the performance.
-- **Apply bucket to encode relative positions** The DeBERTa-v2 model uses log bucket to encode relative positions
-  similar to T5.
-- **900M model & 1.5B model** Two additional model sizes are available: 900M and 1.5B, which significantly improves the
-  performance of downstream tasks.
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-This model was contributed by [DeBERTa](https://huggingface.co/DeBERTa). This model TF 2.0 implementation was
-contributed by [kamalkraj](https://huggingface.co/kamalkraj). The original code can be found [here](https://github.com/microsoft/DeBERTa).
+```py
+import torch
+from transformers import pipeline
+
+# Example: Text classification with DeBERTa-v2
+classifier = pipeline(
+    task="text-classification",
+    model="microsoft/deberta-v2-xlarge",
+    device=0,
+    torch_dtype=torch.float16
+)
+result = classifier("DeBERTa-v2 is great at understanding context!")
+print(result)
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```py
+from transformers import AutoTokenizer, AutoModel
+
+tokenizer = AutoTokenizer.from_pretrained("microsoft/deberta-v2-xlarge")
+model = AutoModel.from_pretrained(
+    pretrained_model_name_or_path="microsoft/deberta-v2-xlarge",
+    device_map=None
+)
+
+inputs = tokenizer("DeBERTa-v2 is great at understanding context!", return_tensors="pt")
+outputs = model(**inputs)
+print(outputs.last_hidden_state)
+
+```
+
+</hfoption>
+
+<hfoption id="transformers-cli">
+
+```bash
+echo -e "Plants create [MASK] through a process known as photosynthesis." | transformers run --task fill-mask --model microsoft/deberta-v2-xlarge --device 0
+```
+</hfoption>
+</hfoptions>
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+
+The example below uses [bitsandbytes quantization](https://huggingface.co/docs/transformers/main/en/main_classes/quantization) to only quantize the weights to 8-bit.
+
+## Notes
+
+- DeBERTa-v2 introduces a sentencepiece-based tokenizer and a larger vocabulary (128K tokens), improving its ability to handle diverse text.
+- The nGiE (nGram Induced Input Encoding) layer helps the model better capture local dependencies in text.
+- Parameter sharing in the attention layer reduces model size without sacrificing performance.
+- Relative position encoding uses log buckets, similar to T5, for more efficient handling of long sequences.
+- Larger model sizes (900M and 1.5B parameters) are available, providing improved performance on downstream tasks but requiring significantly more computational resources.
 
 ## Resources
 
