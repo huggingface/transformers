@@ -665,7 +665,7 @@ class CacheExportIntegrationTest(unittest.TestCase):
         past_key_values = res.past_key_values
 
         shapes = torch.export.ShapesCollection()
-        dyn = torch.export.Dim("seq")
+        dyn = torch.export.Dim("seq", max=512)
 
         for ix in range(len(past_key_values.key_cache)):
             shapes[past_key_values.key_cache[ix]] = (None, None, dyn, None)
@@ -716,8 +716,6 @@ class CacheExportIntegrationTest(unittest.TestCase):
         for v1, v2 in zip(res_export_2.past_key_values.value_cache, res_eager_2.past_key_values.value_cache):
             self.assertTrue(torch.allclose(v1, v2))
 
-    @slow
-    @require_read_token
     def test_static_cache_exportability(self):
         """
         Tests that static cache works with `torch.export()`
