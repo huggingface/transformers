@@ -69,7 +69,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 </hfoption>
 
-<hfoption id="transformers CLI">
+<hfoption id="transformers-cli">
 ```bash
 echo "Plants create energy through a process known as" | transformers run --task text-generation --model ibm-ai-platform/Bamba-9B-v2 --device 0
 ```
@@ -78,14 +78,24 @@ echo "Plants create energy through a process known as" | transformers run --task
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
-The example below uses [FP8 quantization with FMS Model Optimizer](https://github.com/foundation-model-stack/fms-model-optimizer/) to reduce model size from 39.12 GB to 10.83 GB.
+The example below uses [INT4 quantization with TorchAO](https://github.com/pytorch/ao) (via Hugging Face Transformers) to reduce model size significantly.
 
-```bash
-python -m fms_mo.run_quant \
---model_name_or_path <"path_to_original_model"> \
---quant_method fp8 \
---torch_dtype bfloat16 \
---output_dir <"path_to_save_new_model">
+```python
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
+
+quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
+tokenizer = AutoTokenizer.from_pretrained("ibm-ai-platform/Bamba-9B-v2")
+model = AutoModelForCausalLM.from_pretrained(
+   "ibm-ai-platform/Bamba-9B-v2",
+   quantization_config=quantization_config,
+   device_map="auto",
+   attn_implementation="sdpa"
+)
+
+inputs = tokenizer("Plants create energy through a process known as", return_tensors="pt").to("cuda")
+output = model.generate(**inputs)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 ## Notes
@@ -117,10 +127,8 @@ python -m fms_mo.run_quant \
 
 ## BambaConfig
 
-
 [[autodoc]] BambaConfig
 
 ## BambaForCausalLM
 
 [[autodoc]] BambaForCausalLM - forward
-
