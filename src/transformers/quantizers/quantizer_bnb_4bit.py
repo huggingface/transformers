@@ -363,3 +363,8 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             model, self.modules_to_not_convert, quantization_config=self.quantization_config
         )
         return model
+
+    def is_compileable(self) -> bool:
+        # Compatible with PyTorch 2.4+ for fullgraph=False.
+        # Requires PyTorch 2.8 nightly for fullgraph=True.
+        return version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.46.0")
