@@ -13,15 +13,12 @@
 # limitations under the License.
 """Testing suite for the PyTorch Qwen3MoE model."""
 
-import copy
-import gc
 import unittest
 
 import pytest
 
 from transformers import AutoTokenizer, Qwen3MoeConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
-    backend_empty_cache,
     cleanup,
     require_bitsandbytes,
     require_flash_attn,
