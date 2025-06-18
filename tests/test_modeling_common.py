@@ -84,6 +84,7 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_deepspeed,
     require_flash_attn,
+    require_non_hpu,
     require_safetensors,
     require_torch,
     require_torch_accelerator,
@@ -2798,6 +2799,7 @@ class ModelTesterMixin:
                     else:
                         torch.testing.assert_close(base_output[0], new_output[0], rtol=1e-5, atol=1e-5)
 
+    @require_non_hpu
     @require_accelerate
     @mark.accelerate_tests
     @require_torch_multi_accelerator
