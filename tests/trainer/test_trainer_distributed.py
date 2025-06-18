@@ -22,6 +22,7 @@ from transformers.testing_utils import (
     execute_subprocess_async,
     get_torch_dist_unique_port,
     require_torch_multi_accelerator,
+    run_first,
     torch_device,
 )
 from transformers.training_args import ParallelMode
@@ -116,6 +117,7 @@ if is_torch_available():
 
 
 class TestTrainerDistributed(TestCasePlus):
+    @run_first
     @require_torch_multi_accelerator
     def test_trainer(self):
         distributed_args = f"""--nproc_per_node={backend_device_count(torch_device)}
