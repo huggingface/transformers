@@ -78,9 +78,7 @@ if is_torch_available():
         "offloaded_hybrid_chunked": OffloadedHybridCache,
     }
     QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
-    ALL_CACHE_IMPLEMENTATIONS = (
-        list(NEED_SETUP_CACHE_CLASSES_MAPPING.keys()) + ["offloaded", "dynamic", "quantized"]
-    )
+    ALL_CACHE_IMPLEMENTATIONS = list(NEED_SETUP_CACHE_CLASSES_MAPPING.keys()) + ["offloaded", "dynamic", "quantized"]
 
 
 class GenerationMode(ExplicitEnum):
