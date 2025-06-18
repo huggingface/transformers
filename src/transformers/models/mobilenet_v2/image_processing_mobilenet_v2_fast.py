@@ -170,6 +170,11 @@ class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
 
         kwargs["do_normalize"] = False
         kwargs["do_rescale"] = False
+        kwargs["interpolation"] = (
+            pil_torch_interpolation_mapping[PILImageResampling.NEAREST]
+            if PILImageResampling.NEAREST in pil_torch_interpolation_mapping
+            else kwargs.get("interpolation")
+        )
         kwargs["input_data_format"] = ChannelDimension.FIRST
         processed_segmentation_maps = self._preprocess(images=processed_segmentation_maps, **kwargs)
 
