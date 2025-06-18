@@ -195,7 +195,6 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(cached_values.shape == (1, 1, 10, 128))
 
     def test_unflatten_flatten_static_cache(self):
-
         def make_static_cache(key_value_pairs):
             class _config:
                 def __init__(self):
