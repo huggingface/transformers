@@ -485,7 +485,7 @@ def read_video_torchcodec(
 
     decoder = VideoDecoder(
         video_path,
-        dimension_order="NCHW",
+        dimension_order="NHWC",  # to be consistent with other decoders
         # Interestingly `exact` mode takes less than approximate when we load the whole video
         seek_mode="exact",
     )

@@ -775,6 +775,8 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             `dict[str, Any]`: Dictionary of all the attributes that make up this video processor instance.
         """
         output = copy.deepcopy(self.__dict__)
+        output.pop("model_valid_processing_keys", None)
+        output.pop("_valid_kwargs_names", None)
         output["video_processor_type"] = self.__class__.__name__
 
         return output
