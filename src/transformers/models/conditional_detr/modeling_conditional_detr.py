@@ -1418,7 +1418,6 @@ class ConditionalDetrModel(ConditionalDetrPreTrainedModel):
         encoder_outputs: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.FloatTensor], ConditionalDetrModelOutput]:
         r"""
