@@ -4,4 +4,4 @@ require 'stripe'
 
 Stripe.api_key = ENV['STRIPE_SECRET_KEY'] || 'sk_test_dummy'
 Stripe.max_network_retries = 2
-Stripe.api_version = '2020-08-27'
+Stripe.api_version = '2024-11-20'
