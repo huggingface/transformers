@@ -78,7 +78,7 @@ echo "Plants create energy through a process known as" | transformers-cli run --
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
-The example below uses [INT4 quantization with TorchAO](https://github.com/pytorch/ao) (via Hugging Face Transformers) to reduce model size significantly.
+The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
 
 ```python
 import torch
