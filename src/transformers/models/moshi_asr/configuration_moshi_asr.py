@@ -110,7 +110,7 @@ class MoshiAsrConfig(PretrainedConfig):
         ffn_dim=11264,
         rms_norm_eps=1e-8,
         num_codebooks=32,
-        frame_size=1920, 
+        frame_size=1920,
         audio_bos_token_id=2048,
         audio_pad_token_id=69569,
         tie_word_embeddings=False,

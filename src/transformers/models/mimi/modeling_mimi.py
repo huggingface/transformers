@@ -23,24 +23,18 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
+from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...masking_utils import create_causal_mask
-from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, is_torch_flex_attn_available, logging
+from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_mimi import MimiConfig
 
 
 if is_flash_attn_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
-
-if is_torch_flex_attn_available():
-    from torch.nn.attention.flex_attention import BlockMask
-
-    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
@@ -283,7 +277,9 @@ class MimiConv1d(nn.Module):
 
         if self.causal and padding_cache is not None:
             layer_padding_cache = padding_cache.update(
-                hidden_states[:, :, -self.padding_total :] if self.padding_total > 0 else torch.tensor([], dtype=hidden_states.dtype, device=hidden_states.device),
+                hidden_states[:, :, -self.padding_total :]
+                if self.padding_total > 0
+                else torch.tensor([], dtype=hidden_states.dtype, device=hidden_states.device),
                 self.layer_idx,
             )
 

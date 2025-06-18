@@ -24,10 +24,10 @@ from transformers import MoshiAsrConfig, MoshiAsrForConditionalGeneration, Moshi
 from transformers.testing_utils import (
     cleanup,
     require_torch,
+    require_torch_accelerator,
     require_torch_sdpa,
     slow,
     torch_device,
-    require_torch_accelerator,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
