@@ -312,6 +312,7 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
     def test_model_is_small(self):
         pass
 
+
 @require_torch
 class Qwen2VLIntegrationTest(unittest.TestCase):
     def setUp(self):
