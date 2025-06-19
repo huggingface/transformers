@@ -31,10 +31,10 @@ import sys
 import tempfile
 import time
 import warnings
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Iterator, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 
 # Integrations must be imported before ML frameworks:
@@ -526,12 +526,15 @@ class Trainer:
             if is_liger_kernel_available():
                 from liger_kernel.transformers import _apply_liger_kernel_to_instance
 
+                # Prepare kernel config - use provided config or default (empty dict for default behavior)
+                kernel_config = self.args.liger_kernel_config if self.args.liger_kernel_config is not None else {}
+
                 if isinstance(model, PreTrainedModel):
-                    # Patch the model with liger kernels. Use the default kernel configurations.
-                    _apply_liger_kernel_to_instance(model=model)
+                    # Patch the model with liger kernels. Use the the specified or default kernel configurations.
+                    _apply_liger_kernel_to_instance(model=model, **kernel_config)
                 elif hasattr(model, "get_base_model") and isinstance(model.get_base_model(), PreTrainedModel):
-                    # Patch the base model with liger kernels where model is a PeftModel. Use the default kernel configurations.
-                    _apply_liger_kernel_to_instance(model=model.get_base_model())
+                    # Patch the base model with liger kernels where model is a PeftModel. Use the specified or default kernel configurations.
+                    _apply_liger_kernel_to_instance(model=model.get_base_model(), **kernel_config)
                 else:
                     logger.warning(
                         "The model is not an instance of PreTrainedModel. No liger kernels will be applied."
@@ -3938,7 +3941,7 @@ class Trainer:
 
         # Push to the Hub when `save_model` is called by the user.
         if self.args.push_to_hub and not _internal_call:
-            self.push_to_hub(commit_message="Model save")
+            self.push_to_hub(commit_message="Model save", revision=self.args.hub_revision)
 
     def _save_tpu(self, output_dir: Optional[str] = None):
         output_dir = output_dir if output_dir is not None else self.args.output_dir
@@ -4788,6 +4791,7 @@ class Trainer:
             token=self.args.hub_token,
             run_as_future=True,
             ignore_patterns=["_*", f"{PREFIX_CHECKPOINT_DIR}-*"],
+            revision=self.args.hub_revision,
         )
 
         push_jobs = [model_push_job]
@@ -4803,6 +4807,7 @@ class Trainer:
                 commit_message=commit_message + ", checkpoint",
                 token=self.args.hub_token,
                 run_as_future=True,
+                revision=self.args.hub_revision,
             )
             push_jobs.append(checkpoint_push)
 
@@ -4882,8 +4887,12 @@ class Trainer:
 
         self.create_model_card(model_name=model_name, **kwargs)
 
+        if revision is None:
+            revision = self.args.hub_revision
+
         # Wait for the current upload to be finished.
         self._finish_current_push()
+
         return upload_folder(
             repo_id=self.hub_model_id,
             folder_path=self.args.output_dir,

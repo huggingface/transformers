@@ -1355,8 +1355,8 @@ class OneFormerPixelDecoder(nn.Module):
                 nn.GroupNorm(32, config.conv_dim),
                 nn.ReLU(),
             )
-            self.add_module("adapter_{}".format(idx + 1), lateral_conv)
-            self.add_module("layer_{}".format(idx + 1), output_conv)
+            self.add_module(f"adapter_{idx + 1}", lateral_conv)
+            self.add_module(f"layer_{idx + 1}", output_conv)
 
             lateral_convs.append(lateral_conv)
             output_convs.append(output_conv)

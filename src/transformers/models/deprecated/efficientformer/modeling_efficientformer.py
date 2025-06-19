@@ -270,7 +270,7 @@ class EfficientFormerDropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
 class EfficientFormerFlat(nn.Module):
@@ -303,8 +303,8 @@ class EfficientFormerMeta3D(nn.Module):
         self.drop_path = EfficientFormerDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.use_layer_scale = config.use_layer_scale
         if config.use_layer_scale:
-            self.layer_scale_1 = nn.Parameter(config.layer_scale_init_value * torch.ones((dim)), requires_grad=True)
-            self.layer_scale_2 = nn.Parameter(config.layer_scale_init_value * torch.ones((dim)), requires_grad=True)
+            self.layer_scale_1 = nn.Parameter(config.layer_scale_init_value * torch.ones(dim), requires_grad=True)
+            self.layer_scale_2 = nn.Parameter(config.layer_scale_init_value * torch.ones(dim), requires_grad=True)
 
     def forward(self, hidden_states: torch.Tensor, output_attentions: bool = False) -> tuple[torch.Tensor]:
         self_attention_outputs = self.token_mixer(self.layernorm1(hidden_states), output_attentions)
@@ -370,8 +370,8 @@ class EfficientFormerMeta4D(nn.Module):
         self.drop_path = EfficientFormerDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.use_layer_scale = config.use_layer_scale
         if config.use_layer_scale:
-            self.layer_scale_1 = nn.Parameter(config.layer_scale_init_value * torch.ones((dim)), requires_grad=True)
-            self.layer_scale_2 = nn.Parameter(config.layer_scale_init_value * torch.ones((dim)), requires_grad=True)
+            self.layer_scale_1 = nn.Parameter(config.layer_scale_init_value * torch.ones(dim), requires_grad=True)
+            self.layer_scale_2 = nn.Parameter(config.layer_scale_init_value * torch.ones(dim), requires_grad=True)
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor]:
         outputs = self.token_mixer(hidden_states)

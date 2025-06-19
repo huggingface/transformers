@@ -90,7 +90,7 @@ class Data2VecVisionDropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
 # Copied from transformers.models.beit.modeling_beit.BeitEmbeddings with Beit->Data2VecVision
@@ -504,8 +504,8 @@ class Data2VecVisionLayer(nn.Module):
 
         init_values = config.layer_scale_init_value
         if init_values > 0:
-            self.lambda_1 = nn.Parameter(init_values * torch.ones((config.hidden_size)), requires_grad=True)
-            self.lambda_2 = nn.Parameter(init_values * torch.ones((config.hidden_size)), requires_grad=True)
+            self.lambda_1 = nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True)
+            self.lambda_2 = nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True)
         else:
             self.lambda_1, self.lambda_2 = None, None
 

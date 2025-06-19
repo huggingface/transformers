@@ -336,7 +336,7 @@ def gen_sine_position_embeddings(pos_tensor, hidden_size=256):
 
         pos = torch.cat((pos_y, pos_x, pos_w, pos_h), dim=2)
     else:
-        raise ValueError("Unknown pos_tensor shape(-1):{}".format(pos_tensor.size(-1)))
+        raise ValueError(f"Unknown pos_tensor shape(-1):{pos_tensor.size(-1)}")
     return pos
 
 
@@ -1206,7 +1206,7 @@ class DabDetrModel(DabDetrPreTrainedModel):
 
         self.num_patterns = config.num_patterns
         if not isinstance(self.num_patterns, int):
-            logger.warning("num_patterns should be int but {}".format(type(self.num_patterns)))
+            logger.warning(f"num_patterns should be int but {type(self.num_patterns)}")
             self.num_patterns = 0
         if self.num_patterns > 0:
             self.patterns = nn.Embedding(self.num_patterns, self.hidden_size)

@@ -1433,21 +1433,19 @@ class SamModel(SamPreTrainedModel):
         if input_points is not None and len(input_points.shape) != 4:
             raise ValueError(
                 "The input_points must be a 4D tensor. Of shape `batch_size`, `point_batch_size`, `nb_points_per_image`, `2`.",
-                " got {}.".format(input_points.shape),
+                f" got {input_points.shape}.",
             )
         if input_boxes is not None and len(input_boxes.shape) != 3:
             raise ValueError(
                 "The input_points must be a 3D tensor. Of shape `batch_size`, `nb_boxes`, `4`.",
-                " got {}.".format(input_boxes.shape),
+                f" got {input_boxes.shape}.",
             )
         if input_points is not None and input_boxes is not None:
             point_batch_size = input_points.shape[1]
             box_batch_size = input_boxes.shape[1]
             if point_batch_size != box_batch_size:
                 raise ValueError(
-                    "You should provide as many bounding boxes as input points per box. Got {} and {}.".format(
-                        point_batch_size, box_batch_size
-                    )
+                    f"You should provide as many bounding boxes as input points per box. Got {point_batch_size} and {box_batch_size}."
                 )
 
         image_positional_embeddings = self.get_image_wide_positional_embeddings()
@@ -1477,7 +1475,7 @@ class SamModel(SamPreTrainedModel):
         if input_points is not None and image_embeddings.shape[0] != input_points.shape[0]:
             raise ValueError(
                 "The batch size of the image embeddings and the input points must be the same. ",
-                "Got {} and {} respectively.".format(image_embeddings.shape[0], input_points.shape[0]),
+                f"Got {image_embeddings.shape[0]} and {input_points.shape[0]} respectively.",
                 " if you want to pass multiple points for the same image, make sure that you passed ",
                 " input_points of shape (batch_size, point_batch_size, num_points_per_image, 3) and ",
                 " input_labels of shape (batch_size, point_batch_size, num_points_per_image)",

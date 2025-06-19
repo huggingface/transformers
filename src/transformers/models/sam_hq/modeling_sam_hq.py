@@ -1577,9 +1577,7 @@ class SamHQModel(SamHQPreTrainedModel):
             box_batch_size = input_boxes.shape[1]
             if point_batch_size != box_batch_size:
                 raise ValueError(
-                    "You should provide as many bounding boxes as input points per box. Got {} and {}.".format(
-                        point_batch_size, box_batch_size
-                    )
+                    f"You should provide as many bounding boxes as input points per box. Got {point_batch_size} and {box_batch_size}."
                 )
 
         image_positional_embeddings = self.get_image_wide_positional_embeddings()

@@ -1451,7 +1451,7 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
                 param.requires_grad = False
 
     def get_codebook_indices(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        """
+        f"""
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
                 Pixel values. Codebook pixel values can be obtained using [`AutoImageProcessor`] by passing
@@ -1463,8 +1463,8 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoImageProcessor, FlavaImageCodebook
 
-        >>> model = FlavaImageCodebook.from_pretrained("{0}")
-        >>> image_processor = AutoImageProcessor.from_pretrained("{0}")
+        >>> model = FlavaImageCodebook.from_pretrained("{_CHECKPOINT_FOR_CODEBOOK_DOC}")
+        >>> image_processor = AutoImageProcessor.from_pretrained("{_CHECKPOINT_FOR_CODEBOOK_DOC}")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1474,7 +1474,7 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
 
         >>> outputs = model.get_codebook_indices(**inputs)
         ```
-        """.format(_CHECKPOINT_FOR_CODEBOOK_DOC)
+        """
         z_logits = self.blocks(pixel_values)
         return torch.argmax(z_logits, axis=1)
 
@@ -1483,7 +1483,7 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
         return nn.Softmax(dim=1)(z_logits)
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
-        """
+        f"""
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
                 Pixel values. Codebook pixel values can be obtained using [`AutoImageProcessor`] by passing
@@ -1496,8 +1496,8 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoImageProcessor, FlavaImageCodebook
 
-        >>> model = FlavaImageCodebook.from_pretrained("{0}")
-        >>> image_processor = AutoImageProcessor.from_pretrained("{0}")
+        >>> model = FlavaImageCodebook.from_pretrained("{_CHECKPOINT_FOR_CODEBOOK_DOC}")
+        >>> image_processor = AutoImageProcessor.from_pretrained("{_CHECKPOINT_FOR_CODEBOOK_DOC}")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1509,7 +1509,7 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
         >>> print(outputs.shape)
         (1, 196)
         ```
-        """.format(_CHECKPOINT_FOR_CODEBOOK_DOC)
+        """
         if len(pixel_values.shape) != 4:
             raise ValueError(f"input shape {pixel_values.shape} is not 4d")
         if pixel_values.shape[1] != self.input_channels:

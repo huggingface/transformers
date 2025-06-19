@@ -1129,7 +1129,7 @@ def get_class_similarity(class_distance_type, cls_feature, class_proj):
     elif class_distance_type == "dot":
         class_logits = torch.bmm(cls_feature, class_proj)
     else:
-        raise Exception("Unknown class_distance_type {}".format(class_distance_type))
+        raise Exception(f"Unknown class_distance_type {class_distance_type}")
     return class_logits
 
 
