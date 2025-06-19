@@ -20,7 +20,7 @@
 # limitations under the License.
 
 import warnings
-from typing import Callable, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 import numpy as np
 import torch
@@ -309,14 +309,14 @@ class HubertAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -495,7 +495,7 @@ class HubertEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
             skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
@@ -668,7 +668,7 @@ class HubertEncoderStableLayerNorm(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
             skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
@@ -802,7 +802,7 @@ class HubertPreTrainedModel(PreTrainedModel):
 
 
 def _compute_mask_indices(
-    shape: Tuple[int, int],
+    shape: tuple[int, int],
     mask_prob: float,
     mask_length: int,
     attention_mask: Optional[torch.LongTensor] = None,
@@ -810,7 +810,7 @@ def _compute_mask_indices(
 ) -> np.ndarray:
     """
     Computes random mask spans for a given shape. Used to implement [SpecAugment: A Simple Data Augmentation Method for
-    ASR](https://arxiv.org/abs/1904.08779). Note that this method is not optimized to run on TPU and should be run on
+    ASR](https://huggingface.co/papers/1904.08779). Note that this method is not optimized to run on TPU and should be run on
     CPU as part of the preprocessing during training.
 
     Args:
@@ -948,7 +948,7 @@ class HubertModel(HubertPreTrainedModel):
     ):
         """
         Masks extracted features along time axis and/or along feature axis according to
-        [SpecAugment](https://arxiv.org/abs/1904.08779).
+        [SpecAugment](https://huggingface.co/papers/1904.08779).
         """
 
         # `config.apply_spec_augment` can set masking to False
@@ -995,7 +995,7 @@ class HubertModel(HubertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         r"""
         mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
@@ -1155,7 +1155,7 @@ class HubertForCTC(HubertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, CausalLMOutput]:
+    ) -> Union[tuple, CausalLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
             Labels for connectionist temporal classification. Note that `target_length` has to be smaller or equal to
@@ -1278,11 +1278,11 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, SequenceClassifierOutput]:
+    ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
             soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
             conversion into a tensor of type `torch.FloatTensor`. See [`HubertProcessor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):

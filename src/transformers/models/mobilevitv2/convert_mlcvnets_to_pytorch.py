@@ -60,7 +60,7 @@ def load_orig_config_file(orig_cfg_file):
             for k, v in flat_cfg.items():
                 setattr(config, k, v)
         except yaml.YAMLError as exc:
-            logger.error("Error while loading config file: {}. Error message: {}".format(orig_cfg_file, str(exc)))
+            logger.error(f"Error while loading config file: {orig_cfg_file}. Error message: {str(exc)}")
     return config
 
 

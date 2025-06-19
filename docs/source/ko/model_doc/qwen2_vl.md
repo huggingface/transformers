@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview[[Overview]]
 
-[Qwen2-VL](https://qwenlm.github.io/blog/qwen2-vl/) 모델은 알리바바 리서치의 Qwen팀에서 개발한 [Qwen-VL](https://arxiv.org/pdf/2308.12966) 모델의 주요 업데이트 버전입니다.
+[Qwen2-VL](https://qwenlm.github.io/blog/qwen2-vl/) 모델은 알리바바 리서치의 Qwen팀에서 개발한 [Qwen-VL](https://huggingface.co/papers/2308.12966) 모델의 주요 업데이트 버전입니다.
 
 블로그의 요약은 다음과 같습니다:
 

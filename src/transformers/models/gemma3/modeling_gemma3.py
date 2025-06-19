@@ -23,7 +23,7 @@ import copy
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -114,9 +114,9 @@ class Gemma3CausalLMOutputWithPast(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[torch.FloatTensor] = None
 
 
@@ -259,7 +259,7 @@ def eager_attention_forward(
     scaling: Optional[float] = None,
     softcap: Optional[float] = None,
     **kwargs,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     if scaling is None:
         scaling = module.head_dim**-0.5
 
@@ -851,7 +851,7 @@ class Gemma3Model(Gemma3PreTrainedModel):
         pixel_values: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None,
+        past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -861,7 +861,7 @@ class Gemma3Model(Gemma3PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **lm_kwargs,
-    ) -> Union[Tuple, Gemma3ModelOutputWithPast]:
+    ) -> Union[tuple, Gemma3ModelOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -1019,6 +1019,9 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
+    def get_image_features(self, pixel_values):
+        return self.model.get_image_features(pixel_values)
+
     # Make modules available throught conditional class for BC
     @property
     def language_model(self):
@@ -1039,7 +1042,7 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         pixel_values: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None,
+        past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -1050,7 +1053,7 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **lm_kwargs,
-    ) -> Union[Tuple, Gemma3CausalLMOutputWithPast]:
+    ) -> Union[tuple, Gemma3CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,

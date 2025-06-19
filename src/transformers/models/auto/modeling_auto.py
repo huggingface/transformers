@@ -176,6 +176,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("layoutlmv3", "LayoutLMv3Model"),
         ("led", "LEDModel"),
         ("levit", "LevitModel"),
+        ("lightglue", "LightGlueForKeypointMatching"),
         ("lilt", "LiltModel"),
         ("llama", "LlamaModel"),
         ("llama4", "Llama4ForConditionalGeneration"),
@@ -337,6 +338,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("vitdet", "VitDetModel"),
         ("vits", "VitsModel"),
         ("vivit", "VivitModel"),
+        ("vjepa2", "VJEPA2Model"),
         ("wav2vec2", "Wav2Vec2Model"),
         ("wav2vec2-bert", "Wav2Vec2BertModel"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerModel"),
@@ -845,6 +847,7 @@ MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("timesformer", "TimesformerForVideoClassification"),
         ("videomae", "VideoMAEForVideoClassification"),
         ("vivit", "VivitForVideoClassification"),
+        ("vjepa2", "VJEPA2ForVideoClassification"),
     ]
 )
 

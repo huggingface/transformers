@@ -15,7 +15,7 @@
 """Pix2Struct modeling file"""
 
 import math
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -69,7 +69,7 @@ class Pix2StructLayerNorm(nn.Module):
 
     def forward(self, hidden_states):
         # T5 uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
-        # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus variance is calculated
+        # Square Layer Normalization https://huggingface.co/papers/1910.07467 thus variance is calculated
         # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
         # half-precision inputs is done in fp32
 
@@ -278,7 +278,7 @@ class Pix2StructVisionLayer(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         residual = hidden_states
 
         # in Pix2StructVision, layernorm is applied before self-attention
@@ -505,7 +505,7 @@ class Pix2StructVisionModel(Pix2StructPreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings.patch_projection
 
-    def _prune_heads(self, heads_to_prune: Dict[int, List[int]]) -> None:
+    def _prune_heads(self, heads_to_prune: dict[int, list[int]]) -> None:
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
         class PreTrainedModel
@@ -522,12 +522,12 @@ class Pix2StructVisionModel(Pix2StructPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         flattened_patches (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_channels x patch_height x patch_width)`):
             Flattened and padded pixel values. These values can be obtained using [`AutoImageProcessor`]. See
             [`Pix2StructVisionImageProcessor.__call__`] for details. Check the [original
-            paper](https://arxiv.org/abs/2210.03347) (figure 5) for more details.
+            paper](https://huggingface.co/papers/2210.03347) (figure 5) for more details.
 
         Example:
 
@@ -1103,7 +1103,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
         inputs_embeds: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1111,7 +1111,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
-    ) -> Union[Tuple[torch.FloatTensor, ...], CausalLMOutputWithCrossAttentions]:
+    ) -> Union[tuple[torch.FloatTensor, ...], CausalLMOutputWithCrossAttentions]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Pix2StructText is a model with relative position
@@ -1520,8 +1520,8 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel, GenerationMi
         head_mask: Optional[torch.FloatTensor] = None,
         decoder_head_mask: Optional[torch.FloatTensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         labels: Optional[torch.LongTensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
@@ -1529,7 +1529,7 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel, GenerationMi
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple[torch.FloatTensor], Seq2SeqModelOutput]:
+    ) -> Union[tuple[torch.FloatTensor], Seq2SeqModelOutput]:
         r"""
         flattened_patches (`torch.FloatTensor` of shape `(batch_size, seq_length, hidden_size)`):
             Flattened pixel patches. the `hidden_size` is obtained by the following formula: `hidden_size` =

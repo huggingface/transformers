@@ -14,7 +14,7 @@
 # limitations under the License.
 """PyTorch OPT model."""
 
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -144,13 +144,13 @@ class OPTAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Cache]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[Cache]]:
         """Input shape: Batch x Time x Channel"""
         bsz, tgt_len, _ = hidden_states.size()
 
@@ -227,13 +227,13 @@ class OPTDecoderLayer(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         position_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -519,7 +519,7 @@ class OPTDecoder(OPTPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -528,7 +528,7 @@ class OPTDecoder(OPTPreTrainedModel):
         position_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    ) -> Union[tuple, BaseModelOutputWithPast]:
         r"""
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -663,7 +663,7 @@ class OPTDecoder(OPTPreTrainedModel):
                     )
 
         for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -751,7 +751,7 @@ class OPTModel(OPTPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None,
+        past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -760,7 +760,7 @@ class OPTModel(OPTPreTrainedModel):
         position_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    ) -> Union[tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -833,7 +833,7 @@ class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None,
+        past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -843,7 +843,7 @@ class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
         position_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs: Unpack[KwargsForCausalLM],
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -950,7 +950,7 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None,
+        past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -958,7 +958,7 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         position_ids: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
+    ) -> Union[tuple, SequenceClassifierOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1062,7 +1062,7 @@ class OPTForQuestionAnswering(OPTPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None,
+        past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
@@ -1071,7 +1071,7 @@ class OPTForQuestionAnswering(OPTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         position_ids: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, QuestionAnsweringModelOutput]:
+    ) -> Union[tuple, QuestionAnsweringModelOutput]:
         r"""
         Example:
 

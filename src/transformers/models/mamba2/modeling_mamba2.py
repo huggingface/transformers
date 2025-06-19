@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -606,7 +606,7 @@ class Mamba2Mixer(nn.Module):
 
             # 2. Compute the state for each intra-chunk
             # (right term of low-rank factorization of off-diagonal blocks; B terms)
-            decay_states = torch.exp((A_cumsum[:, :, :, -1:] - A_cumsum))
+            decay_states = torch.exp(A_cumsum[:, :, :, -1:] - A_cumsum)
             B_decay = B * decay_states.permute(0, -2, -1, 1)[..., None]
             states = (B_decay[..., None, :] * hidden_states[..., None]).sum(dim=2)
 
@@ -784,7 +784,7 @@ class Mamba2Output(ModelOutput):
 
     last_hidden_state: Optional[torch.FloatTensor] = None
     cache_params: Optional[Mamba2Cache] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -813,7 +813,7 @@ class Mamba2CausalLMOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
     cache_params: Optional[Mamba2Cache] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 @auto_docstring
@@ -854,7 +854,7 @@ class Mamba2Model(Mamba2PreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
-    ) -> Union[Tuple, Mamba2Output]:
+    ) -> Union[tuple, Mamba2Output]:
         r"""
         cache_params (`Mamba2Cache`, *optional*):
             If passed along, the model uses the previous state in all the blocks (which will give the output for the
@@ -1019,7 +1019,7 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
         cache_position: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs,  # for now we need this for generation and loss_function
-    ) -> Union[Tuple, Mamba2CausalLMOutput]:
+    ) -> Union[tuple, Mamba2CausalLMOutput]:
         r"""
         cache_params (`Mamba2Cache`, *optional*):
             If passed along, the model uses the previous state in all the blocks (which will give the output for the

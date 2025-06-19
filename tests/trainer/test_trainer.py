@@ -1623,9 +1623,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertFalse(is_any_loss_nan_or_inf(log_history_filter))
 
     def test_train_and_eval_dataloaders(self):
-        if torch_device in ["cuda", "xpu"]:
+        if torch_device in ["cuda"]:
             n_gpu = max(1, backend_device_count(torch_device))
         else:
+            # DP is decprecated by PyTorch, accelerators like XPU doesn't support DP
             n_gpu = 1
 
         tmp_dir = self.get_auto_remove_tmp_dir()
@@ -3940,7 +3941,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         from torch import _dynamo as torchdynamo
 
         class CustomTrainer(Trainer):
-            def compute_loss(self, model, inputs, return_outputs=False):
+            def compute_loss(self, model, inputs, num_items_in_batch=None, return_outputs=False):
                 x = inputs["x"]
                 output = model(x)
                 if self.args.n_gpu == 1:
@@ -5368,19 +5369,19 @@ if is_torch_available():
             )
         )
     if is_torchao_available():
-        import torchao
+        from torchao.optim import AdamW4bit, AdamW8bit
 
         optim_test_params.append(
             (
                 OptimizerNames.ADAMW_TORCH_4BIT,
-                torchao.prototype.low_bit_optim.AdamW4bit,
+                AdamW4bit,
                 default_adam_kwargs,
             )
         )
         optim_test_params.append(
             (
                 TrainingArguments(optim=OptimizerNames.ADAMW_TORCH_8BIT, output_dir="None"),
-                torchao.prototype.low_bit_optim.AdamW8bit,
+                AdamW8bit,
                 default_adam_kwargs,
             )
         )

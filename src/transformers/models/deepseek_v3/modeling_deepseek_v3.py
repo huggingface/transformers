@@ -5,7 +5,7 @@
 #                          modular_deepseek_v3.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 import math
-from typing import Callable, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -113,7 +113,7 @@ class DeepseekV3TopkRouter(nn.Module):
         self.norm_topk_prob = config.norm_topk_prob
 
         self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
-        self.register_buffer("e_score_correction_bias", torch.zeros((self.n_routed_experts)))
+        self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
 
     @torch.no_grad()
     def get_topk_indices(self, scores):
@@ -338,9 +338,12 @@ class DeepseekV3Attention(nn.Module):
         self.qk_head_dim = config.qk_head_dim
 
         self.is_causal = True
-        self.q_a_proj = nn.Linear(config.hidden_size, config.q_lora_rank, bias=config.attention_bias)
-        self.q_a_layernorm = DeepseekV3RMSNorm(config.q_lora_rank)
-        self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
+        if self.q_lora_rank is None:
+            self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
+        else:
+            self.q_a_proj = nn.Linear(config.hidden_size, config.q_lora_rank, bias=config.attention_bias)
+            self.q_a_layernorm = DeepseekV3RMSNorm(config.q_lora_rank)
+            self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
 
         self.kv_a_proj_with_mqa = nn.Linear(
             config.hidden_size,
@@ -371,17 +374,21 @@ class DeepseekV3Attention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         batch_size, seq_length = hidden_states.shape[:-1]
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
         key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
 
-        q_states = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states))).view(query_shape).transpose(1, 2)
+        if self.q_lora_rank is None:
+            q_states = self.q_proj(hidden_states)
+        else:
+            q_states = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states)))
+        q_states = q_states.view(query_shape).transpose(1, 2)
         q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
@@ -457,9 +464,9 @@ class DeepseekV3DecoderLayer(GradientCheckpointingLayer):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
 

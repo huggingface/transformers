@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -90,12 +90,12 @@ class MoshiConditionalGenerationGenerateOutput(ModelOutput):
     audio_sequences: Optional[torch.Tensor] = None
     sequences: Optional[torch.LongTensor] = None
     sequences_scores: Optional[torch.FloatTensor] = None
-    scores: Optional[Tuple[torch.FloatTensor]] = None
-    logits: Optional[Tuple[torch.FloatTensor]] = None
+    scores: Optional[tuple[torch.FloatTensor]] = None
+    logits: Optional[tuple[torch.FloatTensor]] = None
     beam_indices: Optional[torch.LongTensor] = None
-    attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    past_key_values: Optional[Tuple[Tuple[Tuple[torch.FloatTensor]]]] = None
+    attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
+    hidden_states: Optional[tuple[tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[tuple[tuple[tuple[torch.FloatTensor]]]] = None
     audio_codes: Optional[torch.LongTensor] = None
 
 
@@ -133,9 +133,9 @@ class MoshiCausalLMOutputWithPast(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
     last_hidden_state: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -183,14 +183,14 @@ class MoshiConditionalGenerationOutputWithPast(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
     last_hidden_state: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     depth_loss: Optional[torch.FloatTensor] = None
     audio_logits: Optional[torch.FloatTensor] = None
-    depth_past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    depth_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    depth_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    depth_past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None
+    depth_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    depth_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -463,7 +463,7 @@ class MoshiAttention(nn.Module):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states, cache_position)  # Ignore copy
@@ -544,7 +544,7 @@ class MoshiFlashAttention2(MoshiAttention):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         if isinstance(past_key_value, StaticCache):
             raise ValueError(
                 "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
@@ -655,7 +655,7 @@ class MoshiSdpaAttention(MoshiAttention):
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
             logger.warning_once(
@@ -764,7 +764,7 @@ class MoshiDecoderLayer(nn.Module):
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -887,7 +887,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
         input_ids: Optional[torch.LongTensor] = None,
         last_hidden_state: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.BoolTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -896,7 +896,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
         position_ids: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    ) -> Union[tuple, BaseModelOutputWithPast]:
         """
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -919,7 +919,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
                 `past_key_values`).
 
                 If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
-                and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+                and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
                 information on the default strategy.
 
                 - 1 indicates the head is **not masked**,
@@ -1274,14 +1274,14 @@ class MoshiModel(MoshiPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    ) -> Union[tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1591,7 +1591,7 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1601,7 +1601,7 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
         labels: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
-    ) -> Union[Tuple, MoshiCausalLMOutputWithPast]:
+    ) -> Union[tuple, MoshiCausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -1734,7 +1734,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         user_audio_codes: Optional[torch.Tensor] = None,
         moshi_input_values: Optional[torch.FloatTensor] = None,
         moshi_audio_codes: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         text_labels: Optional[torch.LongTensor] = None,
         audio_labels: Optional[torch.LongTensor] = None,
@@ -1743,7 +1743,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[Tuple, Seq2SeqLMOutput]:
+    ) -> Union[tuple, Seq2SeqLMOutput]:
         r"""
         user_input_values (`torch.Tensor `of shape `(batch_size, 1, audio_sequence_length), *optional*):
             The audio waveforms used as audio user prompt for the generation.
@@ -1906,7 +1906,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         self,
         input_ids: torch.LongTensor,
         generation_config: GenerationConfig,
-        kwargs: Dict[str, Any],
+        kwargs: dict[str, Any],
     ) -> torch.LongTensor:
         pad_token_id = generation_config.pad_token_id
         eos_token_id = generation_config.eos_token_id
@@ -2068,7 +2068,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
                 If `True`, will also returns the generated audio codes, i.e the intermediate audio "tokens" which transforms to `audio_sequences` once passed through the audio decoder.
             concat_unconditional_inputs (`bool`, *optional*, defaults to `True`):
                 If `False`, won't concatenate initial audio and text tokens.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Remaining dictionary of keyword arguments that are passed to the `generate` method. Refers to the
                 original [`generate` docstrings](https://huggingface.co/docs/transformers/main/en/main_classes/text_generation#transformers.GenerationMixin.generate)
                 for more information on how to use them.
@@ -2394,10 +2394,10 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
     def _update_model_kwargs_for_generation(
         self,
         outputs: ModelOutput,
-        model_kwargs: Dict[str, Any],
+        model_kwargs: dict[str, Any],
         is_encoder_decoder: bool = False,
         num_new_tokens: int = 1,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         model_kwargs = super()._update_model_kwargs_for_generation(
             outputs, model_kwargs, is_encoder_decoder, num_new_tokens
         )
@@ -2596,8 +2596,8 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
 
     @staticmethod
     def _reorder_cache(
-        past_key_values: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor
-    ) -> Tuple[Tuple[torch.Tensor]]:
+        past_key_values: tuple[tuple[torch.Tensor]], beam_idx: torch.Tensor
+    ) -> tuple[tuple[torch.Tensor]]:
         """
         This function is used to re-order the `past_key_values` cache if [`~PreTrainedModel.beam_search`] or
         [`~PreTrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct

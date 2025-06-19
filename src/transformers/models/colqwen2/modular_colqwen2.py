@@ -14,7 +14,7 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 from transformers.models.colpali.modeling_colpali import ColPaliForRetrieval, ColPaliPreTrainedModel
 from transformers.models.colpali.processing_colpali import ColPaliProcessor
@@ -93,7 +93,7 @@ class ColQwen2Processor(ColPaliProcessor):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[ColQwen2ProcessorKwargs],
@@ -110,11 +110,11 @@ class ColQwen2Processor(ColPaliProcessor):
         Please refer to the doctsring of the above two methods for more information.
 
         Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
@@ -209,7 +209,7 @@ class ColQwen2Processor(ColPaliProcessor):
             if suffix is None:
                 suffix = self.query_augmentation_token * 10
 
-            texts_query: List[str] = []
+            texts_query: list[str] = []
 
             for query in text:
                 augmented_query = self.query_prefix + query + suffix
@@ -261,9 +261,9 @@ class ColQwen2ForRetrievalOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     embeddings: Optional[torch.Tensor] = None
-    past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @auto_docstring(
@@ -277,7 +277,7 @@ class ColQwen2ForRetrievalOutput(ModelOutput):
     a single model that can take into account both the textual and visual content (layout, charts, ...) of a document.
 
     ColQwen2 is part of the ColVision model family, which was introduced with ColPali in the following paper:
-    [*ColPali: Efficient Document Retrieval with Vision Language Models*](https://arxiv.org/abs/2407.01449).
+    [*ColPali: Efficient Document Retrieval with Vision Language Models*](https://huggingface.co/papers/2407.01449).
     """
 )
 class ColQwen2ForRetrieval(ColPaliForRetrieval):
@@ -288,7 +288,7 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         labels: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
