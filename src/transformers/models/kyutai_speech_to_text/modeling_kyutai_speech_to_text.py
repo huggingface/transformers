@@ -41,7 +41,6 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import LossKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
 from ..auto import AutoModel
-from ..mimi.modeling_mimi import MimiConv1dPaddingCache
 from .configuration_kyutai_speech_to_text import KyutaiSpeechToTextConfig
 
 
@@ -55,6 +54,46 @@ if is_torch_flex_attn_available():
 
 
 logger = logging.get_logger(__name__)
+
+
+class KyutaiSpeechToTextConv1dPaddingCache:
+    """
+    Padding cache for KyutaiSpeechToTextConv1d causal convolutions in order to support streaming via cache padding.
+    See: https://arxiv.org/pdf/2005.06720 & https://arxiv.org/pdf/2204.07064
+
+    A padding cache is a list of cached partial hidden states for each convolution layer.
+    Hidden states are cached from the previous call to the KyutaiSpeechToTextConv1d forward pass, given the padding size.
+    """
+
+    def __init__(self):
+        self.padding_cache: list[torch.Tensor] = []
+
+    def update(
+        self,
+        padding_states: torch.Tensor,
+        layer_idx: int,
+    ):
+        """
+        Updates the padding cache with the new padding states for the layer `layer_idx` and returns the current cache.
+        If cache was not yet initialized, it is initialized with the padding states and None is returned.
+
+        Parameters:
+            padding_states (`torch.Tensor`):
+                The new padding states to cache.
+            layer_idx (`int`):
+                The index of the layer to cache the states for.
+        Returns:
+            `torch.Tensor` or `None`, the current padding cache.
+        """
+        if len(self.padding_cache) <= layer_idx:
+            current_cache = None
+            self.padding_cache.append(padding_states)
+        else:
+            current_cache = self.padding_cache[layer_idx]
+
+        self.padding_cache[layer_idx] = padding_states
+
+        return current_cache
 
 
 class KyutaiSpeechToTextEmbeddings(nn.Module):
@@ -596,7 +635,7 @@ class KyutaiSpeechToTextSdpaAttention(KyutaiSpeechToTextAttention):
         return attn_output, None, past_key_value
 
 
-kyutai_speech_to_text_ATTENTION_CLASSES = {
+KYUTAI_SPEECH_TO_TEXT_ATTENTION_CLASSES = {
     "eager": KyutaiSpeechToTextAttention,
     "flash_attention_2": KyutaiSpeechToTextFlashAttention2,
     "sdpa": KyutaiSpeechToTextSdpaAttention,
@@ -609,7 +648,7 @@ class KyutaiSpeechToTextDecoderLayer(nn.Module):
         self.hidden_size = config.hidden_size
         self.use_flexible_linear = use_flexible_linear
 
-        self.self_attn = kyutai_speech_to_text_ATTENTION_CLASSES[config._attn_implementation](
+        self.self_attn = KYUTAI_SPEECH_TO_TEXT_ATTENTION_CLASSES[config._attn_implementation](
             config=config, layer_idx=layer_idx, use_flexible_linear=use_flexible_linear, use_rope=use_rope
         )
 
@@ -1115,7 +1154,6 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             cache_position=cache_position,
-            # return_dict=True,
             **kwargs,
         )
 
@@ -1204,7 +1242,7 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
                 model_kwargs["encoder_past_key_values"] = temporary_model_kwargs["past_key_values"]
 
             # initialize the padding cache for the codec model
-            model_kwargs["padding_cache"] = MimiConv1dPaddingCache()
+            model_kwargs["padding_cache"] = KyutaiSpeechToTextConv1dPaddingCache()
 
         return inputs, input_name, model_kwargs
 
@@ -1217,7 +1255,7 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
         audio_window_size: Optional[int] = None,
         current_window: Optional[tuple[int, int]] = None,
         encoder_past_key_values: Optional[Cache] = None,
-        padding_cache: Optional[MimiConv1dPaddingCache] = None,
+        padding_cache: Optional[KyutaiSpeechToTextConv1dPaddingCache] = None,
         **kwargs,
     ):
         model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
