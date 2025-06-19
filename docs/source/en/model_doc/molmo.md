@@ -56,21 +56,23 @@ import requests
 model = MolmoForConditionalGeneration.from_pretrained("allenai/Molmo-7B-D-hf", torch_dtype="float16", device_map="auto")
 processor = AutoProcessor.from_pretrained("allenai/Molmo-7B-D-hf")
 
-image = Image.open(requests.get("https://picsum.photos/id/237/536/354", stream=True).raw)
 
 conversation = [
     {
         "role": "user",
         "content": [
-            {"type": "image"},
+            {"type": "image", "url": "https://picsum.photos/id/237/536/354"},
             {"type": "text", "text": "What is shown in this image?"},
         ],
     },
 ]
-prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
-inputs = processor(image, prompt, return_tensors="pt").to(model.device)
+inputs = processor.apply_chat_template(
+        conversation,
+        tokenize=True,
+        return_dict=True,
+        add_generation_prompt=True
+        ).to(model.device)
 
-# autoregressively complete prompt
 output = model.generate(**inputs, max_new_tokens=100)
 
 print(processor.decode(output[0], skip_special_tokens=True))
