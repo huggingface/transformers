@@ -14,7 +14,7 @@
 # limitations under the License.
 """Fast Image processor class for GLM-4.1V."""
 
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 from ...image_processing_utils import (
     BatchFeature,
@@ -106,15 +106,15 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: List["torch.Tensor"],
+        images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
         interpolation: Optional["F.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
         patch_size: int,
         temporal_patch_size: int,
         merge_size: int,
@@ -234,13 +234,13 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
         images: ImageInput,
         videos: VideoInput = None,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: Optional[Union["PILImageResampling", "F.InterpolationMode"]] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         patch_size: Optional[int] = None,
         temporal_patch_size: Optional[int] = None,
         merge_size: Optional[int] = None,

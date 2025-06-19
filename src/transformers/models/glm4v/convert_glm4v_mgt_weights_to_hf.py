@@ -19,7 +19,7 @@ import os
 import pickle
 import re
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Optional
 
 import torch
 from safetensors.torch import save_file
@@ -138,8 +138,8 @@ def merge_qkv_vit(sd_list, original_tp=None):
 
 
 def merge_tensors_vit(
-    tp_sd: List[Dict],
-    keys: List[str],
+    tp_sd: list[dict],
+    keys: list[str],
     original_tp: int,
     target_tp: int,
     slice_dim: Optional[int] = None,

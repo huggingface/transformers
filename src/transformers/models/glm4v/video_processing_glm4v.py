@@ -15,7 +15,7 @@
 """video processor class for GLM-4.1V."""
 
 import math
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -67,8 +67,8 @@ class Glm4vVideoProcessorInitKwargs(VideosKwargs):
     patch_size: Optional[int] = None
     temporal_patch_size: Optional[int] = None
     merge_size: Optional[int] = None
-    image_mean: Optional[List[float]] = None
-    image_std: Optional[List[float]] = None
+    image_mean: Optional[list[float]] = None
+    image_std: Optional[list[float]] = None
 
 
 @add_start_docstrings(
@@ -148,8 +148,8 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
 
     def _preprocess(
         self,
-        videos: List[torch.Tensor],
-        video_metadata: Optional[Union[List[VideoMetadata], List[dict]]] = None,
+        videos: list[torch.Tensor],
+        video_metadata: Optional[Union[list[VideoMetadata], list[dict]]] = None,
         do_convert_rgb: bool = True,
         do_resize: bool = True,
         size: SizeDict = None,
@@ -158,8 +158,8 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
         rescale_factor: float = 1 / 255.0,
         do_normalize: bool = True,
         do_sample_frames: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         patch_size: Optional[int] = None,
         temporal_patch_size: Optional[int] = None,
         merge_size: Optional[int] = None,

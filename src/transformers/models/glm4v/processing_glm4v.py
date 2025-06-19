@@ -19,7 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
@@ -29,7 +29,7 @@ from ...video_utils import VideoInput
 
 
 class Glm4vVideosProcessorKwargs(VideosKwargs, total=False):
-    fps: Union[List[float], float]
+    fps: Union[list[float], float]
 
 
 class Glm4vImagesKwargs(ImagesKwargs):
@@ -88,7 +88,7 @@ class Glm4vProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         videos: VideoInput = None,
         **kwargs: Unpack[Glm4vProcessorKwargs],
     ) -> BatchFeature:
