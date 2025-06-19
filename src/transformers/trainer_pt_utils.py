@@ -1134,6 +1134,8 @@ def get_parameter_names(model, forbidden_layer_types, forbidden_layer_names=None
             allowed_names = [name for name in param_names if not any(pattern.search(name.lower()) for pattern in forbidden_layer_patterns)]
             result.extend(allowed_names)
 
+    return result
+
 
 def get_module_class_from_name(module, name):
     """
