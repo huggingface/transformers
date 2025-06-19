@@ -17,7 +17,7 @@ on:
         type: string
       runner_map:
         required: false
-        default: "{'models/vit': ['aws-g4dn-4xlarge-cache', 'aws-g4dn-12xlarge-cache'], 'models/clip': ['aws-g5-4xlarge-cache', 'aws-g5-12xlarge-cache']}"
+        default: '{"models/vit": ["aws-g4dn-4xlarge-cache", "aws-g4dn-12xlarge-cache"], "models/clip": ["aws-g5-4xlarge-cache", "aws-g5-12xlarge-cache"]}'
         type: string
       docker:
         required: true
