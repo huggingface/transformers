@@ -40,7 +40,7 @@ jobs:
     runs-on:
       group: ${{ inputs.runner }}
     container:
-      image: vault.habana.ai/gaudi-docker/1.20.1/ubuntu22.04/habanalabs/pytorch-installer-2.6.0:latest
+      image: vault.habana.ai/gaudi-docker/1.21.1/ubuntu22.04/habanalabs/pytorch-installer-2.6.0:latest
       options: --runtime=habana
         -v /mnt/cache/.cache/huggingface:/mnt/cache/.cache/huggingface
         --env OMPI_MCA_btl_vader_single_copy_mechanism=none
