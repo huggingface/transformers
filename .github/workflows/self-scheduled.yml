@@ -15,9 +15,6 @@ on:
       slack_report_channel:
         required: true
         type: string
-      runner:
-        required: true
-        type: string
       docker:
         required: true
         type: string
