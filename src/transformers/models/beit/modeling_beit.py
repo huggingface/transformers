@@ -34,6 +34,7 @@ from ...modeling_outputs import (
     MaskedLMOutput,
     SemanticSegmenterOutput,
 )
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import compile_compatible_method_lru_cache, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import auto_docstring, logging, torch_int
@@ -497,7 +498,7 @@ class BeitOutput(nn.Module):
         return hidden_states
 
 
-class BeitLayer(nn.Module):
+class BeitLayer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the timm implementation."""
 
     def __init__(self, config: BeitConfig, window_size: Optional[tuple] = None, drop_path_rate: float = 0.0) -> None:
@@ -695,25 +696,14 @@ class BeitEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    layer_head_mask,
-                    output_attentions,
-                    relative_position_bias,
-                    interpolate_pos_encoding,
-                    resolution,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    layer_head_mask,
-                    output_attentions,
-                    relative_position_bias,
-                    interpolate_pos_encoding,
-                    resolution,
-                )
+            layer_outputs = layer_module(
+                hidden_states,
+                layer_head_mask,
+                output_attentions,
+                relative_position_bias,
+                interpolate_pos_encoding,
+                resolution,
+            )
 
             hidden_states = layer_outputs[0]
 
