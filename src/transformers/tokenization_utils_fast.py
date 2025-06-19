@@ -280,7 +280,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
     def __bool__(self) -> bool:
         """
-        Returns True, to avoid expensive `assert tokenizer` gotcha's.
+        Returns True, to avoid expensive `assert tokenizer` gotchas.
         """
         return True
 
