@@ -21,21 +21,15 @@ import torch.nn as nn
 
 from ...cache_utils import Cache
 from ...generation import GenerationConfig, GenerationMixin
-from ...modeling_flash_attention_utils import (
-    is_flash_attn_available,
-)
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    is_torch_flex_attn_available,
-)
+from ...utils import logging
 from ..auto import AutoModel
 from ..llama.modeling_llama import LlamaForCausalLM
 from ..mimi.modeling_mimi import MimiConv1dPaddingCache
 from ..moshi.modeling_moshi import MoshiModel
 
 
-if is_torch_flex_attn_available():
-    pass
+logger = logging.get_logger(__name__)
 
 
 class KyutaiSpeechToTextConv1dPaddingCache(MimiConv1dPaddingCache):
