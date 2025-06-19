@@ -18,7 +18,7 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The ViTPose model was proposed in [ViTPose: Simple Vision Transformer Baselines for Human Pose Estimation](https://arxiv.org/abs/2204.12484) by Yufei Xu, Jing Zhang, Qiming Zhang, Dacheng Tao. ViTPose employs a standard, non-hierarchical [Vision Transformer](vit) as backbone for the task of keypoint estimation. A simple decoder head is added on top to predict the heatmaps from a given image. Despite its simplicity, the model gets state-of-the-art results on the challenging MS COCO Keypoint Detection benchmark. The model was further improved in [ViTPose++: Vision Transformer for Generic Body Pose Estimation](https://arxiv.org/abs/2212.04246) where the authors employ
+The ViTPose model was proposed in [ViTPose: Simple Vision Transformer Baselines for Human Pose Estimation](https://huggingface.co/papers/2204.12484) by Yufei Xu, Jing Zhang, Qiming Zhang, Dacheng Tao. ViTPose employs a standard, non-hierarchical [Vision Transformer](vit) as backbone for the task of keypoint estimation. A simple decoder head is added on top to predict the heatmaps from a given image. Despite its simplicity, the model gets state-of-the-art results on the challenging MS COCO Keypoint Detection benchmark. The model was further improved in [ViTPose++: Vision Transformer for Generic Body Pose Estimation](https://huggingface.co/papers/2212.04246) where the authors employ
 a mixture-of-experts (MoE) module in the ViT backbone along with pre-training on more data, which further enhances the performance.
 
 The abstract from the paper is the following:
@@ -28,7 +28,7 @@ The abstract from the paper is the following:
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/vitpose-architecture.png"
 alt="drawing" width="600"/>
 
-<small> ViTPose architecture. Taken from the <a href="https://arxiv.org/abs/2204.12484">original paper.</a> </small>
+<small> ViTPose architecture. Taken from the <a href="https://huggingface.co/papers/2204.12484">original paper.</a> </small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr) and [sangbumchoi](https://github.com/SangbumChoi).
 The original code can be found [here](https://github.com/ViTAE-Transformer/ViTPose).
@@ -95,7 +95,7 @@ image_pose_result = pose_results[0]  # results for first image
 
 ### ViTPose++ models
 
-The best [checkpoints](https://huggingface.co/collections/usyd-community/vitpose-677fcfd0a0b2b5c8f79c4335) are those of the [ViTPose++ paper](https://arxiv.org/abs/2212.04246). ViTPose++ models employ a so-called [Mixture-of-Experts (MoE)](https://huggingface.co/blog/moe) architecture for the ViT backbone, resulting in better performance.
+The best [checkpoints](https://huggingface.co/collections/usyd-community/vitpose-677fcfd0a0b2b5c8f79c4335) are those of the [ViTPose++ paper](https://huggingface.co/papers/2212.04246). ViTPose++ models employ a so-called [Mixture-of-Experts (MoE)](https://huggingface.co/blog/moe) architecture for the ViT backbone, resulting in better performance.
 
 The ViTPose+ checkpoints use 6 experts, hence 6 different dataset indices can be passed. 
 An overview of the various dataset indices is provided below:

@@ -21,7 +21,7 @@
 # limitations under the License.
 import collections
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -69,10 +69,10 @@ class SamHQVisionEncoderOutput(ModelOutput):
 
     image_embeds: Optional[torch.FloatTensor] = None
     last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
-    intermediate_embeddings: Optional[List[torch.FloatTensor]] = None
+    intermediate_embeddings: Optional[list[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -106,9 +106,9 @@ class SamHQImageSegmentationOutput(ModelOutput):
 
     iou_scores: Optional[torch.FloatTensor] = None
     pred_masks: Optional[torch.FloatTensor] = None
-    vision_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    vision_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    mask_decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    vision_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    vision_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    mask_decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 class SamHQPatchEmbeddings(nn.Module):
@@ -225,8 +225,8 @@ class SamHQVisionAttention(nn.Module):
         query: torch.Tensor,
         rel_pos_h: torch.Tensor,
         rel_pos_w: torch.Tensor,
-        q_size: Tuple[int, int],
-        k_size: Tuple[int, int],
+        q_size: tuple[int, int],
+        k_size: tuple[int, int],
     ) -> torch.Tensor:
         """
         Calculate decomposed Relative Positional Embeddings from :paper:`mvitv2`.
@@ -373,7 +373,7 @@ class SamHQVisionLayer(nn.Module):
         self.mlp = SamHQMLPBlock(config)
         self.window_size = window_size
 
-    def window_partition(self, hidden_states: torch.Tensor, window_size: int) -> Tuple[torch.Tensor, Tuple[int, int]]:
+    def window_partition(self, hidden_states: torch.Tensor, window_size: int) -> tuple[torch.Tensor, tuple[int, int]]:
         """
         Args:
         Partition into non-overlapping windows with padding if needed.
@@ -398,7 +398,7 @@ class SamHQVisionLayer(nn.Module):
         return windows, (pad_height, pad_width)
 
     def window_unpartition(
-        self, windows: torch.Tensor, window_size: int, padding_shape: Tuple[int, int], original_shape: Tuple[int, int]
+        self, windows: torch.Tensor, window_size: int, padding_shape: tuple[int, int], original_shape: tuple[int, int]
     ) -> torch.Tensor:
         """
         Args:
@@ -431,7 +431,7 @@ class SamHQVisionLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor]:
+    ) -> tuple[torch.FloatTensor]:
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
@@ -521,7 +521,7 @@ class SamHQVisionEncoder(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SamHQVisionEncoderOutput]:
+    ) -> Union[tuple, SamHQVisionEncoderOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -832,7 +832,7 @@ class SamHQTwoWayTransformer(nn.Module):
         target_embedding=None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -956,11 +956,11 @@ class SamHQMaskDecoder(nn.Module):
         dense_prompt_embeddings: torch.Tensor,
         multimask_output: bool,
         hq_token_only: bool,
-        intermediate_embeddings: Optional[List[torch.Tensor]] = None,
+        intermediate_embeddings: Optional[list[torch.Tensor]] = None,
         output_attentions: Optional[bool] = None,
         attention_similarity: Optional[torch.Tensor] = None,
         target_embedding: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Predict high-quality masks given image and prompt embeddings.
 
@@ -1171,7 +1171,7 @@ class SamHQVisionModel(SamHQPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SamHQVisionEncoderOutput]:
+    ) -> Union[tuple, SamHQVisionEncoderOutput]:
         return self.vision_encoder(
             pixel_values,
             output_attentions=output_attentions,
@@ -1298,11 +1298,11 @@ class SamHQPromptEncoder(nn.Module):
 
     def forward(
         self,
-        input_points: Optional[Tuple[torch.Tensor, torch.Tensor]],
+        input_points: Optional[tuple[torch.Tensor, torch.Tensor]],
         input_labels: Optional[torch.Tensor],
         input_boxes: Optional[torch.Tensor],
         input_masks: Optional[torch.Tensor],
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Embeds different types of prompts, returning both sparse and dense embeddings.
 
@@ -1467,9 +1467,9 @@ class SamHQModel(SamHQPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        intermediate_embeddings: Optional[List[torch.FloatTensor]] = None,
+        intermediate_embeddings: Optional[list[torch.FloatTensor]] = None,
         **kwargs,
-    ) -> List[Dict[str, torch.Tensor]]:
+    ) -> list[dict[str, torch.Tensor]]:
         r"""
         input_points (`torch.FloatTensor` of shape `(batch_size, num_points, 2)`):
             Input 2D spatial points, this is used by the prompt encoder to encode the prompt. Generally yields to much
@@ -1522,10 +1522,10 @@ class SamHQModel(SamHQPreTrainedModel):
             This is specific to SAM-HQ's architecture.
         attention_similarity (`torch.FloatTensor`, *optional*):
             Attention similarity tensor, to be provided to the mask decoder for target-guided attention in case the
-            model is used for personalization as introduced in [PerSAM](https://arxiv.org/abs/2305.03048).
+            model is used for personalization as introduced in [PerSAM](https://huggingface.co/papers/2305.03048).
         target_embedding (`torch.FloatTensor`, *optional*):
             Embedding of the target concept, to be provided to the mask decoder for target-semantic prompting in case
-            the model is used for personalization as introduced in [PerSAM](https://arxiv.org/abs/2305.03048).
+            the model is used for personalization as introduced in [PerSAM](https://huggingface.co/papers/2305.03048).
         intermediate_embeddings (`List[torch.FloatTensor]`, *optional*):
             Intermediate embeddings from vision encoder's non-windowed blocks, used by SAM-HQ for enhanced mask quality.
             Required when providing pre-computed image_embeddings instead of pixel_values.
@@ -1587,9 +1587,7 @@ class SamHQModel(SamHQPreTrainedModel):
             box_batch_size = input_boxes.shape[1]
             if point_batch_size != box_batch_size:
                 raise ValueError(
-                    "You should provide as many bounding boxes as input points per box. Got {} and {}.".format(
-                        point_batch_size, box_batch_size
-                    )
+                    f"You should provide as many bounding boxes as input points per box. Got {point_batch_size} and {box_batch_size}."
                 )
 
         image_positional_embeddings = self.get_image_wide_positional_embeddings()

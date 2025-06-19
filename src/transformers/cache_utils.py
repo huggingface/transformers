@@ -2,8 +2,9 @@ import copy
 import importlib.metadata
 import json
 import os
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import torch
 from packaging import version
@@ -27,7 +28,7 @@ def _static_cache_update(
     key_states: torch.Tensor,
     value_states: torch.Tensor,
     cache_position: Optional[torch.LongTensor],
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Updates the static cache tensors in place.
 
@@ -40,7 +41,7 @@ def _static_cache_update(
                                                        If None, the entire cache is overwritten (prefill).
 
     Returns:
-        Tuple[`torch.Tensor`, `torch.Tensor`]: The updated key and value cache tensors (modified in-place).
+        tuple[`torch.Tensor`, `torch.Tensor`]: The updated key and value cache tensors (modified in-place).
     """
     if cache_position is None:
         # Prefill phase where seq_len potentially equals max_cache_len. Directly copy.
@@ -66,7 +67,7 @@ def _sliding_cache_update(
     value_states: torch.Tensor,
     cache_position: torch.LongTensor,
     max_cache_len: int,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Updates the sliding window cache tensors, returning the potentially modified tensors.
 
@@ -79,7 +80,7 @@ def _sliding_cache_update(
         max_cache_len (`int`): The maximum length of the sliding window cache.
 
     Returns:
-        Tuple[`torch.Tensor`, `torch.Tensor`]: The key and value tensors representing the cache state after the update.
+        tuple[`torch.Tensor`, `torch.Tensor`]: The key and value tensors representing the cache state after the update.
                                                For prefill > window, these are the full input states.
                                                Otherwise, they are the updated cache tensors.
     """
@@ -133,8 +134,8 @@ class Cache:
         key_states: torch.Tensor,
         value_states: torch.Tensor,
         layer_idx: int,
-        cache_kwargs: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        cache_kwargs: Optional[dict[str, Any]] = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
 
@@ -145,7 +146,7 @@ class Cache:
                 The new value states to cache.
             layer_idx (`int`):
                 The index of the layer to cache the states for.
-            cache_kwargs (`Dict[str, Any]`, `optional`):
+            cache_kwargs (`dict[str, Any]`, `optional`):
                 Additional arguments for the cache subclass. These are specific to each subclass and allow new types of
                 cache to be created.
 
@@ -221,7 +222,7 @@ class CacheConfig:
         """
         Constructs a CacheConfig instance from a dictionary of parameters.
         Args:
-            config_dict (Dict[str, Any]): Dictionary containing configuration parameters.
+            config_dict (dict[str, Any]): Dictionary containing configuration parameters.
             **kwargs: Additional keyword arguments to override dictionary values.
 
         Returns:
@@ -256,10 +257,10 @@ class CacheConfig:
             writer.write(json_string)
 
     # Copied from transformers.utils.quantization_config.QuantizationConfigMixin.to_dict
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Serializes this instance to a Python dictionary. Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
+            `dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
         return copy.deepcopy(self.__dict__)
 
@@ -288,11 +289,11 @@ class CacheConfig:
         returning all the unused kwargs.
 
         Args:
-            kwargs (`Dict[str, Any]`):
+            kwargs (`dict[str, Any]`):
                 Dictionary of attributes to tentatively update this class.
 
         Returns:
-            `Dict[str, Any]`: Dictionary containing all the key-value pairs that were not used to update the instance.
+            `dict[str, Any]`: Dictionary containing all the key-value pairs that were not used to update the instance.
         """
         to_remove = []
         for key, value in kwargs.items():
@@ -472,8 +473,8 @@ class DynamicCache(Cache):
     def __init__(self, _distributed_cache_data: Optional[Iterable] = None) -> None:
         super().__init__()
         self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
-        self.key_cache: List[torch.Tensor] = []
-        self.value_cache: List[torch.Tensor] = []
+        self.key_cache: list[torch.Tensor] = []
+        self.value_cache: list[torch.Tensor] = []
 
         # `_distributed_cache_data` was originally added for compatibility with `torch.distributed` (DDP). See #36121
         # and #36373 for more information. In a nutshell, it is `map(gather_map, zip(*caches))`, i.e. each item in the
@@ -486,7 +487,7 @@ class DynamicCache(Cache):
                 self.key_cache.append(key_states)
                 self.value_cache.append(value_states)
 
-    def __getitem__(self, layer_idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+    def __getitem__(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Support for backwards-compatible `past_key_value` indexing, e.g. `past_key_value[0][0].shape[2]` to get the
         sequence length.
@@ -516,8 +517,8 @@ class DynamicCache(Cache):
         key_states: torch.Tensor,
         value_states: torch.Tensor,
         layer_idx: int,
-        cache_kwargs: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        cache_kwargs: Optional[dict[str, Any]] = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
 
@@ -528,7 +529,7 @@ class DynamicCache(Cache):
                 The new value states to cache.
             layer_idx (`int`):
                 The index of the layer to cache the states for.
-            cache_kwargs (`Dict[str, Any]`, `optional`):
+            cache_kwargs (`dict[str, Any]`, `optional`):
                 Additional arguments for the cache subclass. No additional arguments are used in `DynamicCache`.
 
         Return:
@@ -573,7 +574,7 @@ class DynamicCache(Cache):
         """Returns the maximum sequence length of the cache object. DynamicCache does not have a maximum length."""
         return None
 
-    def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor, torch.Tensor]]:
+    def to_legacy_cache(self) -> tuple[tuple[torch.Tensor, torch.Tensor]]:
         """Converts the `DynamicCache` instance into the its equivalent in the legacy cache format. Used for
         backward compatibility."""
         legacy_cache = ()
@@ -583,7 +584,7 @@ class DynamicCache(Cache):
 
     @classmethod
     def from_legacy_cache(
-        cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor, torch.FloatTensor]]] = None
+        cls, past_key_values: Optional[tuple[tuple[torch.FloatTensor, torch.FloatTensor]]] = None
     ) -> "DynamicCache":
         """Converts a cache in the legacy cache format into an equivalent `DynamicCache`. Used for
         backward compatibility."""
@@ -610,7 +611,7 @@ class DynamicCache(Cache):
                 self.key_cache[idx] = self.key_cache[idx][..., :max_length, :]
                 self.value_cache[idx] = self.value_cache[idx][..., :max_length, :]
 
-    def batch_split(self, full_batch_size: int, split_size: int) -> List["DynamicCache"]:
+    def batch_split(self, full_batch_size: int, split_size: int) -> list["DynamicCache"]:
         """Split the current instance into a list of `DynamicCache` by the batch size. This will be used by
         `_split_model_inputs()` in `generation.utils`"""
         out = []
@@ -623,7 +624,7 @@ class DynamicCache(Cache):
         return out
 
     @classmethod
-    def from_batch_splits(cls, splits: List["DynamicCache"]) -> "DynamicCache":
+    def from_batch_splits(cls, splits: list["DynamicCache"]) -> "DynamicCache":
         """This is the opposite of the above `batch_split()` method. This will be used by `stack_model_outputs` in
         `generation.utils`"""
         cache = cls()
@@ -761,7 +762,7 @@ class OffloadedCache(DynamicCache):
             self.key_cache[prev_layer_idx] = self.key_cache[prev_layer_idx].to("cpu", non_blocking=True)
             self.value_cache[prev_layer_idx] = self.value_cache[prev_layer_idx].to("cpu", non_blocking=True)
 
-    def __getitem__(self, layer_idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+    def __getitem__(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         "Gets the cache for this layer to the device. Prefetches the next and evicts the previous layer."
         if layer_idx < len(self):
             # Evict the previous layer if necessary
@@ -798,8 +799,8 @@ class OffloadedCache(DynamicCache):
         key_states: torch.Tensor,
         value_states: torch.Tensor,
         layer_idx: int,
-        cache_kwargs: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        cache_kwargs: Optional[dict[str, Any]] = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
         Parameters:
@@ -809,7 +810,7 @@ class OffloadedCache(DynamicCache):
                 The new value states to cache.
             layer_idx (`int`):
                 The index of the layer to cache the states for.
-            cache_kwargs (`Dict[str, Any]`, `optional`):
+            cache_kwargs (`dict[str, Any]`, `optional`):
                 Additional arguments for the cache subclass. No additional arguments are used in `OffloadedCache`.
         Return:
             A tuple containing the updated key and value states.
@@ -842,7 +843,7 @@ class OffloadedCache(DynamicCache):
 
 class QuantizedCache(DynamicCache):
     """
-    A quantizer cache similar to what is described in the [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://arxiv.org/abs/2402.02750).
+    A quantizer cache similar to what is described in the [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://huggingface.co/papers/2402.02750).
     It allows the model to generate longer sequence length without allocating too much memory for Key and Value cache by applying quantization.
 
     The cache has two types of storage, one for original precision and one for the quantized cache. A `residual length` is set as a maximum capacity for the
@@ -856,8 +857,8 @@ class QuantizedCache(DynamicCache):
 
     def __init__(self, cache_config: QuantizedCacheConfig) -> None:
         super().__init__()
-        self._quantized_key_cache: List[torch.Tensor] = []
-        self._quantized_value_cache: List[torch.Tensor] = []
+        self._quantized_key_cache: list[torch.Tensor] = []
+        self._quantized_value_cache: list[torch.Tensor] = []
 
         self.nbits = cache_config.nbits
         self.residual_length = cache_config.residual_length
@@ -874,8 +875,8 @@ class QuantizedCache(DynamicCache):
         key_states: torch.Tensor,
         value_states: torch.Tensor,
         layer_idx: int,
-        cache_kwargs: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        cache_kwargs: Optional[dict[str, Any]] = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         # Update the number of seen tokens
         if layer_idx == 0:
             self._seen_tokens += key_states.shape[-2]
@@ -1093,7 +1094,7 @@ class StaticCache(Cache):
             should pass the `layer_device_map` argument instead.
         dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
-        layer_device_map (`Optional[Dict[int, Union[str, torch.device, int]]]]`, *optional*):
+        layer_device_map (`Optional[dict[int, Union[str, torch.device, int]]]]`, *optional*):
             Mapping between the layers and its device. This is required when you are manually initializing the cache
             and the model is split between different gpus. You can know which layers mapped to which device by
             checking the associated device_map: `model.hf_device_map`.
@@ -1128,7 +1129,7 @@ class StaticCache(Cache):
         max_cache_len: Optional[int] = None,
         device: Union[torch.device, str, None] = None,
         dtype: torch.dtype = torch.float32,
-        layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
+        layer_device_map: Optional[dict[int, Union[str, torch.device, int]]] = None,
     ) -> None:
         super().__init__()
         self.max_batch_size = max_batch_size
@@ -1144,8 +1145,8 @@ class StaticCache(Cache):
             else config.num_key_value_heads
         )
 
-        self.key_cache: List[torch.Tensor] = []
-        self.value_cache: List[torch.Tensor] = []
+        self.key_cache: list[torch.Tensor] = []
+        self.value_cache: list[torch.Tensor] = []
         # Note: There will be significant perf decrease if switching to use 5D tensors instead.
         cache_shape = (self.max_batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
         device = torch.device(device) if device is not None else None
@@ -1168,8 +1169,8 @@ class StaticCache(Cache):
         key_states: torch.Tensor,
         value_states: torch.Tensor,
         layer_idx: int,
-        cache_kwargs: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        cache_kwargs: Optional[dict[str, Any]] = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
         It is VERY important to index using a tensor, otherwise you introduce a copy to the device.
@@ -1181,7 +1182,7 @@ class StaticCache(Cache):
                 The new value states to cache.
             layer_idx (`int`):
                 The index of the layer to cache the states for.
-            cache_kwargs (`Dict[str, Any]`, `optional`):
+            cache_kwargs (`dict[str, Any]`, `optional`):
                 Additional arguments for the cache subclass. The `StaticCache` needs the `cache_position` input
                 to know how where to write in the cache.
 
@@ -1259,7 +1260,7 @@ class SlidingWindowCache(StaticCache):
             should pass the `layer_device_map` argument instead.
         dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
-        layer_device_map (`Optional[Dict[int, Union[str, torch.device, int]]]]`, *optional*):
+        layer_device_map (`Optional[dict[int, Union[str, torch.device, int]]]]`, *optional*):
             Mapping between the layers and its device. This is required when you are manually initializing the cache
             and the model is split between different gpus. You can know which layers mapped to which device by
             checking the associated device_map: `model.hf_device_map`.
@@ -1293,7 +1294,7 @@ class SlidingWindowCache(StaticCache):
         max_cache_len: Optional[int] = None,
         device: Union[torch.device, str, None] = None,
         dtype: torch.dtype = torch.float32,
-        layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
+        layer_device_map: Optional[dict[int, Union[str, torch.device, int]]] = None,
     ) -> None:
         if not hasattr(config, "sliding_window") or config.sliding_window is None:
             raise ValueError(
@@ -1317,8 +1318,8 @@ class SlidingWindowCache(StaticCache):
         key_states: torch.Tensor,
         value_states: torch.Tensor,
         layer_idx: int,
-        cache_kwargs: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        cache_kwargs: Optional[dict[str, Any]] = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         if cache_kwargs is None:
             cache_kwargs = {}
         cache_position = cache_kwargs.get("cache_position")
@@ -1399,7 +1400,7 @@ class EncoderDecoderCache(Cache):
         for layer_idx in range(len(cross_attention_cache.key_cache)):
             self.is_updated[layer_idx] = bool(cross_attention_cache.get_seq_length(layer_idx) > 0)
 
-    def __getitem__(self, layer_idx: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    def __getitem__(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Support for backwards-compatible `past_key_value` indexing, e.g. `past_key_value[0][0].shape[2]` to get the
         sequence length.
@@ -1421,7 +1422,7 @@ class EncoderDecoderCache(Cache):
         """
         return len(self.self_attention_cache)
 
-    def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor]]:
+    def to_legacy_cache(self) -> tuple[tuple[torch.Tensor]]:
         """Converts the `EncoderDecoderCache` instance into its equivalent in the legacy cache format."""
         legacy_cache = ()
         if len(self.cross_attention_cache) > 0:
@@ -1435,7 +1436,7 @@ class EncoderDecoderCache(Cache):
 
     @classmethod
     def from_legacy_cache(
-        cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+        cls, past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None
     ) -> "EncoderDecoderCache":
         """Converts a cache in the legacy cache format into an equivalent `EncoderDecoderCache`."""
         cache = cls(
@@ -1494,7 +1495,7 @@ class EncoderDecoderCache(Cache):
         self.check_dynamic_cache(self.crop.__name__)
         self.self_attention_cache.crop(maximum_length)
 
-    def batch_split(self, full_batch_size: int, split_size: int) -> "List[EncoderDecoderCache]":
+    def batch_split(self, full_batch_size: int, split_size: int) -> "list[EncoderDecoderCache]":
         """Split the current instance into a list of `DynamicCache` by the batch size. This will be used by
         `_split_model_inputs()` in `generation.utils`"""
         self.check_dynamic_cache(self.batch_split.__name__)
@@ -1507,7 +1508,7 @@ class EncoderDecoderCache(Cache):
         return out
 
     @classmethod
-    def from_batch_splits(cls, splits: List["EncoderDecoderCache"]) -> "EncoderDecoderCache":
+    def from_batch_splits(cls, splits: list["EncoderDecoderCache"]) -> "EncoderDecoderCache":
         """This is the opposite of the above `batch_split()` method. This will be used by `stack_model_outputs` in
         `generation.utils`"""
         self_attention_cache = DynamicCache()
@@ -1568,7 +1569,7 @@ class HybridCache(Cache):
             should pass the `layer_device_map` argument instead.
         dtype (torch.dtype, *optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
-        layer_device_map (`Optional[Dict[int, Union[str, torch.device, int]]]]`, *optional*):
+        layer_device_map (`Optional[dict[int, Union[str, torch.device, int]]]]`, *optional*):
             Mapping between the layers and its device. This is required when you are manually initializing the cache
             and the model is split between different gpus. You can know which layers mapped to which device by
             checking the associated device_map: `model.hf_device_map`.
@@ -1602,7 +1603,7 @@ class HybridCache(Cache):
         max_cache_len: Optional[int] = None,
         device: Union[torch.device, str, None] = None,
         dtype: torch.dtype = torch.float32,
-        layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
+        layer_device_map: Optional[dict[int, Union[str, torch.device, int]]] = None,
     ) -> None:
         super().__init__()
         if not hasattr(config, "sliding_window") or config.sliding_window is None:
@@ -1633,8 +1634,8 @@ class HybridCache(Cache):
         else:
             self.is_sliding = [False] * config.num_hidden_layers
 
-        self.key_cache: List[torch.Tensor] = []
-        self.value_cache: List[torch.Tensor] = []
+        self.key_cache: list[torch.Tensor] = []
+        self.value_cache: list[torch.Tensor] = []
         global_cache_shape = (self.max_batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
         sliding_cache_shape = (self.max_batch_size, self.num_key_value_heads, self.sliding_window_len, self.head_dim)
         self.sliding_window = min(config.sliding_window, max_cache_len)
@@ -1659,8 +1660,8 @@ class HybridCache(Cache):
         key_states: torch.Tensor,
         value_states: torch.Tensor,
         layer_idx: int,
-        cache_kwargs: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        cache_kwargs: Optional[dict[str, Any]] = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         if cache_kwargs is None:
             cache_kwargs = {}
         cache_position = cache_kwargs.get("cache_position")
@@ -1756,7 +1757,7 @@ class HybridChunkedCache(Cache):
             should pass the `layer_device_map` argument instead.
         dtype (torch.dtype, *optional*, defaults to `torch.bfloat16`):
             The default `dtype` to use when initializing the layer.
-        layer_device_map (`Optional[Dict[int, Union[str, torch.device, int]]]]`, *optional*):
+        layer_device_map (`Optional[dict[int, Union[str, torch.device, int]]]]`, *optional*):
             Mapping between the layers and its device. This is required when you are manually initializing the cache
             and the model is split between different gpus. You can know which layers mapped to which device by
             checking the associated device_map: `model.hf_device_map`.
@@ -1790,7 +1791,7 @@ class HybridChunkedCache(Cache):
         max_cache_len: Optional[int] = None,
         device: Union[torch.device, str, None] = None,
         dtype: torch.dtype = torch.bfloat16,
-        layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
+        layer_device_map: Optional[dict[int, Union[str, torch.device, int]]] = None,
     ) -> None:
         super().__init__()
         if not hasattr(config, "sliding_window") or config.sliding_window is None:
@@ -1810,8 +1811,8 @@ class HybridChunkedCache(Cache):
         else:
             self.is_sliding = [False] * config.num_hidden_layers
 
-        self.key_cache: List[torch.Tensor] = []
-        self.value_cache: List[torch.Tensor] = []
+        self.key_cache: list[torch.Tensor] = []
+        self.value_cache: list[torch.Tensor] = []
         self.cumulative_length = [0 for _ in range(config.num_hidden_layers)]
 
     def initialise_cache_layer(self, layer_idx, key_states):
@@ -1879,8 +1880,8 @@ class HybridChunkedCache(Cache):
         key_states: torch.Tensor,
         value_states: torch.Tensor,
         layer_idx: int,
-        cache_kwargs: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        cache_kwargs: Optional[dict[str, Any]] = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         if cache_kwargs is None:
             cache_kwargs = {}
         cache_position = cache_kwargs.get("cache_position")
@@ -1967,7 +1968,7 @@ class OffloadedHybridCache(HybridChunkedCache):
         device: Union[torch.device, str, None] = None,
         dtype: torch.dtype = torch.bfloat16,
         offload_device: Union[str, torch.device] = torch.device("cpu"),
-        layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
+        layer_device_map: Optional[dict[int, Union[str, torch.device, int]]] = None,
     ):
         super().__init__(config, max_batch_size, max_cache_len, device, dtype, layer_device_map)
 
@@ -2120,8 +2121,8 @@ class MambaCache:
         self.ssm_state_size = config.state_size
         self.conv_kernel_size = config.conv_kernel
 
-        self.conv_states: List[torch.Tensor] = []
-        self.ssm_states: List[torch.Tensor] = []
+        self.conv_states: list[torch.Tensor] = []
+        self.ssm_states: list[torch.Tensor] = []
         device = torch.device(device) if device is not None else None
         for _ in range(config.num_hidden_layers):
             conv_state: torch.Tensor = torch.zeros(
@@ -2192,7 +2193,7 @@ class OffloadedStaticCache(StaticCache):
             The default `dtype` to use when initializing the cache.
         offload_device (`Union[str, torch.device]`, *optional*, defaults to `cpu`):
             The device to offload to. Defaults to CPU.
-        layer_device_map (`Dict[int, Union[str, torch.device, int]]`, *optional*):
+        layer_device_map (`dict[int, Union[str, torch.device, int]]`, *optional*):
             Mapping between the layers and its device. This is required when you are manually initializing the cache
             and the model is split between different gpus. You can know which layers mapped to which device by
             checking the associated device_map: `model.hf_device_map`.
@@ -2226,7 +2227,7 @@ class OffloadedStaticCache(StaticCache):
         device: Union[str, torch.device],
         dtype: Optional[torch.dtype] = None,
         offload_device: Union[str, torch.device] = torch.device("cpu"),
-        layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
+        layer_device_map: Optional[dict[int, Union[str, torch.device, int]]] = None,
     ) -> None:
         super(Cache, self).__init__()
 
@@ -2254,8 +2255,8 @@ class OffloadedStaticCache(StaticCache):
         cache_shape = (max_batch_size, num_key_value_heads, self.max_cache_len, head_dim)
 
         # Create offloaded CPU tensors.
-        self.key_cache: List[torch.Tensor] = []
-        self.value_cache: List[torch.Tensor] = []
+        self.key_cache: list[torch.Tensor] = []
+        self.value_cache: list[torch.Tensor] = []
 
         for i in range(config.num_hidden_layers):
             # First layer is always on-device.
@@ -2267,8 +2268,8 @@ class OffloadedStaticCache(StaticCache):
             self.value_cache.append(value_cache)
 
         # Create device tensors.
-        self._device_key_cache: List[torch.Tensor] = []
-        self._device_value_cache: List[torch.Tensor] = []
+        self._device_key_cache: list[torch.Tensor] = []
+        self._device_value_cache: list[torch.Tensor] = []
 
         for i in range(2):
             key_cache, value_cache = self._create_key_value_cache_tensors(cache_shape, self.device)
@@ -2288,8 +2289,8 @@ class OffloadedStaticCache(StaticCache):
         key_states: torch.Tensor,
         value_states: torch.Tensor,
         layer_idx: int,
-        cache_kwargs: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        cache_kwargs: Optional[dict[str, Any]] = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
         It is VERY important to index using a tensor, otherwise you introduce a copy to the device.
@@ -2301,7 +2302,7 @@ class OffloadedStaticCache(StaticCache):
                 The new value states to cache.
             layer_idx (`int`):
                 The index of the layer to cache the states for.
-            cache_kwargs (`Dict[str, Any]`, *optional*):
+            cache_kwargs (`dict[str, Any]`, *optional*):
                 Additional arguments for the cache subclass. The `OffloadedStaticCache` needs the
                 `cache_position` input to know how where to write in the cache.
 
@@ -2400,13 +2401,13 @@ class OffloadedStaticCache(StaticCache):
         return self._seen_tokens
 
     def _create_key_value_cache_tensors(
-        self, shape: Tuple[int, ...], device: torch.device
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        self, shape: tuple[int, ...], device: torch.device
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Creates K/V cache tensors on a device. Pins memory for CPU tensors. Marks them as static
         addresses for non-CPU tensors.
 
         Args:
-            shape (`Tuple[int, ...]`): Shape.
+            shape (`tuple[int, ...]`): Shape.
             device (`torch.device`): Device.
 
         Returns:

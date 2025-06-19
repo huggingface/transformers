@@ -35,7 +35,7 @@ python src/transformers/models/colqwen2/convert_colqwen2_weights_to_hf.py \
 import argparse
 import glob
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 import torch
 from huggingface_hub import snapshot_download
@@ -54,7 +54,7 @@ logger = logging.get_logger(__name__)
 ORIGINAL_DTYPE = torch.bfloat16
 
 
-def load_original_state_dict(model_id: str, revision: Optional[str] = None) -> Dict[str, torch.Tensor]:
+def load_original_state_dict(model_id: str, revision: Optional[str] = None) -> dict[str, torch.Tensor]:
     directory_path = snapshot_download(
         repo_id=model_id,
         revision=revision,
@@ -75,8 +75,8 @@ def load_original_state_dict(model_id: str, revision: Optional[str] = None) -> D
     return original_state_dict
 
 
-def rename_state_dict_keys(state_dict: Dict[str, Any]) -> Dict[str, Any]:
-    new_state_dict: Dict[str, Any] = {}
+def rename_state_dict_keys(state_dict: dict[str, Any]) -> dict[str, Any]:
+    new_state_dict: dict[str, Any] = {}
     for key, value in state_dict.items():
         if key.startswith("custom_text_proj"):
             new_key = key.replace("custom_text_proj", "embedding_proj_layer")

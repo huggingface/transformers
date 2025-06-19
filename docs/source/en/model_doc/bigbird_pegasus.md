@@ -22,7 +22,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The BigBird model was proposed in [Big Bird: Transformers for Longer Sequences](https://arxiv.org/abs/2007.14062) by
+The BigBird model was proposed in [Big Bird: Transformers for Longer Sequences](https://huggingface.co/papers/2007.14062) by
 Zaheer, Manzil and Guruganesh, Guru and Dubey, Kumar Avinava and Ainslie, Joshua and Alberti, Chris and Ontanon,
 Santiago and Pham, Philip and Ravula, Anirudh and Wang, Qifan and Yang, Li and others. BigBird, is a sparse-attention
 based transformer which extends Transformer based models, such as BERT to much longer sequences. In addition to sparse

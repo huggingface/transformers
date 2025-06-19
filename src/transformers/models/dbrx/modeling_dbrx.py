@@ -15,7 +15,7 @@
 """PyTorch DBRX model."""
 
 import math
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -130,12 +130,12 @@ def load_balancing_loss_func(
 ) -> torch.Tensor:
     r"""Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
 
-    See Switch Transformer (https://arxiv.org/abs/2101.03961) for more details. This function implements the loss
+    See Switch Transformer (https://huggingface.co/papers/2101.03961) for more details. This function implements the loss
     function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
     experts is too unbalanced.
 
     Args:
-        gate_logits (Union[`torch.Tensor`, Tuple[torch.Tensor]):
+        gate_logits (Union[`torch.Tensor`, tuple[torch.Tensor]):
             Logits from the `gate`, should be a tuple of model.config.num_hidden_layers tensors of
             shape [batch_size X sequence_length, num_experts].
         num_experts (`int`):
@@ -248,7 +248,7 @@ class DbrxAttention(nn.Module):
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Any,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Cache]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[Cache]]:
         bsz, q_len, _ = hidden_states.size()
 
         qkv_states = self.Wqkv(hidden_states)
@@ -333,7 +333,7 @@ class DbrxFlashAttention2(DbrxAttention):
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Any,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         if isinstance(past_key_value, StaticCache):
             raise ValueError(
                 "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
@@ -443,7 +443,7 @@ class DbrxSdpaAttention(DbrxAttention):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
             logger.warning_once(
@@ -551,7 +551,7 @@ class DbrxNormAttentionNorm(nn.Module):
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Any,
-    ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor], Optional[Cache]]:
+    ) -> tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor], Optional[Cache]]:
         residual_states = hidden_states
         hidden_states = self.norm_1(hidden_states).to(hidden_states.dtype)
 
@@ -593,7 +593,7 @@ class DbrxRouter(nn.Module):
 
         self.layer = nn.Linear(self.hidden_size, self.moe_num_experts, bias=False)
 
-    def forward(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.LongTensor]:
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.LongTensor]:
         if self.training and self.moe_jitter_eps is not None:
             hidden_states *= torch.empty_like(hidden_states).uniform_(
                 1.0 - self.moe_jitter_eps, 1.0 + self.moe_jitter_eps
@@ -713,7 +713,7 @@ class DbrxFFN(nn.Module):
             ffn_act_fn=ffn_config.ffn_act_fn,
         )
 
-    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         weights, top_weights, top_experts = self.router(x)
         out = self.experts(x, weights, top_weights, top_experts)
         return out, weights
@@ -743,13 +743,13 @@ class DbrxBlock(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Any,
     ) -> Union[
-        Tuple[torch.Tensor],
-        Tuple[torch.Tensor, Optional[torch.Tensor]],
-        Tuple[torch.Tensor, Optional[Cache]],
-        Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Cache]],
-        Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]],
-        Tuple[torch.Tensor, Optional[Cache], Optional[torch.Tensor]],
-        Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Cache], Optional[torch.Tensor]],
+        tuple[torch.Tensor],
+        tuple[torch.Tensor, Optional[torch.Tensor]],
+        tuple[torch.Tensor, Optional[Cache]],
+        tuple[torch.Tensor, Optional[torch.Tensor], Optional[Cache]],
+        tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]],
+        tuple[torch.Tensor, Optional[Cache], Optional[torch.Tensor]],
+        tuple[torch.Tensor, Optional[torch.Tensor], Optional[Cache], Optional[torch.Tensor]],
     ]:
         """Forward function for DbrxBlock.
 
@@ -877,7 +877,7 @@ class DbrxModel(DbrxPreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,  # NOOP kwargs, for now
-    ) -> Union[Tuple, MoeModelOutputWithPast]:
+    ) -> Union[tuple, MoeModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1180,7 +1180,7 @@ class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
-    ) -> Union[Tuple, MoeCausalLMOutputWithPast]:
+    ) -> Union[tuple, MoeCausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,

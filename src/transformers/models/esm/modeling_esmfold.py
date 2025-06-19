@@ -14,9 +14,10 @@
 # limitations under the License.
 import math
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import partial
-from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Callable, Optional, Union
 
 import numpy as np
 import torch
@@ -153,7 +154,7 @@ def is_deepspeed_initialized():
             return False
 
 
-def collate_dense_tensors(samples: List[torch.Tensor], pad_v: float = 0) -> torch.Tensor:
+def collate_dense_tensors(samples: list[torch.Tensor], pad_v: float = 0) -> torch.Tensor:
     """
     Takes a list of tensors with the following dimensions:
         [(d_11, ..., d_1K),
@@ -180,7 +181,7 @@ def flatten_final_dims(t: torch.Tensor, no_dims: int):
     return t.reshape(t.shape[:-no_dims] + (-1,))
 
 
-def permute_final_dims(tensor: torch.Tensor, inds: List[int]):
+def permute_final_dims(tensor: torch.Tensor, inds: list[int]):
     zero_index = -1 * len(inds)
     first_inds = list(range(len(tensor.shape[:zero_index])))
     return tensor.permute(first_inds + [zero_index + i for i in inds])
@@ -360,7 +361,7 @@ class EsmFoldAttention(nn.Module):
 
         self.sigmoid = nn.Sigmoid()
 
-    def _prep_qkv(self, q_x: torch.Tensor, kv_x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def _prep_qkv(self, q_x: torch.Tensor, kv_x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         # [*, Q/K/V, H * C_hidden]
         q = self.linear_q(q_x)
         k = self.linear_k(kv_x)
@@ -400,7 +401,7 @@ class EsmFoldAttention(nn.Module):
         self,
         q_x: torch.Tensor,
         kv_x: torch.Tensor,
-        biases: Optional[List[torch.Tensor]] = None,
+        biases: Optional[list[torch.Tensor]] = None,
         use_memory_efficient_kernel: bool = False,
         use_lma: bool = False,
         lma_q_chunk_size: int = 1024,
@@ -489,7 +490,7 @@ class EsmFoldTriangleAttention(nn.Module):
     def _chunk(
         self,
         x: torch.Tensor,
-        biases: List[torch.Tensor],
+        biases: list[torch.Tensor],
         chunk_size: int,
         use_memory_efficient_kernel: bool = False,
         use_lma: bool = False,
@@ -1018,7 +1019,7 @@ class EsmFoldDropout(nn.Module):
     Implementation of dropout with the ability to share the dropout mask along a particular dimension.
     """
 
-    def __init__(self, r: float, batch_dim: Union[int, List[int]]):
+    def __init__(self, r: float, batch_dim: Union[int, list[int]]):
         super().__init__()
 
         self.r = r
@@ -1337,7 +1338,7 @@ class EsmFoldAngleResnet(nn.Module):
 
         self.relu = nn.ReLU()
 
-    def forward(self, s: torch.Tensor, s_initial: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, s: torch.Tensor, s_initial: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Args:
             s:
@@ -1413,7 +1414,7 @@ class EsmFoldInvariantPointAttention(nn.Module):
 
         self.linear_b = EsmFoldLinear(c_z, config.num_heads_ipa)
 
-        self.head_weights = nn.Parameter(torch.zeros((config.num_heads_ipa)))
+        self.head_weights = nn.Parameter(torch.zeros(config.num_heads_ipa))
 
         concat_out_dim = config.num_heads_ipa * (c_z + config.ipa_dim + config.num_v_points * 4)
         self.linear_out = EsmFoldLinear(concat_out_dim, c_s, init="final")
@@ -1588,7 +1589,7 @@ class EsmFoldBackboneUpdate(nn.Module):
 
         self.linear = EsmFoldLinear(config.sequence_dim, 6, init="final")
 
-    def forward(self, s: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, s: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Args:
             [*, N_res, C_s] single representation
@@ -2038,7 +2039,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         )
 
     @staticmethod
-    def _af2_to_esm_from_vocab_list(vocab_list: List[str]) -> torch.Tensor:
+    def _af2_to_esm_from_vocab_list(vocab_list: list[str]) -> torch.Tensor:
         # Remember that t is shifted from residue_constants by 1 (0 is padding).
         esm_reorder = [vocab_list.index("<pad>")] + [vocab_list.index(v) for v in residue_constants.restypes_with_x]
         return torch.tensor(esm_reorder)
@@ -2221,7 +2222,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
     @torch.no_grad()
     def infer(
         self,
-        seqs: Union[str, List[str]],
+        seqs: Union[str, list[str]],
         position_ids=None,
     ):
         if isinstance(seqs, str):
@@ -2259,7 +2260,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         )
 
     @staticmethod
-    def output_to_pdb(output: Dict) -> List[str]:
+    def output_to_pdb(output: dict) -> list[str]:
         """Returns the pbd (file) string from the model given the model output."""
         output = {k: v.to("cpu").numpy() for k, v in output.items()}
         pdbs = []
@@ -2286,7 +2287,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         output = self.infer(seqs, *args, **kwargs)
         return self.output_to_pdb(output)[0]
 
-    def infer_pdbs(self, seqs: List[str], *args, **kwargs) -> List[str]:
+    def infer_pdbs(self, seqs: list[str], *args, **kwargs) -> list[str]:
         """Returns the pdb (file) string from the model given an input sequence."""
         output = self.infer(seqs, *args, **kwargs)
         return self.output_to_pdb(output)

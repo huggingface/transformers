@@ -20,7 +20,7 @@
 """PyTorch Zamba model."""
 
 import math
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -148,8 +148,8 @@ class ZambaHybridDynamicCache(DynamicCache):
         key_states: torch.Tensor,
         value_states: torch.Tensor,
         layer_idx: int,
-        cache_kwargs: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        cache_kwargs: Optional[dict[str, Any]] = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         # Update the cache
         if self.key_cache[layer_idx].shape[-1] == 0:
             self.key_cache[layer_idx] = key_states
@@ -183,11 +183,11 @@ class ZambaHybridDynamicCache(DynamicCache):
             return 0
         return self.key_cache[layer_idx].shape[-2]
 
-    def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor]]:
+    def to_legacy_cache(self) -> tuple[tuple[torch.Tensor], tuple[torch.Tensor]]:
         raise NotImplementedError("ZambaHybridDynamicCache does not have a legacy cache equivalent.")
 
     @classmethod
-    def from_legacy_cache(cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
+    def from_legacy_cache(cls, past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
         raise NotImplementedError("ZambaHybridDynamicCache does not have a legacy cache equivalent.")
 
 
@@ -225,7 +225,7 @@ class ZambaAttention(nn.Module):
     Adapted from transformers.models.mistral.modeling_mistral.MistralAttention:
     The input dimension here is attention_hidden_size = 2 * hidden_size, and head_dim = attention_hidden_size // num_heads.
     The extra factor of 2 comes from the input being the concatenation of original_hidden_states with the output of the previous (mamba) layer
-    (see fig. 2 in https://arxiv.org/pdf/2405.16712).
+    (see fig. 2 in https://huggingface.co/papers/2405.16712).
     Additionally, replaced
     attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim) with
     attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim/2)
@@ -256,7 +256,7 @@ class ZambaAttention(nn.Module):
         attention_mask: Optional[torch.Tensor],
         past_key_value: Optional[ZambaHybridDynamicCache] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -332,12 +332,10 @@ class ZambaMambaMixer(nn.Module):
         # weight associated to the selective projection used to make dt, B and C input dependent
         # each mamba head is processed independently
         self.x_proj_weight = nn.Parameter(
-            (
-                torch.zeros(
-                    self.n_mamba_heads,
-                    self.time_step_rank + self.ssm_state_size * 2,
-                    self.mamba_head_dim,
-                )
+            torch.zeros(
+                self.n_mamba_heads,
+                self.time_step_rank + self.ssm_state_size * 2,
+                self.mamba_head_dim,
             )
         )
         # time step projection (discretization)
@@ -601,14 +599,14 @@ class ZambaAttentionDecoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): output of previous Mamba layer of shape `(batch, seq_len, embed_dim)`
             original_hidden_states (`torch.FloatTensor`): word embedding output of shape `(batch, seq_len, embed_dim)`.
                 This is concatenated with `hidden_states` (which is the output of the previous (mamba) layer). The
                 concatenated tensor is then used as input of the pre-attention RMSNorm
-                (see fig. 2 in https://arxiv.org/pdf/2405.16712).
+                (see fig. 2 in https://huggingface.co/papers/2405.16712).
             layer_idx (`int`): layer_idx in the forward pass. Used to distinguish Zamba's tied transformer layers.
             attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
                 `(batch, sequence_length)` where padding elements are indicated by 0.
@@ -665,7 +663,7 @@ class ZambaMambaDecoderLayer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         transformer_hidden_states: Optional[torch.Tensor] = None,
         **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -684,8 +682,8 @@ class ZambaMambaDecoderLayer(nn.Module):
 
         residual = hidden_states
 
-        # `transformer_hidden_states` is the output from shared transformer + linear layer (see fig. 2 in https://arxiv.org/pdf/2405.16712).
-        # `transformer_hidden_states` is then added to the input to the mamba layer below (as described in eq. (6) of https://arxiv.org/pdf/2405.16712).
+        # `transformer_hidden_states` is the output from shared transformer + linear layer (see fig. 2 in https://huggingface.co/papers/2405.16712).
+        # `transformer_hidden_states` is then added to the input to the mamba layer below (as described in eq. (6) of https://huggingface.co/papers/2405.16712).
         hidden_states = (
             hidden_states + transformer_hidden_states if transformer_hidden_states is not None else hidden_states
         )
@@ -731,7 +729,7 @@ class ZambaHybridLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -835,7 +833,7 @@ class ZambaPreTrainedModel(PreTrainedModel):
         cls,
         config,
         torch_dtype: Optional[torch.dtype] = None,
-        device_map: Optional[Union[str, Dict[str, int]]] = None,
+        device_map: Optional[Union[str, dict[str, int]]] = None,
         hard_check_only: bool = False,
         check_device_map: bool = False,
     ):
@@ -929,7 +927,7 @@ class ZambaModel(ZambaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    ) -> Union[tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1109,7 +1107,7 @@ class ZambaForCausalLM(ZambaPreTrainedModel, GenerationMixin):
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **loss_kwargs,
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -1272,14 +1270,14 @@ class ZambaForSequenceClassification(ZambaPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
+    ) -> Union[tuple, SequenceClassifierOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
