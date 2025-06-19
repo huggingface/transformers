@@ -121,7 +121,6 @@ jobs:
       machine_type: ${{ matrix.machine_type }}
       slice_id: ${{ matrix.slice_id }}
       runner_map: ${{ needs.setup.outputs.runner_map }}
-      runner: ${{ inputs.runner }}
       docker: ${{ inputs.docker }}
     secrets: inherit
 
@@ -139,7 +138,6 @@ jobs:
       folder_slices: ${{ needs.setup.outputs.folder_slices }}
       machine_type: ${{ matrix.machine_type }}
       slice_id: ${{ matrix.slice_id }}
-      runner: ${{ inputs.runner }}
       docker: ${{ inputs.docker }}
       report_name_prefix: run_trainer_and_fsdp_gpu
     secrets: inherit
