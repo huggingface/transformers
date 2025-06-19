@@ -1,15 +1,15 @@
 import os
 import requests
 
-response = requests.get("https://huggingface.co/datasets/hf-internal-testing/transformers_daily_ci/resolve/main/runner_map.json")
-runner_map = response.json()
-
 tests = os.getcwd()
 model_tests = os.listdir(os.path.join(tests, "models"))
 d1 = sorted(filter(os.path.isdir, os.listdir(tests)))
 d2 = sorted(filter(os.path.isdir, [f"models/{x}" for x in model_tests]))
 d1.remove("models")
 d = d2 + d1
+
+response = requests.get("https://huggingface.co/datasets/hf-internal-testing/transformers_daily_ci/resolve/main/runner_map.json")
+runner_map = response.json()
 
 for key in d:
     if key not in runner_map:
