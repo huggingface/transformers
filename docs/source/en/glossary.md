@@ -163,7 +163,7 @@ The intermediate embedding size of the feed forward layers is often bigger than 
 
 For an input of size `[batch_size, sequence_length]`, the memory required to store the intermediate feed forward
 embeddings `[batch_size, sequence_length, config.intermediate_size]` can account for a large fraction of the memory
-use. The authors of [Reformer: The Efficient Transformer](https://arxiv.org/abs/2001.04451) noticed that since the
+use. The authors of [Reformer: The Efficient Transformer](https://huggingface.co/papers/2001.04451) noticed that since the
 computation is independent of the `sequence_length` dimension, it is mathematically equivalent to compute the output
 embeddings of both feed forward layers `[batch_size, config.hidden_size]_0, ..., [batch_size, config.hidden_size]_n`
 individually and concat them afterward to `[batch_size, sequence_length, config.hidden_size]` with `n = sequence_length`, which trades increased computation time against reduced memory use, but yields a mathematically
@@ -207,7 +207,7 @@ numerical representations of tokens building the sequences that will be used as 
 <Youtube id="VFp38yj8h3A"/>
 
 Each tokenizer works differently but the underlying mechanism remains the same. Here's an example using the BERT
-tokenizer, which is a [WordPiece](https://arxiv.org/pdf/1609.08144.pdf) tokenizer:
+tokenizer, which is a [WordPiece](https://huggingface.co/papers/1609.08144) tokenizer:
 
 ```python
 >>> from transformers import BertTokenizer

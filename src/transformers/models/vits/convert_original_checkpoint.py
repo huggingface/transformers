@@ -346,7 +346,7 @@ def convert_checkpoint(
 
     model.decoder.apply_weight_norm()
 
-    orig_checkpoint = torch.load(checkpoint_path, map_location=torch.device("cpu"))
+    orig_checkpoint = torch.load(checkpoint_path, map_location=torch.device("cpu"), weights_only=True)
     recursively_load_weights(orig_checkpoint["model"], model)
 
     model.decoder.remove_weight_norm()

@@ -144,12 +144,14 @@ class Blip2QFormerConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        pad_token_id (`int`, *optional*, defaults to 0):
+            Index to be used for padding token.
         position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
             Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
             positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
+            [Self-Attention with Relative Position Representations (Shaw et al.)](https://huggingface.co/papers/1803.02155).
             For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
+            with Better Relative Position Embeddings (Huang et al.)](https://huggingface.co/papers/2009.13658).
         cross_attention_frequency (`int`, *optional*, defaults to 2):
             The frequency of adding cross-attention to the Transformer layers.
         encoder_hidden_size (`int`, *optional*, defaults to 1408):
@@ -233,7 +235,7 @@ class Blip2Config(PretrainedConfig):
         num_query_tokens (`int`, *optional*, defaults to 32):
             The number of query tokens passed through the Transformer.
         image_text_hidden_size (`int`, *optional*, defaults to 256):
-            Dimentionality of the hidden state of the image-text fusion layer.
+            Dimensionality of the hidden state of the image-text fusion layer.
 
         image_token_index (`int`, *optional*):
             Token index of special image token.
@@ -271,6 +273,9 @@ class Blip2Config(PretrainedConfig):
     ```"""
 
     model_type = "blip-2"
+    attribute_map = {
+        "image_token_id": "image_token_index",
+    }
     sub_configs = {"text_config": AutoConfig, "qformer_config": Blip2QFormerConfig, "vision_config": Blip2VisionConfig}
 
     def __init__(

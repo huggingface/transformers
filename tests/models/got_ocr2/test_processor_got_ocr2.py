@@ -31,14 +31,16 @@ if is_vision_available():
 class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = GotOcr2Processor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
 
         image_processor = GotOcr2ImageProcessor()
         tokenizer = PreTrainedTokenizerFast.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf")
-        processor_kwargs = self.prepare_processor_dict()
+        processor_kwargs = {}
         processor = GotOcr2Processor(image_processor, tokenizer, **processor_kwargs)
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
+        cls.image_token = processor.img_pad_token
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
@@ -46,8 +48,9 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_image_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def test_ocr_queries(self):
         processor = self.get_processor()

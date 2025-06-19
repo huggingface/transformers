@@ -16,7 +16,7 @@
 
 import collections.abc
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Callable, Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -26,25 +26,11 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_yolos import YolosConfig
 
 
 logger = logging.get_logger(__name__)
-
-# General docstring
-_CONFIG_FOR_DOC = "YolosConfig"
-
-# Base docstring
-_CHECKPOINT_FOR_DOC = "hustvl/yolos-small"
-_EXPECTED_OUTPUT_SHAPE = [1, 3401, 384]
 
 
 @dataclass
@@ -67,7 +53,7 @@ class YolosObjectDetectionOutput(ModelOutput):
             possible padding). You can use [`~YolosImageProcessor.post_process`] to retrieve the unnormalized bounding
             boxes.
         auxiliary_outputs (`list[Dict]`, *optional*):
-            Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
+            Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
             and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
             `pred_boxes`) for each decoder layer.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -83,13 +69,13 @@ class YolosObjectDetectionOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    loss_dict: Optional[Dict] = None
-    logits: torch.FloatTensor = None
-    pred_boxes: torch.FloatTensor = None
-    auxiliary_outputs: Optional[List[Dict]] = None
+    loss_dict: Optional[dict] = None
+    logits: Optional[torch.FloatTensor] = None
+    pred_boxes: Optional[torch.FloatTensor] = None
+    auxiliary_outputs: Optional[list[dict]] = None
     last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 class YolosEmbeddings(nn.Module):
@@ -155,9 +141,9 @@ class InterpolateInitialPositionEmbeddings(nn.Module):
         patch_pos_embed = patch_pos_embed.view(batch_size, hidden_size, patch_height, patch_width)
 
         height, width = img_size
-        new_patch_heigth, new_patch_width = height // self.config.patch_size, width // self.config.patch_size
+        new_patch_height, new_patch_width = height // self.config.patch_size, width // self.config.patch_size
         patch_pos_embed = nn.functional.interpolate(
-            patch_pos_embed, size=(new_patch_heigth, new_patch_width), mode="bicubic", align_corners=False
+            patch_pos_embed, size=(new_patch_height, new_patch_width), mode="bicubic", align_corners=False
         )
         patch_pos_embed = patch_pos_embed.flatten(2).transpose(1, 2)
         scale_pos_embed = torch.cat((cls_pos_embed, patch_pos_embed, det_pos_embed), dim=1)
@@ -290,7 +276,7 @@ class YolosSelfAttention(nn.Module):
 
     def forward(
         self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         key_layer = self.transpose_for_scores(self.key(hidden_states))
         value_layer = self.transpose_for_scores(self.value(hidden_states))
         query_layer = self.transpose_for_scores(self.query(hidden_states))
@@ -351,7 +337,7 @@ class YolosAttention(nn.Module):
         self.output = YolosSelfOutput(config)
         self.pruned_heads = set()
 
-    def prune_heads(self, heads: Set[int]) -> None:
+    def prune_heads(self, heads: set[int]) -> None:
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
@@ -374,7 +360,7 @@ class YolosAttention(nn.Module):
         hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         self_outputs = self.attention(hidden_states, head_mask, output_attentions)
 
         attention_output = self.output(self_outputs[0], hidden_states)
@@ -435,7 +421,7 @@ class YolosLayer(nn.Module):
         hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in Yolos, layernorm is applied before self-attention
             head_mask,
@@ -537,12 +523,8 @@ class YolosEncoder(nn.Module):
         )
 
 
+@auto_docstring
 class YolosPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = YolosConfig
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
@@ -550,6 +532,8 @@ class YolosPreTrainedModel(PreTrainedModel):
     _no_split_modules = []
     _supports_sdpa = True
     _supports_flash_attn_2 = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
@@ -564,46 +548,13 @@ class YolosPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-YOLOS_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`YolosConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-YOLOS_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`YolosImageProcessor.__call__`] for details.
-
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare YOLOS Model transformer outputting raw hidden-states without any specific head on top.",
-    YOLOS_START_DOCSTRING,
-)
+@auto_docstring
 class YolosModel(YolosPreTrainedModel):
     def __init__(self, config: YolosConfig, add_pooling_layer: bool = True):
+        r"""
+        add_pooling_layer (bool, *optional*, defaults to `True`):
+            Whether to add a pooling layer
+        """
         super().__init__(config)
         self.config = config
 
@@ -619,7 +570,7 @@ class YolosModel(YolosPreTrainedModel):
     def get_input_embeddings(self) -> YolosPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
-    def _prune_heads(self, heads_to_prune: Dict[int, List[int]]) -> None:
+    def _prune_heads(self, heads_to_prune: dict[int, list[int]]) -> None:
         """
         Prunes heads of the model.
 
@@ -631,14 +582,7 @@ class YolosModel(YolosPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(YOLOS_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPooling,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -646,7 +590,7 @@ class YolosModel(YolosPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -727,11 +671,10 @@ class YolosMLPPredictionHead(nn.Module):
         return x
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     YOLOS Model (consisting of a ViT encoder) with object detection heads on top, for tasks such as COCO detection.
-    """,
-    YOLOS_START_DOCSTRING,
+    """
 )
 class YolosForObjectDetection(YolosPreTrainedModel):
     def __init__(self, config: YolosConfig):
@@ -760,25 +703,22 @@ class YolosForObjectDetection(YolosPreTrainedModel):
         # as a dict having both a Tensor and a list.
         return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
 
-    @add_start_docstrings_to_model_forward(YOLOS_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=YolosObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        labels: Optional[List[Dict]] = None,
+        labels: Optional[list[dict]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, YolosObjectDetectionOutput]:
+    ) -> Union[tuple, YolosObjectDetectionOutput]:
         r"""
-        labels (`List[Dict]` of len `(batch_size,)`, *optional*):
+        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
             Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
             following 2 keys: `'class_labels'` and `'boxes'` (the class labels and bounding boxes of an image in the
             batch respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding
             boxes in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image,
             4)`.
-
-        Returns:
 
         Examples:
 

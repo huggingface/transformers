@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -64,9 +63,7 @@ from transformers.testing_utils import (
     require_tf,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     require_torch_multi_accelerator,
-    require_usr_bin_time,
     slow,
     torch_device,
 )
@@ -75,6 +72,7 @@ from transformers.utils import (
     SAFE_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
+    check_torch_load_is_safe,
 )
 from transformers.utils.import_utils import (
     is_flash_attn_2_available,
@@ -82,7 +80,6 @@ from transformers.utils.import_utils import (
     is_tf_available,
     is_torch_npu_available,
     is_torch_sdpa_available,
-    is_torchdynamo_available,
 )
 
 
@@ -236,7 +233,7 @@ if is_torch_available():
                     except OSError:
                         LOG.info("Loading model %s in offline mode failed as expected", TINY_IMAGE_CLASSIF)
                     else:
-                        self.fail("Loading model {} in offline mode should fail".format(TINY_IMAGE_CLASSIF))
+                        self.fail(f"Loading model {TINY_IMAGE_CLASSIF} in offline mode should fail")
 
                     # Download model -> Huggingface Hub not concerned by our offline mode
                     LOG.info("Downloading %s for offline tests", TINY_IMAGE_CLASSIF)
@@ -280,7 +277,7 @@ if is_torch_available():
                     except OSError:
                         LOG.info("Loading model %s in offline mode failed as expected", TINY_IMAGE_CLASSIF)
                     else:
-                        self.fail("Loading model {} in offline mode should fail".format(TINY_IMAGE_CLASSIF))
+                        self.fail(f"Loading model {TINY_IMAGE_CLASSIF} in offline mode should fail")
 
                     LOG.info("Downloading %s for offline tests", TINY_IMAGE_CLASSIF)
                     hub_api = HfApi()
@@ -297,6 +294,27 @@ if is_torch_available():
                 constants.HUGGINGFACE_HUB_CACHE = hub_cache_env1
                 constants.default_cache_path = default_cache
                 hub.TRANSFORMERS_CACHE = transformers_cache
+
+
+# Need to be serializable, which means they cannot be in a test class method
+class TestGammaBetaNorm(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.gamma = torch.nn.Parameter(torch.ones(1))
+        self.beta = torch.nn.Parameter(torch.zeros(1))
+
+    def forward(self):
+        return self.gamma.sum() + self.beta.sum()
+
+
+class TestModelGammaBeta(PreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.LayerNorm = TestGammaBetaNorm()
+        self.post_init()
+
+    def forward(self):
+        return self.LayerNorm()
 
 
 if is_flax_available():
@@ -574,7 +592,7 @@ class ModelUtilsTest(TestCasePlus):
 
         def remove_torch_dtype(model_path):
             file = f"{model_path}/config.json"
-            with open(file, "r", encoding="utf-8") as f:
+            with open(file, encoding="utf-8") as f:
                 s = json.load(f)
             s.pop("torch_dtype")
             with open(file, "w", encoding="utf-8") as f:
@@ -741,11 +759,12 @@ class ModelUtilsTest(TestCasePlus):
                     # Note: pickle adds some junk so the weight of the file can end up being slightly bigger than
                     # the size asked for (since we count parameters)
                     if size >= max_size_int + 50000:
+                        check_torch_load_is_safe()
                         state_dict = torch.load(shard_file, weights_only=True)
                         self.assertEqual(len(state_dict), 1)
 
                 # Check the index and the shard files found match
-                with open(index_file, "r", encoding="utf-8") as f:
+                with open(index_file, encoding="utf-8") as f:
                     index = json.loads(f.read())
 
                 all_shards = set(index["weight_map"].values())
@@ -982,57 +1001,6 @@ class ModelUtilsTest(TestCasePlus):
             self.assertTrue(os.path.isfile(os.path.join(tmp_dir, WEIGHTS_NAME)))
 
         self.assertIsNotNone(model)
-
-    @require_accelerate
-    @mark.accelerate_tests
-    def test_from_pretrained_low_cpu_mem_usage_functional(self):
-        # test that we can use `from_pretrained(..., low_cpu_mem_usage=True)` with normal and
-        # sharded models
-
-        mnames = [
-            "hf-internal-testing/tiny-random-bert-sharded",
-            "hf-internal-testing/tiny-random-bert",
-        ]
-        for mname in mnames:
-            _ = BertModel.from_pretrained(mname, low_cpu_mem_usage=True)
-
-    @slow
-    @require_usr_bin_time
-    @require_accelerate
-    @mark.accelerate_tests
-    def test_from_pretrained_low_cpu_mem_usage_equal(self):
-        # Before this would test that `from_pretrained(..., low_cpu_mem_usage=True)` uses less cpu memory than default
-        # Now though these should be around the same.
-        # TODO: Look for good bounds to check that their timings are near the same
-
-        mname = "HuggingFaceTB/SmolLM-135M"
-
-        preamble = "from transformers import AutoModel"
-        one_liner_str = f'{preamble}; AutoModel.from_pretrained("{mname}", low_cpu_mem_usage=False)'
-        # Save this output as `max_rss_normal` if testing memory results
-        max_rss_normal = self.python_one_liner_max_rss(one_liner_str)
-
-        one_liner_str = f'{preamble};  AutoModel.from_pretrained("{mname}", low_cpu_mem_usage=True)'
-        # Save this output as `max_rss_low_mem` if testing memory results
-        max_rss_low_mem = self.python_one_liner_max_rss(one_liner_str)
-
-        # Should be within 5MBs of each other (overhead)
-        self.assertAlmostEqual(
-            max_rss_normal / 1024 / 1024,
-            max_rss_low_mem / 1024 / 1024,
-            delta=5,
-            msg="using `low_cpu_mem_usage` should incur the same memory usage in both cases.",
-        )
-
-        # if you want to compare things manually, let's first look at the size of the model in bytes
-        # model = AutoModel.from_pretrained(mname, low_cpu_mem_usage=False)
-        # total_numel = sum(dict((p.data_ptr(), p.numel()) for p in model.parameters()).values())
-        # total_bytes = total_numel * 4
-        # Now the diff_bytes should be very close to total_bytes, but the reports are inconsistent.
-        # The easiest way to test this is to switch the model and torch.load to do all the work on
-        # gpu - that way one can measure exactly the total and peak memory used. Perhaps once we add
-        # functionality to load models directly on gpu, this test can be rewritten to use torch's
-        # cuda memory tracking and then we should be able to do a much more precise test.
 
     @require_accelerate
     @mark.accelerate_tests
@@ -1484,8 +1452,6 @@ class ModelUtilsTest(TestCasePlus):
                     model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
             self.assertIn("You may ignore this warning if your `pad_token_id`", cl.out)
 
-        if not is_torchdynamo_available():
-            self.skipTest(reason="torchdynamo is not available")
         with self.subTest("Ensure that the warning code is skipped when compiling with torchdynamo."):
             logger.warning_once.cache_clear()
             from torch._dynamo import config, testing
@@ -1519,7 +1485,6 @@ class ModelUtilsTest(TestCasePlus):
                 config=model_config,
                 ignore_mismatched_sizes=True,
                 torch_dtype=torch.float16,
-                low_cpu_mem_usage=True,
             )
             model_ref = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path=model_id)
 
@@ -1573,6 +1538,14 @@ class ModelUtilsTest(TestCasePlus):
 
         for p1, p2 in zip(hub_model.parameters(), new_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
+
+    @require_tf
+    def test_torch_from_tf(self):
+        model = TFBertModel.from_pretrained("hf-internal-testing/tiny-bert-tf-only")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            _ = BertModel.from_pretrained(tmp_dir, from_tf=True)
 
     @require_safetensors
     def test_safetensors_torch_from_torch_sharded(self):
@@ -1631,24 +1604,6 @@ class ModelUtilsTest(TestCasePlus):
             torch.testing.assert_close(outputs_from_saved["logits"], outputs["logits"])
 
     def test_warning_for_beta_gamma_parameters(self):
-        class TestGammaBetaNorm(torch.nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.gamma = torch.nn.Parameter(torch.ones(1))
-                self.beta = torch.nn.Parameter(torch.zeros(1))
-
-            def forward(self):
-                return self.gamma.sum() + self.beta.sum()
-
-        class TestModelGammaBeta(PreTrainedModel):
-            def __init__(self, config):
-                super().__init__(config)
-                self.LayerNorm = TestGammaBetaNorm()
-                self.post_init()
-
-            def forward(self):
-                return self.LayerNorm()
-
         logger = logging.get_logger("transformers.modeling_utils")
         config = PretrainedConfig()
         warning_msg_gamma = "`LayerNorm.gamma` -> `LayerNorm.weight`"
@@ -1721,8 +1676,8 @@ class ModelUtilsTest(TestCasePlus):
         self.assertTrue("" == cl.out)
         self.assertTrue(can_generate)
 
-        # 4 - BC: models with a custom `prepare_inputs_for_generation` can generate (it was assumed they inherited
-        # `GenerationMixin`)
+        # 4 - Legacy: models with a custom `prepare_inputs_for_generation` can generate (it was assumed
+        # they inherited `GenerationMixin`). Deprecated in v4.45 and removed in v4.51.
         class DummyBertWithPrepareInputs(BertModel):
             def prepare_inputs_for_generation(self):
                 pass
@@ -1730,7 +1685,7 @@ class ModelUtilsTest(TestCasePlus):
         with CaptureLogger(logger) as cl:
             can_generate = DummyBertWithPrepareInputs.can_generate()
         self.assertTrue("it doesn't directly inherit from `GenerationMixin`" in cl.out)
-        self.assertTrue(can_generate)
+        self.assertFalse(can_generate)
 
     def test_save_and_load_config_with_custom_generation(self):
         """
@@ -1771,16 +1726,6 @@ class ModelUtilsTest(TestCasePlus):
 
         model_loaded = BertModel.from_pretrained(
             pretrained_model_name_or_path=None, config=config, state_dict=state_dict
-        )
-        self.assertTrue(check_models_equal(model, model_loaded))
-
-    def test_load_model_with_state_dict_only_low_cpu_mem_usage(self):
-        model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
-        state_dict = model.state_dict()
-        config = model.config
-
-        model_loaded = BertModel.from_pretrained(
-            pretrained_model_name_or_path=None, config=config, state_dict=state_dict, low_cpu_mem_usage=True
         )
         self.assertTrue(check_models_equal(model, model_loaded))
 
@@ -1898,7 +1843,7 @@ class ModelUtilsTest(TestCasePlus):
     @parameterized.expand([("Qwen/Qwen2.5-3B-Instruct", 10), ("meta-llama/Llama-2-7b-chat-hf", 10)])
     @slow
     @require_read_token
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_loading_is_fast_on_gpu(self, model_id: str, max_loading_time: float):
         """
         This test is used to avoid regression on https://github.com/huggingface/transformers/pull/36380.
@@ -1915,27 +1860,30 @@ class ModelUtilsTest(TestCasePlus):
             import time
             import argparse
             from transformers import AutoModelForCausalLM
+            from transformers.utils import is_torch_accelerator_available
 
             parser = argparse.ArgumentParser()
             parser.add_argument("model_id", type=str)
             parser.add_argument("max_loading_time", type=float)
             args = parser.parse_args()
 
-            device = torch.device("cuda:0")
+            device_type = torch.accelerator.current_accelerator().type if is_torch_accelerator_available() else "cuda"
+            device = torch.device(f"{device_type}:0")
 
-            torch.cuda.synchronize(device)
+            torch_accelerator_module = getattr(torch, device_type, torch.cuda)
+            torch_accelerator_module.synchronize(device)
             t0 = time.time()
             model = AutoModelForCausalLM.from_pretrained(args.model_id, torch_dtype=torch.float16, device_map=device)
-            torch.cuda.synchronize(device)
+            torch_accelerator_module.synchronize(device)
             dt = time.time() - t0
 
             # Assert loading is faster (it should be more than enough in both cases)
             if dt > args.max_loading_time:
                 raise ValueError(f"Loading took {dt:.2f}s! It should not take more than {args.max_loading_time}s")
-            # Ensure everything is correctly loaded on gpu
+            # Ensure everything is correctly loaded on accelerator
             bad_device_params = {k for k, v in model.named_parameters() if v.device != device}
             if len(bad_device_params) > 0:
-                raise ValueError(f"The following parameters are not on GPU: {bad_device_params}")
+                raise ValueError(f"The following parameters are not on accelerator: {bad_device_params}")
             """
         )
 
@@ -1949,6 +1897,80 @@ class ModelUtilsTest(TestCasePlus):
                 _ = subprocess.run(cmd, capture_output=True, env=self.get_env(), text=True, check=True, timeout=60)
             except subprocess.CalledProcessError as e:
                 raise Exception(f"The following error was captured: {e.stderr}")
+
+    def test_explicit_transformers_weights(self):
+        """
+        Transformers supports loading from repos where the weights file is explicitly set in the config.
+        When loading a config file, transformers will see whether `transformers_weights` is defined in the config.
+        If so, it will load from that file.
+
+        Here, we ensure that the correct file is loaded.
+        """
+        model = BertModel.from_pretrained("hf-internal-testing/explicit_transformers_weight_in_config")
+        self.assertEqual(model.num_parameters(), 87929)
+
+    def test_explicit_transformers_weights_index(self):
+        """
+        Transformers supports loading from repos where the weights file is explicitly set in the config.
+        When loading a config file, transformers will see whether `transformers_weights` is defined in the config.
+        If so, it will load from that file.
+
+        Here, we ensure that the correct file is loaded, given the file is an index of multiple weights.
+        """
+        model = BertModel.from_pretrained("hf-internal-testing/explicit_transformers_weight_in_config_sharded")
+        self.assertEqual(model.num_parameters(), 87929)
+
+    def test_explicit_transformers_weights_save_and_reload(self):
+        """
+        Transformers supports loading from repos where the weights file is explicitly set in the config.
+        When loading a config file, transformers will see whether `transformers_weights` is defined in the config.
+        If so, it will load from that file.
+
+        When saving the model, we should be careful not to safe the `transformers_weights` attribute in the config;
+        otherwise, transformers will try to load from that file whereas it should simply load from the default file.
+
+        We test that for a non-sharded repo.
+        """
+        model = BertModel.from_pretrained("hf-internal-testing/explicit_transformers_weight_in_config")
+        explicit_transformers_weights = model.config.transformers_weights
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+
+            # The config should not have a mention of transformers_weights
+            with open(os.path.join(tmpdirname, "config.json")) as f:
+                config = json.loads(f.read())
+                self.assertFalse("transformers_weights" in config)
+
+            # The serialized weights should be in model.safetensors and not the transformers_weights
+            self.assertTrue(explicit_transformers_weights not in os.listdir(tmpdirname))
+            self.assertTrue("model.safetensors" in os.listdir(tmpdirname))
+
+    def test_explicit_transformers_weights_index_save_and_reload(self):
+        """
+        Transformers supports loading from repos where the weights file is explicitly set in the config.
+        When loading a config file, transformers will see whether `transformers_weights` is defined in the config.
+        If so, it will load from that file.
+
+        When saving the model, we should be careful not to safe the `transformers_weights` attribute in the config;
+        otherwise, transformers will try to load from that file whereas it should simply load from the default file.
+
+        We test that for a sharded repo.
+        """
+        model = BertModel.from_pretrained("hf-internal-testing/explicit_transformers_weight_in_config_sharded")
+        explicit_transformers_weights = model.config.transformers_weights
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname, max_shard_size="100kb")
+
+            # The config should not have a mention of transformers_weights
+            with open(os.path.join(tmpdirname, "config.json")) as f:
+                config = json.loads(f.read())
+                self.assertFalse("transformers_weights" in config)
+
+            # The serialized weights should be in model.safetensors and not the transformers_weights
+            self.assertTrue(explicit_transformers_weights not in os.listdir(tmpdirname))
+            self.assertTrue("model.safetensors.index.json" in os.listdir(tmpdirname))
 
 
 @slow
@@ -2730,3 +2752,86 @@ class TestTensorSharing(TestCasePlus):
         shared_names, identical_names = _find_identical([{"a", "b"}], state_dict)
         self.assertEqual(shared_names, [{"a", "b"}])
         self.assertEqual(identical_names, [])
+
+
+@require_torch
+class TestSaveAndLoadModelWithExtraState(TestCasePlus):
+    """
+    This test checks that a model can be saved and loaded that uses the torch extra state API.
+    https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.get_extra_state.
+
+    Currently, only tensor-valued extra_states are supported.
+    """
+
+    def test_save_and_load_model_with_tensor_extra_state(self):
+        class MyConfig(PretrainedConfig):
+            def __init__(self, **kwargs):
+                super().__init__(**kwargs)
+
+        class MyModule(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.some_counter = 0
+                self.linear = torch.nn.Linear(320, 320)
+
+            def get_extra_state(self):
+                return torch.tensor(self.some_counter)
+
+            def set_extra_state(self, state):
+                self.some_counter = state.item()
+
+        class MyModel(PreTrainedModel):
+            config_class = MyConfig
+
+            def __init__(self, config: MyConfig):
+                super().__init__(config)
+                self.my_layer = MyModule()
+
+            def forward(self, hidden_states, attention_mask):
+                return self.my_layer(hidden_states, attention_mask)
+
+        config = MyConfig()
+        model = MyModel(config)
+        model.my_layer.some_counter = 42
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            model = MyModel.from_pretrained(tmpdirname)
+            self.assertEqual(model.my_layer.some_counter, 42)
+
+    @mark.xfail(reason="save and from_pretrained currently only supports tensor extra_state")
+    def test_save_and_load_model_with_dict_extra_state(self):
+        class MyConfig(PretrainedConfig):
+            def __init__(self, **kwargs):
+                super().__init__(**kwargs)
+
+        class MyModule(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.some_counter = 0
+                self.linear = torch.nn.Linear(320, 320)
+
+            def get_extra_state(self):
+                return {"some_counter": self.some_counter}
+
+            def set_extra_state(self, state):
+                self.some_counter = state["some_counter"]
+
+        class MyModel(PreTrainedModel):
+            config_class = MyConfig
+
+            def __init__(self, config: MyConfig):
+                super().__init__(config)
+                self.my_layer = MyModule()
+
+            def forward(self, hidden_states, attention_mask):
+                return self.my_layer(hidden_states, attention_mask)
+
+        config = MyConfig()
+        model = MyModel(config)
+        model.my_layer.some_counter = 42
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            model = MyModel.from_pretrained(tmpdirname)
+            self.assertEqual(model.my_layer.some_counter, 42)

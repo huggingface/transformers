@@ -52,8 +52,8 @@ class DeepseekV3Config(PretrainedConfig):
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
             `num_attention_heads`.
         n_shared_experts (`int`, *optional*, defaults to 1):
             Number of shared experts.
@@ -233,6 +233,12 @@ class DeepseekV3Config(PretrainedConfig):
         # BC: if there is a 'type' field, copy it it to 'rope_type'.
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+
+        if self.rope_scaling is not None:
+            for key in ["beta_fast", "beta_slow", "factor"]:
+                if key in self.rope_scaling:
+                    self.rope_scaling[key] = float(self.rope_scaling[key])
+
         rope_config_validation(self)
 
         super().__init__(

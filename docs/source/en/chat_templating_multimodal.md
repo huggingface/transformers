@@ -182,35 +182,6 @@ print(processed_chat.keys())
 ```
 
 </hfoption>
-<hfoption id="custom frame sampling">
-
-Some models don't sample frames *uniformly* and require more complex logic to determine which frames to use. For example, the model may have an *adaptive frame selection* or if the model prioritizes *key moments* in a video rather than evenly spaced frames.
-
-If a model has a different sampling strategy, you can write a function that customizes frame selection. The function should include the following requirements.
-
-- Use the `sample_indices_fn` parameter to pass a callable function for sampling.
-- If provided, this function *overrides* the standard `num_frames` and `fps` parameters.
-- The function receives all the parameters passed to `load_video` and must return valid frame indices to sample from.
-
-An example function is shown below. This gives you full control over frame selection, making the model more adaptable to different video scenarios.
-
-```py
-def sample_indices_fn(metadata, **kwargs):
-    # samples only the first and the second frame
-    return [0, 1]
-
-processed_chat = processor.apply_chat_template(
-    messages,
-    add_generation_prompt=True,
-    tokenize=True,
-    return_dict=True,
-    sample_indices_fn=sample_indices_fn,
-    video_load_backend="decord",
-)
-print(processed_chat.keys())
-```
-
-</hfoption>
 <hfoption id="list of image frames">
 
 Videos may also exist as a set of sampled frames stored as images rather than the full video file.

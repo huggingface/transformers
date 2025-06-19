@@ -43,7 +43,7 @@ class VipLlavaConfig(PretrainedConfig):
             The activation function used by the multimodal projector.
         projector_layernorm_eps (`float`, *optional*, defaults to 1e-05):
             The layer norm epsilon of the projector layernorm
-        vision_feature_layers (`Union[int, List[int]]`, *optional*, defaults to `[-2, -5, -8, -11, 6]`):
+        vision_feature_layers (`Union[int, list[int]]`, *optional*, defaults to `[-2, -5, -8, -11, 6]`):
             The vision feature layer, or list of layers to select the vision features from.
         image_seq_length (`int`, *optional*, defaults to 576):
             Sequence length of one image embedding.
@@ -70,6 +70,9 @@ class VipLlavaConfig(PretrainedConfig):
     ```"""
 
     model_type = "vipllava"
+    attribute_map = {
+        "image_token_id": "image_token_index",
+    }
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
     def __init__(

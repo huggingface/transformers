@@ -17,7 +17,7 @@ Processor class for OmDet-Turbo.
 """
 
 import warnings
-from typing import TYPE_CHECKING, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_transforms import center_to_corners_format
@@ -30,6 +30,7 @@ from ...utils import (
     is_torchvision_available,
 )
 from ...utils.deprecation import deprecate_kwarg
+from ...utils.import_utils import requires
 
 
 if TYPE_CHECKING:
@@ -37,7 +38,7 @@ if TYPE_CHECKING:
 
 
 class OmDetTurboTextKwargs(TextKwargs, total=False):
-    task: Optional[Union[str, List[str], TextInput, PreTokenizedInput]]
+    task: Optional[Union[str, list[str], TextInput, PreTokenizedInput]]
 
 
 if is_torch_available():
@@ -88,7 +89,7 @@ class DictWithDeprecationWarning(dict):
         return super().get(key, *args, **kwargs)
 
 
-def clip_boxes(box, box_size: Tuple[int, int]):
+def clip_boxes(box, box_size: tuple[int, int]):
     """
     Clip the boxes by limiting x coordinates to the range [0, width]
     and y coordinates to the range [0, height].
@@ -127,11 +128,11 @@ def _post_process_boxes_for_image(
     scores: "torch.Tensor",
     labels: "torch.Tensor",
     image_num_classes: int,
-    image_size: Tuple[int, int],
+    image_size: tuple[int, int],
     threshold: float,
     nms_threshold: float,
     max_num_det: Optional[int] = None,
-) -> Tuple["torch.Tensor", "torch.Tensor", "torch.Tensor"]:
+) -> tuple["torch.Tensor", "torch.Tensor", "torch.Tensor"]:
     """
     Filter predicted results using given thresholds and NMS.
 
@@ -146,7 +147,7 @@ def _post_process_boxes_for_image(
             A Tensor of predicted labels for the image.
         image_num_classes (`int`):
             The number of classes queried for detection on the image.
-        image_size (`Tuple[int, int]`):
+        image_size (`tuple[int, int]`):
             A tuple of (height, width) for the image.
         threshold (`float`):
             Only return detections with a confidence score exceeding this threshold.
@@ -199,6 +200,7 @@ def _post_process_boxes_for_image(
     return boxes_per_image, scores_per_image, labels_per_image
 
 
+@requires(backends=("vision", "torchvision"))
 class OmDetTurboProcessor(ProcessorMixin):
     r"""
     Constructs a OmDet-Turbo processor which wraps a Deformable DETR image processor and an AutoTokenizer into a
@@ -225,7 +227,7 @@ class OmDetTurboProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[List[str], List[List[str]]] = None,
+        text: Optional[Union[list[str], list[list[str]]]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[OmDetTurboProcessorKwargs],
@@ -239,12 +241,12 @@ class OmDetTurboProcessor(ProcessorMixin):
         Args:
             images (`ImageInput`):
                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255.
-            text (`Union[str, List[str], List[List[str]]]`):
+            text (`Union[str, list[str], list[list[str]]]`):
                 The classes used to limit the scope of the open vocabulary detection. Expects a list of strings or a list
                 of list of strings. Batched classes can be of different lengths.
                 Examples: ["cat", "dog", "bird"], [["cat", "dog", "bird"], ["hat", "person"], ["car"]]
         Kwargs:
-            task (`Union[str, List[str], TextInput, PreTokenizedInput]`):
+            task (`Union[str, list[str], TextInput, PreTokenizedInput]`):
                 The grounded text used to guide open vocabulary detection. Expects a single string or a list of strings.
                 Examples: "Detect a cat, a dog, and a bird.",[ "Detect everything.", "Detect trees and flowers."]
                 When not provided, the default task is "Detect [class1], [class2], [class3]" etc.
@@ -304,7 +306,7 @@ class OmDetTurboProcessor(ProcessorMixin):
         """
         return self.tokenizer.decode(*args, **kwargs)
 
-    def _get_default_image_size(self) -> Tuple[int, int]:
+    def _get_default_image_size(self) -> tuple[int, int]:
         height = (
             self.image_processor.size["height"]
             if "height" in self.image_processor.size
@@ -322,10 +324,10 @@ class OmDetTurboProcessor(ProcessorMixin):
     def post_process_grounded_object_detection(
         self,
         outputs: "OmDetTurboObjectDetectionOutput",
-        text_labels: Optional[Union[List[str], List[List[str]]]] = None,
+        text_labels: Optional[Union[list[str], list[list[str]]]] = None,
         threshold: float = 0.3,
         nms_threshold: float = 0.5,
-        target_sizes: Optional[Union[TensorType, List[Tuple]]] = None,
+        target_sizes: Optional[Union[TensorType, list[tuple]]] = None,
         max_num_det: Optional[int] = None,
     ):
         """
@@ -335,19 +337,19 @@ class OmDetTurboProcessor(ProcessorMixin):
         Args:
             outputs ([`OmDetTurboObjectDetectionOutput`]):
                 Raw outputs of the model.
-            text_labels (Union[List[str], List[List[str]]], *optional*):
+            text_labels (Union[list[str], list[list[str]]], *optional*):
                 The input classes names. If not provided, `text_labels` will be set to `None` in `outputs`.
             threshold (float, defaults to 0.3):
                 Only return detections with a confidence score exceeding this threshold.
             nms_threshold (float, defaults to 0.5):
                 The threshold to use for box non-maximum suppression. Value in [0, 1].
-            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
-                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
+            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
                 `(height, width)` of each image in the batch. If unset, predictions will not be resized.
             max_num_det (`int`, *optional*):
                 The maximum number of detections to return.
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, classes and boxes for an image
+            `list[Dict]`: A list of dictionaries, each dictionary containing the scores, classes and boxes for an image
             in the batch as predicted by the model.
         """
 

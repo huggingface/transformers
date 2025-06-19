@@ -65,7 +65,7 @@ class GotOcr2VisionConfig(PretrainedConfig):
             Whether to use relative position embedding.
         window_size (`int`, *optional*, defaults to 14):
             Window size for relative position.
-        global_attn_indexes (`List[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
+        global_attn_indexes (`list[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
             The indexes of the global attention layers.
         mlp_dim (`int`, *optional*, defaults to 3072):
             The dimensionality of the MLP layer in the Transformer encoder.
@@ -153,6 +153,9 @@ class GotOcr2Config(PretrainedConfig):
     ```"""
 
     model_type = "got_ocr2"
+    attribute_map = {
+        "image_token_id": "image_token_index",
+    }
     sub_configs = {"text_config": AutoConfig, "vision_config": GotOcr2VisionConfig}
 
     def __init__(

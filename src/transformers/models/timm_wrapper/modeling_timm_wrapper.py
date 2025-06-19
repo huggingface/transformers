@@ -14,7 +14,7 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 from torch import Tensor, nn
@@ -22,12 +22,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...modeling_outputs import ImageClassifierOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_start_docstrings_to_model_forward,
-    is_timm_available,
-    replace_return_docstrings,
-    requires_backends,
-)
+from ...utils import auto_docstring, is_timm_available, requires_backends
 from .configuration_timm_wrapper import TimmWrapperConfig
 
 
@@ -57,26 +52,11 @@ class TimmWrapperModelOutput(ModelOutput):
 
     last_hidden_state: torch.FloatTensor
     pooler_output: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
-TIMM_WRAPPER_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`TimmWrapperImageProcessor.preprocess`]
-            for details.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. Not compatible with timm wrapped models.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. Not compatible with timm wrapped models.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        **kwargs:
-            Additional keyword arguments passed along to the `timm` model forward.
-"""
-
-
+@auto_docstring
 class TimmWrapperPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     config_class = TimmWrapperConfig
@@ -91,7 +71,7 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
         super().__init__(*args, **kwargs)
 
     @staticmethod
-    def _fix_state_dict_key_on_load(key) -> Tuple[str, bool]:
+    def _fix_state_dict_key_on_load(key) -> tuple[str, bool]:
         """
         Overrides original method that renames `gamma` and `beta` to `weight` and `bias`.
         We don't want this behavior for timm wrapped models. Instead, this method adds a
@@ -139,23 +119,26 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         self.timm_model = timm.create_model(config.architecture, pretrained=False, num_classes=0)
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(TIMM_WRAPPER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=TimmWrapperModelOutput, config_class=TimmWrapperConfig)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[Union[bool, List[int]]] = None,
+        output_hidden_states: Optional[Union[bool, list[int]]] = None,
         return_dict: Optional[bool] = None,
         do_pooling: Optional[bool] = None,
         **kwargs,
-    ) -> Union[TimmWrapperModelOutput, Tuple[Tensor, ...]]:
+    ) -> Union[TimmWrapperModelOutput, tuple[Tensor, ...]]:
         r"""
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. Not compatible with timm wrapped models.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. Not compatible with timm wrapped models.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         do_pooling (`bool`, *optional*):
             Whether to do pooling for the last_hidden_state in `TimmWrapperModel` or not. If `None` is passed, the
             `do_pooling` value from the config is used.
-
-        Returns:
 
         Examples:
         ```python
@@ -254,24 +237,29 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
         self.num_labels = config.num_labels
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(TIMM_WRAPPER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=ImageClassifierOutput, config_class=TimmWrapperConfig)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[Union[bool, List[int]]] = None,
+        output_hidden_states: Optional[Union[bool, list[int]]] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[ImageClassifierOutput, Tuple[Tensor, ...]]:
+    ) -> Union[ImageClassifierOutput, tuple[Tensor, ...]]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
-        Returns:
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. Not compatible with timm wrapped models.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. Not compatible with timm wrapped models.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            **kwargs:
+            Additional keyword arguments passed along to the `timm` model forward.
 
         Examples:
         ```python

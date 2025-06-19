@@ -17,7 +17,7 @@
 import collections.abc
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Callable, Optional, Set, Tuple, Union
+from typing import Callable, Optional, Union
 
 import numpy as np
 import torch
@@ -28,21 +28,11 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-    torch_int,
-)
+from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from .configuration_vit_mae import ViTMAEConfig
 
 
 logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "ViTMAEConfig"
-_CHECKPOINT_FOR_DOC = "facebook/vit-mae-base"
 
 
 @dataclass
@@ -67,11 +57,11 @@ class ViTMAEModelOutput(ModelOutput):
             the self-attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    mask: torch.LongTensor = None
-    ids_restore: torch.LongTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    mask: Optional[torch.LongTensor] = None
+    ids_restore: Optional[torch.LongTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -92,9 +82,9 @@ class ViTMAEDecoderOutput(ModelOutput):
             the self-attention heads.
     """
 
-    logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    logits: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -122,11 +112,11 @@ class ViTMAEForPreTrainingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    mask: torch.LongTensor = None
-    ids_restore: torch.LongTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    logits: Optional[torch.FloatTensor] = None
+    mask: Optional[torch.LongTensor] = None
+    ids_restore: Optional[torch.LongTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 def get_2d_sincos_pos_embed(embed_dim, grid_size, add_cls_token=False):
@@ -414,7 +404,7 @@ class ViTMAESelfAttention(nn.Module):
 
     def forward(
         self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         key_layer = self.transpose_for_scores(self.key(hidden_states))
         value_layer = self.transpose_for_scores(self.value(hidden_states))
         query_layer = self.transpose_for_scores(self.query(hidden_states))
@@ -475,7 +465,7 @@ class ViTMAEAttention(nn.Module):
         self.output = ViTMAESelfOutput(config)
         self.pruned_heads = set()
 
-    def prune_heads(self, heads: Set[int]) -> None:
+    def prune_heads(self, heads: set[int]) -> None:
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
@@ -498,7 +488,7 @@ class ViTMAEAttention(nn.Module):
         hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         self_outputs = self.attention(hidden_states, head_mask, output_attentions)
 
         attention_output = self.output(self_outputs[0], hidden_states)
@@ -559,7 +549,7 @@ class ViTMAELayer(nn.Module):
         hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in ViTMAE, layernorm is applied before self-attention
             head_mask,
@@ -635,18 +625,16 @@ class ViTMAEEncoder(nn.Module):
         )
 
 
+@auto_docstring
 class ViTMAEPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = ViTMAEConfig
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _supports_sdpa = True
     _supports_flash_attn_2 = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -666,47 +654,7 @@ class ViTMAEPreTrainedModel(PreTrainedModel):
             module.decoder_pos_embed.data.zero_()
 
 
-VIT_MAE_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`ViTMAEConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-VIT_MAE_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
-            for details.
-
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        interpolate_pos_encoding (`bool`, *optional*, default `False`):
-            Whether to interpolate the pre-trained position encodings. This is mainly used to use the model on higher
-            resolution images.
-"""
-
-
-@add_start_docstrings(
-    "The bare ViTMAE Model transformer outputting raw hidden-states without any specific head on top.",
-    VIT_MAE_START_DOCSTRING,
-)
+@auto_docstring
 class ViTMAEModel(ViTMAEPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -731,8 +679,7 @@ class ViTMAEModel(ViTMAEPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(VIT_MAE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=ViTMAEModelOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -742,9 +689,13 @@ class ViTMAEModel(ViTMAEPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
-    ) -> Union[Tuple, ViTMAEModelOutput]:
+    ) -> Union[tuple, ViTMAEModelOutput]:
         r"""
-        Returns:
+        interpolate_pos_encoding (`bool`, *optional*, default `False`):
+            Whether to interpolate the pre-trained position encodings. This is mainly used to use the model on higher
+            resolution images.
+        noise (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mainly used for testing purposes to control randomness and maintain the reproducibility
 
         Examples:
 
@@ -948,8 +899,9 @@ class ViTMAEDecoder(nn.Module):
         )
 
 
-@add_start_docstrings(
-    """The ViTMAE Model transformer with the decoder on top for self-supervised pre-training.
+@auto_docstring(
+    custom_intro="""
+    The ViTMAE Model transformer with the decoder on top for self-supervised pre-training.
 
     <Tip>
 
@@ -957,9 +909,7 @@ class ViTMAEDecoder(nn.Module):
     directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
 
     </Tip>
-
-    """,
-    VIT_MAE_START_DOCSTRING,
+    """
 )
 class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
     def __init__(self, config):
@@ -1019,12 +969,12 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         )
         return patchified_pixel_values
 
-    def unpatchify(self, patchified_pixel_values, original_image_size: Optional[Tuple[int, int]] = None):
+    def unpatchify(self, patchified_pixel_values, original_image_size: Optional[tuple[int, int]] = None):
         """
         Args:
             patchified_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
                 Patchified pixel values.
-            original_image_size (`Tuple[int, int]`, *optional*):
+            original_image_size (`tuple[int, int]`, *optional*):
                 Original image size.
 
         Returns:
@@ -1091,8 +1041,7 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
         return loss
 
-    @add_start_docstrings_to_model_forward(VIT_MAE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=ViTMAEForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1102,9 +1051,13 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
-    ) -> Union[Tuple, ViTMAEForPreTrainingOutput]:
+    ) -> Union[tuple, ViTMAEForPreTrainingOutput]:
         r"""
-        Returns:
+        interpolate_pos_encoding (`bool`, *optional*, default `False`):
+            Whether to interpolate the pre-trained position encodings. This is mainly used to use the model on higher
+            resolution images.
+        noise (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mainly used for testing purposes to control randomness and maintain the reproducibility
 
         Examples:
 

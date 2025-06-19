@@ -33,11 +33,15 @@ def collect_metrics(benchmark_id, continue_metric_collection, metrics_recorder):
         sleep(0.01)
 
 
-def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, num_tokens_to_generate=100):
+def run_benchmark(
+    logger: Logger, repository: str, branch: str, commit_id: str, commit_msg: str, num_tokens_to_generate=100
+):
     continue_metric_collection = Event()
     metrics_thread = None
     model_id = "meta-llama/Llama-2-7b-hf"
-    metrics_recorder = MetricsRecorder(psycopg2.connect("dbname=metrics"), logger, branch, commit_id, commit_msg)
+    metrics_recorder = MetricsRecorder(
+        psycopg2.connect("dbname=metrics"), logger, repository, branch, commit_id, commit_msg
+    )
     try:
         gpu_stats = gpustat.GPUStatCollection.new_query()
         gpu_name = gpu_stats[0]["name"]
@@ -118,7 +122,7 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
         with torch.no_grad():
             past_key_values = StaticCache(
                 model.config,
-                batch_size=batch_size,
+                max_batch_size=batch_size,
                 device=device,
                 dtype=torch.float16,
                 max_cache_len=seq_length + num_tokens_to_generate,
@@ -144,7 +148,7 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
 
             past_key_values = StaticCache(
                 model.config,
-                batch_size=batch_size,
+                max_batch_size=batch_size,
                 device=device,
                 dtype=torch.float16,
                 max_cache_len=seq_length + num_tokens_to_generate,
@@ -187,7 +191,7 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
             # TODO use  decode_one_token(model, input_id.clone(), cache_position) for verification
             past_key_values = StaticCache(
                 model.config,
-                batch_size=batch_size,
+                max_batch_size=batch_size,
                 device=device,
                 dtype=torch.float16,
                 max_cache_len=seq_length + num_tokens_to_generate + 10,
@@ -254,7 +258,7 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
 
             past_key_values = StaticCache(
                 model.config,
-                batch_size=batch_size,
+                max_batch_size=batch_size,
                 device=device,
                 dtype=torch.float16,
                 max_cache_len=seq_length + 128,
@@ -271,7 +275,7 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
 
             past_key_values = StaticCache(
                 model.config,
-                batch_size=batch_size,
+                max_batch_size=batch_size,
                 device=device,
                 dtype=torch.float16,
                 max_cache_len=seq_length + 128,
@@ -287,13 +291,13 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
 
             past_key_values = StaticCache(
                 model.config,
-                batch_size=batch_size,
+                max_batch_size=batch_size,
                 device=device,
                 dtype=torch.float16,
                 max_cache_len=seq_length + 128,
             )
 
-            # 3nd call
+            # 3rd call
             start = perf_counter()
             output = model.generate(**inputs, past_key_values=past_key_values)
             end = perf_counter()
@@ -303,7 +307,7 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
 
             past_key_values = StaticCache(
                 model.config,
-                batch_size=batch_size,
+                max_batch_size=batch_size,
                 device=device,
                 dtype=torch.float16,
                 max_cache_len=seq_length + 128,

@@ -118,3 +118,6 @@ class QDQBertConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
+
+
+__all__ = ["QDQBertConfig"]

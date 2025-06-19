@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,6 +20,7 @@ import pytest
 
 from transformers import GPT2Config, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_flash_attn,
     require_torch,
@@ -818,10 +818,15 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         output_seq_strs = tokenizer.batch_decode(output_seq, skip_special_tokens=True)
         output_seq_tt_strs = tokenizer.batch_decode(output_seq_tt, skip_special_tokens=True)
 
-        EXPECTED_OUTPUT_STR = (
-            "Today is a nice day and if you don't know anything about the state of play during your holiday"
-        )
-        self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
+        expected_outputs = Expectations(
+            {
+                ("rocm", None): 'Today is a nice day and we can do this again."\n\nDana said that she will',
+                ("rocm", (9, 5)): "Today is a nice day and if you don't know anything about the state of play during your holiday",
+                ("cuda", None): "Today is a nice day and if you don't know anything about the state of play during your holiday",
+            }
+        )  # fmt: skip
+        EXPECTED_OUTPUT = expected_outputs.get_expectation()
+        self.assertEqual(output_str, EXPECTED_OUTPUT)
         self.assertTrue(
             all(output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs)))
         )  # token_type_ids should change output
