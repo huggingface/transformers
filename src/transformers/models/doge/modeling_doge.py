@@ -658,7 +658,7 @@ class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 def load_balancing_loss_func(
-    router_logits: Union[torch.Tensor, Tuple[torch.Tensor], None],
+    gate_logits: Union[torch.Tensor, Tuple[torch.Tensor], None],
     num_experts: Optional[int] = None,
     num_keys: Optional[int] = None,
     top_k: int = 2,
@@ -672,7 +672,7 @@ def load_balancing_loss_func(
     experts is too unbalanced.
 
     Args:
-        router_logits:
+        gate_logits:
             Logits from the `router_gate`, should be a tuple of model.config.num_hidden_layers tensors of
             shape [2, batch_size * sequence_length, num_keys].
         num_experts:
@@ -689,18 +689,18 @@ def load_balancing_loss_func(
     Returns:
         The auxiliary loss.
     """
-    if router_logits is None or not isinstance(router_logits, tuple):
+    if gate_logits is None or not isinstance(gate_logits, tuple):
         return 0
 
-    compute_dtype = router_logits[0].dtype
-    compute_device = router_logits[0].device
+    compute_dtype = gate_logits[0].dtype
+    compute_device = gate_logits[0].device
     all_expert_indices = []
     all_routing_weights = []
 
-    for layer_router_logits in router_logits:
-        layer_router_logits = layer_router_logits.to(compute_device)
+    for layer_gate_logits in gate_logits:
+        layer_gate_logits = layer_gate_logits.to(compute_device)
 
-        (scores_x, scores_y), (indices_x, indices_y) = layer_router_logits.topk(num_keys, dim=-1)
+        (scores_x, scores_y), (indices_x, indices_y) = layer_gate_logits.topk(num_keys, dim=-1)
 
         all_scores = scores_x.unsqueeze(-1) + scores_y.unsqueeze(-2)
         all_indices = indices_x.unsqueeze(-1) * num_keys + indices_y.unsqueeze(-2)
@@ -728,7 +728,7 @@ def load_balancing_loss_func(
         router_prob_per_expert = torch.mean(all_routing_weights, dim=0)
     else:
         batch_size, sequence_length = attention_mask.shape
-        num_hidden_layers = len(router_logits)
+        num_hidden_layers = len(gate_logits)
 
         #  Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
         expert_attention_mask = (
