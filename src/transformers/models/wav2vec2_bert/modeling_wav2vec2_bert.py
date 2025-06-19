@@ -6,7 +6,7 @@
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 import math
 import warnings
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -265,7 +265,7 @@ class Wav2Vec2BertSelfAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         relative_position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         # self-attention mechanism
         batch_size, sequence_length, hidden_size = hidden_states.size()
 
@@ -804,7 +804,7 @@ class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
 
 
 def _compute_mask_indices(
-    shape: Tuple[int, int],
+    shape: tuple[int, int],
     mask_prob: float,
     mask_length: int,
     attention_mask: Optional[torch.LongTensor] = None,
@@ -1002,11 +1002,11 @@ class Wav2Vec2BertModel(Wav2Vec2BertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, Wav2Vec2BertBaseModelOutput]:
+    ) -> Union[tuple, Wav2Vec2BertBaseModelOutput]:
         r"""
         input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
             soundfile`). To prepare the array into `input_features`, the [`AutoProcessor`] should be used for padding and
             conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2BertProcessor.__call__`] for details.
         mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1099,11 +1099,11 @@ class Wav2Vec2BertForCTC(Wav2Vec2BertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, CausalLMOutput]:
+    ) -> Union[tuple, CausalLMOutput]:
         r"""
         input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
             soundfile`). To prepare the array into `input_features`, the [`AutoProcessor`] should be used for padding and
             conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2BertProcessor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
@@ -1210,11 +1210,11 @@ class Wav2Vec2BertForSequenceClassification(Wav2Vec2BertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, SequenceClassifierOutput]:
+    ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
             soundfile`). To prepare the array into `input_features`, the [`AutoProcessor`] should be used for padding and
             conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2BertProcessor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1305,11 +1305,11 @@ class Wav2Vec2BertForAudioFrameClassification(Wav2Vec2BertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, TokenClassifierOutput]:
+    ) -> Union[tuple, TokenClassifierOutput]:
         r"""
         input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
             soundfile`). To prepare the array into `input_features`, the [`AutoProcessor`] should be used for padding and
             conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2ConformerProcessor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1358,7 +1358,7 @@ class Wav2Vec2BertForAudioFrameClassification(Wav2Vec2BertPreTrainedModel):
 
 class AMSoftmaxLoss(nn.Module):
     def __init__(self, input_dim, num_labels, scale=30.0, margin=0.4):
-        super(AMSoftmaxLoss, self).__init__()
+        super().__init__()
         self.scale = scale
         self.margin = margin
         self.num_labels = num_labels
@@ -1468,11 +1468,11 @@ class Wav2Vec2BertForXVector(Wav2Vec2BertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, XVectorOutput]:
+    ) -> Union[tuple, XVectorOutput]:
         r"""
         input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
             soundfile`). To prepare the array into `input_features`, the [`AutoProcessor`] should be used for padding and
             conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2ConformerProcessor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):

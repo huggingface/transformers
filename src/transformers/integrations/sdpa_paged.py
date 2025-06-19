@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Optional
 
 import torch
 
@@ -25,7 +25,7 @@ def sdpa_attention_paged_forward(
     scaling: Optional[float] = None,
     is_causal: Optional[bool] = None,
     **kwargs,
-) -> Tuple[torch.Tensor, None]:
+) -> tuple[torch.Tensor, None]:
     cache = kwargs.pop("cache", None)
     if cache is not None:
         key, value = cache.update(key, value, module.layer_idx, **kwargs)
