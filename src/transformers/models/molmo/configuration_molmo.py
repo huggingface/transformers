@@ -76,6 +76,7 @@ class MolmoVisionConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "molmo_vision_model"
     base_config_key = "vision_config"
 

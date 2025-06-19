@@ -14,7 +14,7 @@
 # limitations under the License.
 
 
-from typing import TYPE_CHECKING, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 
@@ -38,7 +38,7 @@ if is_torch_available():
 class MolmoImagesKwargs(ImagesKwargs, total=False):
     device: Optional[str]
     max_num_crops: Optional[int]
-    overlap_margins: Optional[Tuple[int, int]]
+    overlap_margins: Optional[tuple[int, int]]
     tokens_per_image_height: Optional[int]
     tokens_per_image_width: Optional[int]
 
@@ -101,7 +101,7 @@ class MolmoProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[MolmoProcessorKwargs],

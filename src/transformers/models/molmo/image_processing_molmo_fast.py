@@ -14,7 +14,7 @@
 # limitations under the License.
 
 
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils import get_size_dict
@@ -58,7 +58,7 @@ logger = logging.get_logger(__name__)
 
 def get_resize_output_image_size(
     image: torch.tensor,
-    size: Union[int, Tuple[int, int], List[int], Tuple[int]],
+    size: Union[int, tuple[int, int], list[int], tuple[int]],
 ) -> tuple:
     original_height, original_width = get_image_size(image)
 
@@ -114,15 +114,15 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
     def __init__(
         self,
         max_num_crops: int = 12,
-        overlap_margins: Tuple[int, int] = [4, 4],
-        size: Optional[Dict[str, int]] = None,
+        overlap_margins: tuple[int, int] = [4, 4],
+        size: Optional[dict[str, int]] = None,
         tokens_per_image_width: int = 12,
         tokens_per_image_height: int = 12,
         image_patch_size: int = 14,
         image_padding_mask: bool = True,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_convert_rgb: bool = True,
         do_resize: bool = True,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
@@ -205,7 +205,7 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
     def resize(
         self,
         image: torch.Tensor,
-        size: Dict[str, int],
+        size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -222,7 +222,7 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
     def pad(
         self,
         image: torch.Tensor,
-        size: Dict[str, int],
+        size: dict[str, int],
         mode: str = "constant",
         constant_values: float = 1.0,
         data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -299,9 +299,9 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
         self,
         image: torch.Tensor,
         image_mask: torch.Tensor,
-        crop_grid: Tuple[int, int],
+        crop_grid: tuple[int, int],
         input_data_format,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Split the image into crops (patches), while keeping track of the patch ordering and generating masks for each crop.
 
@@ -450,7 +450,7 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
 
         data["patch_orderings"] = batched_patch_orderings
 
-    def _pad_for_batching(self, data: Dict, device: str):
+    def _pad_for_batching(self, data: dict, device: str):
         crops = data["pixel_values"]
         max_num_crops = max(image.shape[0] for image in crops)
         batch_size = len(crops)
@@ -481,7 +481,7 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: Optional[PILImageResampling] = None,
         do_pad: Optional[bool] = None,
         do_split_into_crops: Optional[bool] = None,
@@ -490,8 +490,8 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = OPENAI_CLIP_MEAN,
-        image_std: Optional[Union[float, List[float]]] = OPENAI_CLIP_STD,
+        image_mean: Optional[Union[float, list[float]]] = OPENAI_CLIP_MEAN,
+        image_std: Optional[Union[float, list[float]]] = OPENAI_CLIP_STD,
         do_convert_rgb: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
