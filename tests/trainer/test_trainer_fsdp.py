@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-from transformers import is_torch_available
+from transformers import is_torch_available, is_torch_hpu_available
 from transformers.testing_utils import (
     TestCasePlus,
     backend_device_count,
@@ -115,6 +115,14 @@ class TestFSDPTrainerFP8(TestCasePlus):
             "--report_to",
             "none",
         ]
+        if is_torch_hpu_available():
+            cmd.extend(
+                [
+                    # is the default in accelerate dataclass but not its launcher
+                    "--fp8_format",
+                    "HYBRID",
+                ]
+            )
         execute_subprocess_async(cmd, env=self.get_env())
         # successful return here == success - any errors would have caused an error in the sub-call
 

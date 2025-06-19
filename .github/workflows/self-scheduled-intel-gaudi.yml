@@ -20,6 +20,7 @@ on:
         type: string
 
 env:
+  NUM_SLICES: 2
   RUN_SLOW: yes
   PT_HPU_LAZY_MODE: 0
   TRANSFORMERS_IS_CI: yes
@@ -27,7 +28,6 @@ env:
   HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
   HF_HOME: /mnt/cache/.cache/huggingface
-  NUM_SLICES: 2
 
 jobs:
   setup:
