@@ -113,9 +113,9 @@ class DeepseekV2Config(LlamaConfig):
             It reduces computational overhead while maintaining model performance.
         n_group (`int`, *optional*):
             Number of groups for routed experts.
-        n_routed_experts (`int`, *optional*):
+        n_routed_experts (`int`, *optional*, defaults to 64):
             Number of routed experts (None indicates a dense model).
-        n_shared_experts (`int`, *optional*):
+        n_shared_experts (`int`, *optional*, defaults to 2):
             Number of shared experts (None indicates a dense model).
         qk_nope_head_dim (`int`, *optional*, defaults to 128):
             The head dimension for the QK (query-key) projections when using NOPE (Neural Operator Position Encoding).
