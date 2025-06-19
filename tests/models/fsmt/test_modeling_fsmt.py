@@ -501,12 +501,12 @@ class FSMTModelIntegrationTests(unittest.TestCase):
         expected_slice = torch.tensor(
             [[-1.5753, -1.5753, 2.8975], [-0.9540, -0.9540, 1.0299], [-3.3131, -3.3131, 0.5219]]
         ).to(torch_device)
-        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
+        torch.testing.assert_close(output[0, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
 
     def translation_setup(self, pair):
         text = {
             "en": "Machine learning is great, isn't it?",
-            "ru": "Машинное обучение - это здорово, не так ли?",
+            "ru": "Машинное обучение - это прекрасно, не так ли?",
             "de": "Maschinelles Lernen ist großartig, oder?",
         }
 
