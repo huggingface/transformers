@@ -12,9 +12,6 @@ on:
       slice_id:
         required: true
         type: number
-      runner:
-        required: true
-        type: string
       runner_map:
         required: false
         type: string
