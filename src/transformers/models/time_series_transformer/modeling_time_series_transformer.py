@@ -37,6 +37,7 @@ from ...modeling_outputs import (
     Seq2SeqTSModelOutput,
     Seq2SeqTSPredictionOutput,
 )
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
@@ -435,7 +436,7 @@ class TimeSeriesTransformerAttention(nn.Module):
 
 
 # Copied from transformers.models.bart.modeling_bart.BartEncoderLayer with Bart->TimeSeriesTransformer, BART->TIME_SERIES_TRANSFORMER
-class TimeSeriesTransformerEncoderLayer(nn.Module):
+class TimeSeriesTransformerEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: TimeSeriesTransformerConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.embed_dim = config.d_model
@@ -507,7 +508,7 @@ class TimeSeriesTransformerEncoderLayer(nn.Module):
 
 
 # Copied from transformers.models.bart.modeling_bart.BartDecoderLayer with Bart->TimeSeriesTransformer, with BART->TIME_SERIES_TRANSFORMER
-class TimeSeriesTransformerDecoderLayer(nn.Module):
+class TimeSeriesTransformerDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: TimeSeriesTransformerConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.embed_dim = config.d_model
@@ -857,21 +858,12 @@ class TimeSeriesTransformerEncoder(TimeSeriesTransformerPreTrainedModel):
             if to_drop:
                 layer_outputs = (None, None)
             else:
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        encoder_layer.__call__,
-                        hidden_states,
-                        attention_mask,
-                        (head_mask[idx] if head_mask is not None else None),
-                        output_attentions,
-                    )
-                else:
-                    layer_outputs = encoder_layer(
-                        hidden_states,
-                        attention_mask,
-                        layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                        output_attentions=output_attentions,
-                    )
+                layer_outputs = encoder_layer(
+                    hidden_states,
+                    attention_mask,
+                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                    output_attentions=output_attentions,
+                )
 
                 hidden_states = layer_outputs[0]
 
@@ -1066,35 +1058,20 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
                 if dropout_probability < self.layerdrop:
                     continue
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    head_mask[idx] if head_mask is not None else None,
-                    cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
-                    None,
-                    output_attentions,
-                    use_cache,
-                    cache_position,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=attention_mask,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                    cross_attn_layer_head_mask=(
-                        cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
-                    ),
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                cross_attn_layer_head_mask=(
+                    cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
+                ),
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+            )
             hidden_states = layer_outputs[0]
 
             if use_cache:
