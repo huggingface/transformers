@@ -86,11 +86,10 @@ jobs:
         name: Identify models to test
         working-directory: /transformers/tests
         run: |
-          apt-get install -y curl
           if [ "${{ inputs.job }}" = "run_models_gpu" ]; then
             echo "folder_slices=$(python3 ../utils/split_model_tests.py --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
             echo "slice_ids=$(python3 -c 'd = list(range(${{ env.NUM_SLICES }})); print(d)')" >> $GITHUB_OUTPUT
-            echo "runner_map=$(curl https://huggingface.co/datasets/hf-internal-testing/transformers_daily_ci/resolve/main/runner_map.json)" >> $GITHUB_OUTPUT
+            echo "runner_map=$(python3 ../utils/get_runner_map.py)" >> $GITHUB_OUTPUT
           elif [ "${{ inputs.job }}" = "run_trainer_and_fsdp_gpu" ]; then
             echo "folder_slices=[['trainer'], ['fsdp']]" >> $GITHUB_OUTPUT
             echo "slice_ids=[0, 1]" >> $GITHUB_OUTPUT
