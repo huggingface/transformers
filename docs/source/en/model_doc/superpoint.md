@@ -136,12 +136,17 @@ The original code can be found [here](https://github.com/magicleap/SuperPointPre
 
 ## SuperPointImageProcessor
 
-[[autodoc]] SuperPointImageProcessor - preprocess - post_process_keypoint_detection
+[[autodoc]] SuperPointImageProcessor
+
+- preprocess
+- post_process_keypoint_detection
 
 <frameworkcontent>
 <pt>
 ## SuperPointForKeypointDetection
 
-[[autodoc]] SuperPointForKeypointDetection - forward
+[[autodoc]] SuperPointForKeypointDetection
+
+- forward
 
 </pt>
