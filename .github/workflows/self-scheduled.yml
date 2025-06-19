@@ -111,11 +111,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        machine_type: [single-gpu, multi-gpu]
         slice_id: ${{ fromJSON(needs.setup.outputs.slice_ids) }}
     uses: ./.github/workflows/model_jobs.yml
     with:
       folder_slices: ${{ needs.setup.outputs.folder_slices }}
-      machine_type: ''
+      machine_type: ${{ matrix.machine_type }}
       slice_id: ${{ matrix.slice_id }}
       runner: ${{ inputs.runner }}
       docker: ${{ inputs.docker }}
