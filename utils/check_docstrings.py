@@ -670,8 +670,8 @@ def eval_math_expression(expression: str) -> Optional[Union[float, int]]:
 
 
 def eval_node(node):
-    if isinstance(node, ast.Num):  # <number>
-        return node.n
+    if isinstance(node, ast.Constant) and type(node.value) in (int, float, complex):
+        return node.value
     elif isinstance(node, ast.BinOp):  # <left> <operator> <right>
         return MATH_OPERATORS[type(node.op)](eval_node(node.left), eval_node(node.right))
     elif isinstance(node, ast.UnaryOp):  # <operator> <operand> e.g., -1
@@ -931,7 +931,12 @@ def fix_docstring(obj: Any, old_doc_args: str, new_doc_args: str):
 
     if idx == len(source):
         # Args are not defined in the docstring of this object
-        return
+        obj_file = find_source_file(obj)
+        raise ValueError(
+            f"Cannot fix docstring of {obj.__name__} in {obj_file} because no argument section was found in the docstring. "
+            f"The docstring should contain a section starting with 'Args:', 'Arguments:', 'Parameters:', or similar. "
+            f"Current docstring:\n{obj.__doc__[:200]}{'...' if len(obj.__doc__) > 200 else ''}"
+        )
 
     # Get to the line where we stop documenting arguments
     indent = find_indent(source[idx])
@@ -947,7 +952,17 @@ def fix_docstring(obj: Any, old_doc_args: str, new_doc_args: str):
 
     if "".join(source[start_idx:idx])[:-1] != old_doc_args:
         # Args are not fully defined in the docstring of this object
-        return
+        obj_file = find_source_file(obj)
+        actual_args_section = "".join(source[start_idx:idx])[:-1]
+        raise ValueError(
+            f"Cannot fix docstring of {obj.__name__} in {obj_file} because the argument section in the source code "
+            f"does not match the expected format. This usually happens when:\n"
+            f"1. The argument section is not properly indented\n"
+            f"2. The argument section contains unexpected formatting\n"
+            f"3. The docstring parsing failed to correctly identify the argument boundaries\n\n"
+            f"Expected argument section:\n{repr(old_doc_args)}\n\n"
+            f"Actual argument section found:\n{repr(actual_args_section)}\n\n"
+        )
 
     obj_file = find_source_file(obj)
     with open(obj_file, "r", encoding="utf-8") as f:
