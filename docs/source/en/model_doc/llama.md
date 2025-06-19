@@ -74,10 +74,10 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>
-<hfoption id="transformers-cli">
+<hfoption id="transformers CLI">
 
 ```bash
-echo -e "Plants create energy through a process known as" | transformers-cli run --task text-generation --model huggyllama/llama-7b --device 0
+echo -e "Plants create energy through a process known as" | transformers run --task text-generation --model huggyllama/llama-7b --device 0
 ```
 
 </hfoption>
@@ -115,6 +115,10 @@ from transformers.utils.attention_visualizer import AttentionMaskVisualizer
 visualizer = AttentionMaskVisualizer("huggyllama/llama-7b")
 visualizer("Plants create energy through a process known as")
 ```
+
+<div class="flex justify-center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/llama-attn-mask.png"/>
+</div>
 
 ## Notes
 

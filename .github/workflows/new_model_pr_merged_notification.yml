@@ -59,7 +59,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "<https://github.com/huggingface/transformers/commit/${{ env.COMMIT_SHA }}|New model: ${{ env.NEW_MODEL }}> GH_ArthurZucker, GH_lysandrejik, GH_ydshieh"
+                    "text": "<https://github.com/huggingface/transformers/commit/${{ env.COMMIT_SHA }}|New model: ${{ env.NEW_MODEL }}> GH_ArthurZucker, GH_lysandrejik, GH_ydshieh\ncommit SHA: ${{ env.COMMIT_SHA }}"
                   }
                 }
               ]

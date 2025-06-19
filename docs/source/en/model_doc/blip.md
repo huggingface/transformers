@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The BLIP model was proposed in [BLIP: Bootstrapping Language-Image Pre-training for Unified Vision-Language Understanding and Generation](https://arxiv.org/abs/2201.12086) by Junnan Li, Dongxu Li, Caiming Xiong, Steven Hoi.
+The BLIP model was proposed in [BLIP: Bootstrapping Language-Image Pre-training for Unified Vision-Language Understanding and Generation](https://huggingface.co/papers/2201.12086) by Junnan Li, Dongxu Li, Caiming Xiong, Steven Hoi.
 
 BLIP is a model that is able to perform various multi-modal tasks including:
 - Visual Question Answering 
@@ -88,6 +88,11 @@ The original code can be found [here](https://github.com/salesforce/BLIP).
 [[autodoc]] BlipTextModel
     - forward
 
+## BlipTextLMHeadModel
+
+[[autodoc]] BlipTextLMHeadModel
+- forward
+
 ## BlipVisionModel
 
 [[autodoc]] BlipVisionModel
@@ -122,6 +127,11 @@ The original code can be found [here](https://github.com/salesforce/BLIP).
 
 [[autodoc]] TFBlipTextModel
     - call
+
+## TFBlipTextLMHeadModel
+
+[[autodoc]] TFBlipTextLMHeadModel
+- forward
 
 ## TFBlipVisionModel
 

@@ -17,7 +17,7 @@
 import collections.abc
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -27,30 +27,12 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import ModelOutput, auto_docstring, logging
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_focalnet import FocalNetConfig
 
 
 logger = logging.get_logger(__name__)
-
-# General docstring
-_CONFIG_FOR_DOC = "FocalNetConfig"
-
-# Base docstring
-_CHECKPOINT_FOR_DOC = "microsoft/focalnet-tiny"
-_EXPECTED_OUTPUT_SHAPE = [1, 49, 768]
-
-# Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "microsoft/focalnet-tiny"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 @dataclass
@@ -75,9 +57,9 @@ class FocalNetEncoderOutput(ModelOutput):
             include the spatial dimensions.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    reshaped_hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -103,10 +85,10 @@ class FocalNetModelOutput(ModelOutput):
             include the spatial dimensions.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     pooler_output: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    reshaped_hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -133,9 +115,9 @@ class FocalNetMaskedImageModelingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    reconstruction: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    reconstruction: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    reshaped_hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -162,9 +144,9 @@ class FocalNetImageClassifierOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    logits: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    reshaped_hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 class FocalNetEmbeddings(nn.Module):
@@ -192,7 +174,7 @@ class FocalNetEmbeddings(nn.Module):
 
     def forward(
         self, pixel_values: Optional[torch.FloatTensor], bool_masked_pos: Optional[torch.BoolTensor] = None
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         embeddings, output_dimensions = self.patch_embeddings(pixel_values)
         embeddings = self.norm(embeddings)
         batch_size, seq_len, _ = embeddings.size()
@@ -259,7 +241,7 @@ class FocalNetPatchEmbeddings(nn.Module):
             pixel_values = nn.functional.pad(pixel_values, pad_values)
         return pixel_values
 
-    def forward(self, pixel_values: Optional[torch.FloatTensor]) -> Tuple[torch.Tensor, Tuple[int]]:
+    def forward(self, pixel_values: Optional[torch.FloatTensor]) -> tuple[torch.Tensor, tuple[int]]:
         _, num_channels, height, width = pixel_values.shape
         if num_channels != self.num_channels:
             raise ValueError(
@@ -311,7 +293,7 @@ class FocalNetDropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
 class FocalNetModulation(nn.Module):
@@ -360,7 +342,7 @@ class FocalNetModulation(nn.Module):
         x = self.projection_in(hidden_state).permute(0, 3, 1, 2).contiguous()
         q, ctx, gates = torch.split(x, (num_channels, num_channels, self.focal_level + 1), 1)
 
-        # context aggreation
+        # context aggregation
         ctx_all = 0
         for level in range(self.focal_level):
             ctx = self.focal_layers[level](ctx)
@@ -379,7 +361,7 @@ class FocalNetModulation(nn.Module):
         if self.use_post_layernorm_in_modulation:
             x_out = self.layernorm(x_out)
 
-        # post linear porjection
+        # post linear projection
         x_out = self.projection_out(x_out)
         x_out = self.projection_dropout(x_out)
         return x_out
@@ -414,8 +396,8 @@ class FocalNetLayer(nn.Module):
             Layer index.
         dim (`int`):
             Number of input channels.
-        input_resolution (`Tuple[int]`):
-            Input resulotion.
+        input_resolution (`tuple[int]`):
+            Input resolution.
         drop_path (`float`, *optional*, defaults to 0.0):
             Stochastic depth rate.
     """
@@ -449,8 +431,8 @@ class FocalNetLayer(nn.Module):
         self.gamma_1 = 1.0
         self.gamma_2 = 1.0
         if config.use_layerscale:
-            self.gamma_1 = nn.Parameter(config.layerscale_value * torch.ones((dim)), requires_grad=True)
-            self.gamma_2 = nn.Parameter(config.layerscale_value * torch.ones((dim)), requires_grad=True)
+            self.gamma_1 = nn.Parameter(config.layerscale_value * torch.ones(dim), requires_grad=True)
+            self.gamma_2 = nn.Parameter(config.layerscale_value * torch.ones(dim), requires_grad=True)
 
     def forward(self, hidden_state, input_dimensions):
         height, width = input_dimensions
@@ -486,7 +468,7 @@ class FocalNetStage(nn.Module):
         downsample = FocalNetPatchEmbeddings if (index < self.num_stages - 1) else None
 
         # stochastic depth decay rule
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths), device="cpu")]
         drop_path = dpr[sum(config.depths[:index]) : sum(config.depths[: index + 1])]
 
         self.layers = nn.ModuleList(
@@ -518,7 +500,7 @@ class FocalNetStage(nn.Module):
 
         self.pointing = False
 
-    def forward(self, hidden_states: torch.Tensor, input_dimensions: Tuple[int, int]) -> Tuple[torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor, input_dimensions: tuple[int, int]) -> tuple[torch.Tensor]:
         height, width = input_dimensions
         for layer_module in self.layers:
             hidden_states = layer_module(hidden_states, input_dimensions)
@@ -561,11 +543,11 @@ class FocalNetEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        input_dimensions: Tuple[int, int],
+        input_dimensions: tuple[int, int],
         output_hidden_states: Optional[bool] = False,
         output_hidden_states_before_downsampling: Optional[bool] = False,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple, FocalNetEncoderOutput]:
+    ) -> Union[tuple, FocalNetEncoderOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_reshaped_hidden_states = () if output_hidden_states else None
 
@@ -621,13 +603,8 @@ class FocalNetEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinPreTrainedModel with Swin->FocalNet,swin->focalnet
+@auto_docstring
 class FocalNetPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = FocalNetConfig
     base_model_prefix = "focalnet"
     main_input_name = "pixel_values"
@@ -645,39 +622,24 @@ class FocalNetPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, FocalNetEmbeddings):
+            if module.mask_token is not None:
+                module.mask_token.data.zero_()
+        elif isinstance(module, FocalNetLayer):
+            if self.config.use_layerscale:
+                module.gamma_1.data.fill_(self.config.layerscale_value)
+                module.gamma_2.data.fill_(self.config.layerscale_value)
 
 
-FOCALNET_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`FocalNetConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-FOCALNET_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`AutoImageProcessor.__call__`] for details.
-
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare FocalNet Model outputting raw hidden-states without any specific head on top.",
-    FOCALNET_START_DOCSTRING,
-)
+@auto_docstring
 class FocalNetModel(FocalNetPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True, use_mask_token=False):
+        r"""
+        add_pooling_layer (bool, *optional*, defaults to `True`):
+            Whether to add a pooling layer
+        use_mask_token (`bool`, *optional*, defaults to `False`):
+            Whether to use a mask token for masked image modeling.
+        """
         super().__init__(config)
         self.config = config
         self.num_stages = len(config.depths)
@@ -695,21 +657,14 @@ class FocalNetModel(FocalNetPreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    @add_start_docstrings_to_model_forward(FOCALNET_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=FocalNetModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, FocalNetModelOutput]:
+    ) -> Union[tuple, FocalNetModelOutput]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
@@ -752,10 +707,11 @@ class FocalNetModel(FocalNetPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """FocalNet Model with a decoder on top for masked image modeling.
+@auto_docstring(
+    custom_intro="""
+    FocalNet Model with a decoder on top for masked image modeling.
 
-    This follows the same implementation as in [SimMIM](https://arxiv.org/abs/2111.09886).
+    This follows the same implementation as in [SimMIM](https://huggingface.co/papers/2111.09886).
 
     <Tip>
 
@@ -763,8 +719,7 @@ class FocalNetModel(FocalNetPreTrainedModel):
     directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
 
     </Tip>
-    """,
-    FOCALNET_START_DOCSTRING,
+    """
 )
 class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
     def __init__(self, config):
@@ -784,20 +739,17 @@ class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(FOCALNET_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=FocalNetMaskedImageModelingOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, FocalNetMaskedImageModelingOutput]:
+    ) -> Union[tuple, FocalNetMaskedImageModelingOutput]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
-
-        Returns:
 
         Examples:
         ```python
@@ -867,12 +819,11 @@ class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     FocalNet Model with an image classification head on top (a linear layer on top of the pooled output) e.g. for
     ImageNet.
-    """,
-    FOCALNET_START_DOCSTRING,
+    """
 )
 class FocalNetForImageClassification(FocalNetPreTrainedModel):
     # Copied from transformers.models.swin.modeling_swin.SwinForImageClassification.__init__ with Swin->FocalNet, swin->focalnet
@@ -890,20 +841,14 @@ class FocalNetForImageClassification(FocalNetPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(FOCALNET_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=FocalNetImageClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, FocalNetImageClassifierOutput]:
+    ) -> Union[tuple, FocalNetImageClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -957,11 +902,10 @@ class FocalNetForImageClassification(FocalNetPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     FocalNet backbone, to be used with frameworks like X-Decoder.
-    """,
-    FOCALNET_START_DOCSTRING,
+    """
 )
 class FocalNetBackbone(FocalNetPreTrainedModel, BackboneMixin):
     def __init__(self, config: FocalNetConfig):
@@ -974,17 +918,14 @@ class FocalNetBackbone(FocalNetPreTrainedModel, BackboneMixin):
         # initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(FOCALNET_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> BackboneOutput:
-        """
-        Returns:
-
+        r"""
         Examples:
 
         ```python

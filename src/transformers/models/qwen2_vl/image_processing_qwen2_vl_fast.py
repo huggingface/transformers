@@ -19,11 +19,10 @@
 # limitations under the License.
 """Fast Image processor class for Qwen2-VL."""
 
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
     group_images_by_shape,
@@ -36,21 +35,20 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
-    VideoInput,
     get_image_size,
-    make_batched_videos,
     make_flat_list_of_images,
     valid_images,
 )
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    add_start_docstrings,
+    auto_docstring,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
     logging,
 )
+from ...video_utils import VideoInput, make_batched_videos
 from .image_processing_qwen2_vl import smart_resize
 
 
@@ -70,6 +68,19 @@ logger = logging.get_logger(__name__)
 
 
 class Qwen2VLFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    """
+    min_pixels (`int`, *optional*, defaults to `56 * 56`):
+        The min pixels of the image to resize the image.
+    max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
+        The max pixels of the image to resize the image.
+    patch_size (`int`, *optional*, defaults to 14):
+        The spatial patch size of the vision encoder.
+    temporal_patch_size (`int`, *optional*, defaults to 2):
+        The temporal patch size of the vision encoder.
+    merge_size (`int`, *optional*, defaults to 2):
+        The merge size of the vision encoder to llm encoder.
+    """
+
     min_pixels: Optional[int]
     max_pixels: Optional[int]
     patch_size: Optional[int]
@@ -77,22 +88,7 @@ class Qwen2VLFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     merge_size: Optional[int]
 
 
-@add_start_docstrings(
-    "Constructs a fast Qwen2-VL image processor that dynamically resizes images based on the original images.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    """
-        min_pixels (`int`, *optional*, defaults to `56 * 56`):
-            The min pixels of the image to resize the image.
-        max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
-            The max pixels of the image to resize the image.
-        patch_size (`int`, *optional*, defaults to 14):
-            The spatial patch size of the vision encoder.
-        temporal_patch_size (`int`, *optional*, defaults to 2):
-            The temporal patch size of the vision encoder.
-        merge_size (`int`, *optional*, defaults to 2):
-            The merge size of the vision encoder to llm encoder.
-    """,
-)
+@auto_docstring
 class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
     do_resize = True
     resample = PILImageResampling.BICUBIC
@@ -128,15 +124,15 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: List["torch.Tensor"],
+        images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
         interpolation: Optional["F.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
         patch_size: int,
         temporal_patch_size: int,
         merge_size: int,
@@ -150,11 +146,11 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
         Args:
             images (`ImageInput`):
                 Image or batch of images to preprocess. Expects pixel values ranging from 0 to 255. If pixel values range from 0 to 1, set `do_rescale=False`.
-            vision_info (`List[Dict]`, *optional*):
+            vision_info (`list[Dict]`, *optional*):
                 Optional list of dictionaries containing additional information about vision inputs.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
                 Size of the image after resizing. `shortest_edge` and `longest_edge` keys must be present.
             interpolation (`InterpolationMode`):
                 Resampling filter to use if resizing the image.
@@ -164,12 +160,12 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
                 Scale factor to use if rescaling the image.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
                 Mean to use if normalizing the image. Can be a float or a list of floats corresponding to the number of channels in the image.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
                 Standard deviation to use if normalizing the image. Can be a float or a list of floats corresponding to the number of channels in the image.
             patch_size (`int`, *optional*, defaults to `self.patch_size`):
-                The spacial patch size of the vision encoder.
+                The spatial patch size of the vision encoder.
             temporal_patch_size (`int`, *optional*, defaults to `self.temporal_patch_size`):
                 The temporal patch size of the vision encoder.
             merge_size (`int`, *optional*, defaults to `self.merge_size`):
@@ -251,100 +247,55 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
 
         return flatten_patches, (grid_t, grid_h, grid_w)
 
+    @auto_docstring
     def preprocess(
         self,
         images: ImageInput,
         videos: VideoInput = None,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[dict[str, int]] = None,
         resample: Optional[Union["PILImageResampling", "F.InterpolationMode"]] = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        min_pixels: int = None,
-        max_pixels: int = None,
-        patch_size: int = None,
-        temporal_patch_size: int = None,
-        merge_size: int = None,
-        do_convert_rgb: bool = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
+        min_pixels: Optional[int] = None,
+        max_pixels: Optional[int] = None,
+        patch_size: Optional[int] = None,
+        temporal_patch_size: Optional[int] = None,
+        merge_size: Optional[int] = None,
+        do_convert_rgb: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         device: Optional["torch.device"] = None,
         **kwargs,
     ):
+        r"""
+        min_pixels (`int`, *optional*, defaults to `56 * 56`):
+            The min pixels of the image to resize the image.
+        max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
+            The max pixels of the image to resize the image.
+        patch_size (`int`, *optional*, defaults to 14):
+            The spatial patch size of the vision encoder.
+        temporal_patch_size (`int`, *optional*, defaults to 2):
+            The temporal patch size of the vision encoder.
+        merge_size (`int`, *optional*, defaults to 2):
+            The merge size of the vision encoder to llm encoder.
         """
-        Args:
-            images (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
-                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            videos (`VideoInput`):
-                Video to preprocess. Expects a single or batch of videos with pixel values ranging from 0 to 255. If
-                passing in videos with pixel values between 0 and 1, set `do_rescale=False`.
-            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
-                Size of the image after resizing. `shortest_edge` and `longest_edge` keys must be present.
-            resample (`int`, *optional*, defaults to `self.resample`):
-                Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
-                has an effect if `do_resize` is set to `True`.
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image.
-            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
-                Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
-                Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
-                `True`.
-            min_pixels (`int`, *optional*, defaults to `self.min_pixels`):
-                The min pixels of the image to resize the image.
-            max_pixels (`int`, *optional*, defaults to `self.max_pixels`):
-                The max pixels of the image to resize the image.
-            patch_size (`int`, *optional*, defaults to `self.patch_size`):
-                The spacial patch size of the vision encoder.
-            temporal_patch_size (`int`, *optional*, defaults to `self.temporal_patch_size`):
-                The temporal patch size of the vision encoder.
-            merge_size (`int`, *optional*, defaults to `self.merge_size`):
-                The merge size of the vision encoder to llm encoder.
-            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
-                Whether to convert the image to RGB.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                - Unset: Return a list of `np.ndarray`.
-                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
-                - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
-            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - Unset: Use the channel dimension format of the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-            device (`torch.device`, *optional*):
-                The device to process the images on. If unset, the device is inferred from the input images.
-        """
+        min_pixels = min_pixels if min_pixels is not None else self.min_pixels
+        max_pixels = max_pixels if max_pixels is not None else self.max_pixels
+
         if size is not None:
             if "shortest_edge" not in size or "longest_edge" not in size:
                 raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
             min_pixels = size["shortest_edge"]
+        elif min_pixels is not None and max_pixels is not None:
+            # backward compatibility: override size with min_pixels and max_pixels if they are provided
+            size = {"shortest_edge": min_pixels, "longest_edge": max_pixels}
         else:
             size = {**self.size}
-        # backward compatibility: override size with min_pixels and max_pixels if they are provided
-        if min_pixels is not None:
-            size["shortest_edge"] = min_pixels
-        if max_pixels is not None:
-            size["longest_edge"] = max_pixels
 
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
@@ -382,8 +333,6 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
 
         if images is not None:
             images = make_flat_list_of_images(images)
-        if videos is not None:
-            videos = make_batched_videos(videos)
 
         if images is not None and not valid_images(images):
             raise ValueError(
@@ -391,6 +340,7 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
+        data = {}
         if images is not None:
             pixel_values, vision_grid_thws = [], []
             for image in images:
@@ -415,10 +365,17 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
                 vision_grid_thws.append(image_grid_thw)
             pixel_values = torch.stack(pixel_values)
             vision_grid_thws = torch.tensor(vision_grid_thws)
-            data = {"pixel_values": pixel_values, "image_grid_thw": vision_grid_thws}
+            data.update({"pixel_values": pixel_values, "image_grid_thw": vision_grid_thws})
 
+        # kept for BC only and should be removed after v5.0
         if videos is not None:
-            pixel_values, vision_grid_thws = [], []
+            logger.warning(
+                "`Qwen2VLImageProcessorFast` works only with image inputs and doesn't process videos anymore. "
+                "This is a deprecated behavior and will be removed in v5.0. "
+                "Your videos should be forwarded to `Qwen2VLVideoProcessor`. "
+            )
+            videos = make_batched_videos(videos)
+            pixel_values_videos, vision_grid_thws_videos = [], []
             for images in videos:
                 patches, video_grid_thw = self._preprocess(
                     images,
@@ -437,13 +394,39 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
                     input_data_format=input_data_format,
                     device=device,
                 )
-                pixel_values.extend(patches)
-                vision_grid_thws.append(video_grid_thw)
-            pixel_values = torch.stack(pixel_values)
-            vision_grid_thws = torch.tensor(vision_grid_thws)
-            data = {"pixel_values_videos": pixel_values, "video_grid_thw": vision_grid_thws}
+                pixel_values_videos.extend(patches)
+                vision_grid_thws_videos.append(video_grid_thw)
+            pixel_values_videos = torch.stack(pixel_values_videos)
+            vision_grid_thws_videos = torch.tensor(vision_grid_thws_videos)
+            data.update({"pixel_values_videos": pixel_values_videos, "video_grid_thw": vision_grid_thws_videos})
 
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
+        """
+        A utility that returns number of image patches for a given image size.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `int`: Number of image patches per image.
+        """
+        min_pixels = images_kwargs.get("min_pixels", None) or self.size["shortest_edge"]
+        max_pixels = images_kwargs.get("max_pixels", None) or self.size["longest_edge"]
+        patch_size = images_kwargs.get("patch_size", None) or self.patch_size
+        merge_size = images_kwargs.get("merge_size", None) or self.merge_size
+
+        factor = patch_size * merge_size
+        resized_height, resized_width = smart_resize(
+            height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
+        )
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+        return grid_h * grid_w
 
 
 __all__ = ["Qwen2VLImageProcessorFast"]

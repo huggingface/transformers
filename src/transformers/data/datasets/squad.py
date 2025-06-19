@@ -16,7 +16,7 @@ import os
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import torch
 from filelock import FileLock
@@ -24,7 +24,7 @@ from torch.utils.data import Dataset
 
 from ...models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
 from ...tokenization_utils import PreTrainedTokenizer
-from ...utils import logging
+from ...utils import check_torch_load_is_safe, logging
 from ..processors.squad import SquadFeatures, SquadV1Processor, SquadV2Processor, squad_convert_examples_to_features
 
 
@@ -112,7 +112,7 @@ class SquadDataset(Dataset):
     """
 
     args: SquadDataTrainingArguments
-    features: List[SquadFeatures]
+    features: list[SquadFeatures]
     mode: Split
     is_language_sensitive: bool
 
@@ -148,7 +148,8 @@ class SquadDataset(Dataset):
         with FileLock(lock_path):
             if os.path.exists(cached_features_file) and not args.overwrite_cache:
                 start = time.time()
-                self.old_features = torch.load(cached_features_file)
+                check_torch_load_is_safe()
+                self.old_features = torch.load(cached_features_file, weights_only=True)
 
                 # Legacy cache files have only features, while new cache files
                 # will have dataset and examples also.
@@ -194,7 +195,7 @@ class SquadDataset(Dataset):
     def __len__(self):
         return len(self.features)
 
-    def __getitem__(self, i) -> Dict[str, torch.Tensor]:
+    def __getitem__(self, i) -> dict[str, torch.Tensor]:
         # Convert to Tensors and build dataset
         feature = self.features[i]
 

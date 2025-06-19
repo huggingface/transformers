@@ -28,7 +28,7 @@ rendered properly in your Markdown viewer.
 
 The instruction-tuned variant was post-trained with knowledge distillation and reinforcement learning.
 
-You can find all the original Gemma 3 checkpoints under the [Gemma 3](https://huggingface.co/collections/meta-llama/llama-2-family-661da1f90a9d678b6f55773b) release.
+You can find all the original Gemma 3 checkpoints under the [Gemma 3](https://huggingface.co/collections/google/gemma-3-release-67c6c6f89c4f76621268bb6d) release.
 
 > [!TIP]
 > Click on the Gemma 3 models in the right sidebar for more examples of how to apply Gemma to different vision and language tasks.
@@ -99,10 +99,10 @@ print(processor.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>
-<hfoption id="transformers-cli">
+<hfoption id="transformers CLI">
 
 ```bash
-echo -e "Plants create energy through a process known as" | transformers-cli run --task text-generation --model google/gemma-3-1b-pt --device 0
+echo -e "Plants create energy through a process known as" | transformers run --task text-generation --model google/gemma-3-1b-pt --device 0
 ```
 
 </hfoption>
@@ -163,6 +163,10 @@ from transformers.utils.attention_visualizer import AttentionMaskVisualizer
 visualizer = AttentionMaskVisualizer("google/gemma-3-4b-it")
 visualizer("<img>What is shown in this image?")
 ```
+
+<div class="flex justify-center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/gemma-3-attn-mask.png"/>
+</div>
 
 ## Notes
 
@@ -249,6 +253,10 @@ visualizer("<img>What is shown in this image?")
 
 [[autodoc]] Gemma3TextModel
     - forward
+
+## Gemma3Model
+
+[[autodoc]] Gemma3Model
 
 ## Gemma3ForCausalLM
 

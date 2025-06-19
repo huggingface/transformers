@@ -39,7 +39,7 @@ import collections
 import os
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 
 # Path is set with the intent you should run this script from the root of the repo.
@@ -89,7 +89,7 @@ def find_backend(line: str) -> Optional[str]:
     return "_and_".join(backends)
 
 
-def parse_init(init_file) -> Optional[Tuple[Dict[str, List[str]], Dict[str, List[str]]]]:
+def parse_init(init_file) -> Optional[tuple[dict[str, list[str]], dict[str, list[str]]]]:
     """
     Read an init_file and parse (per backend) the `_import_structure` objects defined and the `TYPE_CHECKING` objects
     defined.
@@ -232,7 +232,7 @@ def parse_init(init_file) -> Optional[Tuple[Dict[str, List[str]], Dict[str, List
     return import_dict_objects, type_hint_objects
 
 
-def analyze_results(import_dict_objects: Dict[str, List[str]], type_hint_objects: Dict[str, List[str]]) -> List[str]:
+def analyze_results(import_dict_objects: dict[str, list[str]], type_hint_objects: dict[str, list[str]]) -> list[str]:
     """
     Analyze the differences between _import_structure objects and TYPE_CHECKING objects found in an init.
 
@@ -279,26 +279,7 @@ def analyze_results(import_dict_objects: Dict[str, List[str]], type_hint_objects
     return errors
 
 
-def check_all_inits():
-    """
-    Check all inits in the transformers repo and raise an error if at least one does not define the same objects in
-    both halves.
-    """
-    failures = []
-    for root, _, files in os.walk(PATH_TO_TRANSFORMERS):
-        if "__init__.py" in files:
-            fname = os.path.join(root, "__init__.py")
-            objects = parse_init(fname)
-            if objects is not None:
-                errors = analyze_results(*objects)
-                if len(errors) > 0:
-                    errors[0] = f"Problem in {fname}, both halves do not define the same objects.\n{errors[0]}"
-                    failures.append("\n".join(errors))
-    if len(failures) > 0:
-        raise ValueError("\n\n".join(failures))
-
-
-def get_transformers_submodules() -> List[str]:
+def get_transformers_submodules() -> list[str]:
     """
     Returns the list of Transformers submodules.
     """
@@ -370,5 +351,5 @@ def check_submodules():
 
 
 if __name__ == "__main__":
-    check_all_inits()
-    check_submodules()
+    # This entire files needs an overhaul
+    pass

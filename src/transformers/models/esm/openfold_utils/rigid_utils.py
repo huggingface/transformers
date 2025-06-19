@@ -15,8 +15,9 @@
 
 from __future__ import annotations
 
-from functools import lru_cache
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from collections.abc import Sequence
+from functools import cache
+from typing import Any, Callable, Optional
 
 import numpy as np
 import torch
@@ -74,9 +75,9 @@ def rot_vec_mul(r: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
     )
 
 
-@lru_cache(maxsize=None)
+@cache
 def identity_rot_mats(
-    batch_dims: Tuple[int, ...],
+    batch_dims: tuple[int, ...],
     dtype: Optional[torch.dtype] = None,
     device: Optional[torch.device] = None,
     requires_grad: bool = True,
@@ -89,9 +90,9 @@ def identity_rot_mats(
     return rots
 
 
-@lru_cache(maxsize=None)
+@cache
 def identity_trans(
-    batch_dims: Tuple[int, ...],
+    batch_dims: tuple[int, ...],
     dtype: Optional[torch.dtype] = None,
     device: Optional[torch.device] = None,
     requires_grad: bool = True,
@@ -100,9 +101,9 @@ def identity_trans(
     return trans
 
 
-@lru_cache(maxsize=None)
+@cache
 def identity_quats(
-    batch_dims: Tuple[int, ...],
+    batch_dims: tuple[int, ...],
     dtype: Optional[torch.dtype] = None,
     device: Optional[torch.device] = None,
     requires_grad: bool = True,
@@ -115,12 +116,12 @@ def identity_quats(
     return quat
 
 
-_quat_elements: List[str] = ["a", "b", "c", "d"]
-_qtr_keys: List[str] = [l1 + l2 for l1 in _quat_elements for l2 in _quat_elements]
-_qtr_ind_dict: Dict[str, int] = {key: ind for ind, key in enumerate(_qtr_keys)}
+_quat_elements: list[str] = ["a", "b", "c", "d"]
+_qtr_keys: list[str] = [l1 + l2 for l1 in _quat_elements for l2 in _quat_elements]
+_qtr_ind_dict: dict[str, int] = {key: ind for ind, key in enumerate(_qtr_keys)}
 
 
-def _to_mat(pairs: List[Tuple[str, int]]) -> np.ndarray:
+def _to_mat(pairs: list[tuple[str, int]]) -> np.ndarray:
     mat = np.zeros((4, 4))
     for key, value in pairs:
         ind = _qtr_ind_dict[key]
@@ -212,14 +213,14 @@ _QUAT_MULTIPLY[:, :, 3] = [[0, 0, 0, 1], [0, 0, 1, 0], [0, -1, 0, 0], [1, 0, 0, 
 
 _QUAT_MULTIPLY_BY_VEC = _QUAT_MULTIPLY[:, 1:, :]
 
-_CACHED_QUATS: Dict[str, np.ndarray] = {
+_CACHED_QUATS: dict[str, np.ndarray] = {
     "_QTR_MAT": _QTR_MAT,
     "_QUAT_MULTIPLY": _QUAT_MULTIPLY,
     "_QUAT_MULTIPLY_BY_VEC": _QUAT_MULTIPLY_BY_VEC,
 }
 
 
-@lru_cache(maxsize=None)
+@cache
 def _get_quat(quat_key: str, dtype: torch.dtype, device: torch.device) -> torch.Tensor:
     return torch.tensor(_CACHED_QUATS[quat_key], dtype=dtype, device=device)
 
@@ -784,7 +785,7 @@ class Rigid:
 
     @staticmethod
     def identity(
-        shape: Tuple[int, ...],
+        shape: tuple[int, ...],
         dtype: Optional[torch.dtype] = None,
         device: Optional[torch.device] = None,
         requires_grad: bool = True,
@@ -989,10 +990,10 @@ class Rigid:
 
     def to_tensor_4x4(self) -> torch.Tensor:
         """
-        Converts a transformation to a homogenous transformation tensor.
+        Converts a transformation to a homogeneous transformation tensor.
 
         Returns:
-            A [*, 4, 4] homogenous transformation tensor
+            A [*, 4, 4] homogeneous transformation tensor
         """
         tensor = self._trans.new_zeros((*self.shape, 4, 4))
         tensor[..., :3, :3] = self._rots.get_rot_mats()
@@ -1003,10 +1004,10 @@ class Rigid:
     @staticmethod
     def from_tensor_4x4(t: torch.Tensor) -> Rigid:
         """
-        Constructs a transformation from a homogenous transformation tensor.
+        Constructs a transformation from a homogeneous transformation tensor.
 
         Args:
-            t: [*, 4, 4] homogenous transformation tensor
+            t: [*, 4, 4] homogeneous transformation tensor
         Returns:
             T object with shape [*]
         """
@@ -1069,7 +1070,7 @@ class Rigid:
         e0 = [c / denom for c in e0]
         dot = sum((c1 * c2 for c1, c2 in zip(e0, e1)))
         e1 = [c2 - c1 * dot for c1, c2 in zip(e0, e1)]
-        denom = torch.sqrt(sum((c * c for c in e1)) + eps * torch.ones_like(e1[0]))
+        denom = torch.sqrt(sum(c * c for c in e1) + eps * torch.ones_like(e1[0]))
         e1 = [c / denom for c in e1]
         e2 = [
             e0[1] * e1[2] - e0[2] * e1[1],

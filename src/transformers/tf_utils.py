@@ -33,7 +33,7 @@ def shape_list(tensor: Union[tf.Tensor, np.ndarray]) -> list[int]:
         tensor (`tf.Tensor` or `np.ndarray`): The tensor we want the shape of.
 
     Returns:
-        `List[int]`: The shape of the tensor as a list.
+        `list[int]`: The shape of the tensor as a list.
     """
     if isinstance(tensor, np.ndarray):
         return list(tensor.shape)
@@ -105,7 +105,7 @@ def functional_layernorm(inputs, weight, bias, epsilon=1e-5, axis=-1):
 
 
 def scaled_dot_product_attention(
-    query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale: float = None
+    query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale: Optional[float] = None
 ):
     """TF equivalent for torch's nn.functional.scaled_dot_product_attention"""
     if dropout_p != 0.0:

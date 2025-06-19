@@ -52,7 +52,7 @@ if is_training_run_on_sagemaker():
     logging.add_handler(StreamHandler(sys.stdout))
 
 if is_torch_xla_available():
-    import torch_xla.core.xla_model as xm
+    import torch_xla.runtime as xr
 
 if is_torch_available():
     from torch.optim.lr_scheduler import LRScheduler
@@ -225,7 +225,7 @@ def distributed_broadcast_scalars(
     device: Optional[torch.device] = torch.device("cuda"),
 ) -> torch.Tensor:
     try:
-        tensorized_scalar = torch.tensor(scalars).to(device)
+        tensorized_scalar = torch.tensor(scalars, device=device)
         output_tensors = [tensorized_scalar.clone() for _ in range(dist.get_world_size())]
         dist.all_gather(output_tensors, tensorized_scalar)
         concat = torch.cat(output_tensors, dim=0)
@@ -271,7 +271,7 @@ class DistributedSamplerWithLoop(DistributedSampler):
             Dataset used for sampling.
         batch_size (`int`):
             The batch size used with this sampler
-        kwargs (`Dict[str, Any]`, *optional*):
+        kwargs (`dict[str, Any]`, *optional*):
             All other keyword arguments passed to `DistributedSampler`.
     """
 
@@ -398,9 +398,9 @@ class SequentialDistributedSampler(Sampler):
 
 
 def get_tpu_sampler(dataset: torch.utils.data.Dataset, batch_size: int):
-    if xm.xrt_world_size() <= 1:
+    if xr.world_size() <= 1:
         return RandomSampler(dataset)
-    return DistributedSampler(dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal())
+    return DistributedSampler(dataset, num_replicas=xr.world_size(), rank=xr.global_ordinal())
 
 
 def nested_new_like(arrays, num_samples, padding_index=-100):
@@ -644,7 +644,7 @@ class LengthGroupedSampler(Sampler):
             lengths = [len(feature[model_input_name]) for feature in dataset]
         elif isinstance(lengths, torch.Tensor):
             logger.info(
-                "If lengths is a torch.Tensor, LengthGroupedSampler will be slow. Converting lengths to List[int]..."
+                "If lengths is a torch.Tensor, LengthGroupedSampler will be slow. Converting lengths to list[int]..."
             )
             lengths = lengths.tolist()
 
@@ -708,7 +708,7 @@ class DistributedLengthGroupedSampler(DistributedSampler):
         elif isinstance(lengths, torch.Tensor):
             logger.info(
                 "If lengths is a torch.Tensor, DistributedLengthGroupedSampler will be slow. Converting lengths to"
-                " List[int]..."
+                " list[int]..."
             )
             lengths = lengths.tolist()
 
@@ -921,8 +921,9 @@ def _get_learning_rate(self):
             last_lr = self.optimizer.param_groups[0]["lr"]
         else:
             last_lr = self.lr_scheduler.get_last_lr()[0]
-        if torch.is_tensor(last_lr):
-            last_lr = last_lr.item()
+
+    if torch.is_tensor(last_lr):
+        last_lr = last_lr.item()
     return last_lr
 
 
@@ -940,11 +941,11 @@ def metrics_format(self, metrics: dict[str, float]) -> dict[str, float]:
     Reformat Trainer metrics values to a human-readable format.
 
     Args:
-        metrics (`Dict[str, float]`):
+        metrics (`dict[str, float]`):
             The metrics returned from train/evaluate/predict
 
     Returns:
-        metrics (`Dict[str, float]`): The reformatted metrics
+        metrics (`dict[str, float]`): The reformatted metrics
     """
 
     metrics_copy = metrics.copy()
@@ -970,7 +971,7 @@ def log_metrics(self, split, metrics):
     Args:
         split (`str`):
             Mode/split name: one of `train`, `eval`, `test`
-        metrics (`Dict[str, float]`):
+        metrics (`dict[str, float]`):
             The metrics returned from train/evaluate/predictmetrics: metrics dict
 
     Notes on memory reports:
@@ -1060,7 +1061,7 @@ def save_metrics(self, split, metrics, combined=True):
     Args:
         split (`str`):
             Mode/split name: one of `train`, `eval`, `test`, `all`
-        metrics (`Dict[str, float]`):
+        metrics (`dict[str, float]`):
             The metrics returned from train/evaluate/predict
         combined (`bool`, *optional*, defaults to `True`):
             Creates combined metrics by updating `all_results.json` with metrics of this call
@@ -1204,7 +1205,7 @@ if is_sagemaker_mp_enabled():
             return type(tensor)({k: smp_nested_concat(v) for k, v in tensor.items()})
         # It doesn't seem possible to check here if `tensor` is a StepOutput because StepOutput lives in `smp.step`
         # which is also the name of the decorator so Python is confused.
-        return tensor.concat().detach().cpu()
+        return tensor.detach().concat().cpu()
 
 
 @dataclass
@@ -1263,7 +1264,7 @@ class AcceleratorConfig:
             " in your script multiplied by the number of processes."
         },
     )
-    dispatch_batches: bool = field(
+    dispatch_batches: Optional[bool] = field(
         default=None,
         metadata={
             "help": "If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process"
@@ -1377,8 +1378,7 @@ class LayerWiseDummyScheduler(LRScheduler):
         self.default_lr = kwargs["lr"]
         optimizer = LayerWiseDummyOptimizer(**kwargs)
         last_epoch = -1
-        verbose = False
-        super().__init__(optimizer, last_epoch, verbose)
+        super().__init__(optimizer, last_epoch)
 
     def get_lr(self):
         # default value

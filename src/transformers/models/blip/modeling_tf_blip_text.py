@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 import math
-from typing import Optional, Tuple
+from typing import Optional
 
 import tensorflow as tf
 
@@ -337,7 +337,7 @@ class TFBlipTextAttention(keras.layers.Layer):
         head_mask: tf.Tensor | None = None,
         encoder_hidden_states: tf.Tensor | None = None,
         encoder_attention_mask: tf.Tensor | None = None,
-        past_key_value: Tuple[Tuple[tf.Tensor]] | None = None,
+        past_key_value: tuple[tuple[tf.Tensor]] | None = None,
         output_attentions: Optional[bool] = False,
         training: Optional[bool] = None,
     ):
@@ -730,7 +730,7 @@ class TFBlipTextModel(TFBlipTextPreTrainedModel):
     """
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
     cross-attention is added between the self-attention layers, following the architecture described in [Attention is
-    all you need](https://arxiv.org/abs/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
+    all you need](https://huggingface.co/papers/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
     Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin. argument and `is_decoder` set to `True`; an
     `encoder_hidden_states` is then expected as an input to the forward pass.
     """
@@ -751,7 +751,7 @@ class TFBlipTextModel(TFBlipTextPreTrainedModel):
 
     @tf.function
     def get_extended_attention_mask(
-        self, attention_mask: tf.Tensor, input_shape: Tuple[int], is_decoder: bool
+        self, attention_mask: tf.Tensor, input_shape: tuple[int], is_decoder: bool
     ) -> tf.Tensor:
         """
         Makes broadcastable attention and causal masks so that future and masked tokens are ignored.
@@ -759,7 +759,7 @@ class TFBlipTextModel(TFBlipTextPreTrainedModel):
         Arguments:
             attention_mask (`tf.Tensor`):
                 Mask with ones indicating tokens to attend to, zeros for tokens to ignore.
-            input_shape (`Tuple[int]`):
+            input_shape (`tuple[int]`):
                 The shape of the input to the model.
             is_decoder (`bool`):
                 Whether the model is used as a decoder.
@@ -800,9 +800,7 @@ class TFBlipTextModel(TFBlipTextPreTrainedModel):
                 extended_attention_mask = attention_mask[:, None, None, :]
         else:
             raise ValueError(
-                "Wrong shape for input_ids (shape {}) or attention_mask (shape {})".format(
-                    input_shape, attention_mask.shape
-                )
+                f"Wrong shape for input_ids (shape {input_shape}) or attention_mask (shape {attention_mask.shape})"
             )
 
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
@@ -826,14 +824,14 @@ class TFBlipTextModel(TFBlipTextPreTrainedModel):
         encoder_embeds: tf.Tensor | None = None,
         encoder_hidden_states: tf.Tensor | None = None,
         encoder_attention_mask: tf.Tensor | None = None,
-        past_key_values: Tuple[Tuple[tf.Tensor]] | None = None,
+        past_key_values: tuple[tuple[tf.Tensor]] | None = None,
         use_cache: bool | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         is_decoder: bool = False,
         training: bool = False,
-    ) -> Tuple[tf.Tensor] | TFBaseModelOutputWithPoolingAndCrossAttentions:
+    ) -> tuple[tf.Tensor] | TFBaseModelOutputWithPoolingAndCrossAttentions:
         r"""
         encoder_hidden_states  (`tf.Tensor`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
@@ -881,7 +879,7 @@ class TFBlipTextModel(TFBlipTextPreTrainedModel):
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if attention_mask is None:
-            attention_mask = tf.ones(((batch_size, seq_length + past_key_values_length)))
+            attention_mask = tf.ones((batch_size, seq_length + past_key_values_length))
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
@@ -1120,3 +1118,6 @@ class TFBlipTextLMHeadModel(TFBlipTextPreTrainedModel):
         if getattr(self, "cls", None) is not None:
             with tf.name_scope(self.cls.name):
                 self.cls.build(None)
+
+
+__all__ = ["TFBlipTextLMHeadModel", "TFBlipTextModel", "TFBlipTextPreTrainedModel"]

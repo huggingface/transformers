@@ -15,7 +15,7 @@
 """Feature extractor class for CLAP."""
 
 import copy
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import torch
@@ -24,11 +24,13 @@ from ...audio_utils import mel_filter_bank, spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("torch",))
 class ClapFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a CLAP feature extractor.
@@ -47,17 +49,17 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
             The sampling rate at which the audio files should be digitalized expressed in hertz (Hz). This only serves
             to warn users if the audio fed to the feature extractor does not have the same sampling rate.
         hop_length (`int`,*optional*, defaults to 480):
-            Length of the overlaping windows for the STFT used to obtain the Mel Spectrogram. The audio will be split
+            Length of the overlapping windows for the STFT used to obtain the Mel Spectrogram. The audio will be split
             in smaller `frames` with a step of `hop_length` between each frame.
         max_length_s (`int`, *optional*, defaults to 10):
             The maximum input length of the model in seconds. This is used to pad the audio.
         fft_window_size (`int`, *optional*, defaults to 1024):
             Size of the window (in samples) on which the Fourier transform is applied. This controls the frequency
-            resolution of the spectrogram. 400 means that the fourrier transform is computed on windows of 400 samples.
+            resolution of the spectrogram. 400 means that the fourier transform is computed on windows of 400 samples.
         padding_value (`float`, *optional*, defaults to 0.0):
             Padding value used to pad the audio. Should correspond to silences.
         return_attention_mask (`bool`, *optional*, defaults to `False`):
-            Whether or not the model should return the attention masks coresponding to the input.
+            Whether or not the model should return the attention masks corresponding to the input.
         frequency_min (`float`, *optional*, defaults to 0):
             The lowest frequency of interest. The STFT will not be computed for values below this.
         frequency_max (`float`, *optional*, defaults to 14000):
@@ -92,7 +94,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
         return_attention_mask=False,  # pad inputs to max length with silence token (zero) and no attention mask
         frequency_min: float = 0,
         frequency_max: float = 14_000,
-        top_db: int = None,
+        top_db: Optional[int] = None,
         truncation: str = "fusion",
         padding: str = "repeatpad",
         **kwargs,
@@ -134,12 +136,12 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
             mel_scale="slaney",
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Serializes this instance to a Python dictionary.
 
         Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance, excpet for the
+            `dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance, except for the
             mel filter banks, which do not need to be saved or printed as they are too long.
         """
         output = copy.deepcopy(self.__dict__)
@@ -257,8 +259,8 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
-        truncation: str = None,
+        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
+        truncation: Optional[str] = None,
         padding: Optional[str] = None,
         max_length: Optional[int] = None,
         sampling_rate: Optional[int] = None,
@@ -269,7 +271,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
         Main method to featurize and prepare for the model one or several sequence(s).
 
         Args:
-            raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
+            raw_speech (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values. Must be mono channel audio, not
                 stereo, i.e. single float per timestep.
@@ -347,7 +349,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
             rand_idx = np.random.randint(0, len(input_mel))
             is_longer[rand_idx] = True
 
-        if isinstance(input_mel[0], List):
+        if isinstance(input_mel[0], list):
             input_mel = [np.asarray(feature, dtype=np.float64) for feature in input_mel]
 
         # is_longer is a list of bool

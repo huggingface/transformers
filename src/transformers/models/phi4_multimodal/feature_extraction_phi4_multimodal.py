@@ -91,7 +91,7 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
         the STFT computation if available, otherwise a slower NumPy based one.
 
         Args:
-            raw_speech (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            raw_speech (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The sequence or batch of sequences to be processed. Each sequence can be a numpy array or PyTorch tensor.
                 For batched inputs, sequences can be a list of numpy arrays or PyTorch tensors, or a single numpy array or
                 PyTorch tensor with first dimension being the batch size.
@@ -236,7 +236,7 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
             to_mask_batch_idxs = torch.arange(batch_size)[audio_lengths != audio_lengths.max()]
             if to_mask_batch_idxs.numel() > 0:
                 batch_idxs_down = (audio_lengths[to_mask_batch_idxs] - self.win_length) // self.hop_length + 1
-                batch_idxs_up = audio_lengths[to_mask_batch_idxs] // self.hop_length + 1
+                batch_idxs_up = (audio_lengths[to_mask_batch_idxs] // self.hop_length) - 1
                 offset_idx = batch_idxs_down.min()
                 max_idx = batch_idxs_up.max()
 

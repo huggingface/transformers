@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -213,14 +212,6 @@ class BlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="BlipVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="BlipVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "Salesforce/blip-vqa-base"
@@ -359,14 +350,6 @@ class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Blip does not use inputs_embeds")
     def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="BlipTextModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="BlipTextModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
         pass
 
     @slow
@@ -799,7 +782,7 @@ class BlipVQAModelTester:
 @require_vision
 class BlipVQAModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (BlipForQuestionAnswering,) if is_torch_available() else ()
-    # Doesn't run generation tests. There are interface mismatches when using `generate` -- TODO @gante
+    # Doesn't run generation tests due to custom generation logic -- won't fix
     all_generative_model_classes = ()
     fx_compatible = False
     test_head_masking = False
@@ -1108,7 +1091,7 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (BlipForConditionalGeneration,) if is_torch_available() else ()
-    # Doesn't run generation tests. There are interface mismatches when using `generate` -- TODO @gante
+    # Doesn't run generation tests due to custom generation logic -- wont fix
     all_generative_model_classes = ()
     fx_compatible = False
     test_head_masking = False

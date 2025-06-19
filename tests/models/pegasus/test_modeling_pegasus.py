@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021, The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -349,6 +348,19 @@ class PegasusXSUMIntegrationTest(AbstractSeq2SeqIntegrationTest):
         return AutoModelForSeq2SeqLM.from_pretrained(self.checkpoint_name).to(torch_device)
 
     @slow
+    def test_device_map(self):
+        model_no_device_map = AutoModelForSeq2SeqLM.from_pretrained(self.checkpoint_name).to(torch_device)
+        model_with_device_map = AutoModelForSeq2SeqLM.from_pretrained(self.checkpoint_name, device_map="auto")
+        assert torch.equal(
+            model_no_device_map.model.decoder.embed_positions.weight,
+            model_with_device_map.model.decoder.embed_positions.weight,
+        )
+        assert torch.equal(
+            model_no_device_map.model.encoder.embed_positions.weight,
+            model_with_device_map.model.encoder.embed_positions.weight,
+        )
+
+    @slow
     @require_torch_fp16
     def test_pegasus_xsum_summary(self):
         assert self.tokenizer.model_max_length == 512
@@ -530,9 +542,9 @@ class PegasusStandaloneDecoderModelTester:
 
         # get two different outputs
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=attn_mask, past_key_values=past_key_values)[
-            "last_hidden_state"
-        ]
+        output_from_past = model(
+            next_tokens, attention_mask=attn_mask, past_key_values=past_key_values, use_cache=True
+        )["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -584,4 +596,8 @@ class PegasusStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin,
 
     @unittest.skip(reason="Decoder cannot keep gradients")
     def test_retain_grad_hidden_states_attentions(self):
+        return
+
+    @unittest.skip(reason="Decoder cannot keep gradients")
+    def test_flex_attention_with_grads():
         return

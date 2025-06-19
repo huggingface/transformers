@@ -157,24 +157,12 @@ def recursively_load_weights(orig_dict, hf_model, model_name):
                 elif len(mapped_key) == 3:
                     integers = re.findall(r"\b\d+\b", name)
                     if mapped_key[0][0] == "d":
-                        mapped_key = "{}.{}.{}{}.{}".format(
-                            mapped_key[0],
-                            str(int(integers[0]) - 1),
-                            mapped_key[1],
-                            str(int(integers[1]) - 1),
-                            mapped_key[2],
-                        )
+                        mapped_key = f"{mapped_key[0]}.{str(int(integers[0]) - 1)}.{mapped_key[1]}{str(int(integers[1]) - 1)}.{mapped_key[2]}"
                     else:
-                        mapped_key = "{}.{}.{}{}.{}".format(
-                            mapped_key[0],
-                            str(int(integers[0]) - 1),
-                            mapped_key[1],
-                            str(int(integers[1]) + 1),
-                            mapped_key[2],
-                        )
+                        mapped_key = f"{mapped_key[0]}.{str(int(integers[0]) - 1)}.{mapped_key[1]}{str(int(integers[1]) + 1)}.{mapped_key[2]}"
                 elif len(mapped_key) == 2:
                     integers = re.findall(r"\b\d+\b", name)
-                    mapped_key = "{}.{}.{}".format(mapped_key[0], str(int(integers[0]) - 1), mapped_key[1])
+                    mapped_key = f"{mapped_key[0]}.{str(int(integers[0]) - 1)}.{mapped_key[1]}"
 
                 is_used = True
                 if "weight_g" in name:
@@ -205,7 +193,7 @@ def convert_checkpoint(
     sample_rate=16000,
     repo_id=None,
 ):
-    model_dict = torch.load(checkpoint_path, "cpu")
+    model_dict = torch.load(checkpoint_path, "cpu", weights_only=True)
 
     config = DacConfig()
 

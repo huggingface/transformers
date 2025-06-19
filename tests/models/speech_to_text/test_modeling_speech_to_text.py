@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,6 +19,8 @@ import os
 import tempfile
 import unittest
 
+from datasets import load_dataset
+
 from transformers import Speech2TextConfig
 from transformers.testing_utils import (
     is_torch_available,
@@ -28,10 +29,8 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_fp16,
     require_torchaudio,
-    slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -435,7 +434,8 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
 
@@ -702,32 +702,23 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 @require_torchaudio
 @require_sentencepiece
 @require_tokenizers
-@slow
 class Speech2TextModelIntegrationTests(unittest.TestCase):
-    @cached_property
-    def default_processor(self):
-        return Speech2TextProcessor.from_pretrained("facebook/s2t-small-librispeech-asr")
-
-    def _load_datasamples(self, num_samples):
-        from datasets import load_dataset
-
+    @classmethod
+    def setUpClass(cls):
+        model_name = "facebook/s2t-small-librispeech-asr"
+        cls.model = Speech2TextForConditionalGeneration.from_pretrained(model_name, device_map="auto")
+        cls.processor = Speech2TextProcessor.from_pretrained(model_name)
+        # loads 4 samples
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        # automatic decoding with librispeech
-        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
-
-        return [x["array"] for x in speech_samples]
+        speech_samples = ds.sort("id").select(range(4))[:4]["audio"]
+        cls.dataset = [x["array"] for x in speech_samples]
 
     def test_generation_librispeech(self):
-        model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
-        model.to(torch_device)
-        processor = self.default_processor
+        input_speech = [self.dataset[0]]
+        input_features = self.processor(input_speech, return_tensors="pt").input_features.to(torch_device)
 
-        input_speech = self._load_datasamples(1)
-
-        input_features = processor(input_speech, return_tensors="pt").input_features.to(torch_device)
-
-        generated_ids = model.generate(input_features)
-        generated_transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)
+        generated_ids = self.model.generate(input_features)
+        generated_transcript = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
         EXPECTED_TRANSCRIPTIONS = [
             "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"
@@ -735,19 +726,14 @@ class Speech2TextModelIntegrationTests(unittest.TestCase):
         self.assertListEqual(generated_transcript, EXPECTED_TRANSCRIPTIONS)
 
     def test_generation_librispeech_batched(self):
-        model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
-        model.to(torch_device)
-        processor = self.default_processor
-
-        input_speech = self._load_datasamples(4)
-
-        inputs = processor(input_speech, return_tensors="pt", padding=True)
+        input_speech = self.dataset
+        inputs = self.processor(input_speech, return_tensors="pt", padding=True)
 
         input_features = inputs.input_features.to(torch_device)
         attention_mask = inputs.attention_mask.to(torch_device)
 
-        generated_ids = model.generate(input_features, attention_mask=attention_mask)
-        generated_transcripts = processor.batch_decode(generated_ids, skip_special_tokens=True)
+        generated_ids = self.model.generate(input_features, attention_mask=attention_mask)
+        generated_transcripts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
         EXPECTED_TRANSCRIPTIONS = [
             "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel",

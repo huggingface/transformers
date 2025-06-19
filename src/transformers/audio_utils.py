@@ -19,12 +19,17 @@ and remove unnecessary dependencies.
 import os
 import warnings
 from io import BytesIO
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import requests
 
-from .utils import is_librosa_available, requires_backends
+from .utils import (
+    is_librosa_available,
+    is_numpy_array,
+    is_torch_tensor,
+    requires_backends,
+)
 
 
 if is_librosa_available():
@@ -37,15 +42,15 @@ def load_audio(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None)
 
     Args:
         audio (`str` or `np.ndarray`):
-            The audio to be laoded to the numpy array format.
+            The audio to be loaded to the numpy array format.
         sampling_rate (`int`, *optional*, defaults to 16000):
-            The samlping rate to be used when loading the audio. It should be same as the
+            The sampling rate to be used when loading the audio. It should be same as the
             sampling rate the model you will be using further was trained with.
         timeout (`float`, *optional*):
             The timeout value in seconds for the URL request.
 
     Returns:
-        `np.ndarray`: A numpy artay representing the audio.
+        `np.ndarray`: A numpy array representing the audio.
     """
     requires_backends(load_audio, ["librosa"])
 
@@ -65,8 +70,38 @@ def load_audio(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None)
 
 
 AudioInput = Union[
-    np.ndarray, "torch.Tensor", List[np.ndarray], Tuple[np.ndarray], List["torch.Tensor"], Tuple["torch.Tensor"]  # noqa: F821
+    np.ndarray, "torch.Tensor", list[np.ndarray], tuple[np.ndarray], list["torch.Tensor"], tuple["torch.Tensor"]  # noqa: F821
 ]
+
+
+def is_valid_audio(audio):
+    return is_numpy_array(audio) or is_torch_tensor(audio)
+
+
+def is_valid_list_of_audio(audio):
+    return audio and all(is_valid_audio(audio_i) for audio_i in audio)
+
+
+def make_list_of_audio(
+    audio: Union[list[AudioInput], AudioInput],
+) -> AudioInput:
+    """
+    Ensure that the output is a list of audio.
+    Args:
+        audio (`Union[list[AudioInput], AudioInput]`):
+            The input audio.
+    Returns:
+        list: A list of audio.
+    """
+    # If it's a list of audios, it's already in the right format
+    if isinstance(audio, (list, tuple)) and is_valid_list_of_audio(audio):
+        return audio
+
+    # If it's a single audio, convert it to a list of
+    if is_valid_audio(audio):
+        return [audio]
+
+    raise ValueError("Invalid input type. Must be a single audio or a list of audio")
 
 
 def hertz_to_mel(freq: Union[float, np.ndarray], mel_scale: str = "htk") -> Union[float, np.ndarray]:
@@ -211,7 +246,7 @@ def chroma_filter_bank(
             Tuning deviation from A440 in fractions of a chroma bin.
         power (`float`, *optional*, defaults to 2.0):
             If 12.0, normalizes each column with their L2 norm. If 1.0, normalizes each column with their L1 norm.
-        weighting_parameters (`Tuple[float, float]`, *optional*, defaults to `(5., 2.)`):
+        weighting_parameters (`tuple[float, float]`, *optional*, defaults to `(5., 2.)`):
             If specified, apply a Gaussian weighting parameterized by the first element of the tuple being the center and
             the second element being the Gaussian half-width.
         start_at_c_chroma (`float`, *optional*, defaults to `True`):
@@ -293,7 +328,7 @@ def mel_filter_bank(
 
     Args:
         num_frequency_bins (`int`):
-            Number of frequencies used to compute the spectrogram (should be the same as in `stft`).
+            Number of frequency bins (should be the same as `n_fft // 2 + 1` where `n_fft` is the size of the Fourier Transform used to compute the spectrogram).
         num_mel_filters (`int`):
             Number of mel filters to generate.
         min_frequency (`float`):
@@ -317,6 +352,12 @@ def mel_filter_bank(
     if norm is not None and norm != "slaney":
         raise ValueError('norm must be one of None or "slaney"')
 
+    if num_frequency_bins < 2:
+        raise ValueError(f"Require num_frequency_bins: {num_frequency_bins} >= 2")
+
+    if min_frequency > max_frequency:
+        raise ValueError(f"Require min_frequency: {min_frequency} <= max_frequency: {max_frequency}")
+
     # center points of the triangular mel filters
     mel_min = hertz_to_mel(min_frequency, mel_scale=mel_scale)
     mel_max = hertz_to_mel(max_frequency, mel_scale=mel_scale)
@@ -325,7 +366,7 @@ def mel_filter_bank(
 
     if triangularize_in_mel_space:
         # frequencies of FFT bins in Hz, but filters triangularized in mel space
-        fft_bin_width = sampling_rate / (num_frequency_bins * 2)
+        fft_bin_width = sampling_rate / ((num_frequency_bins - 1) * 2)
         fft_freqs = hertz_to_mel(fft_bin_width * np.arange(num_frequency_bins), mel_scale=mel_scale)
         filter_freqs = mel_freqs
     else:
@@ -692,7 +733,7 @@ def spectrogram_batch(
     Note: This function is designed for efficient batch processing of multiple waveforms but retains compatibility with individual waveform processing methods like `librosa.stft`.
 
     Args:
-        waveform_list (`List[np.ndarray]` with arrays of shape `(length,)`):
+        waveform_list (`list[np.ndarray]` with arrays of shape `(length,)`):
             The list of input waveforms, each a single-channel (mono) signal.
         window (`np.ndarray` of shape `(frame_length,)`):
             The windowing function to apply, including zero-padding if necessary.
@@ -734,7 +775,7 @@ def spectrogram_batch(
             Data type of the output spectrogram.
 
     Returns:
-        List[`np.ndarray`]: A list of spectrogram arrays, one for each input waveform.
+        list[`np.ndarray`]: A list of spectrogram arrays, one for each input waveform.
     """
     window_length = len(window)
 
@@ -1125,7 +1166,7 @@ def fram_wave(waveform: np.array, hop_length: int = 160, fft_window_size: int = 
     return frames
 
 
-def stft(frames: np.array, windowing_function: np.array, fft_window_size: int = None):
+def stft(frames: np.array, windowing_function: np.array, fft_window_size: Optional[int] = None):
     """
     Calculates the complex Short-Time Fourier Transform (STFT) of the given framed signal. Should give the same results
     as `torch.stft`.
@@ -1140,9 +1181,9 @@ def stft(frames: np.array, windowing_function: np.array, fft_window_size: int = 
             tutorial]https://download.ni.com/evaluation/pxi/Understanding%20FFTs%20and%20Windowing.pdf
         fft_window_size (`int`, *optional*):
             Size of the window om which the Fourier transform is applied. This controls the frequency resolution of the
-            spectrogram. 400 means that the fourrier transform is computed on windows of 400 samples. The number of
+            spectrogram. 400 means that the fourier transform is computed on windows of 400 samples. The number of
             frequency bins (`nb_frequency_bins`) used to divide the window into equal strips is equal to
-            `(1+fft_window_size)//2`. An increase of the fft_window_size slows the calculus time proportionnally.
+            `(1+fft_window_size)//2`. An increase of the fft_window_size slows the calculus time proportionally.
 
     Example:
 

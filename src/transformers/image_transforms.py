@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import warnings
 from collections.abc import Collection, Iterable
 from math import ceil
 from typing import Optional, Union
@@ -57,7 +56,9 @@ def to_channel_dimension_format(
     input_channel_dim: Optional[Union[ChannelDimension, str]] = None,
 ) -> np.ndarray:
     """
-    Converts `image` to the channel dimension format specified by `channel_dim`.
+    Converts `image` to the channel dimension format specified by `channel_dim`. The input
+    can have arbitrary number of leading dimensions. Only last three dimension will be permuted
+    to format the `image`.
 
     Args:
         image (`numpy.ndarray`):
@@ -81,9 +82,11 @@ def to_channel_dimension_format(
         return image
 
     if target_channel_dim == ChannelDimension.FIRST:
-        image = image.transpose((2, 0, 1))
+        axes = list(range(image.ndim - 3)) + [image.ndim - 1, image.ndim - 3, image.ndim - 2]
+        image = image.transpose(axes)
     elif target_channel_dim == ChannelDimension.LAST:
-        image = image.transpose((1, 2, 0))
+        axes = list(range(image.ndim - 3)) + [image.ndim - 2, image.ndim - 1, image.ndim - 3]
+        image = image.transpose(axes)
     else:
         raise ValueError(f"Unsupported channel dimension format: {channel_dim}")
 
@@ -214,7 +217,7 @@ def get_size_with_aspect_ratio(image_size, size, max_size=None) -> tuple[int, in
     Computes the output image size given the input image size and the desired output size.
 
     Args:
-        image_size (`Tuple[int, int]`):
+        image_size (`tuple[int, int]`):
             The input image size.
         size (`int`):
             The desired output size.
@@ -263,7 +266,7 @@ def get_resize_output_image_size(
     Args:
         input_image (`np.ndarray`):
             The image to resize.
-        size (`int` or `Tuple[int, int]` or List[int] or `Tuple[int]`):
+        size (`int` or `tuple[int, int]` or list[int] or `tuple[int]`):
             The size to use for resizing the image. If `size` is a sequence like (h, w), output size will be matched to
             this.
 
@@ -331,7 +334,7 @@ def resize(
     Args:
         image (`np.ndarray`):
             The image to resize.
-        size (`Tuple[int, int]`):
+        size (`tuple[int, int]`):
             The size to use for resizing the image.
         resample (`int`, *optional*, defaults to `PILImageResampling.BILINEAR`):
             The filter to user for resampling.
@@ -453,7 +456,6 @@ def center_crop(
     size: tuple[int, int],
     data_format: Optional[Union[str, ChannelDimension]] = None,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    return_numpy: Optional[bool] = None,
 ) -> np.ndarray:
     """
     Crops the `image` to the specified `size` using a center crop. Note that if the image is too small to be cropped to
@@ -462,7 +464,7 @@ def center_crop(
     Args:
         image (`np.ndarray`):
             The image to crop.
-        size (`Tuple[int, int]`):
+        size (`tuple[int, int]`):
             The target size for the cropped image.
         data_format (`str` or `ChannelDimension`, *optional*):
             The channel dimension format for the output image. Can be one of:
@@ -474,21 +476,10 @@ def center_crop(
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
             If unset, will use the inferred format of the input image.
-        return_numpy (`bool`, *optional*):
-            Whether or not to return the cropped image as a numpy array. Used for backwards compatibility with the
-            previous ImageFeatureExtractionMixin method.
-                - Unset: will return the same type as the input image.
-                - `True`: will return a numpy array.
-                - `False`: will return a `PIL.Image.Image` object.
     Returns:
         `np.ndarray`: The cropped image.
     """
     requires_backends(center_crop, ["vision"])
-
-    if return_numpy is not None:
-        warnings.warn("return_numpy is deprecated and will be removed in v.4.33", FutureWarning)
-
-    return_numpy = True if return_numpy is None else return_numpy
 
     if not isinstance(image, np.ndarray):
         raise TypeError(f"Input image must be of type np.ndarray, got {type(image)}")
@@ -540,9 +531,6 @@ def center_crop(
 
     new_image = new_image[..., max(0, top) : min(new_height, bottom), max(0, left) : min(new_width, right)]
     new_image = to_channel_dimension_format(new_image, output_data_format, ChannelDimension.FIRST)
-
-    if not return_numpy:
-        new_image = to_pil_image(new_image)
 
     return new_image
 
@@ -716,7 +704,7 @@ def pad(
     Args:
         image (`np.ndarray`):
             The image to pad.
-        padding (`int` or `Tuple[int, int]` or `Iterable[Tuple[int, int]]`):
+        padding (`int` or `tuple[int, int]` or `Iterable[tuple[int, int]]`):
             Padding to apply to the edges of the height, width axes. Can be one of three formats:
             - `((before_height, after_height), (before_width, after_width))` unique pad widths for each axis.
             - `((before, after),)` yields same before and after pad for height and width.
@@ -767,7 +755,7 @@ def pad(
         values = ((0, 0), *values) if input_data_format == ChannelDimension.FIRST else (*values, (0, 0))
 
         # Add additional padding if there's a batch dimension
-        values = (0, *values) if image.ndim == 4 else values
+        values = ((0, 0), *values) if image.ndim == 4 else values
         return values
 
     padding = _expand_for_data_format(padding)

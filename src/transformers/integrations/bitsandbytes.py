@@ -11,7 +11,6 @@ from ..utils import (
     is_accelerate_available,
     is_bitsandbytes_available,
     is_bitsandbytes_multi_backend_available,
-    is_ipex_available,
     is_torch_available,
     logging,
 )
@@ -158,7 +157,7 @@ def _replace_with_bnb_linear(
     """
     Private method that wraps the recursion for module replacement.
 
-    Returns the converted model and a boolean that indicates if the conversion has been successfull or not.
+    Returns the converted model and a boolean that indicates if the conversion has been successful or not.
     """
     for name, module in model.named_children():
         if current_key_name is None:
@@ -244,10 +243,10 @@ def replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name
     Parameters:
         model (`torch.nn.Module`):
             Input model or `torch.nn.Module` as the function is run recursively.
-        modules_to_not_convert (`List[`str`]`, *optional*, defaults to `["lm_head"]`):
+        modules_to_not_convert (`list[`str`]`, *optional*, defaults to `["lm_head"]`):
             Names of the modules to not convert in `Linear8bitLt`. In practice we keep the `lm_head` in full precision
             for numerical stability reasons.
-        current_key_name (`List[`str`]`, *optional*):
+        current_key_name (`list[`str`]`, *optional*):
             An array to track the current key of the recursion. This is used to check whether the current key (part of
             it) is not in the list of modules to not convert (for instances modules that are offloaded to `cpu` or
             `disk`).
@@ -280,7 +279,7 @@ def replace_8bit_linear(*args, **kwargs):
     return replace_with_bnb_linear(*args, **kwargs)
 
 
-# For backward compatiblity
+# For backward compatibility
 def set_module_8bit_tensor_to_device(*args, **kwargs):
     warnings.warn(
         "`set_module_8bit_tensor_to_device` will be deprecated in a future version, please use `set_module_quantized_tensor_to_device` instead",
@@ -403,7 +402,7 @@ def _dequantize_and_replace(
     some performance drop compared to the original model before quantization - use it only for specific usecases
     such as QLoRA adapters merging.
 
-    Returns the converted model and a boolean that indicates if the conversion has been successfull or not.
+    Returns the converted model and a boolean that indicates if the conversion has been successful or not.
     """
     quant_method = quantization_config.quantization_method()
 
@@ -488,27 +487,11 @@ def _validate_bnb_multi_backend_availability(raise_exception):
     bnb_supported_devices = getattr(bnb, "supported_torch_devices", set())
     available_devices = set(get_available_devices())
 
-    if available_devices == {"cpu"} and not is_ipex_available():
-        from importlib.util import find_spec
-
-        if find_spec("intel_extension_for_pytorch"):
-            logger.warning(
-                "You have Intel IPEX installed but if you're intending to use it for CPU, it might not have the right version. Be sure to double check that your PyTorch and IPEX installs are compatible."
-            )
-
-        available_devices.discard("cpu")  # Only Intel CPU is supported by BNB at the moment
-
     if not available_devices.intersection(bnb_supported_devices):
         if raise_exception:
-            bnb_supported_devices_with_info = set(  # noqa: C401
-                '"cpu" (needs an Intel CPU and intel_extension_for_pytorch installed and compatible with the PyTorch version)'
-                if device == "cpu"
-                else device
-                for device in bnb_supported_devices
-            )
             err_msg = (
-                f"None of the available devices `available_devices = {available_devices or None}` are supported by the bitsandbytes version you have installed: `bnb_supported_devices = {bnb_supported_devices_with_info}`. "
-                "Please check the docs to see if the backend you intend to use is available and how to install it: https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend"
+                f"None of the available devices `available_devices = {available_devices or None}` are supported by the bitsandbytes version you have installed: `bnb_supported_devices = {bnb_supported_devices}`. "
+                "Please check the docs to see if the backend you intend to use is available and how to install it: https://huggingface.co/docs/bitsandbytes/main/en/installation"
             )
 
             logger.error(err_msg)

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,6 +20,7 @@ import numpy as np
 from transformers import Dinov2Config, ZoeDepthConfig
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.utils.import_utils import get_torch_major_and_minor_version
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -147,7 +147,8 @@ class ZoeDepthModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
-    test_torch_exportable = True
+    # `strict=True/False` are both failing with torch 2.7, see #38677
+    test_torch_exportable = not get_torch_major_and_minor_version() == "2.7"
 
     def setUp(self):
         self.model_tester = ZoeDepthModelTester(self)
@@ -172,14 +173,6 @@ class ZoeDepthModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @unittest.skip(reason="ZoeDepth with AutoBackbone does not have a base model and hence no input_embeddings")
     def test_model_common_attributes(self):
-        pass
-
-    @unittest.skip(reason="ZoeDepth with AutoBackbone does not have a base model")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="ZoeDepth with AutoBackbone does not have a base model")
-    def test_save_load_fast_init_to_base(self):
         pass
 
     @unittest.skip(reason="ZoeDepth does not support training yet")

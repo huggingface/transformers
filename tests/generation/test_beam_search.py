@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -522,9 +521,9 @@ class ConstrainedBeamSearchTester:
         # set to same device. we don't care what device.
 
         if not isinstance(tensor_1, list):
-            tensor_1 = tensor_1.cpu().tolist()
+            tensor_1 = tensor_1.tolist()
         if not isinstance(tensor_2, list):
-            tensor_2 = tensor_2.cpu().tolist()
+            tensor_2 = tensor_2.tolist()
 
         in_order = len(tensor_1) <= len(tensor_2)
         longer = tensor_2 if in_order else tensor_1

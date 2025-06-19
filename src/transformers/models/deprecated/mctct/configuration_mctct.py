@@ -85,7 +85,7 @@ class MCTCTConfig(PretrainedConfig):
             Feature dimensions of the channels of the input to the Conv1D layer.
         input_channels (`int`, *optional*, defaults to 1):
             Number of input channels of the input to the Conv1D layer.
-        conv_channels (`List[int]`, *optional*):
+        conv_channels (`list[int]`, *optional*):
             Channel sizes of intermediate Conv1D layers.
         ctc_loss_reduction (`str`, *optional*, defaults to `"sum"`):
             Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
@@ -179,3 +179,6 @@ class MCTCTConfig(PretrainedConfig):
                 f"but is `len(config.conv_kernel) = {len(self.conv_kernel)}`, "
                 f"`config.num_conv_layers = {self.num_conv_layers}`."
             )
+
+
+__all__ = ["MCTCTConfig"]

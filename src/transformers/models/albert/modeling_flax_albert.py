@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Callable, Optional, Tuple
+from typing import Callable, Optional
 
 import flax
 import flax.linen as nn
@@ -77,8 +77,8 @@ class FlaxAlbertForPreTrainingOutput(ModelOutput):
 
     prediction_logits: jnp.ndarray = None
     sop_logits: jnp.ndarray = None
-    hidden_states: Optional[Tuple[jnp.ndarray]] = None
-    attentions: Optional[Tuple[jnp.ndarray]] = None
+    hidden_states: Optional[tuple[jnp.ndarray]] = None
+    attentions: Optional[tuple[jnp.ndarray]] = None
 
 
 ALBERT_START_DOCSTRING = r"""
@@ -518,7 +518,7 @@ class FlaxAlbertPreTrainedModel(FlaxPreTrainedModel):
     def __init__(
         self,
         config: AlbertConfig,
-        input_shape: Tuple = (1, 1),
+        input_shape: tuple = (1, 1),
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
@@ -527,7 +527,7 @@ class FlaxAlbertPreTrainedModel(FlaxPreTrainedModel):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
         token_type_ids = jnp.zeros_like(input_ids)
@@ -558,7 +558,7 @@ class FlaxAlbertPreTrainedModel(FlaxPreTrainedModel):
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: jax.random.PRNGKey = None,
         train: bool = False,
         output_attentions: Optional[bool] = None,
@@ -1087,7 +1087,7 @@ class FlaxAlbertForQuestionAnsweringModule(nn.Module):
         hidden_states = outputs[0]
 
         logits = self.qa_outputs(hidden_states)
-        start_logits, end_logits = logits.split(self.config.num_labels, axis=-1)
+        start_logits, end_logits = jnp.split(logits, self.config.num_labels, axis=-1)
         start_logits = start_logits.squeeze(-1)
         end_logits = end_logits.squeeze(-1)
 

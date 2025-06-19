@@ -218,7 +218,7 @@ def convert_t5x_checkpoint_to_flax(t5x_checkpoint_path, config_name, flax_dump_f
         flax_model.params["lm_head"]["kernel"] = t5x_model["target"]["decoder"]["logits_dense"]["kernel"]
 
     flax_model.save_pretrained(flax_dump_folder_path)
-    print("T5X Model was sucessfully converted!")
+    print("T5X Model was successfully converted!")
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@ import argparse
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import pytorch_lightning as pl
 from pytorch_lightning.utilities import rank_zero_info
@@ -201,7 +201,7 @@ class BaseTransformer(pl.LightningModule):
         )
 
     @pl.utilities.rank_zero_only
-    def on_save_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
+    def on_save_checkpoint(self, checkpoint: dict[str, Any]) -> None:
         save_path = self.output_dir.joinpath("best_tfmr")
         self.model.config.save_step = self.step_count
         self.model.save_pretrained(save_path)
@@ -282,7 +282,7 @@ class LoggingCallback(pl.Callback):
         # Log results
         for key in sorted(metrics):
             if key not in ["log", "progress_bar"]:
-                rank_zero_info("{} = {}\n".format(key, str(metrics[key])))
+                rank_zero_info(f"{key} = {str(metrics[key])}\n")
 
     def on_test_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
         rank_zero_info("***** Test results *****")
@@ -292,8 +292,8 @@ class LoggingCallback(pl.Callback):
         with open(output_test_results_file, "w") as writer:
             for key in sorted(metrics):
                 if key not in ["log", "progress_bar"]:
-                    rank_zero_info("{} = {}\n".format(key, str(metrics[key])))
-                    writer.write("{} = {}\n".format(key, str(metrics[key])))
+                    rank_zero_info(f"{key} = {str(metrics[key])}\n")
+                    writer.write(f"{key} = {str(metrics[key])}\n")
 
 
 def add_generic_args(parser, root_dir) -> None:

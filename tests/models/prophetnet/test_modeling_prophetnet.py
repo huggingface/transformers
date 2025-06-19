@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Inc. team, The Microsoft Research team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -979,7 +978,7 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_causal_lm_from_pretrained(*config_and_inputs)
 
-    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
+    @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
     def test_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
@@ -1117,10 +1116,6 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
         self.assertIsNotNone(encoder_hidden_states.grad)
         self.assertIsNotNone(encoder_attentions.grad)
-
-    @unittest.skip(reason="Generating with head_masking has not been implemented for ProphetNet models yet.")
-    def test_generate_with_head_masking(self):
-        pass
 
 
 @require_torch
