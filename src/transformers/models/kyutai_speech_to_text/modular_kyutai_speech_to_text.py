@@ -247,7 +247,13 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
 
     def generate(self, *args, **kwargs):
         padding_mask = kwargs.get("padding_mask")
+        max_length = kwargs.pop("max_length", None)
         max_new_tokens = kwargs.pop("max_new_tokens", None)
+
+        if max_length is not None and max_new_tokens is not None:
+            logger.warning(
+                "`max_length` or `max_new_tokens` has been set, yet they are not supported for this model. They will be ignored."
+            )
 
         if padding_mask is not None:
             audio_tokens_mask = self.codec_model.get_audio_codes_mask(padding_mask)
