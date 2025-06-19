@@ -28,7 +28,7 @@ from ...audio_utils import AudioInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 
 
-class MoshiAsrProcessorKwargs(ProcessingKwargs, total=False):
+class KyutaiSpeechToTextProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "audio_kwargs": {
             "sampling_rate": 24000,
@@ -37,11 +37,11 @@ class MoshiAsrProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-class MoshiAsrProcessor(ProcessorMixin):
+class KyutaiSpeechToTextProcessor(ProcessorMixin):
     r"""
     Constructs a Moshi ASR processor which wraps [`EncodecFeatureExtractor`] and
     [`PreTrainedTokenizerFast`] into a single processor that inherits both the audio feature extraction and
-    tokenizer functionalities. See the [`~MoshiAsrProcessor.__call__`] for more
+    tokenizer functionalities. See the [`~KyutaiSpeechToTextProcessor.__call__`] for more
     information.
     """
 
@@ -51,12 +51,12 @@ class MoshiAsrProcessor(ProcessorMixin):
     def __call__(
         self,
         audio: Optional[AudioInput] = None,
-        **kwargs: Unpack[MoshiAsrProcessorKwargs],
+        **kwargs: Unpack[KyutaiSpeechToTextProcessorKwargs],
     ):
         # TODO: @eustlb, add doc
 
         output_kwargs = self._merge_kwargs(
-            MoshiAsrProcessorKwargs,
+            KyutaiSpeechToTextProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -69,17 +69,17 @@ class MoshiAsrProcessor(ProcessorMixin):
 
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to MoshiAsrTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to
+        This method forwards all its arguments to KyutaiSpeechToTextTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
 
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to MoshiAsrTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
+        This method forwards all its arguments to KyutaiSpeechToTextTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
         refer to the docstring of this method for more information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
 
-__all__ = ["MoshiAsrProcessor"]
+__all__ = ["KyutaiSpeechToTextProcessor"]

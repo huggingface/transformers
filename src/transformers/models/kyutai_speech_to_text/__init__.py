@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_moshi_asr import *
-    from .modeling_moshi_asr import *
-    from .processing_moshi_asr import *
+    from .configuration_kyutai_speech_to_text import *
+    from .modeling_kyutai_speech_to_text import *
+    from .processing_kyutai_speech_to_text import *
 else:
     import sys
 

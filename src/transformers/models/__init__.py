@@ -156,6 +156,7 @@ if TYPE_CHECKING:
     from .janus import *
     from .jetmoe import *
     from .kosmos2 import *
+    from .kyutai_speech_to_text import *
     from .layoutlm import *
     from .layoutlmv2 import *
     from .layoutlmv3 import *
@@ -202,7 +203,6 @@ if TYPE_CHECKING:
     from .modernbert import *
     from .moonshine import *
     from .moshi import *
-    from .moshi_asr import *
     from .mpnet import *
     from .mpt import *
     from .mra import *

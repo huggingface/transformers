@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Union, List
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -82,7 +82,7 @@ class MimiConv1dPaddingCache:
     """
 
     def __init__(self):
-        self.padding_cache: List[torch.Tensor] = []
+        self.padding_cache: list[torch.Tensor] = []
 
     def update(
         self,
@@ -129,7 +129,7 @@ class MimiEncoderOutput(ModelOutput):
     """
 
     audio_codes: Optional[torch.LongTensor] = None
-    encoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None
+    encoder_past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None
     padding_cache: Optional[MimiConv1dPaddingCache] = None
 
 
@@ -1456,7 +1456,7 @@ class MimiModel(MimiPreTrainedModel):
         input_values: torch.Tensor,
         num_quantizers: int,
         padding_mask: int,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
         padding_cache: Optional[MimiConv1dPaddingCache] = None,
         return_dict: Optional[bool] = None,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
@@ -1523,7 +1523,7 @@ class MimiModel(MimiPreTrainedModel):
         input_values: torch.Tensor,
         padding_mask: Optional[torch.Tensor] = None,
         num_quantizers: Optional[float] = None,
-        encoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        encoder_past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
         padding_cache: Optional[MimiConv1dPaddingCache] = None,
         use_streaming: Optional[bool] = None,
         return_dict: Optional[bool] = None,

@@ -21,7 +21,7 @@ from ..auto.configuration_auto import AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class MoshiAsrConfig(PretrainedConfig):
+class KyutaiSpeechToTextConfig(PretrainedConfig):
     r"""
     #TODO: add documentation
 
@@ -87,7 +87,7 @@ class MoshiAsrConfig(PretrainedConfig):
     #TODO: add example
     ```"""
 
-    model_type = "moshi_asr"
+    model_type = "kyutai_speech_to_text"
     keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs = {"codec_config": AutoConfig}
 
@@ -161,4 +161,4 @@ class MoshiAsrConfig(PretrainedConfig):
         self.sliding_window = sliding_window
 
 
-__all__ = ["MoshiAsrConfig"]
+__all__ = ["KyutaiSpeechToTextConfig"]

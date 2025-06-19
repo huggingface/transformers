@@ -24,9 +24,9 @@ import torch
 
 from transformers import (
     AutoFeatureExtractor,
-    MoshiAsrConfig,
-    MoshiAsrForConditionalGeneration,
-    MoshiAsrProcessor,
+    KyutaiSpeechToTextConfig,
+    KyutaiSpeechToTextForConditionalGeneration,
+    KyutaiSpeechToTextProcessor,
     PreTrainedTokenizerFast,
 )
 from transformers.convert_slow_tokenizer import MoshiConverter
@@ -90,7 +90,7 @@ def convert_key(key, mapping):
     return key
 
 
-def convert_moshi_asr_state_dict(state_dict, config, unwanted_prefix="transformer."):
+def convert_kyutai_speech_to_text_state_dict(state_dict, config, unwanted_prefix="transformer."):
     hidden_size = config.hidden_size
     head_dim = config.head_dim
     num_heads = int(config.hidden_size // config.head_dim)
@@ -190,7 +190,7 @@ def write_model(
     print("Converting the model.")
     os.makedirs(output_dir, exist_ok=True)
 
-    config = MoshiAsrConfig()
+    config = KyutaiSpeechToTextConfig()
     config.use_cache = True
     config.codec_config.sliding_window = 250
 
@@ -214,7 +214,7 @@ def write_model(
     # -----------------------
     # convert parameter names
     # -----------------------
-    state_dict = convert_moshi_asr_state_dict(state_dict, config, unwanted_prefix=unwanted_prefix)
+    state_dict = convert_kyutai_speech_to_text_state_dict(state_dict, config, unwanted_prefix=unwanted_prefix)
     codec_state_dict = convert_mimi_state_dict(codec_state_dict, config.codec_config, unwanted_prefix=None)
 
     # -------------------------
@@ -222,7 +222,7 @@ def write_model(
     # -------------------------
     print("Loading the checkpoint in a Moshi ASR model.")
     with torch.device("meta"):
-        model = MoshiAsrForConditionalGeneration(config)
+        model = KyutaiSpeechToTextForConditionalGeneration(config)
 
     linear_weight = state_dict.pop("text_linear.weight")
     model.model.load_state_dict(state_dict, strict=True, assign=True)
@@ -249,7 +249,9 @@ def write_model(
     # Safety check: reload the converted model
     gc.collect()
     print("Reloading the model to check if it's saved correctly.")
-    MoshiAsrForConditionalGeneration.from_pretrained(output_dir, torch_dtype=torch.bfloat16, device_map="auto")
+    KyutaiSpeechToTextForConditionalGeneration.from_pretrained(
+        output_dir, torch_dtype=torch.bfloat16, device_map="auto"
+    )
     print("Model reloaded successfully.")
 
 
@@ -280,7 +282,7 @@ def write_processor(
 
     feature_extractor = AutoFeatureExtractor.from_pretrained(codec_model_path_or_repo)
 
-    processor = MoshiAsrProcessor(feature_extractor, tokenizer)
+    processor = KyutaiSpeechToTextProcessor(feature_extractor, tokenizer)
     processor.save_pretrained(output_dir)
 
 
@@ -299,6 +301,12 @@ def main():
         help="Name of the model in input_path_or_repo",
     )
     parser.add_argument(
+        "--tokenizer_model_name",
+        type=str,
+        required=True,
+        help="Name of the tokenizer model in input_path_or_repo",
+    )
+    parser.add_argument(
         "--codec_model_path_or_repo",
         type=str,
         required=True,
@@ -309,6 +317,12 @@ def main():
         type=str,
         required=True,
         help="Name of the Mimi model in codec_model_path_or_repo",
+    )
+    parser.add_argument(
+        "--preprocessor_model_path_or_repo",
+        type=str,
+        required=True,
+        help="Path or repo containing the preprocessor config",
     )
     parser.add_argument(
         "--output_dir",
@@ -323,28 +337,18 @@ def main():
         args.input_path_or_repo,
         args.model_name,
         args.codec_model_path_or_repo,
-        output_dir=args.output_dir,
+        args.mimi_name,
+        args.output_dir,
         safe_serialization=args.safe_serialization,
     )
 
-    write_processor(args.output_dir, args.codec_model_path_or_repo)
+    write_processor(
+        args.input_path_or_repo,
+        args.tokenizer_model_name,
+        args.preprocessor_model_path_or_repo,
+        args.output_dir,
+    )
 
 
 if __name__ == "__main__":
-    # main()
-    # TODO: @eustlb, update
-    write_model(
-        "kmhf/stt-202506",
-        "model.safetensors",
-        "kmhf/stt-202506",
-        "mimi-pytorch-e351c8d8@125.safetensors",
-        "/Users/eustachelebihan/dev/add-moshi-asr/new-model",
-        safe_serialization=True,
-    )
-
-    write_processor(
-        "kmhf/stt-202506",
-        "tokenizer_en_audio_4000.model",
-        "kyutai/mimi",
-        "/Users/eustachelebihan/dev/add-moshi-asr/new-model",
-    )
+    main()

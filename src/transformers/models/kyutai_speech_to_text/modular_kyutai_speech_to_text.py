@@ -14,7 +14,7 @@
 # limitations under the License.
 
 import types
-from typing import Dict, Optional, Tuple
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -42,7 +42,7 @@ if is_flash_attn_available():
     pass
 
 
-class MoshiAsrEmbeddings(nn.Module):
+class KyutaiSpeechToTextEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
         # TODO: should it be splitted to audio and text embeddings?
@@ -67,13 +67,13 @@ class MoshiAsrEmbeddings(nn.Module):
         return inputs_embeds
 
 
-class MoshiAsrModel(MoshiModel):
+class KyutaiSpeechToTextModel(MoshiModel):
     def __init__(self, config):
         super().__init__(config)
-        self.embed_tokens = MoshiAsrEmbeddings(config)
+        self.embed_tokens = KyutaiSpeechToTextEmbeddings(config)
 
 
-class MoshiAsrForConditionalGeneration(LlamaForCausalLM, GenerationMixin, PreTrainedModel):
+class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMixin, PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.codec_model = AutoModel.from_config(config.codec_config)
@@ -90,8 +90,8 @@ class MoshiAsrForConditionalGeneration(LlamaForCausalLM, GenerationMixin, PreTra
         self,
         inputs: Optional[torch.Tensor] = None,
         bos_token_id: Optional[torch.Tensor] = None,
-        model_kwargs: Optional[Dict[str, torch.Tensor]] = None,
-    ) -> Tuple[torch.Tensor, Optional[str], Dict[str, torch.Tensor]]:
+        model_kwargs: Optional[dict[str, torch.Tensor]] = None,
+    ) -> tuple[torch.Tensor, Optional[str], dict[str, torch.Tensor]]:
         inputs, input_name, model_kwargs = GenerationMixin._prepare_model_inputs(
             inputs=inputs,
             bos_token_id=bos_token_id,
@@ -156,7 +156,7 @@ class MoshiAsrForConditionalGeneration(LlamaForCausalLM, GenerationMixin, PreTra
         input_values: Optional[torch.FloatTensor] = None,
         padding_mask: Optional[torch.Tensor] = None,
         audio_window_size: Optional[int] = None,
-        current_window: Optional[Tuple[int, int]] = None,
+        current_window: Optional[tuple[int, int]] = None,
         encoder_past_key_values: Optional[Cache] = None,
         padding_cache: Optional[MimiConv1dPaddingCache] = None,
         **kwargs,
@@ -269,4 +269,4 @@ class MoshiAsrForConditionalGeneration(LlamaForCausalLM, GenerationMixin, PreTra
         )
 
 
-__all__ = ["MoshiAsrModel", "MoshiAsrForConditionalGeneration"]
+__all__ = ["KyutaiSpeechToTextModel", "KyutaiSpeechToTextForConditionalGeneration"]
