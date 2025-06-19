@@ -24,7 +24,6 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...cache_utils import MambaCache
 from ...generation import GenerationMixin
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -33,6 +32,7 @@ from ...utils import (
     logging,
 )
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available, is_mambapy_available
+from .cache_mamba import MambaCache
 from .configuration_mamba import MambaConfig
 
 
@@ -650,7 +650,12 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
     ):
         # Overwritten -- uses `cache_params` as opposed to `past_key_values`
 
+        cache_params_not_initialized = cache_params is None
         if use_cache:
+            if cache_params_not_initialized:
+                max_batch_size = inputs_embeds.size(0) if inputs_embeds is not None else input_ids.size(0)
+                cache_params = MambaCache(self.backbone.config, max_batch_size, device=self.device, dtype=self.dtype)
+                cache_position = torch.arange(0, self.backbone.config.conv_kernel, device=input_ids.device)
             # `cache_position` should have been initialized in `generate`
             if cache_position is None:
                 raise ValueError(
@@ -671,7 +676,7 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
                 # the length of `cache_params.conv_states`, which is `config.conv_kernel`
                 cache_position = torch.arange(0, self.config.conv_kernel, device=input_ids.device)
 
-        if inputs_embeds is not None and cache_params is None:
+        if inputs_embeds is not None and cache_params_not_initialized:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids.contiguous()}
