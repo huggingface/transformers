@@ -29,12 +29,14 @@ class KyutaiSpeechToTextConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 32000):
-            Vocabulary size of the MoshiDecoder model. Defines the number of different tokens that can be
-            represented by the `inputs_ids` passed when calling [`MoshiDecoder`].
-        hidden_size (`int`, *optional*, defaults to 4096):
+        codebook_vocab_size (`int`, *optional*, defaults to 2049):
+            Vocabulary size of the codebook. Defines the number of different audio tokens that can be represented by each codebook.
+        vocab_size (`int`, *optional*, defaults to 4001):
+            Vocabulary size of the model. Defines the number of different tokens that can be represented by the
+            `input_ids` passed when calling the model.
+        hidden_size (`int`, *optional*, defaults to 2048):
             Dimensionality of the layers and the pooler layer of the main decoder.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
+        num_hidden_layers (`int`, *optional*, defaults to 48):
             Number of decoder layers.
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the main decoder block.
@@ -44,14 +46,11 @@ class KyutaiSpeechToTextConfig(PretrainedConfig):
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `num_attention_heads`.
-        audio_vocab_size (`int`, *optional*):
-            Vocabulary size of the audio part of model. Defines the number of different tokens that can be
-            represented by the `audio_codes` passed when calling the Moshi models.
-        max_position_embeddings (`int`, *optional*, defaults to 3000):
+            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `num_attention_heads`. 
+        max_position_embeddings (`int`, *optional*, defaults to 750):
             The maximum sequence length that this model might ever be used with. Typically, set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        rope_theta (`float`, *optional*, defaults to 10000.0):
+        rope_theta (`float`, *optional*, defaults to 100000.0):
             The base period of the RoPE embeddings.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
@@ -72,8 +71,16 @@ class KyutaiSpeechToTextConfig(PretrainedConfig):
             The epsilon used by the rms normalization layers.
         num_codebooks (`int`, *optional*, defaults to 8):
             The number of audio codebooks for each audio channels.
+        audio_bos_token_id (`int`, *optional*, defaults to 2048):
+            Beginning of stream token id for codebook tokens.
+        audio_pad_token_id (`int`, *optional*, defaults to 69569):
+            Padding token id for codebook tokens.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
+            Whether to tie weight embeddings.
+        pad_token_id (`int`, *optional*, defaults to 3):
+            Padding token id.
+        bos_token_id (`int`, *optional*, defaults to 48000):
+            Beginning of stream token id for text tokens.
         kwargs (*optional*):
             Dictionary of keyword arguments. Notably:
                 - **audio_encoder_config** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
@@ -110,7 +117,6 @@ class KyutaiSpeechToTextConfig(PretrainedConfig):
         ffn_dim=11264,
         rms_norm_eps=1e-8,
         num_codebooks=32,
-        frame_size=1920,
         audio_bos_token_id=2048,
         audio_pad_token_id=69569,
         tie_word_embeddings=False,
@@ -132,7 +138,8 @@ class KyutaiSpeechToTextConfig(PretrainedConfig):
             self.codec_config = codec_config
 
         self.num_codebooks = num_codebooks
-        self.frame_size = frame_size
+        self.frame_size = self.codec_config.frame_size
+
         self.audio_bos_token_id = audio_bos_token_id
         self.audio_pad_token_id = audio_pad_token_id
         self.codebook_vocab_size = codebook_vocab_size
