@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Optional, Union, List
 
 import torch
 import torch.utils.checkpoint
@@ -70,46 +70,6 @@ class MimiOutput(ModelOutput):
     audio_values: Optional[torch.FloatTensor] = None
     encoder_past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None
     decoder_past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None
-
-
-class MimiConv1dPaddingCache:
-    """
-    Padding cache for MimiConv1d causal convolutions in order to support streaming via cache padding.
-    See: https://arxiv.org/pdf/2005.06720 & https://arxiv.org/pdf/2204.07064
-
-    A padding cache is a list of cached partial hidden states for each convolution layer.
-    Hidden states are cached from the previous call to the MimiConv1d forward pass, given the padding size.
-    """
-
-    def __init__(self):
-        self.padding_cache: List[torch.Tensor] = []
-
-    def update(
-        self,
-        padding_states: torch.Tensor,
-        layer_idx: int,
-    ):
-        """
-        Updates the padding cache with the new padding states for the layer `layer_idx` and returns the current cache.
-        If cache was not yet initialized, it is initialized with the padding states and None is returned.
-
-        Parameters:
-            padding_states (`torch.Tensor`):
-                The new padding states to cache.
-            layer_idx (`int`):
-                The index of the layer to cache the states for.
-        Returns:
-            `torch.Tensor` or `None`, the current padding cache.
-        """
-        if len(self.padding_cache) <= layer_idx:
-            current_cache = None
-            self.padding_cache.append(padding_states)
-        else:
-            current_cache = self.padding_cache[layer_idx]
-
-        self.padding_cache[layer_idx] = padding_states
-
-        return current_cache
 
 
 class MimiConv1dPaddingCache:
@@ -1253,7 +1213,7 @@ class MimiEuclideanCodebook(nn.Module):
     def quantize(self, hidden_states):
         # Projects each vector in `hidden_states` over the nearest centroid and return its index.
         # `hidden_states` should be `[N, D]` with `N` the number of input vectors and `D` the dimension.
-        dists = torch.cdist(hidden_states[None], self.embed[None], p=2)[0]
+        dists = torch.cdist(hidden_states[None].float(), self.embed[None].float(), p=2)[0]
         embed_ind = dists.argmin(dim=-1)
         return embed_ind
 
