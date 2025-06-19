@@ -29,6 +29,7 @@ from ...generation import GenerationMixin
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -36,7 +37,6 @@ from ...modeling_outputs import (
     Seq2SeqModelOutput,
     Wav2Vec2BaseModelOutput,
 )
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_seamless_m4t_v2 import SeamlessM4Tv2Config

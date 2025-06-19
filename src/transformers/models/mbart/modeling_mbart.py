@@ -34,6 +34,7 @@ from ...modeling_attn_mask_utils import (
 from ...modeling_flash_attention_utils import (
     FlashAttentionKwargs,
 )
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -43,7 +44,6 @@ from ...modeling_outputs import (
     Seq2SeqQuestionAnsweringModelOutput,
     Seq2SeqSequenceClassifierOutput,
 )
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -1128,9 +1128,7 @@ class MBartDecoder(MBartPreTrainedModel):
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
                 layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                cross_attn_layer_head_mask=(
-                    cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
-                ),
+                cross_attn_layer_head_mask=(cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
                 past_key_value=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,

@@ -24,8 +24,8 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     auto_docstring,

@@ -20,7 +20,6 @@
 # limitations under the License.
 
 import math
-from functools import partial
 from typing import Callable, Optional, Union
 
 import torch
@@ -32,13 +31,13 @@ from ...cache_utils import Cache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import LossKwargs, auto_docstring, is_torch_flex_attn_available, logging

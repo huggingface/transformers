@@ -25,8 +25,8 @@ from torch import Tensor, nn
 
 from ...activations import ACT2FN
 from ...file_utils import ModelOutput, is_scipy_available, requires_backends
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, is_accelerate_available, logging
 from ...utils.backbone_utils import load_backbone

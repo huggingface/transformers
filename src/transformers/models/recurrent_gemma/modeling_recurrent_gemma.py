@@ -25,8 +25,8 @@ from torch import nn
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
-from ...modeling_outputs import BaseModelOutputWithNoAttention, CausalLMOutput
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import BaseModelOutputWithNoAttention, CausalLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import auto_docstring, logging

@@ -28,6 +28,7 @@ from ...generation import GenerationMixin
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -35,7 +36,6 @@ from ...modeling_outputs import (
     Seq2SeqModelOutput,
     Seq2SeqSpectrogramOutput,
 )
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
 from .configuration_speecht5 import SpeechT5Config, SpeechT5HifiGanConfig
@@ -1627,9 +1627,7 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
                 layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                cross_attn_layer_head_mask=(
-                    cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
-                ),
+                cross_attn_layer_head_mask=(cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
                 past_key_value=past_key_value,
                 output_attentions=output_attentions,
                 use_cache=use_cache,

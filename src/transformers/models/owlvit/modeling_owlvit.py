@@ -24,8 +24,8 @@ from torch import Tensor, nn
 
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, is_vision_available, logging, torch_int
 from .configuration_owlvit import OwlViTConfig, OwlViTTextConfig, OwlViTVisionConfig

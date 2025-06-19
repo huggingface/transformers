@@ -24,13 +24,13 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...modeling_layers import GradientCheckpointingLayer
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_bros import BrosConfig

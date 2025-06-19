@@ -24,10 +24,10 @@ from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
-from ...modeling_layers import GradientCheckpointingLayer
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import auto_docstring, logging
 from .configuration_olmoe import OlmoeConfig

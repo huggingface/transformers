@@ -24,8 +24,8 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput, ImageSuperResolutionOutput
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import BaseModelOutput, ImageSuperResolutionOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
 from ...utils import ModelOutput, auto_docstring, logging

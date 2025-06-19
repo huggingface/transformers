@@ -29,6 +29,7 @@ from ...modeling_attn_mask_utils import (
     _prepare_4d_attention_mask,
     _prepare_4d_causal_attention_mask,
 )
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -38,7 +39,6 @@ from ...modeling_outputs import (
     Seq2SeqQuestionAnsweringModelOutput,
     Seq2SeqSequenceClassifierOutput,
 )
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
 from .configuration_mvp import MvpConfig
@@ -932,9 +932,7 @@ class MvpDecoder(MvpPreTrainedModel):
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
                 layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                cross_attn_layer_head_mask=(
-                    cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
-                ),
+                cross_attn_layer_head_mask=(cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
                 self_attn_prompt=(self_attn_prompt[idx] if self.use_prompt else None),
                 cross_attn_prompt=(cross_attn_prompt[idx] if self.use_prompt else None),
                 past_key_value=past_key_value,

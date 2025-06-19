@@ -31,6 +31,7 @@ from ...configuration_utils import PretrainedConfig
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask_for_sdpa
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
@@ -39,7 +40,6 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import (
     apply_chunking_to_forward,

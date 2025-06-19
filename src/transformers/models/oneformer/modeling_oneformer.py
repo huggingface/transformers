@@ -26,9 +26,9 @@ from torch import Tensor, nn
 from torch.cuda.amp import autocast
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...modeling_layers import GradientCheckpointingLayer
 from ...utils import (
     ModelOutput,
     auto_docstring,

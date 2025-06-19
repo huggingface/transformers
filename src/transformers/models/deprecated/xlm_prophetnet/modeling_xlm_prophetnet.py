@@ -26,8 +26,8 @@ from torch import Tensor, nn
 from torch.nn import LayerNorm
 
 from ....activations import ACT2FN
-from ....modeling_outputs import BaseModelOutput
 from ....modeling_layers import GradientCheckpointingLayer
+from ....modeling_outputs import BaseModelOutput
 from ....modeling_utils import PreTrainedModel
 from ....utils import (
     ModelOutput,
@@ -1552,9 +1552,7 @@ class XLMProphetNetDecoder(XLMProphetNetPreTrainedModel):
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attn_mask=extended_encoder_attention_mask,
                 layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                cross_attn_layer_head_mask=(
-                    cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
-                ),
+                cross_attn_layer_head_mask=(cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
                 extended_predict_attention_mask=extended_predict_attention_mask,
                 main_relative_position_buckets=main_relative_position_buckets,
                 predict_relative_position_buckets=predict_relative_position_buckets,

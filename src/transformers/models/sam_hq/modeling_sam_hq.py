@@ -29,8 +29,8 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
 from .configuration_sam_hq import SamHQConfig, SamHQMaskDecoderConfig, SamHQPromptEncoderConfig, SamHQVisionConfig

@@ -25,6 +25,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -32,7 +33,6 @@ from ...modeling_outputs import (
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
@@ -1144,7 +1144,9 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if self.gradient_checkpointing and self.training and use_cache:
-            logger.warning("`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`...")
+            logger.warning(
+                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+            )
             use_cache = False
 
         if input_ids is not None and inputs_embeds is not None:

@@ -31,8 +31,8 @@ from ...generation.logits_process import (
 )
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
-from ...modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel, get_parameter_device
 from ...utils import (
     auto_docstring,

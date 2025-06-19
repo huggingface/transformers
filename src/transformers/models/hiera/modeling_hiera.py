@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BackboneOutput,
     BaseModelOutput,
@@ -32,7 +33,6 @@ from ...modeling_outputs import (
     ModelOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...modeling_layers import GradientCheckpointingLayer
 from ...utils import auto_docstring, logging, torch_int
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_hiera import HieraConfig

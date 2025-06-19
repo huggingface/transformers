@@ -26,8 +26,8 @@ from torch import Tensor, nn
 
 from ...activations import ACT2FN
 from ...file_utils import ModelOutput
-from ...modeling_outputs import BackboneOutput
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
 from ...utils import torch_int
