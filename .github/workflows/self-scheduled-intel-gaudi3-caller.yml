@@ -5,6 +5,9 @@ on:
   workflow_dispatch:
   schedule:
     - cron: "17 2 * * *"
+  push:
+    branches:
+      - gaudi-ci
 
 jobs:
   model-ci:
@@ -12,7 +15,7 @@ jobs:
     uses: ./.github/workflows/self-scheduled-intel-gaudi.yml
     with:
       job: run_models_gpu
-      ci_event: Scheduled CI (Intel Gaudi3)
+      ci_event: Scheduled CI (Intel) - Gaudi3
       runner_scale_set: itac-bm-emr-gaudi3-dell
       slack_report_channel: "#transformers-ci-daily-intel-gaudi3"
       report_repo_id: optimum-intel/transformers_daily_ci_intel_gaudi3
@@ -24,7 +27,7 @@ jobs:
     uses: ./.github/workflows/self-scheduled-intel-gaudi.yml
     with:
       job: run_pipelines_gpu
-      ci_event: Scheduled CI (Intel Gaudi3)
+      ci_event: Scheduled CI (Intel) - Gaudi3
       runner_scale_set: itac-bm-emr-gaudi3-dell
       slack_report_channel: "#transformers-ci-daily-intel-gaudi3"
       report_repo_id: optimum-intel/transformers_daily_ci_intel_gaudi3
@@ -36,7 +39,7 @@ jobs:
     uses: ./.github/workflows/self-scheduled-intel-gaudi.yml
     with:
       job: run_examples_gpu
-      ci_event: Scheduled CI (Intel Gaudi3)
+      ci_event: Scheduled CI (Intel) - Gaudi3
       runner_scale_set: itac-bm-emr-gaudi3-dell
       slack_report_channel: "#transformers-ci-daily-intel-gaudi3"
       report_repo_id: optimum-intel/transformers_daily_ci_intel_gaudi3
@@ -48,7 +51,7 @@ jobs:
     uses: ./.github/workflows/self-scheduled-intel-gaudi.yml
     with:
       job: run_deepspeed_gpu
-      ci_event: Scheduled CI (Intel Gaudi3)
+      ci_event: Scheduled CI (Intel) - Gaudi3
       runner_scale_set: itac-bm-emr-gaudi3-dell
       slack_report_channel: "#transformers-ci-daily-intel-gaudi3"
       report_repo_id: optimum-intel/transformers_daily_ci_intel_gaudi3
@@ -60,7 +63,7 @@ jobs:
     uses: ./.github/workflows/self-scheduled-intel-gaudi.yml
     with:
       job: run_trainer_and_fsdp_gpu
-      ci_event: Scheduled CI (Intel Gaudi3)
+      ci_event: Scheduled CI (Intel) - Gaudi3
       runner_scale_set: itac-bm-emr-gaudi3-dell
       slack_report_channel: "#transformers-ci-daily-intel-gaudi3"
       report_repo_id: optimum-intel/transformers_daily_ci_intel_gaudi3

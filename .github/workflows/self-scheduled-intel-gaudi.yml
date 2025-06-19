@@ -335,10 +335,8 @@ jobs:
     uses: ./.github/workflows/slack-report.yml
     with:
       job: ${{ inputs.job }}
-      # This would be `skipped` if `setup` is skipped.
       setup_status: ${{ needs.setup.result }}
       slack_report_channel: ${{ inputs.slack_report_channel }}
-      # This would be an empty string if `setup` is skipped.
       quantization_matrix: ${{ needs.setup.outputs.quantization_matrix }}
       folder_slices: ${{ needs.setup.outputs.folder_slices }}
       report_repo_id: ${{ inputs.report_repo_id }}

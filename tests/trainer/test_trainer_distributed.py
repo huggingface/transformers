@@ -201,11 +201,7 @@ if __name__ == "__main__":
     model = RegressionModel()
     training_args.per_device_train_batch_size = 1
     training_args.max_steps = 1
-
-    if isinstance(training_args.accelerator_config, dict):
-        training_args.accelerator_config = {"dispatch_batches": False}
-    else:
-        training_args.accelerator_config.dispatch_batches = False
+    training_args.accelerator_config.dispatch_batches = False
 
     trainer = Trainer(model, training_args, train_dataset=train_dataset)
     trainer.train()
