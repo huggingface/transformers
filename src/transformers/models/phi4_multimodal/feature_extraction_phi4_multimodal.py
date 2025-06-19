@@ -20,11 +20,11 @@ from typing import Optional, Union
 
 import numpy as np
 
-from ...audio_utils import AudioInput
+from ...audio_utils import AudioInput, mel_filter_bank
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...image_processing_utils import BatchFeature
 from ...utils import TensorType, is_torch_available, logging
-from ...audio_utils import mel_filter_bank
+
 
 if is_torch_available():
     import torch
