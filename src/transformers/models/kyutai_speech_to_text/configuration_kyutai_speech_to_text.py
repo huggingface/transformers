@@ -46,7 +46,7 @@ class KyutaiSpeechToTextConfig(PretrainedConfig):
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `num_attention_heads`. 
+            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `num_attention_heads`.
         max_position_embeddings (`int`, *optional*, defaults to 750):
             The maximum sequence length that this model might ever be used with. Typically, set this to something large
             just in case (e.g., 512 or 1024 or 2048).
@@ -61,15 +61,15 @@ class KyutaiSpeechToTextConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        sliding_window (`int`, *optional*, defaults to 3000):
+        sliding_window (`int`, *optional*, defaults to 375):
             Sliding window attention window size. If not specified, will default to `3000`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        ffn_dim (`int`, *optional*, defaults to 22528):
+        ffn_dim (`int`, *optional*, defaults to 11264):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the main decoder block. Must be even.
         rms_norm_eps (`float`, *optional*, defaults to 1e-08):
             The epsilon used by the rms normalization layers.
-        num_codebooks (`int`, *optional*, defaults to 8):
+        num_codebooks (`int`, *optional*, defaults to 32):
             The number of audio codebooks for each audio channels.
         audio_bos_token_id (`int`, *optional*, defaults to 2048):
             Beginning of stream token id for codebook tokens.
@@ -81,6 +81,7 @@ class KyutaiSpeechToTextConfig(PretrainedConfig):
             Padding token id.
         bos_token_id (`int`, *optional*, defaults to 48000):
             Beginning of stream token id for text tokens.
+        codec_config (`<fill_type>`, *optional*): <fill_docstring>
         kwargs (*optional*):
             Dictionary of keyword arguments. Notably:
                 - **audio_encoder_config** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that

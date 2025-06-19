@@ -381,7 +381,6 @@ class MimiConvTranspose1d(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.encodec.modeling_encodec.EncodecResnetBlock with Encodec->Mimi,EnCodec->Mimi
 class MimiResnetBlock(nn.Module):
     """
     Residual block from SEANet model as used by Mimi.

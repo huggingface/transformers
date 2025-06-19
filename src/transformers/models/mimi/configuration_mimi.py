@@ -236,7 +236,7 @@ class MimiConfig(PretrainedConfig):
     def num_codebooks(self) -> int:
         # alias to num_quantizers
         return self.num_quantizers
-    
+
     @property
     def frame_size(self) -> int:
         return int(self.sampling_rate / self.frame_rate)

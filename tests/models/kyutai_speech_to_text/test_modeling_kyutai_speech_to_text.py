@@ -260,7 +260,6 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
 
-
     def setUp(self):
         self.model_tester = KyutaiSpeechToTextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=KyutaiSpeechToTextConfig, hidden_size=37)
@@ -279,7 +278,7 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
         # monkey patch prepare_config_and_inputs_for_common
-        
+
         prepare_config_and_inputs_for_common = self.model_tester.prepare_config_and_inputs_for_common
         original_batch_size = self.model_tester.batch_size
 
@@ -534,7 +533,6 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
                             outputs_cached.past_key_values[layer_idx][kv_idx],
                         )
                     )
-
 
 
 class KyutaiSpeechToTextForConditionalGenerationIntegrationTests(unittest.TestCase):
