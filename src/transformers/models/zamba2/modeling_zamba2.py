@@ -35,6 +35,7 @@ from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
@@ -981,7 +982,7 @@ class Zamba2MLP(nn.Module):
         return output
 
 
-class Zamba2AttentionDecoderLayer(nn.Module):
+class Zamba2AttentionDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Zamba2Config, block_id: Optional[int] = None, layer_idx: Optional[int] = None):
         super().__init__()
         self.block_id = block_id
@@ -1045,7 +1046,7 @@ class Zamba2AttentionDecoderLayer(nn.Module):
         return outputs
 
 
-class Zamba2MambaDecoderLayer(nn.Module):
+class Zamba2MambaDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Zamba2Config, layer_idx: int):
         super().__init__()
         self.mamba = Zamba2MambaMixer(config=config, layer_idx=layer_idx)
@@ -1349,31 +1350,17 @@ class Zamba2Model(Zamba2PreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer.__call__,
-                    hidden_states,
-                    original_hidden_states,
-                    layer_idx,
-                    attention_mask,
-                    causal_mask,
-                    past_key_values,
-                    output_attentions,
-                    use_cache,
-                    position_embeddings,
-                )
-            else:
-                layer_outputs = layer(
-                    hidden_states,
-                    original_hidden_states=original_hidden_states,
-                    layer_idx=layer_idx,
-                    attention_mask=attention_mask,
-                    causal_mask=causal_mask,
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    position_embeddings=position_embeddings,
-                )
+            layer_outputs = layer(
+                hidden_states,
+                original_hidden_states=original_hidden_states,
+                layer_idx=layer_idx,
+                attention_mask=attention_mask,
+                causal_mask=causal_mask,
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                position_embeddings=position_embeddings,
+            )
             hidden_states = layer_outputs[0]
 
             if output_attentions:

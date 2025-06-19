@@ -33,6 +33,7 @@ from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
@@ -580,7 +581,7 @@ class ZambaMLP(nn.Module):
         return down_proj
 
 
-class ZambaAttentionDecoderLayer(nn.Module):
+class ZambaAttentionDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: ZambaConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.self_attn = ZambaAttention(config, layer_idx)
@@ -643,7 +644,7 @@ class ZambaAttentionDecoderLayer(nn.Module):
         return outputs
 
 
-class ZambaMambaDecoderLayer(nn.Module):
+class ZambaMambaDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: ZambaConfig, layer_idx: int):
         super().__init__()
         self.mamba = ZambaMambaMixer(config=config, layer_idx=layer_idx)
@@ -975,31 +976,17 @@ class ZambaModel(ZambaPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer.__call__,
-                    hidden_states,
-                    original_hidden_states,
-                    layer_idx,
-                    attention_mask,
-                    causal_mask,
-                    past_key_values,
-                    output_attentions,
-                    use_cache,
-                    cache_position,
-                )
-            else:
-                layer_outputs = layer(
-                    hidden_states,
-                    original_hidden_states=original_hidden_states,
-                    layer_idx=layer_idx,
-                    attention_mask=attention_mask,
-                    causal_mask=causal_mask,
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                )
+            layer_outputs = layer(
+                hidden_states,
+                original_hidden_states=original_hidden_states,
+                layer_idx=layer_idx,
+                attention_mask=attention_mask,
+                causal_mask=causal_mask,
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+            )
             hidden_states = layer_outputs[0]
 
             if output_attentions:
