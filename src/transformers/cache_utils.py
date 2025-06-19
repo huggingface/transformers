@@ -219,47 +219,45 @@ class Cache:
     """
     Base, abstract class for all caches. The actual data structure is specific to the layers.
     This class handles propagation of operations across layers.
+
+    Parameters:
+        config_or_ddp_cache_data (`PretrainedConfig` or `Iterable`, *optional*):
+            Model configuration for shape/device info, or DDP-distributed cache data for compatibility.
+            If DDP-distributed cache data, must be an iterable of (key_states, value_states) tuples for each layer.
+        processors (`CacheProcessorList`, *optional*):
+            List of cache processors to apply (e.g., quantization, offloading). Defaults to empty list.
+        pattern_block (`tuple[Type[CacheLayer], ...]`, *optional*):
+            Pattern of cache layer types to use. Defaults to `(DynamicLayer,)`. Must be a tuple whose length divides
+            the total number of layers. The pattern repeats to fill all layers. Examples: `(StaticLayer,)` for a
+            uniform cache, `(StaticLayer, StaticLayer, SlidingWindowLayer)` for a hybrid cache with repeating pattern,
+            or specify the full structure like `(SlidingWindowLayer, StaticLayer, ..., StaticLayer)`.
+            Additional arguments for cache configuration:
+            - `max_batch_size`/`batch_size` (`int`): Maximum batch size for static caches
+            - `max_cache_len` (`int`): Maximum sequence length. For hybrid caches:
+                * SlidingWindowLayers: clamped to `min(sliding_window, max_cache_len)`
+                * StaticLayers: uses full `max_cache_len`
+            - `device` (`torch.device`): Device for cache tensors
+            - `dtype` (`torch.dtype`): Data type for cache tensors
+            - `layer_device_map` (`dict[int, Union[str, torch.device]]`): Per-layer device mapping
+
+    Note for hybrid caches (blocks of (StaticLayer, ..., SlidingWindowLayer) repeated across layers):
+        - Requires `model_config.sliding_window` to be set
+        - Uses `sliding_window_pattern` (default: 2) to determine layer alternation if pattern not specified
+        - SlidingWindow layers are limited to sliding window size, Static layers use full max_cache_len
     """
 
     pattern_block = ()  # Subclasses can define their layer pattern statically
 
     def __init__(
         self,
-        config_or_ddp_cache_data=None,
+        config_or_ddp_cache_data: Optional[
+            Union[PretrainedConfig, Iterable[tuple[torch.Tensor, torch.Tensor]]]
+        ] = None,
         processors: Optional[CacheProcessorList] = None,
         pattern_block: Optional[tuple[type["CacheLayer"], ...]] = None,
         *args,
         **kwargs,
     ):
-        """
-        Initialize a Cache instance with the specified configuration and processors.
-
-        Args:
-            config_or_ddp_cache_data (`PretrainedConfig` or `Iterable`, *optional*):
-                Model configuration for shape/device info, or DDP-distributed cache data for compatibility.
-                If `Iterable`, must contain (key_states, value_states) tuples for each layer.
-            processors (`CacheProcessorList`, *optional*):
-                List of cache processors to apply (e.g., quantization, offloading). Defaults to empty list.
-            pattern_block (`tuple[Type[CacheLayer], ...]`, *optional*):
-                Pattern of cache layer types to use. Defaults to `(DynamicLayer,)`. Must be a tuple whose length divides
-                the total number of layers. The pattern repeats to fill all layers. Examples: `(StaticLayer,)` for a
-                uniform cache, `(StaticLayer, StaticLayer, SlidingWindowLayer)` for a hybrid cache with repeating pattern,
-                or specify the full structure like `(SlidingWindowLayer, StaticLayer, ..., StaticLayer)`.
-            *args, **kwargs:
-                Additional arguments for cache configuration:
-                - `max_batch_size`/`batch_size` (`int`): Maximum batch size for static caches
-                - `max_cache_len` (`int`): Maximum sequence length. For hybrid caches:
-                  * SlidingWindowLayers: clamped to `min(sliding_window, max_cache_len)`
-                  * StaticLayers: uses full `max_cache_len`
-                - `device` (`torch.device`): Device for cache tensors
-                - `dtype` (`torch.dtype`): Data type for cache tensors
-                - `layer_device_map` (`dict[int, Union[str, torch.device]]`): Per-layer device mapping
-
-        Note for hybrid caches (blocks of (StaticLayer, ..., SlidingWindowLayer) repeated across layers):
-            - Requires `model_config.sliding_window` to be set
-            - Uses `sliding_window_pattern` (default: 2) to determine layer alternation if pattern not specified
-            - SlidingWindow layers are limited to sliding window size, Static layers use full max_cache_len
-        """
         self.layers: list[CacheLayer] = []
         self.processors = processors if processors is not None else CacheProcessorList()
         pattern_block = pattern_block or self.pattern_block or (DynamicLayer,)
@@ -1222,23 +1220,9 @@ class StaticCache(Cache):
     Static Cache class to be used with `torch.compile(model)` and `torch.export()`.
 
     Parameters:
-        config (`PretrainedConfig`):
-            The configuration file defining the shape-related attributes required to initialize the static cache.
-        max_batch_size (`int`):
-            The maximum batch size with which the model will be used. Note that a new instance must be instantiated if a
-            smaller batch size is used. If you are manually setting the batch size, make sure to take into account the
-            number of beams if you are running beam search
-        max_cache_len (`int`, *optional*):
-            The maximum sequence length with which the model will be used.
-        device (`torch.device` or `str`, *optional*):
-            The device on which the cache should be initialized. If you're using more than 1 computation device, you
-            should pass the `layer_device_map` argument instead.
-        dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
-            The default `dtype` to use when initializing the layer.
-        layer_device_map (`Optional[dict[int, Union[str, torch.device, int]]]]`, *optional*):
-            Mapping between the layers and its device. This is required when you are manually initializing the cache
-            and the model is split between different gpus. You can know which layers mapped to which device by
-            checking the associated device_map: `model.hf_device_map`.
+        config_or_ddp_cache_data (`Union`, *optional*): Model configuration for shape/device info, or DDP-distributed cache data for compatibility.
+        processors (`Optional`, *optional*): List of cache processors to apply (e.g., quantization, offloading). Defaults to empty list.
+        pattern_block (`Optional`, *optional*): Pattern of cache layer types to use. Defaults to `(StaticLayer,)` for backward compatibility.
 
 
     Example:
@@ -1614,23 +1598,10 @@ class HybridCache(Cache):
     for global attention.For more information, see the documentation of each subcomponent cache class.
 
     Parameters:
-        config (`PretrainedConfig):
-            The configuration file defining the shape-related attributes required to initialize the static cache.
-        max_batch_size (`int`):
-            The maximum batch size with which the model will be used. Note that a new instance must be instantiated if a
-            smaller batch size is used.
-        max_cache_len (`int`, *optional*):
-            The maximum sequence length with which the model will be used.
-        device (`torch.device` or `str`, *optional*):
-            The device on which the cache should be initialized. If you're using more than 1 computation device, you
-            should pass the `layer_device_map` argument instead.
-        dtype (torch.dtype, *optional*, defaults to `torch.float32`):
-            The default `dtype` to use when initializing the layer.
-        layer_device_map (`Optional[dict[int, Union[str, torch.device, int]]]]`, *optional*):
-            Mapping between the layers and its device. This is required when you are manually initializing the cache
-            and the model is split between different gpus. You can know which layers mapped to which device by
-            checking the associated device_map: `model.hf_device_map`.
-
+        config_or_ddp_cache_data (`PretrainedConfig` or `Iterable`, *optional*): Model configuration for shape/device info. No DDP-distributed cache data is supported.
+        processors (`CacheProcessorList`, *optional*): List of cache processors to apply (e.g., quantization, offloading). Defaults to empty list.
+        pattern_block (`tuple[Type[CacheLayer], ...]`, *optional*): Pattern of cache layer types to use. Defaults to `(SlidingWindowLayer, StaticLayer, ..., StaticLayer)`
+            for backward compatibility.
     Example:
 
         ```python
@@ -2035,21 +2006,13 @@ class OffloadedStaticCache(StaticCache):
     much longer sequences by offloading inactive layers to CPU memory.
 
     Parameters:
-        config (`PretrainedConfig`):
-            The configuration file defining the shape-related attributes required to initialize
-            the static cache.
-        max_batch_size (`int`):
-            The maximum batch size with which the model will be used.
-        max_cache_len (`int`):
-            The maximum sequence length with which the model will be used.
-        device (`torch.device` or `str`):
-            The device on which the cache should be initialized.
-        dtype (`torch.dtype`, *optional*):
-            The default `dtype` to use when initializing the layer.
-        offload_device (`Union[str, torch.device]`, *optional*, defaults to `"cpu"`):
-            The device to offload inactive cache layers to.
-        layer_device_map (`dict[int, Union[str, torch.device, int]]`, *optional*):
-            Mapping between the layers and their devices.
+        config (`PretrainedConfig`): Model configuration for shape/device info.
+        max_batch_size (`int`): Maximum batch size for static caches.
+        max_cache_len (`int`, *optional*): Maximum sequence length.
+        device (`torch.device` or `str`, *optional*): Device for cache tensors.
+        dtype (`torch.dtype`, *optional*, defaults to `torch.float32`): Data type for cache tensors.
+        offload_device (`Union`, *optional*, defaults to `"cpu"`): Device to offload cache tensors to.
+        layer_device_map (`dict[int, Union[str, torch.device, int]]`, *optional*): Per-layer device mapping.
 
     Example:
         ```python
