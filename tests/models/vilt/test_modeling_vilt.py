@@ -637,7 +637,7 @@ class ViltModelIntegrationTest(unittest.TestCase):
 
         processor = self.default_processor
 
-        dataset = load_dataset("hf-internal-testing/fixtures_nlvr2", split="test", trust_remote_code=True)
+        dataset = load_dataset("hf-internal-testing/fixtures_nlvr2", split="test")
         image1 = Image.open(dataset[0]["file"]).convert("RGB")
         image2 = Image.open(dataset[1]["file"]).convert("RGB")
 

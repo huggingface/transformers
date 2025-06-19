@@ -98,7 +98,7 @@ class BeitImageProcessingTester:
 
 
 def prepare_semantic_single_inputs():
-    dataset = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
+    dataset = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
 
     image = Image.open(dataset[0]["file"])
     map = Image.open(dataset[1]["file"])
@@ -107,7 +107,7 @@ def prepare_semantic_single_inputs():
 
 
 def prepare_semantic_batch_inputs():
-    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
+    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
 
     image1 = Image.open(ds[0]["file"])
     map1 = Image.open(ds[1]["file"])

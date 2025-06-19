@@ -107,7 +107,7 @@ class LayoutLMv3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
     def test_LayoutLMv3_integration_test(self):
         from datasets import load_dataset
 
-        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test", trust_remote_code=True)
+        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test")
 
         # with apply_OCR = True
         for image_processing_class in self.image_processor_list:

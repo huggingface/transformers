@@ -90,7 +90,7 @@ class DPTImageProcessingTester:
             numpify=numpify,
             torchify=torchify,
         )
-
+"test"
 
 # Copied from transformers.tests.models.beit.test_image_processing_beit.prepare_semantic_single_inputs
 def prepare_semantic_single_inputs():
@@ -100,7 +100,7 @@ def prepare_semantic_single_inputs():
     map = Image.open(dataset[1]["file"])
 
     return image, map
-
+"test"
 
 # Copied from transformers.tests.models.beit.test_image_processing_beit.prepare_semantic_batch_inputs
 def prepare_semantic_batch_inputs():

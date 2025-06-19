@@ -1155,7 +1155,7 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
 
         >>> set_seed(0)
 
-        >>> datasets = load_dataset("nielsr/funsd", split="test", trust_remote_code=True)
+        >>> datasets = load_dataset("nielsr/funsd", split="test")
         >>> labels = datasets.features["ner_tags"].feature.names
         >>> id2label = {v: k for v, k in enumerate(labels)}
 

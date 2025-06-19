@@ -200,7 +200,7 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
         # we verify our implementation on 2 document images from the DocVQA dataset
         from datasets import load_dataset
 
-        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test", trust_remote_code=True)
+        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test")
 
         image_1 = Image.open(ds[0]["file"]).convert("RGB")
         image_2 = Image.open(ds[1]["file"]).convert("RGB")
