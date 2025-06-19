@@ -1219,7 +1219,7 @@ class UdopStack(UdopPreTrainedModel):
         batch_size, seq_length = input_shape
 
         if use_cache is True:
-            assert self.is_decoder, "`use_cache` can only be set to `True` if {} is used as a decoder".format(self)
+            assert self.is_decoder, f"`use_cache` can only be set to `True` if {self} is used as a decoder"
 
         # initialize past_key_values
         return_legacy_cache = False

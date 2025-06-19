@@ -113,7 +113,7 @@ class DeepseekV3TopkRouter(nn.Module):
         self.norm_topk_prob = config.norm_topk_prob
 
         self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
-        self.register_buffer("e_score_correction_bias", torch.zeros((self.n_routed_experts)))
+        self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
 
     @torch.no_grad()
     def get_topk_indices(self, scores):

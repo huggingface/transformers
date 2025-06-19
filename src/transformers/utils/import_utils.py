@@ -590,7 +590,7 @@ def is_torch_bf16_available():
     return is_torch_bf16_gpu_available()
 
 
-@lru_cache()
+@lru_cache
 def is_torch_fp16_available_on_device(device):
     if not is_torch_available():
         return False
@@ -622,7 +622,7 @@ def is_torch_fp16_available_on_device(device):
     return True
 
 
-@lru_cache()
+@lru_cache
 def is_torch_bf16_available_on_device(device):
     if not is_torch_available():
         return False
@@ -731,14 +731,14 @@ def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False):
     return True
 
 
-@lru_cache()
+@lru_cache
 def is_torch_neuroncore_available(check_device=True):
     if importlib.util.find_spec("torch_neuronx") is not None:
         return is_torch_xla_available()
     return False
 
 
-@lru_cache()
+@lru_cache
 def is_torch_npu_available(check_device=False):
     "Checks if `torch_npu` is installed and potentially if a NPU is in the environment"
     if not _torch_available or importlib.util.find_spec("torch_npu") is None:
@@ -757,7 +757,7 @@ def is_torch_npu_available(check_device=False):
     return hasattr(torch, "npu") and torch.npu.is_available()
 
 
-@lru_cache()
+@lru_cache
 def is_torch_mlu_available(check_device=False):
     """
     Checks if `mlu` is available via an `cndev-based` check which won't trigger the drivers and leave mlu
@@ -782,7 +782,7 @@ def is_torch_mlu_available(check_device=False):
     return available
 
 
-@lru_cache()
+@lru_cache
 def is_torch_musa_available(check_device=False):
     "Checks if `torch_musa` is installed and potentially if a MUSA is in the environment"
     if not _torch_available or importlib.util.find_spec("torch_musa") is None:
@@ -1035,7 +1035,7 @@ def is_torch_xpu_available(check_device=False):
     return hasattr(torch, "xpu") and torch.xpu.is_available()
 
 
-@lru_cache()
+@lru_cache
 def is_bitsandbytes_available(check_library_only=False) -> bool:
     if not _bitsandbytes_available:
         return False
@@ -1090,7 +1090,7 @@ def is_flash_attn_2_available():
         return False
 
 
-@lru_cache()
+@lru_cache
 def is_flash_attn_greater_or_equal_2_10():
     if not _is_package_available("flash_attn"):
         return False
@@ -1098,7 +1098,7 @@ def is_flash_attn_greater_or_equal_2_10():
     return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.1.0")
 
 
-@lru_cache()
+@lru_cache
 def is_flash_attn_greater_or_equal(library_version: str):
     if not _is_package_available("flash_attn"):
         return False
@@ -1106,7 +1106,7 @@ def is_flash_attn_greater_or_equal(library_version: str):
     return version.parse(importlib.metadata.version("flash_attn")) >= version.parse(library_version)
 
 
-@lru_cache()
+@lru_cache
 def is_torch_greater_or_equal(library_version: str, accept_dev: bool = False):
     """
     Accepts a library version and returns True if the current version of the library is greater than or equal to the
@@ -1124,7 +1124,7 @@ def is_torch_greater_or_equal(library_version: str, accept_dev: bool = False):
         return version.parse(importlib.metadata.version("torch")) >= version.parse(library_version)
 
 
-@lru_cache()
+@lru_cache
 def is_huggingface_hub_greater_or_equal(library_version: str, accept_dev: bool = False):
     if not _is_package_available("huggingface_hub"):
         return False
@@ -2175,7 +2175,7 @@ class VersionComparison(Enum):
         return string_to_operator[version_string]
 
 
-@lru_cache()
+@lru_cache
 def split_package_version(package_version_str) -> tuple[str, str, str]:
     pattern = r"([a-zA-Z0-9_-]+)([!<>=~]+)([0-9.]+)"
     match = re.match(pattern, package_version_str)
@@ -2290,7 +2290,7 @@ def fetch__all__(file_content):
         return _all
 
 
-@lru_cache()
+@lru_cache
 def create_import_structure_from_path(module_path):
     """
     This method takes the path to a file/a folder and returns the import structure.
@@ -2618,7 +2618,7 @@ def spread_import_structure(nested_import_structure):
     return flattened_import_structure
 
 
-@lru_cache()
+@lru_cache
 def define_import_structure(module_path: str, prefix: Optional[str] = None) -> IMPORT_STRUCTURE_T:
     """
     This method takes a module_path as input and creates an import structure digestible by a _LazyModule.

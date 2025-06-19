@@ -118,7 +118,7 @@ class MegaSimpleRelativePositionalBias(nn.Module):
 
     def forward(self, seq_len):
         if seq_len > self.max_positions:
-            raise ValueError("Sequence length {} going beyond max length {}".format(seq_len, self.max_positions))
+            raise ValueError(f"Sequence length {seq_len} going beyond max length {self.max_positions}")
 
         # seq_len * 2 - 1
         bias = self.rel_pos_bias[(self.max_positions - seq_len) : (self.max_positions + seq_len - 1)]
@@ -298,7 +298,7 @@ class MegaSequenceNorm(nn.Module):
         elif norm_type == "syncbatchnorm":
             self.norm = nn.SyncBatchNorm(embedding_dim, eps=eps, affine=affine)
         else:
-            raise ValueError("Unknown norm type: {}".format(norm_type))
+            raise ValueError(f"Unknown norm type: {norm_type}")
 
     def forward(self, input):
         if isinstance(self.norm, nn.modules.batchnorm._BatchNorm):
@@ -563,7 +563,7 @@ class MegaGatedCrossAttention(nn.Module):
         elif self.config.relative_positional_bias == "rotary":
             self.rel_pos_bias = MegaRotaryRelativePositionalBias(config)
         else:
-            raise ValueError("unknown relative position bias: {}".format(self.config.relative_positional_bias))
+            raise ValueError(f"unknown relative position bias: {self.config.relative_positional_bias}")
 
         self.softmax = nn.Softmax(dim=-1)
 
