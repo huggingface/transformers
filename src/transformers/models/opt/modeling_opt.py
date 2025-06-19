@@ -32,6 +32,7 @@ from ...modeling_outputs import (
     QuestionAnsweringModelOutput,
     SequenceClassifierOutputWithPast,
 )
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import LossKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
@@ -204,7 +205,7 @@ class OPTAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-class OPTDecoderLayer(nn.Module):
+class OPTDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: OPTConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -672,30 +673,17 @@ class OPTDecoder(OPTPreTrainedModel):
                 if dropout_probability < self.layerdrop:
                     continue
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    causal_mask,
-                    head_mask[idx] if head_mask is not None else None,
-                    None,
-                    output_attentions,
-                    use_cache,
-                    position_ids,
-                    cache_position,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=causal_mask,
-                    position_ids=position_ids,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                    **kwargs,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                position_ids=position_ids,
+                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                **kwargs,
+            )
 
             hidden_states = layer_outputs[0]
 
