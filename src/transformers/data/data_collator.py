@@ -18,7 +18,7 @@ import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass
 from random import randint
-from typing import Any, Callable, Dict, List, NewType, Optional, Tuple, Union
+from typing import Any, Callable, NewType, Optional, Union
 
 import numpy as np
 
@@ -33,7 +33,7 @@ InputDataClass = NewType("InputDataClass", Any)
 A DataCollator is a function that takes a list of samples from a Dataset and collate them into a batch, as a dictionary
 of PyTorch/TensorFlow tensors or NumPy arrays.
 """
-DataCollator = NewType("DataCollator", Callable[[List[InputDataClass]], Dict[str, Any]])
+DataCollator = NewType("DataCollator", Callable[[list[InputDataClass]], dict[str, Any]])
 
 
 class DataCollatorMixin:
@@ -72,7 +72,7 @@ def pad_without_fast_tokenizer_warning(tokenizer, *pad_args, **pad_kwargs):
     return padded
 
 
-def default_data_collator(features: List[InputDataClass], return_tensors="pt") -> Dict[str, Any]:
+def default_data_collator(features: list[InputDataClass], return_tensors="pt") -> dict[str, Any]:
     """
     Very simple data collator that simply collates batches of dict-like objects and performs special handling for
     potential keys named:
@@ -119,13 +119,13 @@ class DefaultDataCollator(DataCollatorMixin):
 
     return_tensors: str = "pt"
 
-    def __call__(self, features: List[Dict[str, Any]], return_tensors=None) -> Dict[str, Any]:
+    def __call__(self, features: list[dict[str, Any]], return_tensors=None) -> dict[str, Any]:
         if return_tensors is None:
             return_tensors = self.return_tensors
         return default_data_collator(features, return_tensors)
 
 
-def torch_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
+def torch_default_data_collator(features: list[InputDataClass]) -> dict[str, Any]:
     import torch
 
     if not isinstance(features[0], Mapping):
@@ -161,7 +161,7 @@ def torch_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any
     return batch
 
 
-def tf_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
+def tf_default_data_collator(features: list[InputDataClass]) -> dict[str, Any]:
     import tensorflow as tf
 
     if not isinstance(features[0], Mapping):
@@ -202,7 +202,7 @@ def tf_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
     return batch
 
 
-def numpy_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
+def numpy_default_data_collator(features: list[InputDataClass]) -> dict[str, Any]:
     if not isinstance(features[0], Mapping):
         features = [vars(f) for f in features]
     first = features[0]
@@ -268,7 +268,7 @@ class DataCollatorWithPadding:
     pad_to_multiple_of: Optional[int] = None
     return_tensors: str = "pt"
 
-    def __call__(self, features: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def __call__(self, features: list[dict[str, Any]]) -> dict[str, Any]:
         batch = pad_without_fast_tokenizer_warning(
             self.tokenizer,
             features,
@@ -569,7 +569,7 @@ class DataCollatorForMultipleChoice(DataCollatorMixin):
     pad_to_multiple_of: Optional[int] = None
     return_tensors: str = "pt"
 
-    def torch_call(self, examples: List[Dict[str, Any]]):  # Refactored implementation from the docs.
+    def torch_call(self, examples: list[dict[str, Any]]):  # Refactored implementation from the docs.
         import torch
 
         # Take labels out of the examples beforehand, because they aren't nested.
@@ -824,7 +824,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
 
     tokenizer: PreTrainedTokenizerBase
     mlm: bool = True
-    mlm_probability: float = 0.15
+    mlm_probability: Optional[float] = 0.15
     mask_replace_prob: float = 0.8
     random_replace_prob: float = 0.1
     pad_to_multiple_of: Optional[int] = None
@@ -833,13 +833,15 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
     seed: Optional[int] = None
 
     def __post_init__(self):
-        if self.mlm and self.tokenizer.mask_token is None:
-            raise ValueError(
-                "This tokenizer does not have a mask token which is necessary for masked language modeling. "
-                "You should pass `mlm=False` to train on causal language modeling instead."
-            )
-        if self.mlm_probability < 0 or self.mlm_probability > 1:
-            raise ValueError("mlm_probability should be between 0 and 1.")
+        if self.mlm:
+            if self.tokenizer.mask_token is None:
+                raise ValueError(
+                    "This tokenizer does not have a mask token which is necessary for masked language modeling. "
+                    "You should pass `mlm=False` to train on causal language modeling instead."
+                )
+            if self.mlm_probability is None or self.mlm_probability < 0 or self.mlm_probability > 1:
+                raise ValueError("mlm_probability should be between 0 and 1.")
+            self.mlm_probability = float(self.mlm_probability)
         if self.mask_replace_prob + self.random_replace_prob > 1:
             raise ValueError("The sum of mask_replace_prob and random_replace_prob should not exceed 1")
         if self.mask_replace_prob < 0 or self.mask_replace_prob > 1:
@@ -847,7 +849,6 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         if self.random_replace_prob < 0 or self.random_replace_prob > 1:
             raise ValueError("random_replace_prob should be between 0 and 1.")
 
-        self.mlm_probability = float(self.mlm_probability)
         self.mask_replace_prob = float(self.mask_replace_prob)
         self.random_replace_prob = float(self.random_replace_prob)
 
@@ -910,7 +911,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
 
     def tf_mask_tokens(
         self, inputs: Any, vocab_size, mask_token_id, special_tokens_mask: Optional[Any] = None
-    ) -> Tuple[Any, Any]:
+    ) -> tuple[Any, Any]:
         """
         Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
         """
@@ -955,7 +956,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         # The rest of the time ((1-random_replace_prob-mask_replace_prob)% of the time) we keep the masked input tokens unchanged
         return inputs, labels
 
-    def tf_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
+    def tf_call(self, examples: list[Union[list[int], Any, dict[str, Any]]]) -> dict[str, Any]:
         import tensorflow as tf
 
         if self.seed and self.generator is None:
@@ -1001,7 +1002,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
             batch["labels"] = labels
         return batch
 
-    def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
+    def torch_call(self, examples: list[Union[list[int], Any, dict[str, Any]]]) -> dict[str, Any]:
         # Handle dict or lists with proper padding and conversion to tensor.
 
         if self.seed and self.generator is None:
@@ -1031,7 +1032,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
             batch["labels"] = labels
         return batch
 
-    def torch_mask_tokens(self, inputs: Any, special_tokens_mask: Optional[Any] = None) -> Tuple[Any, Any]:
+    def torch_mask_tokens(self, inputs: Any, special_tokens_mask: Optional[Any] = None) -> tuple[Any, Any]:
         """
         Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
         """
@@ -1080,7 +1081,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         # The rest of the time ((1-random_replace_prob-mask_replace_prob)% of the time) we keep the masked input tokens unchanged
         return inputs, labels
 
-    def numpy_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
+    def numpy_call(self, examples: list[Union[list[int], Any, dict[str, Any]]]) -> dict[str, Any]:
         # Handle dict or lists with proper padding and conversion to tensor.
 
         if self.seed and self.generator is None:
@@ -1110,7 +1111,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
             batch["labels"] = labels
         return batch
 
-    def numpy_mask_tokens(self, inputs: Any, special_tokens_mask: Optional[Any] = None) -> Tuple[Any, Any]:
+    def numpy_mask_tokens(self, inputs: Any, special_tokens_mask: Optional[Any] = None) -> tuple[Any, Any]:
         """
         Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
         """
@@ -1192,7 +1193,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
 
     </Tip>"""
 
-    def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
+    def torch_call(self, examples: list[Union[list[int], Any, dict[str, Any]]]) -> dict[str, Any]:
         if self.seed and self.generator is None:
             # If we have a seed, we need to create a generator object. Subsequent calls to this function will use the same generator.
             # If no seed supplied, we will use the global RNG
@@ -1225,7 +1226,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         inputs, labels = self.torch_mask_tokens(batch_input, batch_mask)
         return {"input_ids": inputs, "labels": labels}
 
-    def tf_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
+    def tf_call(self, examples: list[Union[list[int], Any, dict[str, Any]]]) -> dict[str, Any]:
         import tensorflow as tf
 
         if self.seed and self.generator is None:
@@ -1260,7 +1261,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         inputs, labels = self.tf_mask_tokens(tf.cast(batch_input, tf.int64), batch_mask)
         return {"input_ids": inputs, "labels": labels}
 
-    def numpy_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
+    def numpy_call(self, examples: list[Union[list[int], Any, dict[str, Any]]]) -> dict[str, Any]:
         if self.seed and self.generator is None:
             # If we have a seed, we need to create a generator object. Subsequent calls to this function will use the same generator.
             # If no seed supplied, we will use the global RNG
@@ -1317,7 +1318,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
             self.generator.shuffle(cand_indexes)
             return cand_indexes
 
-    def _whole_word_mask(self, input_tokens: List[str], max_predictions=512):
+    def _whole_word_mask(self, input_tokens: list[str], max_predictions=512):
         """
         Get 0/1 labels for masked tokens with whole word mask proxy
         """
@@ -1357,7 +1358,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         mask_labels = [1 if i in covered_indexes else 0 for i in range(len(input_tokens))]
         return mask_labels
 
-    def torch_mask_tokens(self, inputs: Any, mask_labels: Any) -> Tuple[Any, Any]:
+    def torch_mask_tokens(self, inputs: Any, mask_labels: Any) -> tuple[Any, Any]:
         """
         Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original. Set
         'mask_labels' means we use whole word mask (wwm), we directly mask idxs according to it's ref.
@@ -1413,7 +1414,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         # The rest of the time ((1-random_replacement_prob-mask_replace_prob)% of the time) we keep the masked input tokens unchanged
         return inputs, labels
 
-    def tf_mask_tokens(self, inputs: Any, mask_labels: Any) -> Tuple[Any, Any]:
+    def tf_mask_tokens(self, inputs: Any, mask_labels: Any) -> tuple[Any, Any]:
         """
         Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original. Set
         'mask_labels' means we use whole word mask (wwm), we directly mask idxs according to it's ref.
@@ -1473,7 +1474,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         # The rest of the time ((1-mask_replace_prob-random_replace_prob)% of the time) we keep the masked input tokens unchanged
         return inputs, labels
 
-    def numpy_mask_tokens(self, inputs: Any, mask_labels: Any) -> Tuple[Any, Any]:
+    def numpy_mask_tokens(self, inputs: Any, mask_labels: Any) -> tuple[Any, Any]:
         """
         Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original. Set
         'mask_labels' means we use whole word mask (wwm), we directly mask idxs according to it's ref.
@@ -1563,7 +1564,7 @@ class DataCollatorForSOP(DataCollatorForLanguageModeling):
             FutureWarning,
         )
 
-    def __call__(self, examples: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def __call__(self, examples: list[dict[str, Any]]) -> dict[str, Any]:
         import torch
         from torch.nn.utils.rnn import pad_sequence
 
@@ -1586,7 +1587,7 @@ class DataCollatorForSOP(DataCollatorForLanguageModeling):
             "sentence_order_label": sentence_order_label,
         }
 
-    def mask_tokens(self, inputs: Any) -> Tuple[Any, Any, Any]:
+    def mask_tokens(self, inputs: Any) -> tuple[Any, Any, Any]:
         """
         Prepare masked tokens inputs/labels/attention_mask for masked language modeling: 80% MASK, 10% random, 10%
         original. N-gram not applied yet.
@@ -1644,28 +1645,28 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
     max_span_length: int = 5  # maximum length of a span of masked tokens
     return_tensors: str = "pt"
 
-    def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
+    def torch_call(self, examples: list[Union[list[int], Any, dict[str, Any]]]) -> dict[str, Any]:
         if isinstance(examples[0], Mapping):
             examples = [e["input_ids"] for e in examples]
         batch = _torch_collate_batch(examples, self.tokenizer)
         inputs, perm_mask, target_mapping, labels = self.torch_mask_tokens(batch)
         return {"input_ids": inputs, "perm_mask": perm_mask, "target_mapping": target_mapping, "labels": labels}
 
-    def tf_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
+    def tf_call(self, examples: list[Union[list[int], Any, dict[str, Any]]]) -> dict[str, Any]:
         if isinstance(examples[0], Mapping):
             examples = [e["input_ids"] for e in examples]
         batch = _tf_collate_batch(examples, self.tokenizer)
         inputs, perm_mask, target_mapping, labels = self.tf_mask_tokens(batch)
         return {"input_ids": inputs, "perm_mask": perm_mask, "target_mapping": target_mapping, "labels": labels}
 
-    def numpy_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
+    def numpy_call(self, examples: list[Union[list[int], Any, dict[str, Any]]]) -> dict[str, Any]:
         if isinstance(examples[0], Mapping):
             examples = [e["input_ids"] for e in examples]
         batch = _numpy_collate_batch(examples, self.tokenizer)
         inputs, perm_mask, target_mapping, labels = self.numpy_mask_tokens(batch)
         return {"input_ids": inputs, "perm_mask": perm_mask, "target_mapping": target_mapping, "labels": labels}
 
-    def torch_mask_tokens(self, inputs: Any) -> Tuple[Any, Any, Any, Any]:
+    def torch_mask_tokens(self, inputs: Any) -> tuple[Any, Any, Any, Any]:
         """
         The masked tokens to be predicted for a particular sequence are determined by the following algorithm:
 
@@ -1764,7 +1765,7 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
 
         return inputs.long(), perm_mask, target_mapping, labels.long()
 
-    def tf_mask_tokens(self, inputs: Any) -> Tuple[Any, Any, Any, Any]:
+    def tf_mask_tokens(self, inputs: Any) -> tuple[Any, Any, Any, Any]:
         """
         The masked tokens to be predicted for a particular sequence are determined by the following algorithm:
 
@@ -1871,7 +1872,7 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
 
         return tf.cast(inputs, tf.int64), tf.cast(perm_mask, tf.float32), target_mapping, tf.cast(labels, tf.int64)
 
-    def numpy_mask_tokens(self, inputs: Any) -> Tuple[Any, Any, Any, Any]:
+    def numpy_mask_tokens(self, inputs: Any) -> tuple[Any, Any, Any, Any]:
         """
         The masked tokens to be predicted for a particular sequence are determined by the following algorithm:
 

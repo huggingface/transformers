@@ -15,7 +15,6 @@
 
 import os
 import re
-from typing import List
 
 from ..utils import is_compressed_tensors_available, is_torch_available, logging
 from ..utils.quantization_config import CompressedTensorsConfig
@@ -56,7 +55,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         self.run_compressed = quantization_config.run_compressed
         self.quantization_config = quantization_config
 
-    def update_missing_keys_after_loading(self, model, missing_keys: List[str], prefix: str) -> List[str]:
+    def update_missing_keys_after_loading(self, model, missing_keys: list[str], prefix: str) -> list[str]:
         """
         Update missing keys after loading the model. This is necessary for compressed tensors
         to load the model correctly. We expect weights to be present in missing keys.
@@ -78,12 +77,12 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             key for key in missing_keys if not any(re.match(f".*{pattern}", key) for pattern in expected_missing_keys)
         ]
 
-    def update_unexpected_keys(self, model, unexpected_keys: List[str], prefix: str) -> List[str]:
+    def update_unexpected_keys(self, model, unexpected_keys: list[str], prefix: str) -> list[str]:
         """
         Override this method if you want to adjust the `unexpected_keys`.
 
         Args:
-            unexpected_keys (`List[str]`, *optional*):
+            unexpected_keys (`list[str]`, *optional*):
                 The list of unexpected keys in the checkpoint compared to the state dict of the model
         """
 
