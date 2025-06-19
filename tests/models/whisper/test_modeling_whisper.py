@@ -2431,7 +2431,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         torch_dtype = torch.float16 if (torch.cuda.is_available() or is_torch_xpu_available()) else torch.float32
         model_id = "openai/whisper-large-v2"
         model = WhisperForConditionalGeneration.from_pretrained(
-            model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
+            model_id, torch_dtype=torch_dtype, use_safetensors=True
         )
         model.to(torch_device)
 
@@ -2439,7 +2439,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         assistant_model_id = "distil-whisper/distil-large-v2"
         assistant_model = WhisperForCausalLM.from_pretrained(
-            assistant_model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
+            assistant_model_id, torch_dtype=torch_dtype, use_safetensors=True
         )
         assistant_model.to(torch_device)
 
@@ -2481,7 +2481,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         torch_dtype = torch.float16 if torch_device in ["cuda", "xpu"] else torch.float32
         model_id = "openai/whisper-large-v2"
         model = WhisperForConditionalGeneration.from_pretrained(
-            model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
+            model_id, torch_dtype=torch_dtype, use_safetensors=True
         )
         model.to(torch_device)
 
@@ -2489,7 +2489,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         assistant_model_id = "openai/whisper-tiny"
         assistant_model = WhisperForConditionalGeneration.from_pretrained(
-            assistant_model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
+            assistant_model_id, torch_dtype=torch_dtype, use_safetensors=True
         )
         assistant_model.to(torch_device)
 

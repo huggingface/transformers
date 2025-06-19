@@ -176,7 +176,7 @@ class AutoProcessor:
     """
 
     def __init__(self):
-        raise EnvironmentError(
+        raise OSError(
             "AutoProcessor is designed to be instantiated "
             "using the `AutoProcessor.from_pretrained(pretrained_model_name_or_path)` method."
         )
@@ -209,7 +209,7 @@ class AutoProcessor:
             resume_download:
                 Deprecated and ignored. All downloads are now resumed by default when possible.
                 Will be removed in v5 of Transformers.
-            proxies (`Dict[str, str]`, *optional*):
+            proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
             token (`str` or *bool*, *optional*):
@@ -228,7 +228,7 @@ class AutoProcessor:
                 Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
                 should only be set to `True` for repositories you trust and in which you have read the code, as it will
                 execute code present on the Hub on your local machine.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 The values in kwargs of any keys which are feature extractor attributes will be used to override the
                 loaded values. Behavior concerning key/value pairs whose keys are *not* feature extractor attributes is
                 controlled by the `return_unused_kwargs` keyword parameter.

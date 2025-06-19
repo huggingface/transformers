@@ -17,7 +17,7 @@
 import math
 import os
 from dataclasses import dataclass
-from typing import Callable, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -258,7 +258,7 @@ class DecisionTransformerGPT2Attention(nn.Module):
     @deprecate_kwarg("layer_past", new_name="past_key_value", version="4.53.0", raise_if_both_names=True)
     def forward(
         self,
-        hidden_states: Optional[Tuple[torch.FloatTensor]],
+        hidden_states: Optional[tuple[torch.FloatTensor]],
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
@@ -267,7 +267,7 @@ class DecisionTransformerGPT2Attention(nn.Module):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
         **kwargs,
-    ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor]], ...]:
+    ) -> tuple[Union[torch.Tensor, tuple[torch.Tensor]], ...]:
         is_cross_attention = encoder_hidden_states is not None
         if is_cross_attention:
             if not hasattr(self, "q_attn"):
@@ -351,7 +351,7 @@ class DecisionTransformerGPT2MLP(nn.Module):
         self.act = ACT2FN[config.activation_function]
         self.dropout = nn.Dropout(config.resid_pdrop)
 
-    def forward(self, hidden_states: Optional[Tuple[torch.FloatTensor]]) -> torch.FloatTensor:
+    def forward(self, hidden_states: Optional[tuple[torch.FloatTensor]]) -> torch.FloatTensor:
         hidden_states = self.c_fc(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.c_proj(hidden_states)
@@ -382,7 +382,7 @@ class DecisionTransformerGPT2Block(nn.Module):
     @deprecate_kwarg("layer_past", new_name="past_key_value", version="4.53.0", raise_if_both_names=True)
     def forward(
         self,
-        hidden_states: Optional[Tuple[torch.FloatTensor]],
+        hidden_states: Optional[tuple[torch.FloatTensor]],
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
@@ -392,7 +392,7 @@ class DecisionTransformerGPT2Block(nn.Module):
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
         **kwargs,
-    ) -> Union[Tuple[torch.Tensor], Optional[Tuple[torch.Tensor, Tuple[torch.FloatTensor, ...]]]]:
+    ) -> Union[tuple[torch.Tensor], Optional[tuple[torch.Tensor, tuple[torch.FloatTensor, ...]]]]:
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
         attn_output, self_attn_weights = self.attn(
@@ -517,7 +517,7 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
@@ -530,7 +530,7 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -795,7 +795,7 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
     """
 
     The model builds upon the GPT2 architecture to perform autoregressive prediction of actions in an offline RL
-    setting. Refer to the paper for more details: https://arxiv.org/abs/2106.01345
+    setting. Refer to the paper for more details: https://huggingface.co/papers/2106.01345
 
     """
 
@@ -836,7 +836,7 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], DecisionTransformerOutput]:
+    ) -> Union[tuple[torch.FloatTensor], DecisionTransformerOutput]:
         r"""
         states (`torch.FloatTensor` of shape `(batch_size, episode_length, state_dim)`):
             The states for each step in the trajectory

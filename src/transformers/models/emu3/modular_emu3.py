@@ -16,7 +16,7 @@
 
 import math
 from functools import cached_property
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -54,9 +54,9 @@ class Emu3DecoderLayer(LlamaDecoderLayer):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -162,8 +162,8 @@ class Emu3VQVAEConv3d(nn.Module):
         self,
         in_channel: int,
         out_channel: int,
-        kernel_size: Tuple[int],
-        stride: Tuple[int],
+        kernel_size: tuple[int],
+        stride: tuple[int],
     ):
         super().__init__()
 
@@ -693,7 +693,8 @@ class Emu3VQVAEDecoder(nn.Module):
     custom_intro="""
     The VQ-VAE model used in Emu3 for encoding/decoding images into discrete tokens.
     This model follows the "Make-a-scene: Scene-based text-to-image generation with human priors" paper from
-    [ Oran Gafni, Adam Polyak, Oron Ashual, Shelly Sheynin, Devi Parikh, and Yaniv Taigman](https://arxiv.org/abs/2203.13131).
+    [ Oran Gafni, Adam Polyak, Oron Ashual, Shelly Sheynin, Devi Parikh, and Yaniv
+    Taigman](https://huggingface.co/papers/2203.13131).
     """
 )
 class Emu3VQVAE(PreTrainedModel):
@@ -847,7 +848,7 @@ class Emu3ImageVocabularyMapping:
             mapping[k] = v
         return mapping
 
-    def convert_img2bpe(self, img_batch: List[torch.Tensor]) -> torch.Tensor:
+    def convert_img2bpe(self, img_batch: list[torch.Tensor]) -> torch.Tensor:
         device = img_batch.device
         eol_row = torch.ones((img_batch.shape[0], 1), dtype=torch.int) * self.eol_token_id
         img_tokens = self.img2bpe_mapping_tensor[img_batch.to("cpu")]
@@ -1008,7 +1009,7 @@ class Emu3Model(Emu3PreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
         image_sizes (`torch.LongTensor` of shape `(batch_size, 2)`):
             The sizes of the images in the batch, being (height, width) for each image. Image sizes can be obtained using
@@ -1125,7 +1126,7 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         labels: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[KwargsForCausalLM],
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
         image_sizes (`torch.LongTensor` of shape `(batch_size, 2)`):
             The sizes of the images in the batch, being (height, width) for each image. Image sizes can be obtained using

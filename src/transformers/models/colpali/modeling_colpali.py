@@ -15,7 +15,7 @@
 """PyTorch ColPali model"""
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -84,9 +84,9 @@ class ColPaliForRetrievalOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     embeddings: Optional[torch.Tensor] = None
-    past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[torch.FloatTensor] = None
 
 
@@ -101,7 +101,7 @@ class ColPaliForRetrievalOutput(ModelOutput):
     single model that can take into account both the textual and visual content (layout, charts, etc.) of a document.
 
     ColPali is part of the ColVision model family, which was first introduced in the following paper:
-    [*ColPali: Efficient Document Retrieval with Vision Language Models*](https://arxiv.org/abs/2407.01449).
+    [*ColPali: Efficient Document Retrieval with Vision Language Models*](https://huggingface.co/papers/2407.01449).
     """
 )
 class ColPaliForRetrieval(ColPaliPreTrainedModel):

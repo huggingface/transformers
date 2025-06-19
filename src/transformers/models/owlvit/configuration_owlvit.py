@@ -15,7 +15,8 @@
 """OWL-ViT model configuration"""
 
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Dict, Mapping, Optional
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, Optional
 
 
 if TYPE_CHECKING:
@@ -271,7 +272,7 @@ class OwlViTConfig(PretrainedConfig):
         self.initializer_factor = 1.0
 
     @classmethod
-    def from_text_vision_configs(cls, text_config: Dict, vision_config: Dict, **kwargs):
+    def from_text_vision_configs(cls, text_config: dict, vision_config: dict, **kwargs):
         r"""
         Instantiate a [`OwlViTConfig`] (or a derived class) from owlvit text model configuration and owlvit vision
         model configuration.

@@ -20,7 +20,7 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 from torch import nn
 
@@ -92,9 +92,9 @@ class ColQwen2ForRetrievalOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     embeddings: Optional[torch.Tensor] = None
-    past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @auto_docstring(
@@ -108,7 +108,7 @@ class ColQwen2ForRetrievalOutput(ModelOutput):
     a single model that can take into account both the textual and visual content (layout, charts, ...) of a document.
 
     ColQwen2 is part of the ColVision model family, which was introduced with ColPali in the following paper:
-    [*ColPali: Efficient Document Retrieval with Vision Language Models*](https://arxiv.org/abs/2407.01449).
+    [*ColPali: Efficient Document Retrieval with Vision Language Models*](https://huggingface.co/papers/2407.01449).
     """
 )
 class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
@@ -137,7 +137,7 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         labels: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,

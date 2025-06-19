@@ -17,7 +17,7 @@
 import math
 import warnings
 from dataclasses import dataclass
-from typing import Callable, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 import numpy as np
 import torch
@@ -82,7 +82,7 @@ class Wav2Vec2ForPreTrainingOutput(ModelOutput):
     Args:
         loss (*optional*, returned when `sample_negative_indices` are passed, `torch.FloatTensor` of shape `(1,)`):
             Total loss as the sum of the contrastive loss (L_m) and the diversity loss (L_d) as stated in the [official
-            paper](https://arxiv.org/pdf/2006.11477.pdf) . (classification) loss.
+            paper](https://huggingface.co/papers/2006.11477) . (classification) loss.
         projected_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
             Hidden-states of the model projected to *config.proj_codevector_dim* that can be used to predict the masked
             projected quantized states.
@@ -101,23 +101,23 @@ class Wav2Vec2ForPreTrainingOutput(ModelOutput):
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
         contrastive_loss (*optional*, returned when `sample_negative_indices` are passed, `torch.FloatTensor` of shape `(1,)`):
-            The contrastive loss (L_m) as stated in the [official paper](https://arxiv.org/pdf/2006.11477.pdf) .
+            The contrastive loss (L_m) as stated in the [official paper](https://huggingface.co/papers/2006.11477) .
         diversity_loss (*optional*, returned when `sample_negative_indices` are passed, `torch.FloatTensor` of shape `(1,)`):
-            The diversity loss (L_d) as stated in the [official paper](https://arxiv.org/pdf/2006.11477.pdf) .
+            The diversity loss (L_d) as stated in the [official paper](https://huggingface.co/papers/2006.11477) .
     """
 
     loss: Optional[torch.FloatTensor] = None
     projected_states: Optional[torch.FloatTensor] = None
     projected_quantized_states: Optional[torch.FloatTensor] = None
     codevector_perplexity: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
     contrastive_loss: Optional[torch.FloatTensor] = None
     diversity_loss: Optional[torch.FloatTensor] = None
 
 
 def _compute_mask_indices(
-    shape: Tuple[int, int],
+    shape: tuple[int, int],
     mask_prob: float,
     mask_length: int,
     attention_mask: Optional[torch.LongTensor] = None,
@@ -125,7 +125,7 @@ def _compute_mask_indices(
 ) -> np.ndarray:
     """
     Computes random mask spans for a given shape. Used to implement [SpecAugment: A Simple Data Augmentation Method for
-    ASR](https://arxiv.org/abs/1904.08779). Note that this method is not optimized to run on TPU and should be run on
+    ASR](https://huggingface.co/papers/1904.08779). Note that this method is not optimized to run on TPU and should be run on
     CPU as part of the preprocessing during training.
 
     Args:
@@ -236,7 +236,7 @@ def _compute_mask_indices(
 
 
 def _sample_negative_indices(
-    features_shape: Tuple, num_negatives: int, mask_time_indices: Optional[np.ndarray] = None
+    features_shape: tuple, num_negatives: int, mask_time_indices: Optional[np.ndarray] = None
 ):
     """
     Sample `num_negatives` vectors from feature vectors.
@@ -540,14 +540,14 @@ class Wav2Vec2Attention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -772,7 +772,7 @@ class Wav2Vec2Encoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
             skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
@@ -875,7 +875,7 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
             skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
@@ -941,7 +941,7 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
 class Wav2Vec2GumbelVectorQuantizer(nn.Module):
     """
     Vector quantization using gumbel softmax. See `[CATEGORICAL REPARAMETERIZATION WITH
-    GUMBEL-SOFTMAX](https://arxiv.org/pdf/1611.01144.pdf) for more information.
+    GUMBEL-SOFTMAX](https://huggingface.co/papers/1611.01144) for more information.
     """
 
     def __init__(self, config):
@@ -1228,7 +1228,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
             resume_download:
                 Deprecated and ignored. All downloads are now resumed by default when possible.
                 Will be removed in v5 of Transformers.
-            proxies (`Dict[str, str]`, *optional*):
+            proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             local_files_only(`bool`, *optional*, defaults to `False`):
@@ -1322,7 +1322,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
 
                 state_dict = safe_load_file(weight_path)
 
-            except EnvironmentError:
+            except OSError:
                 if use_safetensors:
                     # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted
                     # to the original exception.
@@ -1331,7 +1331,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
             except Exception:
                 # For any other exception, we throw a generic error.
                 if use_safetensors:
-                    raise EnvironmentError(
+                    raise OSError(
                         f"Can't load the model for '{model_path_or_id}'. If you were trying to load it"
                         " from 'https://huggingface.co/models', make sure you don't have a local directory with the"
                         f" same name. Otherwise, make sure '{model_path_or_id}' is the correct path to a"
@@ -1362,7 +1362,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
                     weights_only=True,
                 )
 
-            except EnvironmentError:
+            except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted
                 # to the original exception.
                 raise
@@ -1372,7 +1372,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
 
             except Exception:
                 # For any other exception, we throw a generic error.
-                raise EnvironmentError(
+                raise OSError(
                     f"Can't load the model for '{model_path_or_id}'. If you were trying to load it"
                     " from 'https://huggingface.co/models', make sure you don't have a local directory with the"
                     f" same name. Otherwise, make sure '{model_path_or_id}' is the correct path to a"
@@ -1453,7 +1453,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
     ):
         """
         Masks extracted features along time axis and/or along feature axis according to
-        [SpecAugment](https://arxiv.org/abs/1904.08779).
+        [SpecAugment](https://huggingface.co/papers/1904.08779).
         """
 
         # `config.apply_spec_augment` can set masking to False
@@ -1500,7 +1500,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, Wav2Vec2BaseModelOutput]:
+    ) -> Union[tuple, Wav2Vec2BaseModelOutput]:
         r"""
         mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
@@ -1625,7 +1625,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, Wav2Vec2ForPreTrainingOutput]:
+    ) -> Union[tuple, Wav2Vec2ForPreTrainingOutput]:
         r"""
         mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
@@ -1730,7 +1730,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
             ).permute(2, 0, 1, 3)
 
             # 4. compute logits, corresponding to `logs = sim(c_t, [q_t, \sim{q}_t]) / \kappa`
-            # of equation (3) in https://arxiv.org/pdf/2006.11477.pdf
+            # of equation (3) in https://huggingface.co/papers/2006.11477
             logits = self.compute_contrastive_logits(
                 quantized_features[None, :],
                 negative_quantized_features,
@@ -1800,7 +1800,7 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, MaskedLMOutput]:
+    ) -> Union[tuple, MaskedLMOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.wav2vec2(
@@ -1913,7 +1913,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, CausalLMOutput]:
+    ) -> Union[tuple, CausalLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
             Labels for connectionist temporal classification. Note that `target_length` has to be smaller or equal to
@@ -2036,11 +2036,11 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, SequenceClassifierOutput]:
+    ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
             soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
             conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -2150,11 +2150,11 @@ class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, TokenClassifierOutput]:
+    ) -> Union[tuple, TokenClassifierOutput]:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
             soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
             conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -2332,11 +2332,11 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, XVectorOutput]:
+    ) -> Union[tuple, XVectorOutput]:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
             soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
             conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):

@@ -17,7 +17,7 @@
 import copy
 import math
 import warnings
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -66,7 +66,7 @@ def router_z_loss_func(router_logits: torch.Tensor) -> float:
     r"""
     Compute the router z-loss implemented in PyTorch.
 
-    The router z-loss was introduced in [Designing Effective Sparse Expert Models](https://arxiv.org/abs/2202.08906).
+    The router z-loss was introduced in [Designing Effective Sparse Expert Models](https://huggingface.co/papers/2202.08906).
     It encourages router logits to remain small in an effort to improve stability.
 
     Args:
@@ -86,7 +86,7 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
 
-    See Switch Transformer (https://arxiv.org/abs/2101.03961) for more details. This function implements the loss
+    See Switch Transformer (https://huggingface.co/papers/2101.03961) for more details. This function implements the loss
     function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
     experts is too unbalanced.
 
@@ -125,8 +125,8 @@ class SwitchTransformersTop1Router(nn.Module):
     """
     Router using tokens choose top-1 experts assignment.
 
-    This router uses the same mechanism as in Switch Transformer (https://arxiv.org/abs/2101.03961) and V-MoE
-    (https://arxiv.org/abs/2106.05974): tokens choose their top experts. Items are sorted by router_probs and then
+    This router uses the same mechanism as in Switch Transformer (https://huggingface.co/papers/2101.03961) and V-MoE
+    (https://huggingface.co/papers/2106.05974): tokens choose their top experts. Items are sorted by router_probs and then
     routed to their choice of expert until the expert's expert_capacity is reached. **There is no guarantee that each
     token is processed by an expert**, or that each expert receives at least one token.
 
@@ -141,7 +141,7 @@ class SwitchTransformersTop1Router(nn.Module):
         self.ignore_padding_tokens = config.router_ignore_padding_tokens
         self.dtype = getattr(torch, config.router_dtype)
 
-    def _compute_router_probabilities(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _compute_router_probabilities(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         r"""
         Computes router probabilities from input hidden states.
 
@@ -157,7 +157,7 @@ class SwitchTransformersTop1Router(nn.Module):
                 This is used later for computing router z-loss.
         """
         # float32 is used to ensure stability. See the discussion of "selective precision" in
-        # https://arxiv.org/abs/2101.03961.
+        # https://huggingface.co/papers/2101.03961.
         # We also store the previous dtype to cast back the output to the previous dtype
         self.input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(self.dtype)
@@ -182,7 +182,7 @@ class SwitchTransformersTop1Router(nn.Module):
         if not (hasattr(self.classifier, "SCB") or hasattr(self.classifier, "CB")):
             self.classifier = self.classifier.to(self.dtype)
 
-    def forward(self, hidden_states: torch.Tensor) -> Tuple:
+    def forward(self, hidden_states: torch.Tensor) -> tuple:
         r"""
         Generic forward function for every Router class. Each Router expects to have the same input hidden states
         (`hidden_states`) corresponding to the hidden states for each token, the `expert_capacity` corresponding to the
@@ -196,7 +196,7 @@ class SwitchTransformersTop1Router(nn.Module):
             hidden_states (`torch.Tensor`) :
                 [num_groups, tokens_per_group, hidden_dim] inputs to send to experts.
         Returns:
-            Tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`] Tuple containing the expert index, the router probs
+            tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`] Tuple containing the expert index, the router probs
             and the router logits. The router probabilities and logits are required to compute the loss.
         """
         router_probs, router_logits = self._compute_router_probabilities(hidden_states)
@@ -226,7 +226,7 @@ class SwitchTransformersLayerNorm(nn.Module):
 
     def forward(self, hidden_states):
         # SwitchTransformers uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
-        # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus variance is calculated
+        # Square Layer Normalization https://huggingface.co/papers/1910.07467 thus variance is calculated
         # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
         # half-precision inputs is done in fp32
 
@@ -307,7 +307,7 @@ class SwitchTransformersSparseMLP(nn.Module):
             0
         ].tolist()  # length: number of "activated" expert / value: index
         for idx in idx_mask:
-            next_states[router_mask[:, :, idx]] = getattr(self.experts, "expert_{}".format(idx))(
+            next_states[router_mask[:, :, idx]] = getattr(self.experts, f"expert_{idx}")(
                 hidden_states[router_mask[:, :, idx]]
             )
 
@@ -1320,8 +1320,8 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         head_mask: Optional[torch.FloatTensor] = None,
         decoder_head_mask: Optional[torch.FloatTensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
@@ -1330,7 +1330,7 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple[torch.FloatTensor], Seq2SeqMoEModelOutput]:
+    ) -> Union[tuple[torch.FloatTensor], Seq2SeqMoEModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. SWITCH_TRANSFORMERS is a model with relative position
@@ -1541,8 +1541,8 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         head_mask: Optional[torch.FloatTensor] = None,
         decoder_head_mask: Optional[torch.FloatTensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.Tensor]]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        encoder_outputs: Optional[tuple[tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -1552,7 +1552,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         output_router_logits: Optional[bool] = True,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple[torch.FloatTensor], Seq2SeqMoEOutput]:
+    ) -> Union[tuple[torch.FloatTensor], Seq2SeqMoEOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. SWITCH_TRANSFORMERS is a model with relative position
@@ -1850,7 +1850,7 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_router_logits: Optional[bool] = True,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], MoEModelOutput]:
+    ) -> Union[tuple[torch.FloatTensor], MoEModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. SWITCH_TRANSFORMERS is a model with relative position
