@@ -39,6 +39,7 @@ class MistralCommonTokenizer(PushToHubMixin):
     Handles several methods for tokenization as well as methods for
     downloading/caching/loading pretrained tokenizers.
     """
+
     def __init__(
         self, tokenizer_path: Union[str, os.PathLike, Path], mode: ValidationMode = ValidationMode.test, **kwargs
     ):
