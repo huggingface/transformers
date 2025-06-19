@@ -16,7 +16,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from functools import lru_cache
+from functools import cache
 from typing import Any, Callable, Optional
 
 import numpy as np
@@ -75,7 +75,7 @@ def rot_vec_mul(r: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
     )
 
 
-@lru_cache(maxsize=None)
+@cache
 def identity_rot_mats(
     batch_dims: tuple[int, ...],
     dtype: Optional[torch.dtype] = None,
@@ -90,7 +90,7 @@ def identity_rot_mats(
     return rots
 
 
-@lru_cache(maxsize=None)
+@cache
 def identity_trans(
     batch_dims: tuple[int, ...],
     dtype: Optional[torch.dtype] = None,
@@ -101,7 +101,7 @@ def identity_trans(
     return trans
 
 
-@lru_cache(maxsize=None)
+@cache
 def identity_quats(
     batch_dims: tuple[int, ...],
     dtype: Optional[torch.dtype] = None,
@@ -220,7 +220,7 @@ _CACHED_QUATS: dict[str, np.ndarray] = {
 }
 
 
-@lru_cache(maxsize=None)
+@cache
 def _get_quat(quat_key: str, dtype: torch.dtype, device: torch.device) -> torch.Tensor:
     return torch.tensor(_CACHED_QUATS[quat_key], dtype=dtype, device=device)
 
@@ -1070,7 +1070,7 @@ class Rigid:
         e0 = [c / denom for c in e0]
         dot = sum((c1 * c2 for c1, c2 in zip(e0, e1)))
         e1 = [c2 - c1 * dot for c1, c2 in zip(e0, e1)]
-        denom = torch.sqrt(sum((c * c for c in e1)) + eps * torch.ones_like(e1[0]))
+        denom = torch.sqrt(sum(c * c for c in e1) + eps * torch.ones_like(e1[0]))
         e1 = [c / denom for c in e1]
         e2 = [
             e0[1] * e1[2] - e0[2] * e1[1],
