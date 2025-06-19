@@ -91,6 +91,10 @@ class JambaModelTester(CausalLMModelTester):
         causal_lm_class = JambaForCausalLM
         sequence_classification_class = JambaForSequenceClassification
 
+    def __init__(self, use_mamba_kernels=False, **kwargs):
+        self.use_mamba_kernels = use_mamba_kernels
+        super().__init__(**kwargs)
+
 
 @require_torch
 class JambaModelTest(CausalLMModelTest, unittest.TestCase):
