@@ -127,11 +127,11 @@ class WhisperConfig(PretrainedConfig):
             Begin of stream token id.
         eos_token_id (`int`, *optional*, defaults to 50256):
             End of stream token id.
-        suppress_tokens (`List[int]`, *optional*):
+        suppress_tokens (`list[int]`, *optional*):
             A list containing the non-speech tokens that will be used by the logit processor in the `generate`
             function. NON_SPEECH_TOKENS and NON_SPEECH_TOKENS_MULTI each correspond to the `english-only` and the
             `multilingual` model.
-        begin_suppress_tokens (`List[int]`, *optional*, defaults to `[220,50256]`):
+        begin_suppress_tokens (`list[int]`, *optional*, defaults to `[220,50256]`):
             A list containing tokens that will be suppressed at the beginning of the sampling process. Initialized as
             the token for `" "` (`blank_token_id`) and the `eos_token_id`
         use_weighted_layer_sum (`bool`, *optional*, defaults to `False`):
