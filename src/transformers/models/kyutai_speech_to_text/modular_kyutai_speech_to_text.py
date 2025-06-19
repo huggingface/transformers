@@ -141,7 +141,8 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
                 device=device,
             )
 
-            model_kwargs["encoder_past_key_values"] = temporary_model_kwargs["past_key_values"]
+            if "past_key_values" in temporary_model_kwargs:
+                model_kwargs["encoder_past_key_values"] = temporary_model_kwargs["past_key_values"]
 
             # initialize the padding cache for the codec model
             model_kwargs["padding_cache"] = KyutaiSpeechToTextConv1dPaddingCache()
