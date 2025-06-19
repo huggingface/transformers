@@ -21,8 +21,8 @@ import io
 import json
 import math
 import os
-import sys
 import re
+import sys
 import warnings
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
@@ -1126,12 +1126,18 @@ def get_parameter_names(model, forbidden_layer_types, forbidden_layer_names=None
     Returns the names of the model parameters that are not inside a forbidden layer.
     """
     forbidden_layer_types = tuple(forbidden_layer_types)
-    forbidden_layer_patterns = [re.compile(pattern) for pattern in forbidden_layer_names] if forbidden_layer_names is not None else []
+    forbidden_layer_patterns = (
+        [re.compile(pattern) for pattern in forbidden_layer_names] if forbidden_layer_names is not None else []
+    )
     result = []
     for module_name, module in model.named_modules(remove_duplicate=False):
         if not isinstance(module, forbidden_layer_types):
             param_names = [f"{module_name}.{name}" for name in list(module._parameters.keys())]
-            allowed_names = [name for name in param_names if not any(pattern.search(name.lower()) for pattern in forbidden_layer_patterns)]
+            allowed_names = [
+                name
+                for name in param_names
+                if not any(pattern.search(name.lower()) for pattern in forbidden_layer_patterns)
+            ]
             result.extend(allowed_names)
 
     return result
