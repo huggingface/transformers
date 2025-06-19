@@ -793,8 +793,9 @@ class TrainingArguments:
             It can effectively increase multi-GPU training throughput by ~20% and reduces memory usage by ~60%, works out of the box with
             flash attention, PyTorch FSDP, and Microsoft DeepSpeed. Currently, it supports llama, mistral, mixtral and gemma models.
 
-        liger_kernel_config (`dict`, *optional*):
-            Configuration to be used for Liger Kernel. When use_liger_kernel=True, this dict specifies which kernels to apply. Available options vary by model but typically
+        liger_kernel_config (`Optional[dict]`, *optional*):
+            Configuration to be used for Liger Kernel. When use_liger_kernel=True, this dict is passed as keyword arguments to the
+            `_apply_liger_kernel_to_instance` function, which specifies which kernels to apply. Available options vary by model but typically
             include: 'rope', 'swiglu', 'cross_entropy', 'fused_linear_cross_entropy', 'rms_norm', etc. If `None`, use the default kernel configurations.
 
         average_tokens_across_devices (`bool`, *optional*, defaults to `False`):
@@ -1534,7 +1535,8 @@ class TrainingArguments:
         metadata={
             "help": (
                 "Configuration to be used for Liger Kernel. When use_liger_kernel=True, "
-                "this dict specifies which kernels to apply. Available options vary by model "
+                "this dict is passed as keyword arguments to the `_apply_liger_kernel_to_instance` function, "
+                "which specifies which kernels to apply. Available options vary by model "
                 "but typically include: 'rope', 'swiglu', 'cross_entropy', 'fused_linear_cross_entropy', "
                 "'rms_norm', etc. If None, use the default kernel configurations."
             )
