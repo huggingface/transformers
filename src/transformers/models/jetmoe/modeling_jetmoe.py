@@ -233,7 +233,7 @@ class JetMoeMoE(nn.Module):
     """
 
     def __init__(self, config: JetMoeConfig):
-        super(JetMoeMoE, self).__init__()
+        super().__init__()
 
         self.input_size = config.hidden_size
         self.hidden_size = config.intermediate_size
@@ -291,7 +291,7 @@ class JetMoeMoA(nn.Module):
     """
 
     def __init__(self, config: JetMoeConfig):
-        super(JetMoeMoA, self).__init__()
+        super().__init__()
 
         self.num_experts = config.num_local_experts
         self.input_size = config.hidden_size

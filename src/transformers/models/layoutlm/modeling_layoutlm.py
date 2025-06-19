@@ -47,7 +47,7 @@ class LayoutLMEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config):
-        super(LayoutLMEmbeddings, self).__init__()
+        super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.x_position_embeddings = nn.Embedding(config.max_2d_position_embeddings, config.hidden_size)
@@ -635,7 +635,7 @@ class LayoutLMPreTrainedModel(PreTrainedModel):
 @auto_docstring
 class LayoutLMModel(LayoutLMPreTrainedModel):
     def __init__(self, config):
-        super(LayoutLMModel, self).__init__(config)
+        super().__init__(config)
         self.config = config
 
         self.embeddings = LayoutLMEmbeddings(config)

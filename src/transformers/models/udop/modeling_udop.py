@@ -847,7 +847,7 @@ class UdopBlock(nn.Module):
 
 class UdopCellEmbeddings(nn.Module):
     def __init__(self, max_2d_position_embeddings=501, hidden_size=1024):
-        super(UdopCellEmbeddings, self).__init__()
+        super().__init__()
         self.max_2d_position_embeddings = max_2d_position_embeddings
 
         self.x_position_embeddings = nn.Embedding(max_2d_position_embeddings, hidden_size)
@@ -911,7 +911,7 @@ class RelativePositionBiasBase(nn.Module, ABC):
         prefix_bucket=False,
         expand=False,
     ):
-        super(RelativePositionBiasBase, self).__init__()
+        super().__init__()
         self.prefix_bucket = prefix_bucket
         self.augmentation = augmentation
         self.level = level
@@ -1499,7 +1499,7 @@ class UdopModel(UdopPreTrainedModel):
     ]
 
     def __init__(self, config):
-        super(UdopModel, self).__init__(config)
+        super().__init__(config)
 
         # text and image embeddings
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
@@ -1695,7 +1695,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
     ]
 
     def __init__(self, config):
-        super(UdopForConditionalGeneration, self).__init__(config)
+        super().__init__(config)
 
         # text and image embeddings
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
