@@ -9,15 +9,15 @@ exclude_folders :=  ""
 
 modified_only_fixup:
 	@current_branch=$$(git branch --show-current); \
-	if [ "$$(current_branch)" = "main" ]; then \
-		echo "On main branch, running style target instead..."; \
+	if [ "$$current_branch" = "main" ]; then \
+		echo "On main branch, running 'style' target instead..."; \
 		$(MAKE) style; \
 	else \
-		modified_py_files=$$(python utils/get_modified_files.py $(check_dirs)) && \
+		modified_py_files=$$(python utils/get_modified_files.py $(check_dirs)); \
 		if [ -n "$$modified_py_files" ]; then \
-			echo "Checking/fixing $${modified_py_files}"; \
+			echo "Checking/fixing files: $${modified_py_files}"; \
 			ruff check $${modified_py_files} --fix --exclude $(exclude_folders); \
-			ruff format $${modified_py_files} --exclude $(exclude_folders);\
+			ruff format $${modified_py_files} --exclude $(exclude_folders); \
 		else \
 			echo "No library .py files were modified"; \
 		fi; \
