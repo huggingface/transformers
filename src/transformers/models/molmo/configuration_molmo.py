@@ -130,7 +130,7 @@ class MolmoPoolingConfig(PretrainedConfig):
         num_key_value_heads (`int`, *optional*, defaults to 16):
             Number of kv heads for each attention layer in the Transformer pooler.
         head_dim (`int`, *optional*, defaults to 64):
-            The poolinng attention head dimension.
+            The pooling attention head dimension.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -302,8 +302,6 @@ class MolmoTextConfig(PretrainedConfig):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*):
             End of stream token id.
-        sliding_window (`int`, *optional*, defaults to 4096):
-            Sliding window attention (SWA) window size. If not specified, will default to `4096`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         attention_bias (`bool`, *optional*, defaults to `False`):
@@ -364,7 +362,6 @@ class MolmoTextConfig(PretrainedConfig):
         pad_token_id=None,
         bos_token_id=None,
         eos_token_id=None,
-        sliding_window=4096,
         attention_dropout=0.0,
         attention_bias=False,
         use_qk_norm=False,
@@ -383,7 +380,6 @@ class MolmoTextConfig(PretrainedConfig):
         self.attention_bias = attention_bias
         self.use_qk_norm = use_qk_norm
         self.use_postnorm = use_postnorm
-        self.sliding_window = sliding_window
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -428,7 +424,7 @@ class MolmoConfig(PretrainedConfig):
             The config object or dictionary of the text backbone.
         pooling_config (`Union[AutoConfig, dict]`, *optional*, defaults to `MolmoPoolingConfig`):
             The config object or dictionary of the adapter backbone.
-        image_token_index (`int`, *optional*, defaults to 152069):
+        image_token_id (`int`, *optional*, defaults to 152069):
             The image token index to encode the image prompt.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -474,14 +470,14 @@ class MolmoConfig(PretrainedConfig):
         vision_config=None,
         text_config=None,
         pooling_config=None,
-        image_token_index=152069,
+        image_token_id=152069,
         initializer_range=0.02,
         vision_feature_select_strategy="default",
         vision_feature_layers=(-2, -9),
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.image_token_index = image_token_index
+        self.image_token_id = image_token_id
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.vision_feature_layers = vision_feature_layers
         if vision_config is None:

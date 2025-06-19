@@ -341,8 +341,6 @@ class MolmoTextConfig(CohereConfig):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*):
             End of stream token id.
-        sliding_window (`int`, *optional*, defaults to 4096):
-            Sliding window attention (SWA) window size. If not specified, will default to `4096`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         attention_bias (`bool`, *optional*, defaults to `False`):
@@ -386,7 +384,6 @@ class MolmoTextConfig(CohereConfig):
         pad_token_id=None,
         bos_token_id=None,
         eos_token_id=None,
-        sliding_window=4096,
         attention_dropout=0.0,
         attention_bias=False,
         use_qk_norm=False,
@@ -398,7 +395,6 @@ class MolmoTextConfig(CohereConfig):
         self.attention_bias = attention_bias
         self.use_qk_norm = use_qk_norm
         self.use_postnorm = use_postnorm
-        self.sliding_window = sliding_window
         super().__init__(**kwargs)
         del self.logit_scale
 
