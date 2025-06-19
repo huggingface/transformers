@@ -3802,12 +3802,15 @@ class ModelTesterMixin:
 
             model = model_class(config)
 
-            sub_models_supports_sdpa = all(
+            sub_models_supporting_sdpa = [
                 module._supports_sdpa
                 for name, module in model.named_modules()
                 if isinstance(module, PreTrainedModel) and name != ""
+            ]
+            supports_sdpa_all_modules = (
+                all(sub_models_supporting_sdpa) if len(sub_models_supporting_sdpa) > 0 else model._supports_sdpa
             )
-            if not sub_models_supports_sdpa:
+            if not supports_sdpa_all_modules:
                 self.skipTest(reason="This models' submodels does not support sdpa")
 
             with tempfile.TemporaryDirectory() as tmpdirname:
