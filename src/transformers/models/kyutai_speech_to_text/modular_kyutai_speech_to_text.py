@@ -38,7 +38,7 @@ if is_torch_flex_attn_available():
     pass
 
 
-if is_flash_attn_available():
+class KyutaiSpeechToTextConv1dPaddingCache(MimiConv1dPaddingCache):
     pass
 
 
@@ -77,7 +77,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
     def __init__(self, config):
         super().__init__(config)
         self.codec_model = AutoModel.from_config(config.codec_config)
-        
+
         # we are in an edge case where for the codec_model self.can_generate is False, setting self.codec_model.generation_config to None
         # yet the codec_model needs a generation config to initalize it's cache for streaming inference
         # we therefore initialize a generation config for the codec model
@@ -150,7 +150,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
             model_kwargs["encoder_past_key_values"] = temporary_model_kwargs["past_key_values"]
 
             # initialize the padding cache for the codec model
-            model_kwargs["padding_cache"] = MimiConv1dPaddingCache()
+            model_kwargs["padding_cache"] = KyutaiSpeechToTextConv1dPaddingCache()
 
         return inputs, input_name, model_kwargs
 
@@ -163,7 +163,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
         audio_window_size: Optional[int] = None,
         current_window: Optional[tuple[int, int]] = None,
         encoder_past_key_values: Optional[Cache] = None,
-        padding_cache: Optional[MimiConv1dPaddingCache] = None,
+        padding_cache: Optional[KyutaiSpeechToTextConv1dPaddingCache] = None,
         **kwargs,
     ):
         model_inputs = GenerationMixin.prepare_inputs_for_generation(*args, **kwargs)
