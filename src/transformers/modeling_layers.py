@@ -15,7 +15,9 @@
 from functools import partial
 
 import torch.nn as nn
+
 from transformers.utils import logging
+
 
 logger = logging.get_logger(__name__)
 
@@ -47,7 +49,6 @@ class GradientCheckpointingLayer(nn.Module):
 
     def __call__(self, *args, **kwargs):
         if self.gradient_checkpointing and self.training:
-
             do_warn = False
             if "use_cache" in kwargs and kwargs["use_cache"]:
                 kwargs["use_cache"] = False
