@@ -29,7 +29,6 @@ import warnings
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
-from dataclasses import dataclass
 from enum import Enum
 from functools import partial, wraps
 from threading import Thread
@@ -41,7 +40,6 @@ from huggingface_hub import split_torch_state_dict_into_shards
 from packaging import version
 from torch import Tensor, nn
 from torch.distributions import constraints
-from torch.nn import CrossEntropyLoss, Identity
 from torch.utils.checkpoint import checkpoint
 
 from transformers.utils import is_torchao_available
@@ -50,7 +48,6 @@ from transformers.utils import is_torchao_available
 if is_torchao_available():
     from torchao.quantization import Int4WeightOnlyConfig
 
-from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
@@ -98,7 +95,6 @@ from .utils import (
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     ContextManagers,
-    ModelOutput,
     PushToHubMixin,
     cached_file,
     check_torch_load_is_safe,
@@ -123,7 +119,6 @@ from .utils import (
     is_torch_xla_available,
     is_torch_xpu_available,
     logging,
-    replace_return_docstrings,
     strtobool,
 )
 from .utils.generic import GeneralInterface
