@@ -25,38 +25,6 @@ logger = logging.getLogger()
 
 flex_attention_comp = flex_attention
 
-
-def causal_mask(b, h, q_idx, kv_idx):
-    return q_idx >= kv_idx
-
-
-def create_causal_mask(
-    seqlen,
-    attn_impl: str,
-    attn_bias_type: str | None,
-    *,
-    eos_id: int | None = None,
-    tokens: torch.Tensor | None = None,
-    sliding_window: int | None = None,
-):
-    if attn_impl == "sdpa":
-        BLT_SUPPRESS_ATTN_ERROR = int(os.environ.get("BLT_SUPPRESS_ATTN_ERROR", 0))
-
-        if attn_bias_type == "causal":
-            return "causal"
-
-        if BLT_SUPPRESS_ATTN_ERROR == 1:
-            return "causal"
-        else:
-            raise ValueError(
-                "SDPA attention being used, which doesn't have specialized attention implementations for block_causal and local_block_causal attention. To suppress this error and run the model anyway, set the environment variable BLT_SUPPRESS_ATTN_ERROR=1"
-            )
-    elif attn_impl == "flex_attention":
-        return create_block_mask(causal_mask, None, None, seqlen, seqlen)
-    else:
-        raise NotImplementedError(f"Attention {attn_impl} with {sliding_window} sliding window not implemented")
-
-
 def cross_entropy(pred, target, **kwargs):
     return F.nll_loss(
         F.log_softmax(pred.flatten(end_dim=-2).float(), -1),
@@ -76,81 +44,6 @@ def repeat_kv(x: torch.Tensor, n_rep: int, dim: int) -> torch.Tensor:
         .expand(bs, slen, n_kv_heads, n_rep, head_dim)
         .reshape(bs, slen, n_kv_heads * n_rep, head_dim)
     )
-
-
-def precompute_freqs_cis(
-    dim: int,
-    end: int,
-    theta: float = 10000.0,
-    rope_use_fp32_in_outer_product: bool = False,
-):
-    """
-    Precompute the frequency tensor for complex exponentials (cis) with given dimensions.
-
-    This function calculates a frequency tensor with complex exponentials using the given dimension 'dim'
-    and the end index 'end'. The 'theta' parameter scales the frequencies.
-    The returned tensor contains complex values in complex64 data type.
-
-    Args:
-        dim (int): Dimension of the frequency tensor.
-        end (int): End index for precomputing frequencies.
-        theta (float, optional): Scaling factor for frequency computation. Defaults to 10000.0.
-
-    Returns:
-        torch.Tensor: Precomputed frequency tensor with complex exponentials.
-    """
-    freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
-    t = torch.arange(end, device=freqs.device)
-    if rope_use_fp32_in_outer_product:
-        t = t.to(torch.float32)
-
-    freqs = torch.outer(t, freqs).float()
-
-    cos, sin = freqs.cos(), freqs.sin()
-
-    return torch.stack((cos, -sin, sin, cos), dim=-1).view(*freqs.size(), 2, 2)
-
-
-def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor, seq_dim: int):
-    """
-    Reshape frequency tensor for broadcasting it with another tensor.
-
-    This function reshapes the frequency tensor to have the same shape as the target tensor 'x'
-    for the purpose of broadcasting the frequency tensor during element-wise operations.
-
-    Args:
-        freqs_cis (torch.Tensor): Frequency tensor to be reshaped.
-        x (torch.Tensor): Target tensor for broadcasting compatibility.
-        seq_dim (int): Sequence dimension index.
-
-    Returns:
-        torch.Tensor: Reshaped frequency tensor.
-    """
-    ndim = x.ndim
-    assert 0 <= seq_dim < ndim
-    assert freqs_cis.shape == (
-        x.shape[seq_dim],
-        x.shape[-3],
-        2,
-        2,
-    ), f"freqs_cis vs x: {(freqs_cis.shape, x.shape)}"
-    shape = [d if i == seq_dim or i == ndim - 3 else 1 for i, d in enumerate(x.shape[:-2])] + [2, 2]
-    return freqs_cis.view(*shape)
-
-
-def apply_rotary_emb(
-    xq: torch.Tensor,
-    xk: torch.Tensor,
-    seq_dim: int,
-    freqs_cis: torch.Tensor,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    xq_ = xq.reshape(*xq.shape[:-1], -1, 1, 2)  # B S H D -> B S H D/2 1 2
-    xk_ = xk.reshape(*xk.shape[:-1], -1, 1, 2)  # B S H D -> B S H D/2 1 2
-    freqs_cis = reshape_for_broadcast(freqs_cis, xq_, seq_dim).float()  # S D/2 2 2 -> 1 S 1 D/2 2 2
-    xq_out = (xq_ * freqs_cis).sum(5).flatten(3)
-    xk_out = (xk_ * freqs_cis).sum(5).flatten(3)
-    return xq_out.type_as(xq), xk_out.type_as(xk)
-
 
 class BLTMLP(nn.Module):
     def __init__(
@@ -685,16 +578,6 @@ class BLTLocalEncoder(nn.Module):
     ):
         """ """
         bs, seqlen = input_ids.shape
-        if mask is None:
-            mask = create_causal_mask(
-                seqlen,
-                self.config.attn_impl,
-                "local_block_causal",
-                sliding_window=self.config.local_attention_window_len,
-                tokens=input_ids,
-                eos_id=self.config.eos_token_id,
-            )
-
         if input_embeds is None:
             input_embeds = self.embed_tokens(input_ids)
 
@@ -870,14 +753,14 @@ class BLTLocalDecoder(nn.Module):
         assert embeds is not None, "Embeddings must be provided"
 
         if mask is None:
-            mask = create_causal_mask(
-                seqlen,
-                self.config.attn_impl,
-                "local_block_causal",
-                sliding_window=self.config.local_attention_window_len,
-                tokens=tokens,
-                eos_id=self.config.eos_token_id,
+            attention_mask = create_causal_mask_for_blt(
+                seqlen=seq_length,
+                batch_size=batch_size,
+                device=embeds.device,
+                dtype=embeds.dtype,
+                sliding_window=self.config.sliding_window,
             )
+
 
         h = embeds
 
@@ -1030,37 +913,26 @@ class BLTGlobalTransformer(nn.Module):
 
     def forward(
         self,
-        tokens: torch.Tensor,
+        input_ids: torch.Tensor,
         tok_idx: Optional[torch.Tensor] = None,
-        embeds: Optional[torch.Tensor] = None,
+        input_embeds: Optional[torch.Tensor] = None,
         mask: Optional[Union[BlockMask, torch.Tensor, str]] = None,
         cache: Optional[List[Tuple[torch.Tensor, torch.Tensor, int]]] = None,
     ):
-        bs, seqlen = tokens.shape
+        batch_size, seq_length, _ = input_embeds.shape
 
-        h = embeds
-
-        mask = (
-            mask
-            if mask is not None
-            else create_causal_mask(
-                seqlen,
-                self.config.attn_impl,
-                self.config.attn_bias_type,
-                tokens=tokens,
-                eos_id=self.config.eos_id,
-            )
-        )
+        h = input_embeds
 
         if self.token_embedding_projection is not None and h.shape[-1] != self.config.dim_global:
             h = self.token_embedding_projection(h)
 
         h = F.dropout(h, p=self.config.dropout, training=self.training)
 
-        freq_cis = self.rope_embeddings(seqlen=self.config.max_seqlen, tok_idx=tok_idx)
+        position_ids = torch.arange(input_ids.shape[1], device=input_embeds.device).unsqueeze(0).expand(batch_size, -1)
+        position_embeddings = self.rotary_emb(h, position_ids)  
 
         for i, layer in enumerate(self.layers):
-            h = layer(h, freq_cis, tok_idx=tok_idx, mask=mask, attn_impl=self.config.attn_impl)
+            h = layer(h, position_embeddings=position_embeddings, attention_mask=None)
 
         return h, cache
 
@@ -1148,15 +1020,7 @@ class BLTPreTrainedModel(PreTrainedModel):
         #     nn.init.ones_(module.weight)
         #     if module.bias is not None:
         #         nn.init.zeros_(module.bias)
-                
-        elif isinstance(module, RotaryEmbedding):
-            module.freqs_cis[...] = precompute_freqs_cis(
-                dim=module.head_dim,
-                end=module.max_seqlen,
-                theta=module.theta,
-                rope_use_fp32_in_outer_product=module.rope_use_fp32_in_outer_product,
-            )
-            
+             
         elif isinstance(module, BLTModel):
             if module.encoder_hash_tok_embedding is not None:
                 emb_std = module.config.dim_local_encoder ** (-0.5)
@@ -1302,8 +1166,8 @@ class BLTModel(BLTPreTrainedModel):
         global_tokens[rows, eos_patch_ids] = self.config.eos_token_id
 
         h, _ = self.global_transformer(
-            embeds=h,
-            tokens=global_tokens,
+            input_embeds=h,
+            input_ids=global_tokens,
         )
 
         # Unpatching
