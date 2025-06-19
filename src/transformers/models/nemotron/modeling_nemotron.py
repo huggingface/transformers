@@ -51,11 +51,17 @@ if is_torch_flex_attn_available():
 logger = logging.get_logger(__name__)
 
 
-def _cast_if_autocast_enabled(*args):
+def _cast_if_autocast_enabled(device_type, *args):
     if not torch.is_autocast_enabled():
         return args
     else:
-        return torch.cuda.amp.autocast_mode._cast(args, torch.get_autocast_gpu_dtype())
+        # NOTE: `torch.get_autocast_dtype` is there starting from PyTorch 2.4
+        target_dtype = (
+            torch.get_autocast_dtype(device_type)
+            if hasattr(torch, "get_autocast_dtype")
+            else torch.get_autocast_gpu_dtype()
+        )
+        return torch.amp.autocast_mode._cast(args, device_type, target_dtype)
 
 
 class NemotronLayerNorm1P(nn.LayerNorm):
@@ -71,8 +77,11 @@ class NemotronLayerNorm1P(nn.LayerNorm):
         super().__init__(normalized_shape, eps, elementwise_affine, bias, device, dtype)
 
     def forward(self, input: Tensor) -> Tensor:
-        args = _cast_if_autocast_enabled(input, self.normalized_shape, self.weight + 1, self.bias, self.eps)
-        with torch.amp.autocast(input.device.type, enabled=False):
+        device_type = input.device.type if input.device.type != "mps" else "cpu"
+        args = _cast_if_autocast_enabled(
+            device_type, input, self.normalized_shape, self.weight + 1, self.bias, self.eps
+        )
+        with torch.autocast(device_type=input.device.type, enabled=False):
             return F.layer_norm(*args)
 
 
@@ -344,9 +353,15 @@ class NemotronFlashAttention2(NemotronAttention):
         # in fp32. (NemotronRMSNorm handles it correctly)
 
         input_dtype = query_states.dtype
+        device_type = query_states.device.type if query_states.device.type != "mps" else "cpu"
         if input_dtype == torch.float32:
             if torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_gpu_dtype()
+                # NOTE: `torch.get_autocast_dtype` is there starting from PyTorch 2.4
+                target_dtype = (
+                    torch.get_autocast_dtype(device_type)
+                    if hasattr(torch, "get_autocast_dtype")
+                    else torch.get_autocast_gpu_dtype()
+                )
             # Handle the case where the model is quantized
             elif hasattr(self.config, "_pre_quantization_dtype"):
                 target_dtype = self.config._pre_quantization_dtype

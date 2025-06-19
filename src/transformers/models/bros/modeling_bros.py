@@ -74,7 +74,7 @@ class BrosPositionalEmbedding1D(nn.Module):
     # Reference: https://github.com/kimiyoung/transformer-xl/blob/master/pytorch/mem_transformer.py#L15
 
     def __init__(self, config):
-        super(BrosPositionalEmbedding1D, self).__init__()
+        super().__init__()
 
         self.dim_bbox_sinusoid_emb_1d = config.dim_bbox_sinusoid_emb_1d
 
@@ -93,7 +93,7 @@ class BrosPositionalEmbedding1D(nn.Module):
 
 class BrosPositionalEmbedding2D(nn.Module):
     def __init__(self, config):
-        super(BrosPositionalEmbedding2D, self).__init__()
+        super().__init__()
 
         self.dim_bbox = config.dim_bbox
         self.x_pos_emb = BrosPositionalEmbedding1D(config)
@@ -112,7 +112,7 @@ class BrosPositionalEmbedding2D(nn.Module):
 
 class BrosBboxEmbeddings(nn.Module):
     def __init__(self, config):
-        super(BrosBboxEmbeddings, self).__init__()
+        super().__init__()
         self.bbox_sinusoid_emb = BrosPositionalEmbedding2D(config)
         self.bbox_projection = nn.Linear(config.dim_bbox_sinusoid_emb_2d, config.dim_bbox_projection, bias=False)
 
