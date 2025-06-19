@@ -29,6 +29,7 @@ from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPastAndCrossAttentions, Seq2SeqLMOutput
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import auto_docstring, is_torch_flex_attn_available, is_torch_fx_proxy, is_torchdynamo_compiling, logging
@@ -469,7 +470,7 @@ class Pop2PianoLayerCrossAttention(nn.Module):
 
 
 # Copied from transformers.models.t5.modeling_t5.T5Block with T5->Pop2Piano,t5->pop2piano
-class Pop2PianoBlock(nn.Module):
+class Pop2PianoBlock(GradientCheckpointingLayer):
     def __init__(self, config, has_relative_attention_bias=False, layer_idx: Optional[int] = None):
         super().__init__()
         self.is_decoder = config.is_decoder
@@ -816,37 +817,20 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.forward,
-                    hidden_states,
-                    causal_mask,
-                    position_bias,
-                    encoder_hidden_states,
-                    encoder_extended_attention_mask,
-                    encoder_decoder_position_bias,
-                    layer_head_mask,
-                    cross_attn_layer_head_mask,
-                    None,  # past_key_value is always None with gradient checkpointing
-                    use_cache,
-                    output_attentions,
-                    cache_position,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask=causal_mask,
-                    position_bias=position_bias,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_extended_attention_mask,
-                    encoder_decoder_position_bias=encoder_decoder_position_bias,
-                    layer_head_mask=layer_head_mask,
-                    cross_attn_layer_head_mask=cross_attn_layer_head_mask,
-                    past_key_value=past_key_values,
-                    use_cache=use_cache,
-                    output_attentions=output_attentions,
-                    cache_position=cache_position,
-                )
+            layer_outputs = layer_module(
+                hidden_states,
+                attention_mask=causal_mask,
+                position_bias=position_bias,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_extended_attention_mask,
+                encoder_decoder_position_bias=encoder_decoder_position_bias,
+                layer_head_mask=layer_head_mask,
+                cross_attn_layer_head_mask=cross_attn_layer_head_mask,
+                past_key_value=past_key_values,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                cache_position=cache_position,
+            )
 
             # layer_outputs is a tuple with:
             # hidden-states, key-value-states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
