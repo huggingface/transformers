@@ -474,6 +474,11 @@ class FSMTModelIntegrationTests(unittest.TestCase):
 
     def get_model(self, mname):
         if mname not in self.models_cache:
+            # The safetensors checkpoint on `facebook/wmt19-de-en` (and other repositories) has issues.
+            # Hub PRs are opened, see https://huggingface.co/facebook/wmt19-de-en/discussions/6
+            # We have asked Meta to merge them but no response yet:
+            # https://huggingface.slack.com/archives/C01NE71C4F7/p1749565278015529?thread_ts=1749031628.757929&cid=C01NE71C4F7
+            # Below is what produced the Hub PRs that work (loading without safetensors, saving the reloading)
             model = FSMTForConditionalGeneration.from_pretrained(mname, use_safetensors=False)
             with tempfile.TemporaryDirectory() as tmpdir:
                 model.save_pretrained(tmpdir)
