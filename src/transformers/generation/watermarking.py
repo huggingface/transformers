@@ -16,7 +16,7 @@
 import collections
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import torch
@@ -77,7 +77,7 @@ class WatermarkDetector:
     the correct device that was used during text generation, the correct watermarking arguments and the correct tokenizer vocab size.
     The code was based on the [original repo](https://github.com/jwkirchenbauer/lm-watermarking/tree/main).
 
-    See [the paper](https://arxiv.org/abs/2306.04634) for more information.
+    See [the paper](https://huggingface.co/papers/2306.04634) for more information.
 
     Args:
         model_config (`PretrainedConfig`):
@@ -126,7 +126,7 @@ class WatermarkDetector:
         self,
         model_config: PretrainedConfig,
         device: str,
-        watermarking_config: Union[WatermarkingConfig, Dict],
+        watermarking_config: Union[WatermarkingConfig, dict],
         ignore_repeated_ngrams: bool = False,
         max_cache_size: int = 128,
     ):
@@ -300,7 +300,7 @@ class BayesianDetectorWatermarkedLikelihood(nn.Module):
         self.beta = torch.nn.Parameter(-2.5 + 0.001 * torch.randn(1, 1, watermarking_depth))
         self.delta = torch.nn.Parameter(0.001 * torch.randn(1, 1, self.watermarking_depth, watermarking_depth))
 
-    def _compute_latents(self, g_values: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _compute_latents(self, g_values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Computes the unique token probability distribution given g-values.
 
         Args:

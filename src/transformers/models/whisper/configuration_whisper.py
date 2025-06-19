@@ -15,7 +15,8 @@
 """Whisper model configuration"""
 
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig, OnnxSeq2SeqConfigWithPast
@@ -87,10 +88,10 @@ class WhisperConfig(PretrainedConfig):
         decoder_ffn_dim (`int`, *optional*, defaults to 1536):
             Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
         encoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
         decoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
         decoder_start_token_id (`int`, *optional*, defaults to 50257):
             Corresponds to the "<|startoftranscript|>" token, which is automatically used when no `decoder_input_ids`
@@ -126,11 +127,11 @@ class WhisperConfig(PretrainedConfig):
             Begin of stream token id.
         eos_token_id (`int`, *optional*, defaults to 50256):
             End of stream token id.
-        suppress_tokens (`List[int]`, *optional*):
+        suppress_tokens (`list[int]`, *optional*):
             A list containing the non-speech tokens that will be used by the logit processor in the `generate`
             function. NON_SPEECH_TOKENS and NON_SPEECH_TOKENS_MULTI each correspond to the `english-only` and the
             `multilingual` model.
-        begin_suppress_tokens (`List[int]`, *optional*, defaults to `[220,50256]`):
+        begin_suppress_tokens (`list[int]`, *optional*, defaults to `[220,50256]`):
             A list containing tokens that will be suppressed at the beginning of the sampling process. Initialized as
             the token for `" "` (`blank_token_id`) and the `eos_token_id`
         use_weighted_layer_sum (`bool`, *optional*, defaults to `False`):
@@ -142,7 +143,7 @@ class WhisperConfig(PretrainedConfig):
         apply_spec_augment (`bool`, *optional*, defaults to `False`):
             Whether to apply *SpecAugment* data augmentation to the outputs of the feature encoder. For reference see
             [SpecAugment: A Simple Data Augmentation Method for Automatic Speech
-            Recognition](https://arxiv.org/abs/1904.08779).
+            Recognition](https://huggingface.co/papers/1904.08779).
         mask_time_prob (`float`, *optional*, defaults to 0.05):
             Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. The masking
             procedure generates `mask_time_prob*len(time_axis)/mask_time_length` independent masks over the axis. If
@@ -262,7 +263,7 @@ class WhisperConfig(PretrainedConfig):
         self.classifier_proj_size = classifier_proj_size
         self.use_weighted_layer_sum = use_weighted_layer_sum
 
-        # fine-tuning config parameters for SpecAugment: https://arxiv.org/abs/1904.08779
+        # fine-tuning config parameters for SpecAugment: https://huggingface.co/papers/1904.08779
         self.apply_spec_augment = apply_spec_augment
         self.mask_time_prob = mask_time_prob
         self.mask_time_length = mask_time_length

@@ -14,7 +14,7 @@
 """PyTorch SuperPoint model."""
 
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -37,7 +37,7 @@ logger = logging.get_logger(__name__)
 
 def remove_keypoints_from_borders(
     keypoints: torch.Tensor, scores: torch.Tensor, border: int, height: int, width: int
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Removes keypoints (and their associated scores) that are too close to the border"""
     mask_h = (keypoints[:, 0] >= border) & (keypoints[:, 0] < (height - border))
     mask_w = (keypoints[:, 1] >= border) & (keypoints[:, 1] < (width - border))
@@ -45,7 +45,7 @@ def remove_keypoints_from_borders(
     return keypoints[mask], scores[mask]
 
 
-def top_k_keypoints(keypoints: torch.Tensor, scores: torch.Tensor, k: int) -> Tuple[torch.Tensor, torch.Tensor]:
+def top_k_keypoints(keypoints: torch.Tensor, scores: torch.Tensor, k: int) -> tuple[torch.Tensor, torch.Tensor]:
     """Keeps the k keypoints with highest score"""
     if k >= len(keypoints):
         return keypoints, scores
@@ -103,7 +103,7 @@ class SuperPointKeypointDescriptionOutput(ModelOutput):
     scores: Optional[torch.FloatTensor] = None
     descriptors: Optional[torch.FloatTensor] = None
     mask: Optional[torch.BoolTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 class SuperPointConvBlock(nn.Module):
@@ -169,7 +169,7 @@ class SuperPointEncoder(nn.Module):
         input,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple, BaseModelOutputWithNoAttention]:
+    ) -> Union[tuple, BaseModelOutputWithNoAttention]:
         all_hidden_states = () if output_hidden_states else None
 
         for conv_block in self.conv_blocks:
@@ -215,7 +215,7 @@ class SuperPointInterestPointDecoder(nn.Module):
             config.decoder_hidden_size, config.keypoint_decoder_dim, kernel_size=1, stride=1, padding=0
         )
 
-    def forward(self, encoded: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, encoded: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         scores = self._get_pixel_scores(encoded)
         keypoints, scores = self._extract_keypoints(scores)
 
@@ -232,7 +232,7 @@ class SuperPointInterestPointDecoder(nn.Module):
         scores = simple_nms(scores, self.nms_radius)
         return scores
 
-    def _extract_keypoints(self, scores: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _extract_keypoints(self, scores: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Based on their scores, extract the pixels that represent the keypoints that will be used for descriptors computation.
         The keypoints are in the form of relative (x, y) coordinates.
@@ -253,7 +253,7 @@ class SuperPointInterestPointDecoder(nn.Module):
             keypoints, scores = top_k_keypoints(keypoints, scores, self.max_keypoints)
 
         # Convert (y, x) to (x, y)
-        keypoints = torch.flip(keypoints, [1]).float()
+        keypoints = torch.flip(keypoints, [1]).to(scores.dtype)
 
         return keypoints, scores
 
@@ -363,7 +363,7 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
     """
     SuperPoint model. It consists of a SuperPointEncoder, a SuperPointInterestPointDecoder and a
     SuperPointDescriptorDecoder. SuperPoint was proposed in `SuperPoint: Self-Supervised Interest Point Detection and
-    Description <https://arxiv.org/abs/1712.07629>`__ by Daniel DeTone, Tomasz Malisiewicz, and Andrew Rabinovich. It
+    Description <https://huggingface.co/papers/1712.07629>`__ by Daniel DeTone, Tomasz Malisiewicz, and Andrew Rabinovich. It
     is a fully convolutional neural network that extracts keypoints and descriptors from an image. It is trained in a
     self-supervised manner, using a combination of a photometric loss and a loss based on the homographic adaptation of
     keypoints. It is made of a convolutional encoder and two decoders: one for keypoints and one for descriptors.
@@ -387,7 +387,7 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SuperPointKeypointDescriptionOutput]:
+    ) -> Union[tuple, SuperPointKeypointDescriptionOutput]:
         r"""
         Examples:
 

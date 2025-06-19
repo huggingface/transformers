@@ -19,9 +19,10 @@ import logging
 import math
 import random
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Sequence, Tuple, Union
+from typing import Any, Optional, Union
 
 import torch
 from torch import Tensor, nn
@@ -93,10 +94,10 @@ class BaseModelOutputWithAttentionMask(ModelOutput):
 
     last_hidden_state: Optional[torch.FloatTensor] = None
     attention_mask: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 def get_visual_bbox(image_size=224, patch_size=16):
@@ -350,7 +351,7 @@ class UdopLayerNorm(nn.Module):
 
     def forward(self, hidden_states):
         # Udop uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
-        # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus variance is calculated
+        # Square Layer Normalization https://huggingface.co/papers/1910.07467 thus variance is calculated
         # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
         # half-precision inputs is done in fp32
 
@@ -927,11 +928,11 @@ class RelativePositionBiasBase(nn.Module, ABC):
     def prepare_input(
         self,
         attention_mask: Optional[Tensor] = None,
-        bbox: Optional[Dict[str, Any]] = None,
+        bbox: Optional[dict[str, Any]] = None,
     ) -> Tensor:
         pass
 
-    def get_bucket(self, attention_mask: Optional[Tensor] = None, bbox: Optional[Dict[str, Any]] = None) -> Tensor:
+    def get_bucket(self, attention_mask: Optional[Tensor] = None, bbox: Optional[dict[str, Any]] = None) -> Tensor:
         relative_position = self.prepare_input(attention_mask, bbox)
         rp_bucket: Tensor = get_relative_position_bucket(
             relative_position,
@@ -951,7 +952,7 @@ class RelativePositionBiasBase(nn.Module, ABC):
 
         return relative_position.to(torch.long)
 
-    def forward(self, attention_mask: Optional[Tensor] = None, bbox: Optional[Dict[str, Any]] = None) -> Tensor:
+    def forward(self, attention_mask: Optional[Tensor] = None, bbox: Optional[dict[str, Any]] = None) -> Tensor:
         # re-using pretrained model with subsequent addition of prefix_bucket
         if self.expand and self.prefix_bucket:
             new_bias = nn.Embedding(self.relative_attention_num_buckets + 2, self.num_heads)
@@ -988,7 +989,7 @@ class RelativePositionBias1D(RelativePositionBiasBase):
         """
         super().__init__(scaling_factor=scaling_factor, max_distance=max_distance, **kwargs)
 
-    def prepare_input(self, attention_mask: Optional[Tensor] = None, bbox: Optional[Dict[str, Any]] = None) -> Tensor:
+    def prepare_input(self, attention_mask: Optional[Tensor] = None, bbox: Optional[dict[str, Any]] = None) -> Tensor:
         if self.scaling_factor != 1:
             raise ValueError("No need to scale 1d features")
         relative_position = self.get_relative_position(
@@ -1006,7 +1007,7 @@ class RelativePositionBiasHorizontal(RelativePositionBiasBase):
         """
         super().__init__(scaling_factor=scaling_factor, max_distance=max_distance, **kwargs)
 
-    def prepare_input(self, attention_mask: Optional[Tensor] = None, bbox: Optional[Dict[str, Any]] = None) -> Tensor:
+    def prepare_input(self, attention_mask: Optional[Tensor] = None, bbox: Optional[dict[str, Any]] = None) -> Tensor:
         if not self.scaling_factor > 1.0:
             raise ValueError("Need to scale the values of bboxes, as there are in small (0,1) range")
         if bbox is None:
@@ -1025,7 +1026,7 @@ class RelativePositionBiasVertical(RelativePositionBiasBase):
         """
         super().__init__(scaling_factor=scaling_factor, max_distance=max_distance, **kwargs)
 
-    def prepare_input(self, attention_mask: Optional[Tensor] = None, bbox: Optional[Dict[str, Any]] = None) -> Tensor:
+    def prepare_input(self, attention_mask: Optional[Tensor] = None, bbox: Optional[dict[str, Any]] = None) -> Tensor:
         if not self.scaling_factor > 1.0:
             raise ValueError("Need to scale the values of bboxes, as there are in small (0,1) range")
         if bbox is None:
@@ -1049,7 +1050,7 @@ class RelativePositionBiasAggregated(nn.Module):
         self.biases = nn.ModuleList(modules)
 
     def forward(
-        self, attention_mask: Optional[Tensor] = None, bbox: Optional[Dict[str, Any]] = None
+        self, attention_mask: Optional[Tensor] = None, bbox: Optional[dict[str, Any]] = None
     ) -> Union[float, Tensor]:
         output = 0.0
         for bias in self.biases:  # type: ignore
@@ -1218,7 +1219,7 @@ class UdopStack(UdopPreTrainedModel):
         batch_size, seq_length = input_shape
 
         if use_cache is True:
-            assert self.is_decoder, "`use_cache` can only be set to `True` if {} is used as a decoder".format(self)
+            assert self.is_decoder, f"`use_cache` can only be set to `True` if {self} is used as a decoder"
 
         # initialize past_key_values
         return_legacy_cache = False
@@ -1538,9 +1539,9 @@ class UdopModel(UdopPreTrainedModel):
         self,
         input_ids: Optional[Tensor] = None,
         attention_mask: Optional[Tensor] = None,
-        bbox: Optional[Dict[str, Any]] = None,
+        bbox: Optional[dict[str, Any]] = None,
         pixel_values: Optional[Tensor] = None,
-        visual_bbox: Optional[Dict[str, Any]] = None,
+        visual_bbox: Optional[dict[str, Any]] = None,
         decoder_input_ids: Optional[Tensor] = None,
         decoder_attention_mask: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
@@ -1555,7 +1556,7 @@ class UdopModel(UdopPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Tuple[Tensor, ...]:
+    ) -> tuple[Tensor, ...]:
         r"""
         bbox (`torch.LongTensor` of shape `({0}, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,
@@ -1743,9 +1744,9 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         self,
         input_ids: Optional[Tensor] = None,
         attention_mask: Optional[Tensor] = None,
-        bbox: Optional[Dict[str, Any]] = None,
+        bbox: Optional[dict[str, Any]] = None,
         pixel_values: Optional[Tensor] = None,
-        visual_bbox: Optional[Dict[str, Any]] = None,
+        visual_bbox: Optional[dict[str, Any]] = None,
         decoder_input_ids: Optional[Tensor] = None,
         decoder_attention_mask: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
@@ -1761,7 +1762,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         labels: Optional[Tensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Tuple[Tensor, ...]:
+    ) -> tuple[Tensor, ...]:
         r"""
         bbox (`torch.LongTensor` of shape `({0}, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,
@@ -1979,16 +1980,16 @@ class UdopEncoderModel(UdopPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[Tensor] = None,
-        bbox: Optional[Dict[str, Any]] = None,
+        bbox: Optional[dict[str, Any]] = None,
         attention_mask: Optional[Tensor] = None,
         pixel_values: Optional[Tensor] = None,
-        visual_bbox: Optional[Dict[str, Any]] = None,
+        visual_bbox: Optional[dict[str, Any]] = None,
         head_mask: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], BaseModelOutputWithAttentionMask]:
+    ) -> Union[tuple[torch.FloatTensor], BaseModelOutputWithAttentionMask]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you

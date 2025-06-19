@@ -45,7 +45,7 @@ if is_vision_available():
 
 def get_random_video(height, width, num_frames=8, return_torch=False):
     random_frame = np.random.randint(0, 256, (height, width, 3), dtype=np.uint8)
-    video = np.array(([random_frame] * num_frames))
+    video = np.array([random_frame] * num_frames)
     if return_torch:
         # move channel first
         return torch.from_numpy(video).permute(0, 3, 1, 2)
