@@ -474,7 +474,11 @@ class FSMTModelIntegrationTests(unittest.TestCase):
 
     def get_model(self, mname):
         if mname not in self.models_cache:
-            self.models_cache[mname] = FSMTForConditionalGeneration.from_pretrained(mname).to(torch_device)
+            model = FSMTForConditionalGeneration.from_pretrained(mname, use_safetensors=False)
+            with tempfile.TemporaryDirectory() as tmpdir:
+                model.save_pretrained(tmpdir)
+                self.models_cache[mname] = FSMTForConditionalGeneration.from_pretrained(tmpdir).to(torch_device)
+
             if torch_device == "cuda":
                 self.models_cache[mname].half()
         return self.models_cache[mname]
