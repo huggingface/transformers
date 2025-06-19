@@ -1344,16 +1344,18 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
         max_length = kwargs.pop("max_length", None)
         max_new_tokens = kwargs.pop("max_new_tokens", None)
 
-        if max_length is not None and max_new_tokens is not None:
-            logger.warning(
-                "`max_length` or `max_new_tokens` has been set, yet they are not supported for this model. They will be ignored."
-            )
-
         if padding_mask is not None:
             audio_tokens_mask = self.codec_model.get_audio_codes_mask(padding_mask)
 
             # TODO: @eustlb, we should have per-batch-idx values
-            max_new_tokens = audio_tokens_mask.sum(dim=-1).max()
+            max_audio_frames = audio_tokens_mask.sum(dim=-1).max()
+
+            if max_new_tokens > max_audio_frames:
+                logger.warning(
+                    f"`max_new_tokens` ({max_new_tokens}) is greater than the maximum number of audio frames ({max_audio_frames})."
+                    f"Setting `max_new_tokens` to {max_audio_frames}."
+                )
+                max_new_tokens = max_audio_frames
 
         return super().generate(
             *args,
