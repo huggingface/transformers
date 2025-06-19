@@ -22,6 +22,9 @@ rendered properly in your Markdown viewer.
 
 [SuperPoint](https://huggingface.co/papers/1712.07629) is the result of self-supervised training of a fully-convolutional network for interest point detection and description. The model is able to detect interest points that are repeatable under homographic transformations and provide a descriptor for each point. Usage on it's own is limited, but it can be used as a feature extractor for other tasks such as homography estimation and image matching.
 
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/superpoint_architecture.png"
+alt="drawing" width="500"/>
+
 You can find all the original SuperPoint checkpoints under the [Magic Leap Community](https://huggingface.co/magic-leap-community) organization.
 
 > [!TIP]
@@ -29,8 +32,6 @@ You can find all the original SuperPoint checkpoints under the [Magic Leap Commu
 >
 > Click on the SuperPoint models in the right sidebar for more examples of how to apply SuperPoint to different computer vision tasks.
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/superpoint_architecture.png"
-alt="drawing" width="500"/>
 
 
 The example below demonstrates how to detect interest points in an image with the [`AutoModel`] class.
@@ -61,74 +62,63 @@ processed_outputs = processor.post_process_keypoint_detection(outputs, [image_si
 </hfoption>
 </hfoptions>
 
-
-
 ## Notes
 
 - SuperPoint outputs a dynamic number of keypoints per image, which makes it suitable for tasks requiring variable-length feature representations.
 
-```py
-from transformers import AutoImageProcessor, SuperPointForKeypointDetection
-import torch
-from PIL import Image
-import requests
-processor = AutoImageProcessor.from_pretrained("magic-leap-community/superpoint")
-model = SuperPointForKeypointDetection.from_pretrained("magic-leap-community/superpoint")
-url_image_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
-image_1 = Image.open(requests.get(url_image_1, stream=True).raw)
-url_image_2 = "http://images.cocodataset.org/test-stuff2017/000000000568.jpg"
-image_2 = Image.open(requests.get(url_image_2, stream=True).raw)
-images = [image_1, image_2]
-inputs = processor(images, return_tensors="pt")
-# Example of handling dynamic keypoint output
-outputs = model(**inputs)
-keypoints = outputs.keypoints  # Shape varies per image
-scores = outputs.scores        # Confidence scores for each keypoint
-descriptors = outputs.descriptors  # 256-dimensional descriptors
-mask = outputs.mask # Value of 1 corresponds to a keypoint detection
-```
+    ```py
+    from transformers import AutoImageProcessor, SuperPointForKeypointDetection
+    import torch
+    from PIL import Image
+    import requests
+    processor = AutoImageProcessor.from_pretrained("magic-leap-community/superpoint")
+    model = SuperPointForKeypointDetection.from_pretrained("magic-leap-community/superpoint")
+    url_image_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    image_1 = Image.open(requests.get(url_image_1, stream=True).raw)
+    url_image_2 = "http://images.cocodataset.org/test-stuff2017/000000000568.jpg"
+    image_2 = Image.open(requests.get(url_image_2, stream=True).raw)
+    images = [image_1, image_2]
+    inputs = processor(images, return_tensors="pt")
+    # Example of handling dynamic keypoint output
+    outputs = model(**inputs)
+    keypoints = outputs.keypoints  # Shape varies per image
+    scores = outputs.scores        # Confidence scores for each keypoint
+    descriptors = outputs.descriptors  # 256-dimensional descriptors
+    mask = outputs.mask # Value of 1 corresponds to a keypoint detection
+    ```
 
 - The model provides both keypoint coordinates and their corresponding descriptors (256-dimensional vectors) in a single forward pass.
 - For batch processing with multiple images, you need to use the mask attribute to retrieve the respective information for each image. You can use the `post_process_keypoint_detection` from the `SuperPointImageProcessor` to retrieve the each image information.
 
-```py
-# Batch processing example
-images = [image1, image2, image3]
-inputs = processor(images, return_tensors="pt")
-outputs = model(**inputs)
-image_sizes = [(img.height, img.width) for img in images]
-processed_outputs = processor.post_process_keypoint_detection(outputs, image_sizes)
-```
+    ```py
+    # Batch processing example
+    images = [image1, image2, image3]
+    inputs = processor(images, return_tensors="pt")
+    outputs = model(**inputs)
+    image_sizes = [(img.height, img.width) for img in images]
+    processed_outputs = processor.post_process_keypoint_detection(outputs, image_sizes)
+    ```
 
 - You can then print the keypoints on the image of your choice to visualize the result:
-```py
-import matplotlib.pyplot as plt
-plt.axis("off")
-plt.imshow(image_1)
-plt.scatter(
-    outputs[0]["keypoints"][:, 0],
-    outputs[0]["keypoints"][:, 1],
-    c=outputs[0]["scores"] * 100,
-    s=outputs[0]["scores"] * 50,
-    alpha=0.8
-)
-plt.savefig(f"output_image.png")
-```
+    ```py
+    import matplotlib.pyplot as plt
+    plt.axis("off")
+    plt.imshow(image_1)
+    plt.scatter(
+        outputs[0]["keypoints"][:, 0],
+        outputs[0]["keypoints"][:, 1],
+        c=outputs[0]["scores"] * 100,
+        s=outputs[0]["scores"] * 50,
+        alpha=0.8
+    )
+    plt.savefig(f"output_image.png")
+    ```
 ![image/png](https://cdn-uploads.huggingface.co/production/uploads/632885ba1558dac67c440aa8/ZtFmphEhx8tcbEQqOolyE.png)
 
 ## Resources
 
-The resources provided in the following sections consist of a list of official Hugging Face and community (indicated by 🌎) resources to help you get started with SuperPoint. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
-This model was contributed by [stevenbucaille](https://huggingface.co/stevenbucaille).
-The original code can be found [here](https://github.com/magicleap/SuperPointPretrainedNetwork).
-
-<PipelineTag pipeline="keypoint-detection"/>
-
-- [`SuperPointForKeypointDetection`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/vision) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/keypoint_detection.ipynb).
+- Refer to this [noteboook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/SuperPoint/Inference_with_SuperPoint_to_detect_interest_points_in_an_image.ipynb) for an inference and visualization example.
 - Check the [Keypoint detection task guide](../tasks/keypoint_detection) on how to use the model.
-
-
-- A notebook showcasing inference and visualization with SuperPoint can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/SuperPoint/Inference_with_SuperPoint_to_detect_interest_points_in_an_image.ipynb). 🌎
 
 ## SuperPointConfig
 
