@@ -26,6 +26,7 @@ from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutputWithNoAttention, CausalLMOutput
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import auto_docstring, logging
@@ -471,7 +472,7 @@ class RecurrentGemmaMlp(nn.Module):
         return self.down_proj(gate * self.up_proj(hidden_states))
 
 
-class RecurrentGemmaDecoderLayer(nn.Module):
+class RecurrentGemmaDecoderLayer(GradientCheckpointingLayer):
     """Griffin and Hawk's residual block."""
 
     def __init__(self, config, layer_idx):
@@ -648,12 +649,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         for i, residual_block in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-            if self.gradient_checkpointing and self.training:
-                hidden_states = self._gradient_checkpointing_func(
-                    residual_block.__call__, hidden_states, position_ids, causal_mask, cache_position, use_cache
-                )
-            else:
-                hidden_states = residual_block(hidden_states, position_ids, causal_mask, cache_position, use_cache)
+            hidden_states = residual_block(hidden_states, position_ids, causal_mask, cache_position, use_cache)
 
         hidden_states = self.final_norm(hidden_states)
 
