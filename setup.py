@@ -204,6 +204,7 @@ _deps = [
     "opentelemetry-api",
     "opentelemetry-exporter-otlp",
     "opentelemetry-sdk",
+    "mistral-common>=1.6.3",
 ]
 
 
@@ -334,6 +335,7 @@ extras["video"] = deps_list("av")
 extras["num2words"] = deps_list("num2words")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
+extras["mistral-common"] = deps_list("mistral-common")
 extras["testing"] = (
     deps_list(
         "pytest",
@@ -384,6 +386,7 @@ extras["all"] = (
     + extras["accelerate"]
     + extras["video"]
     + extras["num2words"]
+    + extras["mistral-common"]
 )
 
 

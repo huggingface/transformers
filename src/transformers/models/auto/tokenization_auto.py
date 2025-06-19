@@ -21,6 +21,8 @@ import warnings
 from collections import OrderedDict
 from typing import Any, Optional, Union
 
+from transformers.utils.import_utils import is_mistral_common_available
+
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...modeling_gguf_pytorch_utils import load_gguf_checkpoint
@@ -377,6 +379,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
                 "LlamaTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
+        ("mistral-common", ("MistralCommonTokenizer" if is_mistral_common_available() else None, None)),
         (
             "mixtral",
             (
@@ -706,8 +709,10 @@ def tokenizer_class_from_name(class_name: str) -> Union[type[Any], None]:
     for module_name, tokenizers in TOKENIZER_MAPPING_NAMES.items():
         if class_name in tokenizers:
             module_name = model_type_to_module_name(module_name)
-
-            module = importlib.import_module(f".{module_name}", "transformers.models")
+            if module_name == "mistral_common":
+                module = importlib.import_module(".tokenization_mistral_common", "transformers")
+            else:
+                module = importlib.import_module(f".{module_name}", "transformers.models")
             try:
                 return getattr(module, class_name)
             except AttributeError:
