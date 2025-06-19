@@ -361,28 +361,8 @@ def squad_convert_examples_to_features(
         is_training=not evaluate,
     )
     ```"""
-    # Defining helper methods
-    features = []
 
-    if is_torch_hpu_available():
-        squad_convert_example_to_features_init(tokenizer_for_convert=tokenizer)
-        annotate_ = partial(
-            squad_convert_example_to_features,
-            max_seq_length=max_seq_length,
-            doc_stride=doc_stride,
-            max_query_length=max_query_length,
-            padding_strategy=padding_strategy,
-            is_training=is_training,
-        )
-        features = list(
-            tqdm(
-                map(annotate_, examples),
-                total=len(examples),
-                desc="convert squad examples to features",
-                disable=not tqdm_enabled,
-            )
-        )
-    else:
+    if not is_torch_hpu_available():
         threads = min(threads, cpu_count())
         with Pool(threads, initializer=squad_convert_example_to_features_init, initargs=(tokenizer,)) as p:
             annotate_ = partial(
@@ -401,6 +381,25 @@ def squad_convert_examples_to_features(
                     disable=not tqdm_enabled,
                 )
             )
+    else:
+        # Non-parallel version for hpu https://github.com/huggingface/transformers/pull/38790#discussion_r2156470902
+        squad_convert_example_to_features_init(tokenizer_for_convert=tokenizer)
+        annotate_ = partial(
+            squad_convert_example_to_features,
+            max_seq_length=max_seq_length,
+            doc_stride=doc_stride,
+            max_query_length=max_query_length,
+            padding_strategy=padding_strategy,
+            is_training=is_training,
+        )
+        features = list(
+            tqdm(
+                map(annotate_, examples),
+                total=len(examples),
+                desc="convert squad examples to features",
+                disable=not tqdm_enabled,
+            )
+        )
 
     new_features = []
     unique_id = 1000000000
