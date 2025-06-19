@@ -1803,7 +1803,7 @@ class HybridChunkedCache(Cache):
         self.sliding_window = min(self.sliding_window, self.max_cache_len)
         self.max_batch_size = max_batch_size
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self._dtype = dtype
+        self._dtype = getattr(config, "torch_dtype", dtype)
 
         # If the attribute does not exist in the config, fallback to a simple StaticCache
         if hasattr(config, "layer_types"):
