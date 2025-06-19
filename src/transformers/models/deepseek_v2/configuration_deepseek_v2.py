@@ -5,7 +5,7 @@
 #                          modular_deepseek_v2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 # coding=utf-8
-# Copyright 2025 Baidu Inc and The HuggingFace Inc. team.
+# Copyright 2025 HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -175,8 +175,8 @@ class DeepseekV2Config(PretrainedConfig):
         kv_lora_rank=512,
         q_lora_rank=1536,
         n_group=None,
-        n_routed_experts=None,
-        n_shared_experts=None,
+        n_routed_experts=64,
+        n_shared_experts=2,
         qk_nope_head_dim=128,
         qk_rope_head_dim=64,
         routed_scaling_factor=1.0,
@@ -218,7 +218,7 @@ class DeepseekV2Config(PretrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
-        self.head_dim = head_dim if head_dim is not None else qk_rope_head_dim
+        self.head_dim = qk_rope_head_dim
         # Validate the correctness of rotary position embeddings parameters
         # BC: if there is a 'type' field, copy it it to 'rope_type'.
         if self.rope_scaling is not None and "type" in self.rope_scaling:

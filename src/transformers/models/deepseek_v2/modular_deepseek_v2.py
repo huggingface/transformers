@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2025 Baidu Inc and The HuggingFace Inc. team.
+# Copyright 2025 HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,15 +14,22 @@
 # limitations under the License.
 
 import warnings
-from typing import Callable, Optional, Tuple
+from typing import Callable, Optional
 
 import torch
 import torch.nn.functional as F
 from torch import nn
 
 from transformers.cache_utils import Cache
-from transformers.models.llama.configuration_llama import LlamaConfig
-from transformers.models.llama.modeling_llama import (
+from transformers.utils import (
+    logging,
+)
+
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...processing_utils import Unpack
+from ..llama.configuration_llama import LlamaConfig
+from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaForSequenceClassification,
@@ -32,14 +39,7 @@ from transformers.models.llama.modeling_llama import (
     LlamaRMSNorm,
     eager_attention_forward,
 )
-from transformers.utils import (
-    logging,
-)
-
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...processing_utils import Unpack
+from ..llama4.modeling_llama4 import Llama4TextRotaryEmbedding
 
 
 logger = logging.get_logger(__name__)
@@ -169,8 +169,8 @@ class DeepseekV2Config(LlamaConfig):
         kv_lora_rank=512,
         q_lora_rank=1536,
         n_group=None,
-        n_routed_experts=None,
-        n_shared_experts=None,
+        n_routed_experts=64,
+        n_shared_experts=2,
         qk_nope_head_dim=128,
         qk_rope_head_dim=64,
         routed_scaling_factor=1.0,
@@ -181,7 +181,6 @@ class DeepseekV2Config(LlamaConfig):
         num_experts_per_tok=None,
         norm_topk_prob=False,
         moe_intermediate_size=1407,
-        head_dim=None,
         **super_kwargs,
     ):
         super().__init__(**super_kwargs)
@@ -203,14 +202,14 @@ class DeepseekV2Config(LlamaConfig):
         self.num_experts_per_tok = num_experts_per_tok
         self.norm_topk_prob = norm_topk_prob
         self.moe_intermediate_size = moe_intermediate_size
-        self.head_dim = head_dim if head_dim is not None else qk_rope_head_dim
+        self.head_dim = qk_rope_head_dim
 
 
-def apply_rotary_pos_emb(
+def apply_rotary_emb(
     xq: torch.Tensor,
     xk: torch.Tensor,
     freqs_cis: torch.Tensor,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     xq_ = torch.view_as_complex(xq.float().reshape(*xq.shape[:-1], -1, 2))
     xk_ = torch.view_as_complex(xk.float().reshape(*xk.shape[:-1], -1, 2))
 
@@ -348,38 +347,15 @@ class DeepseekV2RMSNorm(LlamaRMSNorm):
     pass
 
 
-class DeepseekV2RotaryEmbedding(nn.Module):
+class DeepseekV2RotaryEmbedding(Llama4TextRotaryEmbedding):
     def __init__(self, config: DeepseekV2Config, device=None):
-        super().__init__()
+        super().__init__(config=config, device=device)
         # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
-
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.to(x.device) @ position_ids_expanded).transpose(1, 2)
-            freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # Convert to complex representation
-            freqs_cis = freqs_cis * self.attention_scaling
-
-        return freqs_cis
+        self.rope_type = (
+            config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+            if config.rope_scaling is not None
+            else "default"
+        )
 
 
 class DeepseekV2Attention(nn.Module):
@@ -389,13 +365,6 @@ class DeepseekV2Attention(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        if layer_idx is None:
-            logger.warning_once(
-                f"Instantiating {self.__class__.__name__} without passing `layer_idx` is not recommended and will "
-                "to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
-                "when creating this class."
-            )
-
         self.attention_dropout = config.attention_dropout
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
@@ -445,10 +414,10 @@ class DeepseekV2Attention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         position_ids: Optional[torch.Tensor] = None,
         **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         if "padding_mask" in kwargs:
             warnings.warn(
                 "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
@@ -470,7 +439,7 @@ class DeepseekV2Attention(nn.Module):
         k_nope, value_states = torch.split(k_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
 
         k_pe = k_pe.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
-        q_pe, k_pe = apply_rotary_pos_emb(q_pe, k_pe, position_embeddings.to(q_pe.device))
+        q_pe, k_pe = apply_rotary_emb(q_pe, k_pe, position_embeddings.to(q_pe.device))
 
         k_pe = k_pe.expand(*k_nope.shape[:-1], -1)
         query_states = torch.cat((q_nope, q_pe), dim=-1)
@@ -486,13 +455,7 @@ class DeepseekV2Attention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -534,9 +497,9 @@ class DeepseekV2DecoderLayer(LlamaDecoderLayer):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
@@ -569,8 +532,6 @@ class DeepseekV2DecoderLayer(LlamaDecoderLayer):
 
 
 class DeepseekV2PreTrainedModel(LlamaPreTrainedModel):
-    _supports_sdpa = False
-
     def _init_weights(self, module):
         if isinstance(module, DeepseekV2MoEGate):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -578,18 +539,7 @@ class DeepseekV2PreTrainedModel(LlamaPreTrainedModel):
 
 
 class DeepseekV2Model(LlamaModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`DeepseekV2DecoderLayer`]
-    Args:
-        config: DeepseekV2Config
-    """
-
-    def __init__(self, config: DeepseekV2Config):
-        super().__init__(config)
-        self.layers = nn.ModuleList(
-            [DeepseekV2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
-        self.norm = DeepseekV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+    pass
 
 
 class DeepseekV2ForCausalLM(LlamaForCausalLM):
