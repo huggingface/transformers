@@ -1010,6 +1010,26 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             self.device = self.model.device
         logger.warning(f"Device set to use {self.device}")
 
+        # Ensure the dtype chosen (possibly coming from `torch_dtype="auto"`) is actually supported on the
+        # execution device. If it is not (e.g. the model weights were loaded as bfloat16 but the target device
+        # does not have bfloat16 capabilities), silently fall back to FP32 so that users still get a working
+        # pipeline instead of a runtime error. The original dtype is preserved when possible.
+        if is_torch_available() and self.framework == "pt":
+            model_dtype = getattr(self.model, "dtype", None)
+            if model_dtype is not None and isinstance(self.device, torch.device):
+                try:
+                    # Allocation will fail fast if the dtype is not supported on the target device.
+                    _ = torch.empty(1, dtype=model_dtype, device=self.device)
+                except (TypeError, RuntimeError):
+                    logger.warning(
+                        f"torch_dtype={model_dtype} is not supported on device {self.device}. "
+                        "Falling back to torch.float32."
+                    )
+                    # Cast the model weights to fp32 and update the config so subsequent saves are correct.
+                    self.model = self.model.to(dtype=torch.float32)
+                    if hasattr(self.model, "config") and hasattr(self.model.config, "torch_dtype"):
+                        self.model.config.torch_dtype = torch.float32
+
         self.binary_output = binary_output
         # We shouldn't call `model.to()` for models loaded with accelerate as well as the case that model is already on device
         if (
