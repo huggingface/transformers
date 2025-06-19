@@ -80,10 +80,6 @@ print(f"The predicted class label is: {predicted_class_label}")
 </hfoption>
 </hfoptions>
 
-<!-- Quantization - Not applicable -->
-<!-- Attention Visualization - Not applicable for this model type -->
-
-
 ## Notes
 
 -   Checkpoint names follow the pattern `mobilenet_v1_{depth_multiplier}_{resolution}`, like `mobilenet_v1_1.0_224`. `1.0` is the depth multiplier and `224` is the image resolution.
