@@ -20,17 +20,18 @@ rendered properly in your Markdown viewer.
 
 # SuperPoint
 
-[SuperPoint](https://huggingface.co/papers/1712.07629) is the result of a self-supervised training of a fully-convolutional network for interest point detection and description. The model is able to detect interest points that are repeatable under homographic transformations and provide a descriptor for each point. The use of the model in its own is limited, but it can be used as a feature extractor for other tasks such as homography estimation, image matching, etc.
+[SuperPoint](https://huggingface.co/papers/1712.07629) is the result of self-supervised training of a fully-convolutional network for interest point detection and description. The model is able to detect interest points that are repeatable under homographic transformations and provide a descriptor for each point. Usage on it's own is limited, but it can be used as a feature extractor for other tasks such as homography estimation and image matching.
 
-You can find all the original SuperPoint checkpoints under the [SuperPoint](https://huggingface.co/magic-leap-community/superpoint) repository.
+You can find all the original SuperPoint checkpoints under the [Magic Leap Community](https://huggingface.co/magic-leap-community) organization.
 
 > [!TIP]
+> This model was contributed by [stevenbucaille](https://huggingface.co/stevenbucaille).
+>
 > Click on the SuperPoint models in the right sidebar for more examples of how to apply SuperPoint to different computer vision tasks.
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/superpoint_architecture.png"
 alt="drawing" width="500"/>
 
-<small> SuperPoint overview. Taken from the <a href="https://huggingface.co/papers/1712.07629v4">original paper.</a> </small>
 
 The example below demonstrates how to detect interest points in an image with the [`AutoModel`] class.
 <hfoptions id="usage">
@@ -100,7 +101,7 @@ processed_outputs = processor.post_process_keypoint_detection(outputs, image_siz
 ```
 
 - You can then print the keypoints on the image of your choice to visualize the result:
-```pyq
+```py
 import matplotlib.pyplot as plt
 plt.axis("off")
 plt.imshow(image_1)
@@ -126,7 +127,6 @@ The original code can be found [here](https://github.com/magicleap/SuperPointPre
 - [`SuperPointForKeypointDetection`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/vision) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/keypoint_detection.ipynb).
 - Check the [Keypoint detection task guide](../tasks/keypoint_detection) on how to use the model.
 
-**Visualization and inference**
 
 - A notebook showcasing inference and visualization with SuperPoint can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/SuperPoint/Inference_with_SuperPoint_to_detect_interest_points_in_an_image.ipynb). 🌎
 
