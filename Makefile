@@ -8,8 +8,8 @@ check_dirs := examples tests src utils
 exclude_folders :=  ""
 
 modified_only_fixup:
-	$(eval current_branch := $(shell git branch --show-current))
-		@if [ "$(current_branch)" = "main" ]; then \
+	@current_branch=$$(git branch --show-current); \
+	if [ "$$(current_branch)" = "main" ]; then \
 		echo "On main branch, running style target instead..."; \
 		$(MAKE) style; \
 	else \
