@@ -529,10 +529,8 @@ class ErnieMModel(ErnieMPreTrainedModel):
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time.")
 
         # init the default bool value
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        
+      
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)

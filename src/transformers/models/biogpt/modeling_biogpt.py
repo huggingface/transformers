@@ -315,7 +315,7 @@ class BioGptDecoderLayer(nn.Module):
             output_attentions=output_attentions,
             position_ids=position_ids,
             cache_position=cache_position,
-            **flash_attn_kwargs,
+            **kwargs,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -547,10 +547,8 @@ class BioGptModel(BioGptPreTrainedModel):
         cache_position: Optional[torch.Tensor] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        
+      
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -648,7 +646,7 @@ class BioGptModel(BioGptPreTrainedModel):
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
-                    partial(decoder_layer.__call__, **flash_attn_kwargs),
+                    partial(decoder_layer.__call__, **kwargs),
                     hidden_states,
                     causal_mask,
                     head_mask[idx] if head_mask is not None else None,
@@ -668,7 +666,7 @@ class BioGptModel(BioGptPreTrainedModel):
                     use_cache=use_cache,
                     position_ids=position_ids,
                     cache_position=cache_position,
-                    **flash_attn_kwargs,
+                    **kwargs,
                 )
 
             hidden_states = layer_outputs[0]

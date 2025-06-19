@@ -73,6 +73,7 @@ from .integrations.tensor_parallel import (
     verify_tp_plan,
 )
 from .loss.loss_utils import LOSS_MAPPING
+from .modeling_layers import GradientCheckpointingLayer
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
     apply_chunking_to_forward,
@@ -2001,6 +2002,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
     # In practice, it means that they support attention interface functions, fully pass the kwargs
     # through all modules up to the Attention layer, can slice logits with Tensor, and have a default TP plan
     _supports_attention_backend = False
+    _can_record_outputs = None
 
     @property
     def dummy_inputs(self) -> dict[str, torch.Tensor]:
@@ -2050,6 +2052,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         self._keep_in_fp32_modules = copy.copy(self.__class__._keep_in_fp32_modules)
 
         self._no_split_modules = self._no_split_modules or []
+        self._can_record_outputs = {
+            "hidden_states": (GradientCheckpointingLayer, 0),
+            "attentions": (GradientCheckpointingLayer, 1),
+        }
 
     def post_init(self):
         """

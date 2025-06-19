@@ -504,10 +504,8 @@ class TrajectoryTransformerModel(TrajectoryTransformerPreTrainedModel):
         ... )
         ```
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        
+      
 
         if past_key_values is None:
             past_key_values = tuple([None] * len(self.blocks))

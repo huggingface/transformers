@@ -113,8 +113,7 @@ class VipLlavaModel(LlavaModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         vision_feature_layers: Optional[Union[int, list[int]]] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **lm_kwargs,
@@ -124,7 +123,7 @@ class VipLlavaModel(LlavaModel):
             The vision feature layer, or the list of indexes of the layers to select
             the vision feature.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -200,8 +199,7 @@ class VipLlavaForConditionalGeneration(LlavaForConditionalGeneration):
         vision_feature_layers: Optional[Union[int, list[int]]] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
@@ -241,7 +239,7 @@ class VipLlavaForConditionalGeneration(LlavaForConditionalGeneration):
         The image features a brown and white cat sitting on a green surface, with a red ball in its
         ```"""
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )

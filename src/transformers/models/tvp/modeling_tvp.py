@@ -495,15 +495,12 @@ class TvpEncoder(nn.Module):
         hidden_states,
         attention_mask=None,
         head_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ):
         return_dict = return_dict if return_dict is not None else self.config.return_dict
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        
+      
         all_hidden_states = ()
         all_attentions = ()
 
@@ -761,8 +758,7 @@ class TvpModel(TvpPreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
     ):
@@ -864,8 +860,7 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
         attention_mask: Optional[torch.LongTensor] = None,
         labels: Optional[tuple[torch.Tensor]] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
     ):

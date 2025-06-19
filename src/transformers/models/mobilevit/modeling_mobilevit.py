@@ -691,9 +691,7 @@ class MobileViTModel(MobileViTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutputWithPoolingAndNoAttention]:
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+      
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if pixel_values is None:
@@ -967,9 +965,7 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
         >>> # logits are of shape (batch_size, num_labels, height, width)
         >>> logits = outputs.logits
         ```"""
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+      
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None and self.config.num_labels == 1:

@@ -685,8 +685,7 @@ class ViTMAEModel(ViTMAEPreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         noise: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
     ) -> Union[tuple, ViTMAEModelOutput]:
@@ -714,10 +713,8 @@ class ViTMAEModel(ViTMAEPreTrainedModel):
         >>> outputs = model(**inputs)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        
+      
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if pixel_values is None:
@@ -1047,8 +1044,7 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         noise: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
     ) -> Union[tuple, ViTMAEForPreTrainingOutput]:

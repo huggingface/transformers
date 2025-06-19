@@ -586,9 +586,7 @@ class TFSegformerMainLayer(keras.layers.Layer):
         training: bool = False,
     ) -> Union[tuple, TFBaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+      
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # When running on CPU, `keras.layers.Conv2D` doesn't support `NCHW` format.
@@ -984,9 +982,7 @@ class TFSegformerForSemanticSegmentation(TFSegformerPreTrainedModel):
         [1, 150, 128, 128]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+      
 
         if labels is not None and not self.config.num_labels > 1:
             raise ValueError("The number of labels should be greater than one")

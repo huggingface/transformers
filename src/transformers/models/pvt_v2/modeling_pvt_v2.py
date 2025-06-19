@@ -438,14 +438,11 @@ class PvtV2Model(PvtV2PreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutput]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        
+      
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         encoder_outputs = self.encoder(
@@ -492,8 +489,7 @@ class PvtV2ForImageClassification(PvtV2PreTrainedModel):
         self,
         pixel_values: Optional[torch.Tensor],
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, ImageClassifierOutput]:
         r"""
@@ -574,8 +570,7 @@ class PvtV2Backbone(PvtV2Model, BackboneMixin):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> BackboneOutput:
         r"""
@@ -603,9 +598,7 @@ class PvtV2Backbone(PvtV2Model, BackboneMixin):
         [1, 256, 7, 7]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+      
 
         outputs = self.encoder(
             pixel_values=pixel_values,

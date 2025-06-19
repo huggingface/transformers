@@ -686,8 +686,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         subsampled_output_points: Optional[dict[str, torch.Tensor]] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, PerceiverModelOutput]:
@@ -789,10 +788,8 @@ class PerceiverModel(PerceiverPreTrainedModel):
         >>> labels = torch.tensor([1])
         >>> loss = criterion(logits, labels)
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        
+      
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if self.input_preprocessor is not None:
@@ -929,8 +926,7 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
         inputs: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
         input_ids: Optional[torch.Tensor] = None,
@@ -1056,8 +1052,7 @@ class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
         inputs: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
         input_ids: Optional[torch.Tensor] = None,
@@ -1189,8 +1184,7 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
         inputs: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         labels: Optional[torch.Tensor] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
@@ -1333,8 +1327,7 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
         inputs: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
         pixel_values: Optional[torch.Tensor] = None,
@@ -1475,8 +1468,7 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
         inputs: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
         pixel_values: Optional[torch.Tensor] = None,
@@ -1634,8 +1626,7 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
         inputs: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, PerceiverClassifierOutput]:
@@ -1844,8 +1835,7 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         subsampled_output_points: Optional[dict[str, torch.Tensor]] = None,
         head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, PerceiverClassifierOutput]:

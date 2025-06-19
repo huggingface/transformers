@@ -325,8 +325,7 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
         attention_mask: Optional[Tensor] = None,
         token_type_ids: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[DPRContextEncoderOutput, tuple[Tensor, ...]]:
         r"""
@@ -367,10 +366,8 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
         >>> embeddings = model(input_ids).pooler_output
         ```"""
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        
+      
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
@@ -430,8 +427,7 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
         attention_mask: Optional[Tensor] = None,
         token_type_ids: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[DPRQuestionEncoderOutput, tuple[Tensor, ...]]:
         r"""
@@ -472,10 +468,8 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
         >>> embeddings = model(input_ids).pooler_output
         ```
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        
+      
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
@@ -535,8 +529,7 @@ class DPRReader(DPRPretrainedReader):
         input_ids: Optional[Tensor] = None,
         attention_mask: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[DPRReaderOutput, tuple[Tensor, ...]]:
         r"""
@@ -577,10 +570,8 @@ class DPRReader(DPRPretrainedReader):
         >>> relevance_logits = outputs.relevance_logits
         ```
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        
+      
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:

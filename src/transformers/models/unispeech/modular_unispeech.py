@@ -249,8 +249,7 @@ class UniSpeechModel(UniSpeechPreTrainedModel, Wav2Vec2Model):
         input_values: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         mask_time_indices: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, UniSpeechBaseModelOutput]:
         r"""
@@ -258,7 +257,7 @@ class UniSpeechModel(UniSpeechPreTrainedModel, Wav2Vec2Model):
             Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
             masked extracted features in *config.proj_codevector_dim* space.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -368,8 +367,7 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
         self,
         input_values: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, UniSpeechForPreTrainingOutput]:
         r"""

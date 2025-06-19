@@ -1902,15 +1902,12 @@ class BigBirdModel(BigBirdPreTrainedModel):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         **kwargs,  # NOOP kwargs, for now
     ) -> Union[BaseModelOutputWithPoolingAndCrossAttentions, tuple[torch.FloatTensor]]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        
+      
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if self.config.is_decoder:
@@ -2178,8 +2175,7 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.FloatTensor] = None,
         next_sentence_label: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[BigBirdForPreTrainingOutput, tuple[torch.FloatTensor]]:
         r"""
@@ -2287,8 +2283,7 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[MaskedLMOutput, tuple[torch.FloatTensor]]:
         r"""
@@ -2430,8 +2425,7 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel, GenerationMixin):
         past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[CausalLMOutputWithCrossAttentions, tuple[torch.FloatTensor]]:
@@ -2546,8 +2540,7 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[SequenceClassifierOutput, tuple[torch.FloatTensor]]:
         r"""
@@ -2665,8 +2658,7 @@ class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[MultipleChoiceModelOutput, tuple[torch.FloatTensor]]:
         r"""
@@ -2773,8 +2765,7 @@ class BigBirdForTokenClassification(BigBirdPreTrainedModel):
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[TokenClassifierOutput, tuple[torch.FloatTensor]]:
         r"""
@@ -2866,8 +2857,7 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[BigBirdForQuestionAnsweringModelOutput, tuple[torch.FloatTensor]]:
         r"""

@@ -172,10 +172,8 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+      
+        
         do_pooling = do_pooling if do_pooling is not None else self.config.do_pooling
 
         if output_attentions:
@@ -290,10 +288,8 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+      
+        
 
         if output_attentions:
             raise ValueError("Cannot set `output_attentions` for timm models.")

@@ -48,7 +48,7 @@ class AutoDocstringTest(unittest.TestCase):
     #     COOL_CLASS_DOC = """
     #     Args:
     #         input_ids (some):
-    #         flash_attn_kwargs (FlashAttentionKwrargs):
+    #         kwargs (FlashAttentionKwrargs):
     #             parameters that are completely optional and that should be passed.
     #         another_warg (something): should pass
     #         and_another_on (this time):
@@ -66,10 +66,10 @@ class AutoDocstringTest(unittest.TestCase):
     #     @auto_docstring
     #     class MyModel:
     #         @auto_docstring
-    #         def __init__(input_ids, flash_attn_kwargs=None, another_warg=True, and_another_on=1):
+    #         def __init__(input_ids, kwargs=None, another_warg=True, and_another_on=1):
     #             r"""
     #             Args:
-    #                 flash_attn_kwargs (FlashAttentionKwrargs):
+    #                 kwargs (FlashAttentionKwrargs):
     #                     parameters that are completely optional and that should be passed.
     #                 another_warg (something): should pass
     #                 and_another_on (this time):

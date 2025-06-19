@@ -684,8 +684,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[BaseModelOutput, tuple[torch.Tensor, ...]]:
         r"""
@@ -701,10 +700,8 @@ class DistilBertModel(DistilBertPreTrainedModel):
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        
+      
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
@@ -803,8 +800,7 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[MaskedLMOutput, tuple[torch.Tensor, ...]]:
         r"""
@@ -905,8 +901,7 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[SequenceClassifierOutput, tuple[torch.Tensor, ...]]:
         r"""
@@ -1012,8 +1007,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         start_positions: Optional[torch.Tensor] = None,
         end_positions: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[QuestionAnsweringModelOutput, tuple[torch.Tensor, ...]]:
         r"""
@@ -1119,8 +1113,7 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[TokenClassifierOutput, tuple[torch.Tensor, ...]]:
         r"""
@@ -1202,8 +1195,7 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[MultipleChoiceModelOutput, tuple[torch.Tensor, ...]]:
         r"""

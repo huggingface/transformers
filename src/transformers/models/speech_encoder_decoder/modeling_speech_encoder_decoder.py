@@ -329,8 +329,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         input_values: Optional[torch.FloatTensor] = None,
         input_features: Optional[torch.FloatTensor] = None,
         return_dict: Optional[bool] = None,

@@ -1159,10 +1159,8 @@ class UdopStack(UdopPreTrainedModel):
         cache_position=None,
     ):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        
+      
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # input embeddings processing
@@ -1552,8 +1550,7 @@ class UdopModel(UdopPreTrainedModel):
         decoder_head_mask: Optional[Tensor] = None,
         cross_attn_head_mask: Optional[Tensor] = None,
         use_cache=True,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> tuple[Tensor, ...]:
@@ -1757,8 +1754,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         decoder_head_mask: Optional[Tensor] = None,
         cross_attn_head_mask: Optional[Tensor] = None,
         use_cache=True,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         labels: Optional[Tensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
@@ -1986,8 +1982,7 @@ class UdopEncoderModel(UdopPreTrainedModel):
         visual_bbox: Optional[dict[str, Any]] = None,
         head_mask: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.FloatTensor], BaseModelOutputWithAttentionMask]:
         r"""
@@ -2035,10 +2030,8 @@ class UdopEncoderModel(UdopPreTrainedModel):
         >>> outputs = model(**encoding)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        
+      
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         encoder_outputs = self.encoder(

@@ -167,10 +167,8 @@ class FuyuModel(FuyuPreTrainedModel):
         image_patches_indices (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Tensor of indices of the image patches in the input_ids tensor.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        
+      
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -314,10 +312,8 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         A blue bus parked on the side of a road.
         ```"""
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        
+      
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

@@ -494,9 +494,7 @@ class FlaxResNetPreTrainedModel(FlaxPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+      
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         pixel_values = jnp.transpose(pixel_values, (0, 2, 3, 1))
@@ -539,9 +537,7 @@ class FlaxResNetModule(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ) -> FlaxBaseModelOutputWithPoolingAndNoAttention:
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+      
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         embedding_output = self.embedder(pixel_values, deterministic=deterministic)

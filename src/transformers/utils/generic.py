@@ -31,6 +31,7 @@ from typing import Any, Callable, ContextManager, Optional, TypedDict
 import numpy as np
 from packaging import version
 
+from ..utils import logging
 from .import_utils import (
     get_torch_version,
     is_flax_available,
@@ -41,9 +42,12 @@ from .import_utils import (
 )
 
 
+logger = logging.get_logger(__name__)
+
 if is_torch_available():
     # required for @can_return_tuple decorator to work with torchdynamo
     import torch  # noqa: F401
+    from torch._dynamo import is_compiling
 
 
 class cached_property(property):
@@ -926,29 +930,103 @@ def can_return_tuple(func):
 
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        is_requested_to_return_tuple = kwargs.pop("return_dict", True) is False
-        is_configured_to_return_tuple = self.config.use_return_dict is False if hasattr(self, "config") else False
+        if "return_dict" in kwargs:
+            return_dict = kwargs.get("return_dict", self.config.use_return_dict)
+            kwargs["return_dict"] = True
+        output = func(self, *args, **kwargs)
 
-        # The following allows to convert output to tuple ONLY on top level forward call,
-        # while internal modules of the model will return Output objects
-        # to be able to use name-based attribute access in modeling code.
-
-        # We will check if we are on top level module, if so, turn off to tuple conversion for all
-        # underling calls.
-        is_top_level_module = getattr(self, "_is_top_level_module", True)
-        if is_configured_to_return_tuple and is_top_level_module:
-            set_attribute_for_modules(self, "_is_top_level_module", False)
-
-        try:
-            output = func(self, *args, **kwargs)
-            if is_requested_to_return_tuple or (is_configured_to_return_tuple and is_top_level_module):
-                output = output.to_tuple()
-        finally:
-            # Remove the flag after the model forward call is finished.
-            if is_configured_to_return_tuple and is_top_level_module:
-                del_attribute_from_modules(self, "_is_top_level_module")
-
+        if "return_dict" in kwargs and return_dict is False:
+            output = output.to_tuple()
         return output
+
+    return wrapper
+
+
+def register_hook_if_needed(layer, capture_outputs):
+    if is_compiling():
+        pass
+        # TorchDynamo is tracing — wrap in disable context
+    else:
+        # Eager mode — no need to disable
+        return layer.register_forward_hook(capture_outputs)
+
+
+def check_model_inputs(func):
+    """
+    Decorator to check if the model inputs are valid before calling the function.
+    It raises a ValueError if the inputs are not valid.
+    """
+
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        print(kwargs)
+        output_attentions = kwargs.get("output_attentions", self.config.output_attentions)
+        output_hidden_states = kwargs.get("output_hidden_states", self.config.output_hidden_states)
+        use_cache = kwargs.get("use_cache", self.config.use_cache)
+        return_dict = kwargs.pop("return_dict", self.config.use_return_dict)
+
+        # Safely extract common config-backed flags
+        kwargs.setdefault("output_attentions", output_attentions)
+        kwargs.setdefault("output_hidden_states", output_hidden_states)
+        kwargs.setdefault("use_cache", use_cache)
+        kwargs["return_dict"] = kwargs.pop("return_dict", return_dict)
+
+        # Use inspect to bind args/kwargs to parameter names
+        sig = inspect.signature(func)
+        bound = sig.bind_partial(self, *args, **kwargs)
+        bound.apply_defaults()
+        all_args = bound.arguments
+
+        # Extract input_ids and inputs_embeds more robustly
+        input_ids = all_args.get("input_ids", None)
+        inputs_embeds = all_args.get("inputs_embeds", None)
+
+        use_cache = kwargs["use_cache"]
+        past_key_values = kwargs.get("past_key_values", None)
+        hooks = []
+        collected_attentions = []
+        collected_hidden_states = []
+        if output_attentions or output_hidden_states:
+
+            def output_hidden_and_attention(module, inp, out):
+                if output_hidden_states:
+                    collected_hidden_states.append(out[0])
+                if output_attentions:
+                    collected_attentions.append(out[1])
+
+        def make_capture_fn(key, index):
+            def capture_fn(module, input, output):
+                collected[key].append(output[index])
+
+            return capture_fn
+
+        if any(capture_flags.values()):
+            for _, layer in self.named_modules():
+                for key, (cls, idx) in self._can_record_outputs.items():
+                    if capture_flags.get(key, False) and isinstance(layer, cls):
+                        hook_fn = make_capture_fn(key, idx)
+                        hooks.append(register_hook_if_needed(layer, hook_fn))
+
+        outputs = func(self, *args, **kwargs)
+        for h in hooks:
+            if h is not None:
+                h.remove()
+
+        # Insert collected outputs
+        for key in collected:
+            # Optional: append a final model-level output like `last_hidden_state` for hidden_states
+            # if needed. You can customize this as per key semantics.
+            outputs[key] = tuple(collected[key]) if collected[key] else None
+
+        # Fill missing keys with None if not using return_dict
+        if return_dict is False:
+            for key in recordable_keys:
+                if key not in outputs:
+                    outputs[key] = None
+
+        if return_dict is False:
+            outputs = outputs.to_tuple()
+        return outputs
 
     return wrapper
 

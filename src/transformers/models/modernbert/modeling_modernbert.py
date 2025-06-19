@@ -810,10 +810,8 @@ class ModernBertModel(ModernBertPreTrainedModel):
         seq_len (`int`, *optional*):
             Sequence length of the input sequences including padding tokens. Used to pad the output tensors.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        
+      
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):

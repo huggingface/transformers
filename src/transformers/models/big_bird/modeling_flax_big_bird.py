@@ -1735,9 +1735,7 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
         past_key_values: Optional[dict] = None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+      
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # init input tensors if not passed
@@ -2451,9 +2449,7 @@ class FlaxBigBirdForQuestionAnswering(FlaxBigBirdPreTrainedModel):
         return_dict: Optional[bool] = None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+      
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if position_ids is None:
