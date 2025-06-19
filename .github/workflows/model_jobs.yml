@@ -47,7 +47,7 @@ jobs:
       max-parallel: 8
       fail-fast: false
       matrix:
-        machine_type: '${{ fromJson(inputs.runner_map)[matrix.folders] }}'
+        machine_type: ${{ fromJson(inputs.runner_map)[matrix.folders] }}
         folders: ${{ fromJson(inputs.folder_slices)[inputs.slice_id] }}
     runs-on:
       group: '${{ inputs.machine_type }}'
