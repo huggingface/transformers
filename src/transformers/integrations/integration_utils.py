@@ -1071,6 +1071,7 @@ class TrackioCallback(TrainerCallback):
 
             self._trackio.init(
                 project=os.getenv("WANDB_PROJECT", "huggingface"),
+                space_id="trl-lib/trackio",
                 **init_args,
             )
 
