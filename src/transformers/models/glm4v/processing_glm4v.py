@@ -203,9 +203,9 @@ class Glm4vProcessor(ProcessorMixin):
         """
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
         Args:
-            image_sizes (`List[List[int]]`, *optional*):
+            image_sizes (`list[list[int]]`, *optional*):
                 The input sizes formatted as (height, width) per each image.
-            video_sizes (`List[List[int]]`, *optional*):
+            video_sizes (`list[list[int]]`, *optional*):
                 The input sizes formatted as (num_frames, height, width) per each video.
         Returns:
             `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
@@ -269,7 +269,7 @@ class Glm4vProcessor(ProcessorMixin):
                 Additional arguments to be passed to the tokenizer's `batch_decode method`.
 
         Returns:
-            `List[str]`: The decoded text.
+            `list[str]`: The decoded text.
         """
         return self.tokenizer.batch_decode(
             generated_outputs,
