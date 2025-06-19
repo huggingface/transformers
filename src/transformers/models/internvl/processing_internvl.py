@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -156,7 +156,7 @@ class InternVLProcessor(ProcessorMixin):
     def __call__(
         self,
         images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
         audio=None,
         videos: Optional[VideoInput] = None,
         **kwargs: Unpack[InternVLProcessorKwargs],
@@ -169,14 +169,14 @@ class InternVLProcessor(ProcessorMixin):
         GotOcr2ImageProcessor's [`~GotOcr2ImageProcessor.__call__`] if `images` is not `None`.
 
         Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            videos (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            videos (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of videos to be prepared. Each video can be a 4D NumPy array or PyTorch
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
@@ -223,12 +223,15 @@ class InternVLProcessor(ProcessorMixin):
             image_num_patches_indices = np.cumsum(image_num_patches)
         if videos is not None:
             videos = make_batched_videos(videos)
-            num_frames_per_video = [len(video) for video in videos]
-            video_patch_indices = np.cumsum(num_frames_per_video)
             video_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
+            video_pixel_values = video_inputs.pop("pixel_values_videos")
+
+            # Obtain per frame information first and then flatten to (BS * T, ...)
+            num_frames_per_video = [len(video) for video in video_pixel_values]
             video_num_patches = [1 for frames in num_frames_per_video for _ in range(frames)]
-            video_pixel_values = video_inputs.pop("pixel_values_videos").flatten(0, 1)
+            video_patch_indices = np.cumsum(num_frames_per_video)
             video_num_patches_indices = np.cumsum(video_num_patches)
+            video_pixel_values = video_pixel_values.flatten(0, 1)
 
         if images is not None or videos is not None:
             text, image_video_patches, image_index, video_index = self._insert_media_placeholders(
@@ -267,7 +270,7 @@ class InternVLProcessor(ProcessorMixin):
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
 
         Args:
-            image_sizes (`List[List[int]]`, *optional*):
+            image_sizes (`list[list[int]]`, *optional*):
                 The input sizes formatted as (height, width) per each image.
 
         Returns:

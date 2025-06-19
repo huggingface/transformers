@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 A HGNet-V2 (High Performance GPU Net) image classification model.
-HGNet arhtictecture was proposed in [HGNET: A Hierarchical Feature Guided Network for Occupancy Flow Field Prediction](https://arxiv.org/abs/2407.01097) by
+HGNet arhtictecture was proposed in [HGNET: A Hierarchical Feature Guided Network for Occupancy Flow Field Prediction](https://huggingface.co/papers/2407.01097) by
 Zhan Chen, Chen Tang, Lu Xiong
 
 The abstract from the HGNET paper is the following:
