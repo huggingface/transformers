@@ -168,7 +168,7 @@ def prepare_padding_mask(
     """
     local_padding_mask = attention_mask
     if attention_mask is not None:
-        # Pad it if necesary
+        # Pad it if necessary
         if (padding_length := kv_length + kv_offset - attention_mask.shape[-1]) > 0:
             local_padding_mask = torch.nn.functional.pad(attention_mask, (0, padding_length))
         # For flex, we should not slice them, only use an offset
@@ -490,7 +490,7 @@ def flash_attention_mask(
     **kwargs,
 ):
     """
-    Create the attention mask necesary to use FA2. Since FA2 is un-padded by definition, here we simply return
+    Create the attention mask necessary to use FA2. Since FA2 is un-padded by definition, here we simply return
     `None` if the mask is fully causal, or we return the 2D mask which will then be used to extract the seq_lens.
     We just slice it in case of sliding window.
 
