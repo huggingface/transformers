@@ -2785,14 +2785,7 @@ class OneFormerPreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.value_proj.bias.data, 0.0)
             nn.init.xavier_uniform_(module.output_proj.weight.data)
             nn.init.constant_(module.output_proj.bias.data, 0.0)
-        elif isinstance(module, OneFormerPixelDecoderEncoderOnly):
-            for p in module.parameters():
-                if p.dim() > 1:
-                    nn.init.xavier_uniform_(p)
         elif isinstance(module, OneFormerPixelDecoder):
-            for p in module.parameters():
-                if p.dim() > 1:
-                    nn.init.xavier_uniform_(p)
             nn.init.normal_(module.level_embed, std=0)
         elif isinstance(module, OneFormerTransformerDecoderSelfAttentionLayer):
             for p in module.parameters():
@@ -2810,21 +2803,12 @@ class OneFormerPreTrainedModel(PreTrainedModel):
             for p in module.parameters():
                 if p.dim() > 1:
                     nn.init.xavier_uniform_(p, gain=xavier_std)
-        elif isinstance(module, OneFormerPixelLevelModule):
-            for submodule in module.modules():
-                if isinstance(submodule, (nn.Conv2d, nn.Linear)):
-                    submodule.weight.data.normal_(mean=0.0, std=std)
-                    if submodule.bias is not None:
-                        submodule.bias.data.zero_()
         elif isinstance(module, OneFormerTextContextDecoder):
             for submodule in module.modules():
                 if isinstance(submodule, nn.Linear):
                     nn.init.trunc_normal_(submodule.weight, std=0.02)
                     if isinstance(submodule, nn.Linear) and submodule.bias is not None:
                         nn.init.constant_(submodule.bias, 0)
-                elif isinstance(submodule, nn.LayerNorm):
-                    nn.init.constant_(submodule.bias, 0)
-                    nn.init.constant_(submodule.weight, 1.0)
         elif isinstance(module, OneFormerTextTransformer):
             proj_std = (module.width**-0.5) * ((2 * module.num_layers) ** -0.5)
             attn_std = module.width**-0.5
@@ -2840,16 +2824,11 @@ class OneFormerPreTrainedModel(PreTrainedModel):
         if hasattr(module, "reference_points"):
             nn.init.xavier_uniform_(module.reference_points.weight.data, gain=1.0)
             nn.init.constant_(module.reference_points.bias.data, 0.0)
-        elif isinstance(module, OneFormerTaskModel):
+        elif isinstance(module, OneFormerMLPPredictionHead):
             for submodule in module.modules():
-                if isinstance(module, OneFormerMLPPredictionHead):
-                    for submodule in module.modules():
-                        if isinstance(submodule, nn.Linear):
-                            nn.init.xavier_uniform_(submodule.weight, gain=xavier_std)
-                            nn.init.constant_(submodule.bias, 0)
-                        elif isinstance(module, nn.LayerNorm):
-                            module.bias.data.zero_()
-                            module.weight.data.fill_(1.0)
+                if isinstance(submodule, nn.Linear):
+                    nn.init.xavier_uniform_(submodule.weight, gain=xavier_std)
+                    nn.init.constant_(submodule.bias, 0)
         elif isinstance(module, nn.MultiheadAttention):
             module.in_proj_weight.data.normal_(mean=0.0, std=std)
             module.in_proj_bias.data.zero_()
@@ -2857,10 +2836,15 @@ class OneFormerPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, OneFormerLoss):
+            module.logit_scale.data.fill_(np.log(1 / self.config.contrastive_temperature))
 
 
 @auto_docstring
