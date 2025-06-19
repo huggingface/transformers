@@ -1494,7 +1494,7 @@ if __name__ == "__main__":
         other_ci_artifacts=other_ci_artifacts,
     )
 
-    # send report only if there is any failure (for push CI)
-    if message.n_failures or (ci_event != "push" and not ci_event.startswith("Push CI (AMD)")):
-        message.post()
-        message.post_reply()
+    # # send report only if there is any failure (for push CI)
+    # if message.n_failures or (ci_event != "push" and not ci_event.startswith("Push CI (AMD)")):
+    #     message.post()
+    #     message.post_reply()

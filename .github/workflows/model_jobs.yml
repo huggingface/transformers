@@ -15,6 +15,10 @@ on:
       runner:
         required: true
         type: string
+      runner_map:
+        required: false
+        default: "{'models/vit': ['aws-g4dn-4xlarge-cache', 'aws-g4dn-12xlarge-cache'], 'models/clip': ['aws-g5-4xlarge-cache', 'aws-g5-12xlarge-cache']}"
+        type: string
       docker:
         required: true
         type: string
@@ -45,7 +49,7 @@ jobs:
       matrix:
         folders: ${{ fromJson(inputs.folder_slices)[inputs.slice_id] }}
     runs-on:
-      group: '${{ inputs.machine_type }}'
+      group: '${{ fromJson(inputs.runner_map)[matrix.folders] }}'
     container:
       image: ${{ inputs.docker }}
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
