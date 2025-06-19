@@ -254,7 +254,6 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
 
             # TODO: @eustlb, we should have per-batch-idx values
             max_new_tokens = audio_tokens_mask.sum(dim=-1).max()
-            max_new_tokens += self.config.delay_in_tokens
 
         return GenerationMixin.generate(
             self,
