@@ -77,6 +77,11 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
     def __init__(self, config):
         super().__init__(config)
         self.codec_model = AutoModel.from_config(config.codec_config)
+        
+        # we are in an edge case where for the codec_model self.can_generate is False, setting self.codec_model.generation_config to None
+        # yet the codec_model needs a generation config to initalize it's cache for streaming inference
+        # we therefore initialize a generation config for the codec model
+        self.codec_model.generation_config = GenerationConfig.from_model_config(config.codec_config)
 
     def _prepare_generation_config(self, *args, **kwargs):
         generation_config, model_kwargs = GenerationMixin._prepare_generation_config(*args, **kwargs)
@@ -210,11 +215,6 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
         else:
             model = PreTrainedModel.from_pretrained(*args, **kwargs)
 
-        # we are in an edge case where for the codec_model self.can_generate is False, setting self.codec_model.generation_config to None
-        # yet the codec_model needs a generation config to initalize it's cache for streaming inference
-        # we therefore initialize a generation config for the codec model
-        model.codec_model.generation_config = GenerationConfig()
-
         # copy depth decoder generation conf attr to the depth decoder generation config
         prefix = "codec_"
         prefix_len = len(prefix)
@@ -237,11 +237,6 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
 
     # TODO: @eustlb, this should be standardized
     def save_pretrained(self, *args, **kwargs):
-        # we are in an edge case where for the codec_model self.can_generate is False, setting self.codec_model.generation_config to None
-        # yet the codec_model needs a generation config to initalize it's cache for streaming inference
-        # we therefore initialize a generation config for the codec model
-        self.codec_model.generation_config = GenerationConfig()
-
         prefix = "codec_"
         codec_model_attrs = self.codec_model.generation_config.to_diff_dict()
         codec_model_attrs.pop("transformers_version", None)
