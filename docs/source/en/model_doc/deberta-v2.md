@@ -24,13 +24,15 @@ rendered properly in your Markdown viewer.
 
 # DeBERTa-v2
 
-[DeBERTa-v2](https://huggingface.co/papers/2006.03654) is an advanced language model that builds on the original DeBERTa architecture, which itself is an evolution of BERT and RoBERTa. What makes DeBERTa-v2 special is its unique way of handling the meaning and position of words separately, using a disentangled attention mechanism—this helps it better understand context and relationships in language. The v2 version introduces a new, larger vocabulary, a sentencepiece-based tokenizer, nGram Induced Input Encoding (nGiE) for better local dependency learning, and more efficient parameter sharing in the attention layers. It also comes in larger sizes (900M and 1.5B parameters), which means it can tackle even more complex language tasks with higher accuracy.
+[DeBERTa-v2](https://huggingface.co/papers/2006.03654) improves on the original [DeBERTa](./deberta) architecture by using a SentencePiece-based tokenizer and a new vocabulary size of 128K. It also adds an additional convolutional layer within the first transformer layer to better learn local dependencies of input tokens. Finally, the position projection and content projection matrices are shared in the attention layer to reduce the number of parameters.
 
-You can find all the original [DeBERTa-v2] checkpoints under the [DeBERTa-v2](https://huggingface.co/microsoft?search_models=deberta-v2) collection.
+You can find all the original [DeBERTa-v2] checkpoints under the [Microsoft](https://huggingface.co/microsoft?search_models=deberta-v2) organization.
 
 
 > [!TIP]
-> Click on the [DeBERTa-v2] models in the right sidebar for more examples of how to apply [DeBERTa-v2] to different text classification, token classification, question answering, and multiple choice tasks.
+> This model was contributed by [Pengcheng He](https://huggingface.co/DeBERTa).
+>
+> Click on the [DeBERTa-v2] models in the right sidebar for more examples of how to apply [DeBERTa-v2] to different language tasks.
 
 The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
 
@@ -44,7 +46,7 @@ from transformers import pipeline
 # Example: Text classification with DeBERTa-v2
 classifier = pipeline(
     task="text-classification",
-    model="microsoft/deberta-v2-xlarge",
+    model="microsoft/deberta-v2-xlarge-mnli",
     device=0,
     torch_dtype=torch.float16
 )
@@ -56,41 +58,41 @@ print(result)
 <hfoption id="AutoModel">
 
 ```py
-from transformers import AutoTokenizer, AutoModel
+import torch
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
-tokenizer = AutoTokenizer.from_pretrained("microsoft/deberta-v2-xlarge")
-model = AutoModel.from_pretrained(
-    pretrained_model_name_or_path="microsoft/deberta-v2-xlarge",
-    device_map=None
+tokenizer = AutoTokenizer.from_pretrained(
+    "microsoft/deberta-v2-xlarge-mnli"
+)
+model = AutoModelForSequenceClassification.from_pretrained(
+    "microsoft/deberta-v2-xlarge-mnli",
+    torch_dtype=torch.float16,
+    device_map="auto"
 )
 
-inputs = tokenizer("DeBERTa-v2 is great at understanding context!", return_tensors="pt")
+inputs = tokenizer("DeBERTa-v2 is great at understanding context!", return_tensors="pt").to("cuda")
 outputs = model(**inputs)
-print(outputs.last_hidden_state)
+
+logits = outputs.logits
+predicted_class_id = logits.argmax().item()
+predicted_label = model.config.id2label[predicted_class_id]
+print(f"Predicted label: {predicted_label}")
 
 ```
 
 </hfoption>
 
-<hfoption id="transformers-cli">
+<hfoption id="transformers-CLI">
 
 ```bash
-echo -e "Plants create [MASK] through a process known as photosynthesis." | transformers-cli run --task fill-mask --model microsoft/deberta-v2-xlarge --device 0
+echo -e "DeBERTa-v2 is great at understanding context!" | transformers-cli run --task fill-mask --model microsoft/deberta-v2-xlarge-mnli --device 0
 ```
 </hfoption>
 </hfoptions>
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
-The example below uses [bitsandbytes quantization](https://huggingface.co/docs/transformers/main/en/main_classes/quantization) to only quantize the weights to 8-bit.
-
-## Notes
-
-- DeBERTa-v2 introduces a sentencepiece-based tokenizer and a larger vocabulary (128K tokens), improving its ability to handle diverse text.
-- The nGiE (nGram Induced Input Encoding) layer helps the model better capture local dependencies in text.
-- Parameter sharing in the attention layer reduces model size without sacrificing performance.
-- Relative position encoding uses log buckets, similar to T5, for more efficient handling of long sequences.
-- Larger model sizes (900M and 1.5B parameters) are available, providing improved performance on downstream tasks but requiring significantly more computational resources.
+The example below uses [bitsandbytes quantization](../quantization/bitsandbytes) to only quantize the weights to 4-bit.
 
 ## Resources
 
