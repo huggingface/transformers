@@ -5,7 +5,7 @@
 #                          modular_molmo.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 # coding=utf-8
-# Copyright 2024 HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -76,7 +76,6 @@ class MolmoVisionConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-
     model_type = "molmo_vision_model"
     base_config_key = "vision_config"
 
@@ -236,7 +235,7 @@ class MolmoTextConfig(PretrainedConfig):
         num_hidden_layers (`int`, *optional*, defaults to 28):
             Number of hidden layers in the Transformer encoder.
         head_dim (`int`, *optional*, defaults to 128):
-            The poolinng attention head dimension.
+            The pooling attention head dimension.
         vocab_size (`int`, *optional*, defaults to 152192):
             Vocabulary size of the Molmo model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`MolmoTextModel`]

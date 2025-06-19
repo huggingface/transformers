@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -169,7 +169,7 @@ class MolmoPoolingConfig(PretrainedConfig):
         num_key_value_heads (`int`, *optional*, defaults to 16):
             Number of kv heads for each attention layer in the Transformer pooler.
         head_dim (`int`, *optional*, defaults to 64):
-            The poolinng attention head dimension.
+            The pooling attention head dimension.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -275,7 +275,7 @@ class MolmoTextConfig(CohereConfig):
         num_hidden_layers (`int`, *optional*, defaults to 28):
             Number of hidden layers in the Transformer encoder.
         head_dim (`int`, *optional*, defaults to 128):
-            The poolinng attention head dimension.
+            The pooling attention head dimension.
         vocab_size (`int`, *optional*, defaults to 152192):
             Vocabulary size of the Molmo model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`MolmoTextModel`]
@@ -421,7 +421,7 @@ class MolmoConfig(PretrainedConfig):
             The config object or dictionary of the text backbone.
         pooling_config (`Union[AutoConfig, dict]`, *optional*, defaults to `MolmoPoolingConfig`):
             The config object or dictionary of the adapter backbone.
-        image_token_index (`int`, *optional*, defaults to 152069):
+        image_token_id (`int`, *optional*, defaults to 152069):
             The image token index to encode the image prompt.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -467,14 +467,14 @@ class MolmoConfig(PretrainedConfig):
         vision_config=None,
         text_config=None,
         pooling_config=None,
-        image_token_index=152069,
+        image_token_id=152069,
         initializer_range=0.02,
         vision_feature_select_strategy="default",
         vision_feature_layers=(-2, -9),
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.image_token_index = image_token_index
+        self.image_token_id = image_token_id
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.vision_feature_layers = vision_feature_layers
         if vision_config is None:
@@ -1214,7 +1214,7 @@ class MolmoModel(LlavaModel):
 
     def __init__(self, config: MolmoConfig):
         super().__init__(config)
-        self.image_token_index = config.image_token_index  # mostly for testing purposes
+        self.image_token_id = config.image_token_id  # mostly for testing purposes
         self.adapter = MolmoAdapterModel._from_config(config.pooling_config)
 
         self.language_model = MolmoTextModel._from_config(config.text_config)
