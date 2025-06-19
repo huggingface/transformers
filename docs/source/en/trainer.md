@@ -187,14 +187,17 @@ from torch import nn
 from transformers import Trainer
 
 class CustomTrainer(Trainer):
-    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+    def compute_losss(self, model: nn.Module, inputs: dict[str, Union[torch.Tensor, Any]], return_outputs: bool = False num_items_in_batch: Optional[torch.Tensor] = None):
         labels = inputs.pop("labels")
         # forward pass
         outputs = model(**inputs)
         logits = outputs.get("logits")
         # compute custom loss for 3 labels with different weights
-        loss_fct = nn.CrossEntropyLoss(weight=torch.tensor([1.0, 2.0, 3.0], device=model.device))
+        reduction = "mean" if num_items_in_batch is not None else "sum"
+        loss_fct = nn.CrossEntropyLoss(weight=torch.tensor([1.0, 2.0, 3.0], device=model.device, reduction=reduction))
         loss = loss_fct(logits.view(-1, self.model.config.num_labels), labels.view(-1))
+        if num_items_in_batch is not None:
+            loss = loss / num_items_in_batch
         return (loss, outputs) if return_outputs else loss
 ```
 
@@ -372,14 +375,14 @@ accelerate launch \
 
 ### torch.compile
 
-[torch.compile](./perf_torch_compile) can significantly speed up training and reduce computational overhead. Configure your torch.compile settings in [`TrainingArguments`]. Set `torch.compile` to `True`, and select a backend and compile mode.
+[torch.compile](./perf_torch_compile) can significantly speed up training and reduce computational overhead. Configure your torch.compile settings in [`TrainingArguments`]. Set `torch_compile` to `True`, and select a backend and compile mode.
 
 ```py
 from transformers import TrainingArguments
 
 training_args = TrainingArguments(
-    torch.compile=True,
-    torch.compile_backend="inductor",
+    torch_compile=True,
+    torch_compile_backend="inductor",
     torch_compile_mode="default",
     ...,
 )
@@ -389,15 +392,15 @@ training_args = TrainingArguments(
 
 [Gradient Low-Rank Projection (GaLore)](https://hf.co/papers/2403.03507) significantly reduces memory usage when training large language models (LLMs). One of GaLores key benefits is *full-parameter* learning, unlike low-rank adaptation methods like [LoRA](https://hf.co/papers/2106.09685), which produces better model performance.
 
-Install the [GaLore](https://github.com/jiaweizzhao/GaLore) library, [TRL](https://hf.co/docs/trl/index), and [Datasets](https://hf.co/docs/datasets/index).
+Install the [GaLore](https://github.com/jiaweizzhao/GaLore) and [TRL](https://hf.co/docs/trl/index) libraries.
 
 ```bash
-pip install galore-torch trl datasets
+pip install galore-torch trl
 ```
 
-Pick a GaLore optimizer (`"galore_adamw"`, `"galore_adafactor"`, `"galore_adamw_8bit`") and pass it to the `optim` parameter in [`TrainingArguments`]. Use the `optim_target_modules` parameter to specify which modules to adapt (can be a list of strings, regex, or a full path).
+Pick a GaLore optimizer (`"galore_adamw"`, `"galore_adafactor"`, `"galore_adamw_8bit`") and pass it to the `optim` parameter in [`trl.SFTConfig`]. Use the `optim_target_modules` parameter to specify which modules to adapt (can be a list of strings, regex, or a full path).
 
-Extra parameters supported by GaLore, `rank`, `update_proj_gap`, and `scale`, should be passed to the `optim_args` parameter in [`TrainingArguments`].
+Extra parameters supported by GaLore, `rank`, `update_proj_gap`, and `scale`, should be passed to the `optim_args` parameter in [`trl.SFTConfig`].
 
 The example below enables GaLore with [`~trl.SFTTrainer`] that targets the `attn` and `mlp` layers with regex.
 
@@ -408,29 +411,22 @@ The example below enables GaLore with [`~trl.SFTTrainer`] that targets the `attn
 <hfoption id="GaLore optimizer">
 
 ```py
-import torch
 import datasets
-import trl
-from transformers import TrainingArguments, AutoConfig, AutoTokenizer, AutoModelForCausalLM
+from trl import SFTConfig, SFTTrainer
 
 train_dataset = datasets.load_dataset('imdb', split='train')
-args = TrainingArguments(
+args = SFTConfig(
     output_dir="./test-galore",
     max_steps=100,
-    per_device_train_batch_size=2,
     optim="galore_adamw",
     optim_target_modules=[r".*.attn.*", r".*.mlp.*"],
     optim_args="rank=64, update_proj_gap=100, scale=0.10",
+    gradient_checkpointing=True,
 )
-config = AutoConfig.from_pretrained("google/gemma-2b")
-tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b")
-model = AutoModelForCausalLM.from_config("google/gemma-2b").to(0)
-trainer = trl.SFTTrainer(
-    model=model,
+trainer = SFTTrainer(
+    model="google/gemma-2b",
     args=args,
     train_dataset=train_dataset,
-    dataset_text_field='text',
-    max_seq_length=512,
 )
 trainer.train()
 ```
@@ -441,29 +437,22 @@ trainer.train()
 Append `layerwise` to the optimizer name to enable layerwise optimization. For example, `"galore_adamw"` becomes `"galore_adamw_layerwise"`. This feature is still experimental and does not support Distributed Data Parallel (DDP). The code below can only be run on a [single GPU](https://github.com/jiaweizzhao/GaLore?tab=readme-ov-file#train-7b-model-with-a-single-gpu-with-24gb-memory). Other features like gradient clipping and DeepSpeed may not be available out of the box. Feel free to open an [issue](https://github.com/huggingface/transformers/issues) if you encounter any problems!
 
 ```py
-import torch
 import datasets
-import trl
-from transformers import TrainingArguments, AutoConfig, AutoTokenizer, AutoModelForCausalLM
+from trl import SFTConfig, SFTTrainer
 
 train_dataset = datasets.load_dataset('imdb', split='train')
-args = TrainingArguments(
+args = SFTConfig(
     output_dir="./test-galore",
     max_steps=100,
-    per_device_train_batch_size=2,
     optim="galore_adamw_layerwise",
     optim_target_modules=[r".*.attn.*", r".*.mlp.*"],
     optim_args="rank=64, update_proj_gap=100, scale=0.10",
+    gradient_checkpointing=True,
 )
-config = AutoConfig.from_pretrained("google/gemma-2b")
-tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b")
-model = AutoModelForCausalLM.from_config("google/gemma-2b").to(0)
-trainer = trl.SFTTrainer(
-    model=model,
+trainer = SFTTrainer(
+    model="google/gemma-2b",
     args=args,
     train_dataset=train_dataset,
-    dataset_text_field='text',
-    max_seq_length=512,
 )
 trainer.train()
 ```

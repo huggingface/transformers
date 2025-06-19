@@ -115,6 +115,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("ernie_m", "ErnieMModel"),
         ("esm", "EsmModel"),
         ("falcon", "FalconModel"),
+        ("falcon_h1", "FalconH1Model"),
         ("falcon_mamba", "FalconMambaModel"),
         ("fastspeech2_conformer", "FastSpeech2ConformerModel"),
         ("flaubert", "FlaubertModel"),
@@ -174,9 +175,11 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("layoutlmv3", "LayoutLMv3Model"),
         ("led", "LEDModel"),
         ("levit", "LevitModel"),
+        ("lightglue", "LightGlueForKeypointMatching"),
         ("lilt", "LiltModel"),
         ("llama", "LlamaModel"),
         ("llama4", "Llama4ForConditionalGeneration"),
+        ("llama4_text", "Llama4TextModel"),
         ("llava", "LlavaModel"),
         ("llava_next", "LlavaNextModel"),
         ("llava_next_video", "LlavaNextVideoModel"),
@@ -199,6 +202,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("megatron-bert", "MegatronBertModel"),
         ("mgp-str", "MgpstrForSceneTextRecognition"),
         ("mimi", "MimiModel"),
+        ("minimax", "MiniMaxModel"),
         ("mistral", "MistralModel"),
         ("mistral3", "Mistral3Model"),
         ("mixtral", "MixtralModel"),
@@ -334,6 +338,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("vitdet", "VitDetModel"),
         ("vits", "VitsModel"),
         ("vivit", "VivitModel"),
+        ("vjepa2", "VJEPA2Model"),
         ("wav2vec2", "Wav2Vec2Model"),
         ("wav2vec2-bert", "Wav2Vec2BertModel"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerModel"),
@@ -364,6 +369,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("bloom", "BloomForCausalLM"),
         ("camembert", "CamembertForMaskedLM"),
         ("colpali", "ColPaliForRetrieval"),
+        ("colqwen2", "ColQwen2ForRetrieval"),
         ("ctrl", "CTRLLMHeadModel"),
         ("data2vec-text", "Data2VecTextForMaskedLM"),
         ("deberta", "DebertaForMaskedLM"),
@@ -558,6 +564,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("emu3", "Emu3ForCausalLM"),
         ("ernie", "ErnieForCausalLM"),
         ("falcon", "FalconForCausalLM"),
+        ("falcon_h1", "FalconH1ForCausalLM"),
         ("falcon_mamba", "FalconMambaForCausalLM"),
         ("fuyu", "FuyuForCausalLM"),
         ("gemma", "GemmaForCausalLM"),
@@ -591,6 +598,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("mbart", "MBartForCausalLM"),
         ("mega", "MegaForCausalLM"),
         ("megatron-bert", "MegatronBertForCausalLM"),
+        ("minimax", "MiniMaxForCausalLM"),
         ("mistral", "MistralForCausalLM"),
         ("mixtral", "MixtralForCausalLM"),
         ("mllama", "MllamaForCausalLM"),
@@ -839,6 +847,7 @@ MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("timesformer", "TimesformerForVideoClassification"),
         ("videomae", "VideoMAEForVideoClassification"),
         ("vivit", "VivitForVideoClassification"),
+        ("vjepa2", "VJEPA2ForVideoClassification"),
     ]
 )
 
@@ -1105,6 +1114,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("mbart", "MBartForSequenceClassification"),
         ("mega", "MegaForSequenceClassification"),
         ("megatron-bert", "MegatronBertForSequenceClassification"),
+        ("minimax", "MiniMaxForSequenceClassification"),
         ("mistral", "MistralForSequenceClassification"),
         ("mixtral", "MixtralForSequenceClassification"),
         ("mobilebert", "MobileBertForSequenceClassification"),
@@ -1196,6 +1206,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("mbart", "MBartForQuestionAnswering"),
         ("mega", "MegaForQuestionAnswering"),
         ("megatron-bert", "MegatronBertForQuestionAnswering"),
+        ("minimax", "MiniMaxForQuestionAnswering"),
         ("mistral", "MistralForQuestionAnswering"),
         ("mixtral", "MixtralForQuestionAnswering"),
         ("mobilebert", "MobileBertForQuestionAnswering"),
@@ -1302,6 +1313,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("markuplm", "MarkupLMForTokenClassification"),
         ("mega", "MegaForTokenClassification"),
         ("megatron-bert", "MegatronBertForTokenClassification"),
+        ("minimax", "MiniMaxForTokenClassification"),
         ("mistral", "MistralForTokenClassification"),
         ("mixtral", "MixtralForTokenClassification"),
         ("mobilebert", "MobileBertForTokenClassification"),
@@ -1523,11 +1535,6 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_MASK_GENERATION_MAPPING_NAMES = OrderedDict(
     [
         ("sam", "SamModel"),
-    ]
-)
-
-MODEL_FOR_MASK_GENERATION_MAPPING_NAMES = OrderedDict(
-    [
         ("sam_hq", "SamHQModel"),
     ]
 )
@@ -2103,6 +2110,7 @@ __all__ = [
     "AutoModelForTableQuestionAnswering",
     "AutoModelForTextToSpectrogram",
     "AutoModelForTextToWaveform",
+    "AutoModelForTimeSeriesPrediction",
     "AutoModelForTokenClassification",
     "AutoModelForUniversalSegmentation",
     "AutoModelForVideoClassification",

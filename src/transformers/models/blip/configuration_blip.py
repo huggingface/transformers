@@ -75,7 +75,7 @@ class BlipTextConfig(PretrainedConfig):
         label_smoothing (float, *optional*):
             A float in [0.0, 1.0]. Specifies the amount of smoothing when computing the loss, where 0.0 means no smoothing. The targets
             become a mixture of the original ground truth and a uniform distribution as described in
-            `Rethinking the Inception Architecture for Computer Vision <https://arxiv.org/abs/1512.00567>`__. Default: :math:`0.0`.
+            `Rethinking the Inception Architecture for Computer Vision <https://huggingface.co/papers/1512.00567>`__. Default: :math:`0.0`.
 
     Example:
 
@@ -251,7 +251,7 @@ class BlipConfig(PretrainedConfig):
         label_smoothing (float, optional, *optional*, defaults to 0.0):
             A float in [0.0, 1.0]. Specifies the amount of smoothing when computing the loss, where 0.0 means no smoothing. The targets
             become a mixture of the original ground truth and a uniform distribution as described in
-            `Rethinking the Inception Architecture for Computer Vision <https://arxiv.org/abs/1512.00567>`__. Default: :math:`0.0`.
+            `Rethinking the Inception Architecture for Computer Vision <https://huggingface.co/papers/1512.00567>`__. Default: :math:`0.0`.
         kwargs (*optional*):
             Dictionary of keyword arguments.
 

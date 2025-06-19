@@ -15,7 +15,7 @@
 
 """Configuration for TimmWrapper models"""
 
-from typing import Any, Dict
+from typing import Any
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import is_timm_available, logging, requires_backends
@@ -66,7 +66,7 @@ class TimmWrapperConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
     @classmethod
-    def from_dict(cls, config_dict: Dict[str, Any], **kwargs):
+    def from_dict(cls, config_dict: dict[str, Any], **kwargs):
         label_names = config_dict.get("label_names", None)
         is_custom_model = "num_labels" in kwargs or "id2label" in kwargs
 
@@ -105,7 +105,7 @@ class TimmWrapperConfig(PretrainedConfig):
 
         return super().from_dict(config_dict, **kwargs)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         output = super().to_dict()
         output["num_classes"] = self.num_labels
         output["label_names"] = list(self.id2label.values())

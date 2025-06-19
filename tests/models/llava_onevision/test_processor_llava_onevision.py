@@ -11,10 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import json
 import shutil
 import tempfile
 import unittest
+
+import torch
 
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
@@ -90,3 +93,33 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # so we check if the same template is loaded
         processor_dict = self.prepare_processor_dict()
         self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
+
+    def test_image_token_filling(self):
+        processor = self.processor_class.from_pretrained(self.tmpdirname)
+        processor.patch_size = 14
+        processor.vision_feature_select_strategy = "default"
+        processor.image_processor.crop_size = {"height": 336, "width": 336}
+        processor.image_processor.size = {"shortest_edge": 336}
+        processor.image_processor.image_grid_pinpoints = [[672, 336]]
+        processor.num_image_tokens = (processor.image_processor.size["shortest_edge"] // processor.patch_size) ** 2
+        # Important to check with non square image
+        image = torch.randint(0, 2, (3, 503, 316))
+        expected_image_tokens = 1525
+        image_token_index = processor.image_token_id
+
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image"},
+                    {"type": "text", "text": "What is shown in this image?"},
+                ],
+            },
+        ]
+        inputs = processor(
+            text=[processor.apply_chat_template(messages)],
+            images=[image],
+            return_tensors="pt",
+        )
+        image_tokens = (inputs["input_ids"] == image_token_index).sum().item()
+        self.assertEqual(expected_image_tokens, image_tokens)

@@ -16,12 +16,11 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
@@ -457,13 +456,19 @@ class Mamba2Mixer(nn.Module):
         return out
 
     # fmt: off
-    def torch_forward(self, input_states, cache_params: Optional[Mamba2Cache]=None, cache_position:Optional[torch.LongTensor]=None, attention_mask: Optional[torch.Tensor]=None):
-        batch_size, seq_len, _ = input_states.shape
-        dtype = input_states.dtype
+    def torch_forward(
+        self,
+        hidden_states: torch.Tensor,
+        cache_params: Optional[Mamba2Cache]=None,
+        cache_position:Optional[torch.LongTensor]=None,
+        attention_mask: Optional[torch.Tensor]=None
+    ):
+        batch_size, seq_len, _ = hidden_states.shape
+        dtype = hidden_states.dtype
 
         # 1. Gated MLP's linear projection
-        input_states = apply_mask_to_padding_states(input_states, attention_mask)
-        projected_states = self.in_proj(input_states)
+        hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
+        projected_states = self.in_proj(hidden_states)
         d_mlp = (projected_states.shape[-1] - 2 * self.intermediate_size - 2 * self.n_groups * self.ssm_state_size-self.num_heads) // 2
         _, _, gate, hidden_states_B_C, dt = projected_states.split(
                 [d_mlp, d_mlp, self.intermediate_size,  self.conv_dim, self.num_heads], dim=-1
@@ -601,7 +606,7 @@ class Mamba2Mixer(nn.Module):
 
             # 2. Compute the state for each intra-chunk
             # (right term of low-rank factorization of off-diagonal blocks; B terms)
-            decay_states = torch.exp((A_cumsum[:, :, :, -1:] - A_cumsum))
+            decay_states = torch.exp(A_cumsum[:, :, :, -1:] - A_cumsum)
             B_decay = B * decay_states.permute(0, -2, -1, 1)[..., None]
             states = (B_decay[..., None, :] * hidden_states[..., None]).sum(dim=2)
 
@@ -657,11 +662,6 @@ class Mamba2Mixer(nn.Module):
     ):
         if is_fast_path_available and "cuda" in self.in_proj.weight.device.type:
             return self.cuda_kernels_forward(hidden_states, cache_params, cache_position, attention_mask)
-        dtype = hidden_states.dtype
-        if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
-            # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
-            hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
-
         return self.torch_forward(hidden_states, cache_params, cache_position, attention_mask)
 
 
@@ -784,7 +784,7 @@ class Mamba2Output(ModelOutput):
 
     last_hidden_state: Optional[torch.FloatTensor] = None
     cache_params: Optional[Mamba2Cache] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -813,7 +813,7 @@ class Mamba2CausalLMOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
     cache_params: Optional[Mamba2Cache] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 @auto_docstring
@@ -854,7 +854,7 @@ class Mamba2Model(Mamba2PreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
-    ) -> Union[Tuple, Mamba2Output]:
+    ) -> Union[tuple, Mamba2Output]:
         r"""
         cache_params (`Mamba2Cache`, *optional*):
             If passed along, the model uses the previous state in all the blocks (which will give the output for the
@@ -1018,8 +1018,8 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        **kwargs,  # for now we need this for generation
-    ) -> Union[Tuple, Mamba2CausalLMOutput]:
+        **kwargs,  # for now we need this for generation and loss_function
+    ) -> Union[tuple, Mamba2CausalLMOutput]:
         r"""
         cache_params (`Mamba2Cache`, *optional*):
             If passed along, the model uses the previous state in all the blocks (which will give the output for the
@@ -1052,14 +1052,7 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
-            labels = labels.to(logits.device)
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         if not return_dict:
             output = (logits,) + mamba2_outputs[1:]

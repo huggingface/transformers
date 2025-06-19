@@ -54,8 +54,8 @@ For each model type, there is a separate class for each machine learning framewo
 from transformers import AutoModelForCausalLM, MistralForCausalLM
 
 # load with AutoClass or model-specific class
-model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", , torch_dtype="auto", device_map="auto")
-model = MistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", , torch_dtype="auto", device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", torch_dtype="auto", device_map="auto")
+model = MistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", torch_dtype="auto", device_map="auto")
 ```
 
 </hfoption>
@@ -148,11 +148,6 @@ You need enough memory to hold two copies of the model weights (random and pretr
 
 Transformers reduces some of these memory-related challenges with fast initialization, sharded checkpoints, Accelerate's [Big Model Inference](https://hf.co/docs/accelerate/usage_guides/big_modeling) feature, and supporting lower bit data types.
 
-### Fast initialization
-
-A PyTorch model is instantiated with random weights, or "empty" tensors, that take up space in memory without filling it.
-
-Transformers boosts loading speed by skipping random weight initialization with the [_fast_init](https://github.com/huggingface/transformers/blob/c9f6e5e35156e068b227dd9b15521767f6afd4d2/src/transformers/modeling_utils.py#L2710) parameter if the pretrained weights are correctly initialized. This parameter is set to `True` by default.
 
 ### Sharded checkpoints
 
@@ -245,7 +240,7 @@ Big Model Inference's second feature relates to how weights are loaded and dispa
 
 Both features combined reduces memory usage and loading times for big pretrained models.
 
-Set [device_map](https://github.com/huggingface/transformers/blob/026a173a64372e9602a16523b8fae9de4b0ff428/src/transformers/modeling_utils.py#L3061) to `"auto"` to enable Big Model Inference. This also sets the [low_cpu_mem_usage](https://github.com/huggingface/transformers/blob/026a173a64372e9602a16523b8fae9de4b0ff428/src/transformers/modeling_utils.py#L3028) parameter to `True`, such that not more than 1x the model size is used in CPU memory.
+Set [device_map](https://github.com/huggingface/transformers/blob/026a173a64372e9602a16523b8fae9de4b0ff428/src/transformers/modeling_utils.py#L3061) to `"auto"` to enable Big Model Inference.
 
 ```py
 from transformers import AutoModelForCausalLM
@@ -272,6 +267,7 @@ Explicitly set the [torch_dtype](https://pytorch.org/docs/stable/tensor_attribut
 <hfoption id="specific dtype">
 
 ```py
+import torch
 from transformers import AutoModelForCausalLM
 
 gemma = AutoModelForCausalLM.from_pretrained("google/gemma-7b", torch_dtype=torch.float16)

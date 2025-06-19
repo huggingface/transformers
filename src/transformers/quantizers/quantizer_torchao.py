@@ -25,7 +25,7 @@ from .quantizers_utils import get_module_from_name
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from typing import Any, Dict, List
+from typing import Any
 
 from ..utils import is_torch_available, is_torchao_available, logging
 from ..utils.quantization_config import TorchAoConfig
@@ -174,21 +174,25 @@ class TorchAoHfQuantizer(HfQuantizer):
                 "`pip install --upgrade accelerate`"
             )
 
-    def adjust_max_memory(self, max_memory: Dict[str, Union[int, str]]) -> Dict[str, Union[int, str]]:
+    def adjust_max_memory(self, max_memory: dict[str, Union[int, str]]) -> dict[str, Union[int, str]]:
         # need more space for the quantization parameters (e.g. scale). Tested with int4 wo and group size = 128
         max_memory = {key: val * 0.9 for key, val in max_memory.items()}
         return max_memory
 
     def _process_model_before_weight_loading(
-        self, model: "PreTrainedModel", keep_in_fp32_modules: Optional[List[str]] = None, **kwargs
+        self, model: "PreTrainedModel", keep_in_fp32_modules: Optional[list[str]] = None, **kwargs
     ):
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
         )
-        if self.quantization_config.include_embedding:
+        if self.quantization_config.include_input_output_embeddings:
             input_emb = model.get_input_embeddings()
             input_emb_names = [name for name, module in model.named_modules() if id(module) == id(input_emb)]
-            self.modules_to_not_convert = [x for x in self.modules_to_not_convert if x not in input_emb_names]
+            output_emb = model.get_output_embeddings()
+            output_emb_names = [name for name, module in model.named_modules() if id(module) == id(output_emb)]
+            self.modules_to_not_convert = [
+                x for x in self.modules_to_not_convert if x not in input_emb_names + output_emb_names
+            ]
         return
 
     def check_quantized_param(
@@ -196,7 +200,7 @@ class TorchAoHfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         param_value: "torch.Tensor",
         param_name: str,
-        state_dict: Dict[str, Any],
+        state_dict: dict[str, Any],
         **kwargs,
     ) -> bool:
         if self.quantization_config.quant_type == "autoquant":
@@ -213,7 +217,7 @@ class TorchAoHfQuantizer(HfQuantizer):
             # we only quantize the weight of nn.Linear and nn.Embedding
             module, tensor_name = get_module_from_name(model, param_name)
             _QUANTIZABLE = [torch.nn.Linear]
-            if self.quantization_config.include_embedding:
+            if self.quantization_config.include_input_output_embeddings:
                 _QUANTIZABLE.append(torch.nn.Embedding)
             return isinstance(module, tuple(_QUANTIZABLE)) and (tensor_name == "weight")
 
@@ -223,8 +227,8 @@ class TorchAoHfQuantizer(HfQuantizer):
         param_value: "torch.Tensor",
         param_name: str,
         target_device: "torch.device",
-        state_dict: Dict[str, Any],
-        unexpected_keys: List[str],
+        state_dict: dict[str, Any],
+        unexpected_keys: list[str],
     ):
         """
         Each nn.Linear layer that needs to be quantized is processed here.
@@ -257,12 +261,12 @@ class TorchAoHfQuantizer(HfQuantizer):
                 model.tie_weights()
                 setattr(model.config.get_text_config(decoder=True), "tie_word_embeddings", False)
 
-            # handle AOPerModuleConfig, introduced in torchao 0.11.0+
-            if self.quantization_config._get_ao_version() > version.Version("0.10.0"):
-                from torchao.quantization import AOPerModuleConfig
+            # handle ModuleFqnToConfig, introduced in torchao 0.12.0+
+            if self.quantization_config._get_ao_version() >= version.Version("0.12.0"):
+                from torchao.quantization import ModuleFqnToConfig
 
                 config = self.quantization_config.get_apply_tensor_subclass()
-                if isinstance(config, AOPerModuleConfig):
+                if isinstance(config, ModuleFqnToConfig):
                     module_fqn, _ = param_name.rsplit(".", 1)
                     c = None
                     if module_fqn in config.module_fqn_to_config:

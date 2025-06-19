@@ -17,7 +17,7 @@
 """PyTorch MobileViT model."""
 
 import math
-from typing import Dict, Optional, Set, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -121,7 +121,7 @@ class MobileViTConvLayer(nn.Module):
 
 class MobileViTInvertedResidual(nn.Module):
     """
-    Inverted residual block (MobileNetv2): https://arxiv.org/abs/1801.04381
+    Inverted residual block (MobileNetv2): https://huggingface.co/papers/1801.04381
     """
 
     def __init__(
@@ -260,7 +260,7 @@ class MobileViTAttention(nn.Module):
         self.output = MobileViTSelfOutput(config, hidden_size)
         self.pruned_heads = set()
 
-    def prune_heads(self, heads: Set[int]) -> None:
+    def prune_heads(self, heads: set[int]) -> None:
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
@@ -352,7 +352,7 @@ class MobileViTTransformer(nn.Module):
 
 class MobileViTLayer(nn.Module):
     """
-    MobileViT block: https://arxiv.org/abs/2110.02178
+    MobileViT block: https://huggingface.co/papers/2110.02178
     """
 
     def __init__(
@@ -413,7 +413,7 @@ class MobileViTLayer(nn.Module):
             config, in_channels=2 * in_channels, out_channels=in_channels, kernel_size=config.conv_kernel_size
         )
 
-    def unfolding(self, features: torch.Tensor) -> Tuple[torch.Tensor, Dict]:
+    def unfolding(self, features: torch.Tensor) -> tuple[torch.Tensor, dict]:
         patch_width, patch_height = self.patch_width, self.patch_height
         patch_area = int(patch_width * patch_height)
 
@@ -464,7 +464,7 @@ class MobileViTLayer(nn.Module):
         }
         return patches, info_dict
 
-    def folding(self, patches: torch.Tensor, info_dict: Dict) -> torch.Tensor:
+    def folding(self, patches: torch.Tensor, info_dict: dict) -> torch.Tensor:
         patch_width, patch_height = self.patch_width, self.patch_height
         patch_area = int(patch_width * patch_height)
 
@@ -831,7 +831,7 @@ class MobileViTASPPPooling(nn.Module):
 
 class MobileViTASPP(nn.Module):
     """
-    ASPP module defined in DeepLab papers: https://arxiv.org/abs/1606.00915, https://arxiv.org/abs/1706.05587
+    ASPP module defined in DeepLab papers: https://huggingface.co/papers/1606.00915, https://huggingface.co/papers/1706.05587
     """
 
     def __init__(self, config: MobileViTConfig) -> None:
@@ -890,7 +890,7 @@ class MobileViTASPP(nn.Module):
 
 class MobileViTDeepLabV3(nn.Module):
     """
-    DeepLabv3 architecture: https://arxiv.org/abs/1706.05587
+    DeepLabv3 architecture: https://huggingface.co/papers/1706.05587
     """
 
     def __init__(self, config: MobileViTConfig) -> None:
