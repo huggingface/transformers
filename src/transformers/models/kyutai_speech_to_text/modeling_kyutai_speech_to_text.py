@@ -1264,7 +1264,8 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
             cache_position = model_inputs["cache_position"]
             start, end = current_window[0]
 
-            if cache_position[-1] >= end:
+            # first cache position is for bos token, so we need to offset by -1
+            if cache_position[-1] - 1 >= end:
                 # we need to encode the new audio tokens
                 with torch.no_grad():
                     input_values_start_idx = start * self.config.frame_size
@@ -1285,7 +1286,8 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
                     torch.tensor([start, end], device=current_window.device).expand(current_window.shape[0], -1)
                 )
 
-            current_audio_tokens_idxs = (cache_position - start).clamp(min=0)
+            # first cache position is for bos token, so we need to offset by -1
+            current_audio_tokens_idxs = (cache_position - start - 1).clamp(min=0)
             current_audio_tokens = audio_tokens[:, current_audio_tokens_idxs, :]
 
             current_audio_tokens[:, cache_position == 0, :] = self.config.audio_bos_token_id
