@@ -20,7 +20,12 @@ import datasets
 import pytest
 from parameterized import parameterized
 
-from transformers import MoshiAsrConfig, MoshiAsrForConditionalGeneration, MoshiAsrProcessor, is_torch_available
+from transformers import (
+    KyutaiSpeechToTextConfig,
+    KyutaiSpeechToTextForConditionalGeneration,
+    KyutaiSpeechToTextProcessor,
+    is_torch_available,
+)
 from transformers.testing_utils import (
     cleanup,
     require_torch,
@@ -46,18 +51,19 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        MoshiAsrForConditionalGeneration,
-        MoshiAsrModel,
+        KyutaiSpeechToTextForConditionalGeneration,
+        KyutaiSpeechToTextModel,
     )
 
 
-class MoshiAsrModelTester:
+class KyutaiSpeechToTextModelTester:
     def __init__(
         self,
         parent,
         batch_size=13,
         seq_length=7,
-        input_values_length=448,  # gives 7 audio tokens with the given codec config
+        text_seq_length=1,
+        input_values_length=192,  # gives 3 audio tokens, corresponding to the default in GenerationTesterMixin
         is_training=False,
         use_input_mask=True,
         use_token_type_ids=False,
@@ -110,6 +116,7 @@ class MoshiAsrModelTester:
         self.parent = parent
         self.batch_size = batch_size
         self.seq_length = seq_length
+        self.text_seq_length = text_seq_length
         self.is_training = is_training
         self.use_input_mask = use_input_mask
         self.use_token_type_ids = use_token_type_ids
@@ -143,7 +150,7 @@ class MoshiAsrModelTester:
         self.input_values_length = input_values_length
 
     def get_config(self):
-        return MoshiAsrConfig(
+        return KyutaiSpeechToTextConfig(
             codebook_vocab_size=self.codebook_vocab_size,
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
@@ -172,7 +179,7 @@ class MoshiAsrModelTester:
         )
 
     def create_and_check_model(self, config, input_ids, input_mask):
-        model = MoshiAsrModel(config=config)
+        model = KyutaiSpeechToTextModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
@@ -195,12 +202,11 @@ class MoshiAsrModelTester:
     def prepare_config_and_inputs_generate(self):
         config = self.get_config()
 
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size - 1) + 1
+        input_ids = torch.ones([self.batch_size, 1], dtype=torch.long, device=torch_device)
         input_values = floats_tensor([self.batch_size, 1, self.input_values_length])
-        # TODO: @eustlb, padding_mask ???
-        attention_mask = input_ids.ne(1).to(torch_device)
+        padding_mask = torch.ones_like(input_values, dtype=torch.int32, device=torch_device)
 
-        return config, input_ids, input_values, attention_mask
+        return config, input_ids, input_values, padding_mask
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -218,26 +224,30 @@ class MoshiAsrModelTester:
             config,
             input_ids,
             input_values,
-            attention_mask,
+            padding_mask,
         ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "input_values": input_values, "attention_mask": attention_mask}
+        inputs_dict = {
+            "input_ids": input_ids,
+            "input_values": input_values,
+            "padding_mask": padding_mask,
+        }
         return config, inputs_dict
 
 
 @require_torch
-class MoshiAsrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
-            MoshiAsrModel,
-            MoshiAsrForConditionalGeneration,
+            KyutaiSpeechToTextModel,
+            KyutaiSpeechToTextForConditionalGeneration,
         )
         if is_torch_available()
         else ()
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": MoshiAsrModel,
-            "automatic-speech-recognition": MoshiAsrForConditionalGeneration,
+            "feature-extraction": KyutaiSpeechToTextModel,
+            "automatic-speech-recognition": KyutaiSpeechToTextForConditionalGeneration,
         }
         if is_torch_available()
         else {}
@@ -250,12 +260,10 @@ class MoshiAsrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
 
-    # used in `test_torch_compile_for_training`
-    _torch_compile_train_cls = MoshiAsrForConditionalGeneration if is_torch_available() else None
 
     def setUp(self):
-        self.model_tester = MoshiAsrModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MoshiAsrConfig, hidden_size=37)
+        self.model_tester = KyutaiSpeechToTextModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=KyutaiSpeechToTextConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -475,12 +483,12 @@ class MoshiAsrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             }
 
             # Traditional way of generating text, with `return_dict_in_generate` to return the past key values
-            _, inputs = self.model_tester.prepare_config_and_inputs_for_common_generate()
-            outputs = model.generate(**inputs, **generate_kwargs, max_new_tokens=4)
+            _, inputs = self.prepare_config_and_inputs_for_generate()
+            outputs = model.generate(**inputs, **generate_kwargs, max_new_tokens=3)
 
-            # Let's generate again, but passing the past key values in between (3 + 1 = 4 tokens). Note that the
+            # Let's generate again, but passing the past key values in between (2 + 1 = 3 tokens). Note that the
             # inputs may need to be tweaked across `generate` calls (like the attention mask).
-            outputs_cached = model.generate(**inputs, **generate_kwargs, max_new_tokens=3)
+            outputs_cached = model.generate(**inputs, **generate_kwargs, max_new_tokens=2)
 
             # Continue from the tokens generated above, preparing the inputs accordingly
             inputs["past_key_values"] = outputs_cached.past_key_values
@@ -520,7 +528,8 @@ class MoshiAsrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
                     )
 
 
-class MoshiAsrForConditionalGenerationIntegrationTests(unittest.TestCase):
+
+class KyutaiSpeechToTextForConditionalGenerationIntegrationTests(unittest.TestCase):
     _dataset = None
 
     def setUp(self):
@@ -555,8 +564,10 @@ class MoshiAsrForConditionalGenerationIntegrationTests(unittest.TestCase):
         as implementation choices (qkv matrix in one linear for original code vs three for hf) create growing divergence with context lenght,
         ultimately giving different outputs.
         """
-        processor = MoshiAsrProcessor.from_pretrained(self.model_checkpoint)
-        model = MoshiAsrForConditionalGeneration.from_pretrained(self.model_checkpoint, device_map=torch_device)
+        processor = KyutaiSpeechToTextProcessor.from_pretrained(self.model_checkpoint)
+        model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(
+            self.model_checkpoint, device_map=torch_device
+        )
 
         samples = self._load_datasamples(2)
         out_list = []
@@ -591,8 +602,10 @@ class MoshiAsrForConditionalGenerationIntegrationTests(unittest.TestCase):
         as implementation choices (qkv matrix in one linear for original code vs three for hf) create growing divergence with context lenght,
         ultimately giving different outputs.
         """
-        processor = MoshiAsrProcessor.from_pretrained(self.model_checkpoint)
-        model = MoshiAsrForConditionalGeneration.from_pretrained(self.model_checkpoint, device_map=torch_device)
+        processor = KyutaiSpeechToTextProcessor.from_pretrained(self.model_checkpoint)
+        model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(
+            self.model_checkpoint, device_map=torch_device
+        )
 
         samples = self._load_datasamples(4)
         inputs = processor(
