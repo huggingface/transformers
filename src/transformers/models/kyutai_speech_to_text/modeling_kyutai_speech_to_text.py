@@ -1210,7 +1210,7 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
                 dtype=torch.long,
             )
             model_kwargs["current_window"] = (
-                torch.tensor([0, audio_window_size], device=device, dtype=torch.long)
+                torch.tensor([0, 0], device=device, dtype=torch.long)
                 .expand(batch_size, -1)
                 .contiguous()
             )
@@ -1341,7 +1341,6 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
 
     def generate(self, *args, **kwargs):
         padding_mask = kwargs.get("padding_mask")
-        max_length = kwargs.pop("max_length", None)
         max_new_tokens = kwargs.pop("max_new_tokens", None)
 
         if padding_mask is not None:
