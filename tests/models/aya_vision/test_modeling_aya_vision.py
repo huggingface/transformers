@@ -67,7 +67,7 @@ class AyaVisionVisionText2TextModelTester:
         bos_token_id=0,
         eos_token_id=0,
         pad_token_id=0,
-        image_token_index=1,
+        image_token_index=2,
         num_channels=3,
         image_size=64,
         model_type="aya_vision",
