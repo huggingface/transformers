@@ -1362,9 +1362,10 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
             else:
                 video_mask = input_ids == self.config.video_token_id
 
-            video_mask = video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
             n_video_tokens = (video_mask).sum()
             n_video_features = video_embeds.shape[0]
+            video_mask = video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+            print(video_embeds.shape)
             if not is_torchdynamo_compiling() and n_video_tokens != n_video_features:
                 raise ValueError(
                     f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
