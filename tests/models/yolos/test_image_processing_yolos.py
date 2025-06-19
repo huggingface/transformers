@@ -173,9 +173,9 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
 
             # Updated to remove deprecated `max_size`
             image_processor = image_processing_class.from_dict(
-            self.image_processor_dict,
-            size={"shortest_edge": 42},  # Only pass what's supported now
-            pad_and_return_pixel_mask=False,
+                self.image_processor_dict,
+                size={"shortest_edge": 42},  # Only pass what's supported now
+                pad_and_return_pixel_mask=False,
             )
 
             self.assertEqual(image_processor.size, {"shortest_edge": 42})
