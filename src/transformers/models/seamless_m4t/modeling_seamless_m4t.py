@@ -2366,11 +2366,9 @@ class SeamlessM4TCodeHifiGan(PreTrainedModel):
 
         # take care of edge cases where no padding or too many padding
         unit_lengths = torch.clamp(unit_lengths, 0, dur_out.shape[1] - 1)
-        cumulative_dur_out = torch.cumsum(dur_out, dim=1)
-        print(f"unit_lengths.dtype() : {unit_lengths.dtype}  cumulative_dur_out.dtype : {cumulative_dur_out.dtype}  ")
-        unit_lengths = cumulative_dur_out.gather(dim=1, index=unit_lengths.unsqueeze(1)).squeeze()
-        print(f"unit_lengths : {unit_lengths}  ")
 
+        cumulative_dur_out = torch.cumsum(dur_out, dim=1)
+        unit_lengths = cumulative_dur_out.gather(dim=1, index=unit_lengths.unsqueeze(1)).squeeze()
         return unit_lengths
 
     def _get_output_hifigan_lengths(self, input_lengths: Union[torch.LongTensor, int]):
@@ -2390,7 +2388,7 @@ class SeamlessM4TCodeHifiGan(PreTrainedModel):
 
         # conv_pre
         input_lengths = _conv_out_length(input_lengths, 7, 1, 3)
-        print(f"input_lenghts={input_lengths}, dtype={input_lengths.dtype}")
+
         # upsampler
         for i, (upsample_rate, kernel_size) in enumerate(
             zip(self.config.upsample_rates, self.config.upsample_kernel_sizes)
@@ -2399,7 +2397,6 @@ class SeamlessM4TCodeHifiGan(PreTrainedModel):
                 input_lengths, kernel_size, upsample_rate, (kernel_size - upsample_rate) // 2
             )
 
-        print(f"input_lenghts={input_lengths}, dtype={input_lengths.dtype}")
         # resblock
         for i in range(len(self.config.upsample_rates)):
             for kernel_size, dilation in zip(self.config.resblock_kernel_sizes, self.config.resblock_dilation_sizes):
@@ -2411,11 +2408,9 @@ class SeamlessM4TCodeHifiGan(PreTrainedModel):
                 for dil in dilation:
                     input_lengths = _conv_out_length(input_lengths, kernel_size, 1, (kernel_size - 1) // 2, dilation=1)
 
-        print(f"input_lenghts={input_lengths}, dtype={input_lengths.dtype}")
         # conv_post
         input_lengths = _conv_out_length(input_lengths, 7, 1, 3)
 
-        print(f"input_lenghts={input_lengths}, dtype={input_lengths.dtype}")
         return input_lengths
 
     def forward(
@@ -2463,9 +2458,7 @@ class SeamlessM4TCodeHifiGan(PreTrainedModel):
         hidden_states = self.hifi_gan(hidden_states)
 
         unit_lengths = self._get_dur_output_lengths(input_ids, dur_out)
-        print(f"unit_lengths : {unit_lengths}, dtype : {unit_lengths.dtype}")
         lengths = self._get_output_hifigan_lengths(unit_lengths)
-        print(f"lengths : {lengths}, dtype : {lengths.dtype}")
 
         return hidden_states, lengths
 
