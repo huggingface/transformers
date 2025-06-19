@@ -35,6 +35,9 @@ class CTRLModelTester(CausalLMModelTester):
         causal_lm_class = CTRLLMHeadModel
         sequence_classification_class = CTRLForSequenceClassification
 
+    def __init__(self, parent, num_hidden_layers=1, **kwargs):
+        super().__init__(parent=parent, num_hidden_layers=num_hidden_layers, **kwargs)
+
 
 @require_torch
 class CTRLModelTest(CausalLMModelTest, unittest.TestCase):
@@ -50,6 +53,24 @@ class CTRLModelTest(CausalLMModelTest, unittest.TestCase):
         else {}
     )
     model_tester_class = CTRLModelTester
+
+    def is_pipeline_test_to_skip(
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
+    ):
+        if pipeline_test_case_name == "ZeroShotClassificationPipelineTests":
+            # Get `tokenizer does not have a padding token` error for both fast/slow tokenizers.
+            # `CTRLConfig` was never used in pipeline tests, either because of a missing checkpoint or because a tiny
+            # config could not be created.
+            return True
+
+        return False
 
 
 @require_torch
