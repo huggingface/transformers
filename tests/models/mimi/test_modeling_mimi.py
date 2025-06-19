@@ -537,7 +537,7 @@ class MimiIntegrationTest(unittest.TestCase):
             return_tensors="pt",
         ).to(torch_device)
 
-        frame_size = model.frame_size
+        frame_size = model.config.frame_size
         audio_codes = model.encode(inputs["input_values"]).audio_codes
 
         # streaming chunk by chunk

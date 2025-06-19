@@ -1482,10 +1482,6 @@ class MimiModel(MimiPreTrainedModel):
         codes = codes.transpose(0, 1)
         return codes, past_key_values, padding_cache
 
-    @property
-    def frame_size(self) -> int:
-        return int(self.config.sampling_rate / self.config.frame_rate)
-
     def get_encoded_length(self, input_length: torch.LongTensor) -> torch.LongTensor:
         """
         Return the number of frames of the encoded audio waveform.
