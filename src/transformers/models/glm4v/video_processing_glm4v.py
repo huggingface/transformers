@@ -143,7 +143,8 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
 
         frame_indices = uniq
         sampled_video = video[frame_indices]
-        second_idxs = [int(idx / video_fps) for idx in frame_indices]
+        full_second_idxs = [int(idx / video_fps) for idx in frame_indices]
+        second_idxs = full_second_idxs[::2] # mrope
         return sampled_video, second_idxs
 
     def _preprocess(
@@ -153,7 +154,7 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
         do_convert_rgb: bool = True,
         do_resize: bool = True,
         size: SizeDict = None,
-        interpolation: Optional[str] = F.InterpolationMode.BILINEAR,
+        interpolation: Optional[str] = F.InterpolationMode.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255.0,
         do_normalize: bool = True,

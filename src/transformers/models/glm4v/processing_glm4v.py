@@ -175,7 +175,7 @@ class Glm4vProcessor(ProcessorMixin):
                     else:
                         timestamps_list = timestamps[0] if isinstance(timestamps[0], list) else timestamps
                     unique_timestamps = []
-                    for idx in range(0, len(timestamps_list), 2):
+                    for idx in range(0, len(timestamps_list)):
                         unique_timestamps.append(timestamps_list[idx])
                     selected_timestamps = unique_timestamps[:num_frames]
                     while len(selected_timestamps) < num_frames:
