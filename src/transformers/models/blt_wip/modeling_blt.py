@@ -550,20 +550,21 @@ class BLTLocalEncoder(nn.Module):
 
         self.tok_embeddings = nn.Embedding(config.vocab_size + config.pm_size, config.dim_local_encoder)
 
-        # Initialize cross attention layers as None (will be set if needed)
+        # Initialize cross attention layers only if cross attention is enabled
         self.cross_attn_layers = None
-        self.cross_attn_layers = torch.nn.ModuleList()
-        layers_to_add = config.n_layers_local_encoder if config.cross_attn_all_layers_encoder else 1
-        for _ in range(layers_to_add):
-            self.cross_attn_layers.append(
-                BLTCrossAttention(
-                    dim=config.dim_local_encoder,
-                    head_dim=config.dim_local_encoder // config.cross_attn_nheads,
-                    n_heads=config.cross_attn_nheads,
-                    n_kv_heads=config.cross_attn_nheads,
-                    norm_eps=config.norm_eps,
+        if getattr(config, "cross_attn_encoder", False) and config.cross_attn_nheads is not None:
+            self.cross_attn_layers = torch.nn.ModuleList()
+            layers_to_add = config.n_layers_local_encoder if config.cross_attn_all_layers_encoder else 1
+            for _ in range(layers_to_add):
+                self.cross_attn_layers.append(
+                    BLTCrossAttention(
+                        dim=config.dim_local_encoder,
+                        head_dim=config.dim_local_encoder // config.cross_attn_nheads,
+                        n_heads=config.cross_attn_nheads,
+                        n_kv_heads=config.cross_attn_nheads,
+                        norm_eps=config.norm_eps,
+                    )
                 )
-            )
 
     def forward(
         self,
@@ -679,12 +680,15 @@ class BLTLocalEncoder(nn.Module):
 class BLTLocalDecoder(nn.Module):
     def __init__(self, config: BLTConfig):
         super().__init__()
-
         self.config = config
 
         self.layers = nn.ModuleList([BLTTransformerLayer(config.dim_local_decoder, config.n_heads_local_decoder, config) for _ in range(config.n_layers_local_decoder)])
 
-        self.rotary_emb = BLTRotaryEmbedding(config=config)
+        decoder_config = config
+        decoder_config.head_dim = config.dim_local_decoder // config.n_heads_local_decoder
+        decoder_config.max_position_embeddings = config.max_encoder_seq_length or config.max_seqlen
+
+        self.rotary_emb = BLTRotaryEmbedding(config=decoder_config)
 
         self.pos_embeddings = None
 
@@ -698,20 +702,21 @@ class BLTLocalDecoder(nn.Module):
 
         self.norm = RMSNorm(config.dim_local_decoder, eps=config.norm_eps)
 
-        # Initialize cross attention layers as None (will be set if needed)
+        # Initialize cross attention layers only if cross attention is enabled
         self.cross_attn_layers = None
-        self.cross_attn_layers = torch.nn.ModuleList()
-        layers_to_add = config.n_layers_local_decoder if config.cross_attn_all_layers_decoder else 1
-        for _ in range(layers_to_add):
-            self.cross_attn_layers.append(
-                BLTCrossAttention(
-                    dim=config.dim_local_decoder,
-                    head_dim=config.dim_local_decoder // config.cross_attn_nheads,
-                    n_heads=config.cross_attn_nheads,
-                    n_kv_heads=config.cross_attn_nheads,
-                    norm_eps=config.norm_eps,
+        if getattr(config, "cross_attn_decoder", False) and config.cross_attn_nheads is not None:
+            self.cross_attn_layers = torch.nn.ModuleList()
+            layers_to_add = config.n_layers_local_decoder if config.cross_attn_all_layers_decoder else 1
+            for _ in range(layers_to_add):
+                self.cross_attn_layers.append(
+                    BLTCrossAttention(
+                        dim=config.dim_local_decoder,
+                        head_dim=config.dim_local_decoder // config.cross_attn_nheads,
+                        n_heads=config.cross_attn_nheads,
+                        n_kv_heads=config.cross_attn_nheads,
+                        norm_eps=config.norm_eps,
+                    )
                 )
-            )
 
         self.output = nn.Linear(config.dim_local_decoder, config.vocab_size, bias=False)
 
@@ -750,6 +755,8 @@ class BLTLocalDecoder(nn.Module):
         cache: Optional[List[Tuple[torch.Tensor, torch.Tensor, int]]] = None,
     ):
         bs, seqlen = tokens.shape
+        batch_size, seq_length, _ = embeds.shape
+
         assert embeds is not None, "Embeddings must be provided"
 
         if mask is None:
@@ -761,11 +768,7 @@ class BLTLocalDecoder(nn.Module):
                 sliding_window=self.config.sliding_window,
             )
 
-
         h = embeds
-
-        batch_size, seq_length, _ = embeds.shape
-
 
         if self.patch_embedding_projection is not None:
             assert patch_embeds is not None, "Patch embeddings must be passed."
@@ -791,7 +794,6 @@ class BLTLocalDecoder(nn.Module):
                 h = h + h_cross
 
             h = layer(h, position_embeddings=position_embeddings, attention_mask=None)
-
 
         h_preds = self.norm(h)
         h_preds = F.dropout(h_preds, p=self.config.dropout, training=self.training)
@@ -901,7 +903,10 @@ class BLTGlobalTransformer(nn.Module):
             self.layers.append(BLTTransformerLayer(self.config.dim_global, self.config.n_heads_global, config))
         config.n_kv_heads = old
 
-        self.rotary_emb = BLTRotaryEmbedding(config=config)
+        global_config = config
+        global_config.head_dim = config.dim_global // config.n_heads_global
+
+        self.rotary_emb = BLTRotaryEmbedding(config=global_config)
 
         self.token_embedding_projection = None
         if config.global_dim_patch_emb is not None and config.global_dim_patch_emb != config.dim_global:
@@ -1046,7 +1051,7 @@ class BLTPreTrainedModel(PreTrainedModel):
                 module.token_embedding_projection._custom_std = module.dim_token_emb ** (-0.5)
                 
         elif isinstance(module, BLTPatcher):
-            emb_std = module.config.patcher_dim ** (-0.5)
+            emb_std = module.config.dim ** (-0.5)
             module.tok_embeddings._custom_std = emb_std
             module.output._custom_std = emb_std
 
@@ -1251,42 +1256,28 @@ class BLTModel(BLTPreTrainedModel):
 
 class BLTPatcher(BLTPreTrainedModel):
     def __init__(self, config):
-        config.num_attention_heads = config.patcher_n_heads
-        config.hidden_size = config.patcher_dim
+        # Store reference to main config for accessing non-patcher settings
+        self.main_config = config
+        
+        # Initialize with patcher config directly
+        super().__init__(config.patcher_config)
 
-
-        config.n_heads = config.patcher_n_heads 
-
-
-        config.num_key_value_heads = 12 # config.num_key_value_heads  #TODO: add patcher_n_kv_heads
-
-        config.head_dim = 64 #self.config.patcher_head_dim #TODO: add
-        super().__init__(config)
-
-        self.config.hidden_size = self.config.patcher_dim
-        self.config.n_heads = self.config.patcher_n_heads 
-        self.config.head_dim = 64 #self.config.patcher_head_dim #TODO: add
-
-        # Create a patcher-specific config copy to use patcher_rope_theta and simple rope
-        import copy
-        patcher_config = copy.deepcopy(config)
-        patcher_config.rope_theta = config.patcher_rope_theta
-        patcher_config.rope_scaling = {"rope_type": "default"}  # Use simple default rope for patcher
-        self.rotary_emb = BLTRotaryEmbedding(config=patcher_config)
+        # Initialize rotary embeddings with patcher config
+        self.rotary_emb = BLTRotaryEmbedding(config=self.config)
 
         self.layers = nn.ModuleList()
-        for _ in range(config.patcher_n_layers):
-            self.layers.append(BLTTransformerLayer(config.patcher_dim, config.patcher_n_heads, config))
+        for _ in range(self.config.n_layers):
+            self.layers.append(BLTTransformerLayer(self.config.dim, self.config.n_heads, self.config))
 
-        #assert config.patcher_vocab_size > 0
+        #assert self.config.vocab_size > 0
 
-        self.tok_embeddings = torch.nn.Embedding(config.patcher_vocab_size, config.patcher_dim)
+        self.tok_embeddings = torch.nn.Embedding(self.config.vocab_size, self.config.dim)
 
-        self.norm = RMSNorm(config.patcher_dim, eps=config.patcher_norm_eps)
+        self.norm = RMSNorm(self.config.dim, eps=self.config.norm_eps)
 
         self.output = nn.Linear(
-            config.patcher_dim,
-            config.patcher_vocab_size,
+            self.config.dim,
+            self.config.vocab_size,
             bias=False,
         )
 
@@ -1304,7 +1295,7 @@ class BLTPatcher(BLTPreTrainedModel):
         # Handle chunked processing for entropy calculation
         entropies = []
         preds = []
-        max_length = self.config.patcher_max_seqlen
+        max_length = self.config.max_seqlen
         batch_numel = max_length * patching_batch_size
         splits = torch.split(token_values.flatten(), batch_numel)
 

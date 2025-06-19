@@ -9,7 +9,7 @@ from huggingface_hub import hf_hub_download, upload_folder
 from safetensors.torch import load_file, save_file
 
 from transformers.models.blt_wip.configuration_blt import BLTConfig
-from transformers.models.blt_wip.modeling_blt_wip import BLTModel
+from transformers.models.blt_wip.modeling_blt_modellike import BLTModel
 from transformers.utils import logging as transformers_logging
 
 
@@ -61,6 +61,40 @@ def merge_configurations(config_path: str, entropy_params_path: str) -> Dict[str
     if isinstance(patch_size, float):
         patch_size = int(patch_size)
 
+    # Create patcher configuration dictionary
+    patcher_config = {
+        "vocab_size": int(entropy_model_params.get("vocab_size", 256)),
+        "dim": int(entropy_model_params.get("dim", 512)),
+        "n_layers": int(entropy_model_params.get("n_layers", 8)),
+        "n_heads": int(entropy_model_params.get("n_heads", 8)),
+        "head_dim": int(entropy_model_params.get("head_dim"))
+        if entropy_model_params.get("head_dim") is not None
+        else None,  # Let BLTPatcherConfig compute this from dim // n_heads
+        "n_kv_heads": int(entropy_model_params.get("n_kv_heads"))
+        if entropy_model_params.get("n_kv_heads") is not None
+        else None,  # Let BLTPatcherConfig default this to n_heads
+        "max_seqlen": int(entropy_model_params.get("max_seqlen", 1024)),
+        "norm_eps": entropy_model_params.get("norm_eps", 1e-5),
+        "dropout": entropy_model_params.get("dropout", 0.0),
+        "sliding_window": int(entropy_model_params.get("sliding_window", 512))
+        if entropy_model_params.get("sliding_window") is not None
+        else None,
+        "ffn_dim_multiplier": entropy_model_params.get("ffn_dim_multiplier"),
+        "multiple_of": int(entropy_model_params.get("multiple_of", 256)),
+        "rope_theta": entropy_model_params.get("rope_theta", 10000.0),
+        "rope_use_fp32_in_outer_product": entropy_model_params.get(
+            "rope_use_fp32_in_outer_product", False
+        ),
+        "attn_impl": entropy_model_params.get("attn_impl", "sdpa"),
+        "attn_bias_type": entropy_model_params.get("attn_bias_type", "causal"),
+        "init_base_std": entropy_model_params.get("init_base_std"),
+        "init_std_factor": entropy_model_params.get("init_std_factor", "disabled"),
+        "dim_token_emb": entropy_model_params.get("dim_token_emb"),
+        "weight_tying": entropy_model_params.get("weight_tying", False),
+        "bos_token_id": entropy_model_params.get("bos_token_id", 1),
+        "eos_token_id": entropy_model_params.get("eos_token_id", 2),
+    }
+
     unified_config.update(
         {
             "patch_in_forward": True,
@@ -73,36 +107,7 @@ def merge_configurations(config_path: str, entropy_params_path: str) -> Dict[str
             "patching_batch_size": patcher_args.get("patching_batch_size", 1),
             "patching_device": patcher_args.get("patching_device", "cuda"),
             "monotonicity": patcher_args.get("monotonicity", False),
-            "patcher_vocab_size": int(entropy_model_params.get("vocab_size", 256)),
-            "patcher_dim": int(entropy_model_params.get("dim", 512)),
-            "patcher_n_layers": int(entropy_model_params.get("n_layers", 8)),
-            "patcher_n_heads": int(entropy_model_params.get("n_heads", 8)),
-            "patcher_head_dim": int(entropy_model_params.get("head_dim"))
-            if entropy_model_params.get("head_dim") is not None
-            else None,
-            "patcher_n_kv_heads": int(entropy_model_params.get("n_kv_heads"))
-            if entropy_model_params.get("n_kv_heads") is not None
-            else None,
-            "patcher_max_seqlen": int(entropy_model_params.get("max_seqlen", 1024)),
-            "patcher_norm_eps": entropy_model_params.get("norm_eps", 1e-5),
-            "patcher_dropout": entropy_model_params.get("dropout", 0.0),
-            "patcher_sliding_window": int(entropy_model_params.get("sliding_window", 512))
-            if entropy_model_params.get("sliding_window") is not None
-            else None,
-            "patcher_ffn_dim_multiplier": entropy_model_params.get("ffn_dim_multiplier"),
-            "patcher_multiple_of": int(entropy_model_params.get("multiple_of", 256)),
-            "patcher_rope_theta": entropy_model_params.get("rope_theta", 10000.0),
-            "patcher_rope_use_fp32_in_outer_product": entropy_model_params.get(
-                "rope_use_fp32_in_outer_product", False
-            ),
-            "patcher_attn_impl": entropy_model_params.get("attn_impl", "sdpa"),
-            "patcher_attn_bias_type": entropy_model_params.get("attn_bias_type", "causal"),
-            "patcher_init_base_std": entropy_model_params.get("init_base_std"),
-            "patcher_init_std_factor": entropy_model_params.get("init_std_factor", "disabled"),
-            "patcher_dim_token_emb": entropy_model_params.get("dim_token_emb"),
-            "patcher_weight_tying": entropy_model_params.get("weight_tying", False),
-            "patcher_bos_token_id": entropy_model_params.get("bos_token_id", 1),
-            "patcher_eos_token_id": entropy_model_params.get("eos_token_id", 2),
+            "patcher_args": patcher_config,
         }
     )
 
@@ -168,8 +173,7 @@ def validate_unified_model(config: Dict[str, Any], weights: Dict[str, torch.Tens
         "n_layers",
         "n_heads",
         "patch_in_forward",
-        "patcher_vocab_size",
-        "patcher_dim",
+        "patcher_args",
     ]
 
     missing_keys = [key for key in required_keys if key not in config]
@@ -339,7 +343,7 @@ def main():
     parser.add_argument(
         "--push_to_hub",
         type=str,
-        default="itazap/blt-1b",
+        default="itazap/blt-1b-hf",
     )
     parser.add_argument(
         "--hub_private",
@@ -349,7 +353,7 @@ def main():
     parser.add_argument(
         "--hub_token",
         type=str,
-        default="hf_your_token_here",
+        default="hf_token",
     )
 
     args = parser.parse_args()
