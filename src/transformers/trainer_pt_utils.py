@@ -22,6 +22,7 @@ import json
 import math
 import os
 import sys
+import re
 import warnings
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
@@ -1124,22 +1125,14 @@ def get_parameter_names(model, forbidden_layer_types, forbidden_layer_names=None
     """
     Returns the names of the model parameters that are not inside a forbidden layer.
     """
-    if forbidden_layer_names is None:
-        forbidden_layer_names = []
+    forbidden_layer_types = tuple(forbidden_layer_types)
+    forbidden_layer_patterns = [re.compile(pattern) for pattern in forbidden_layer_names] if forbidden_layer_names is not None else []
     result = []
-    for name, child in model.named_children():
-        child_params = get_parameter_names(child, forbidden_layer_types, forbidden_layer_names)
-        result += [
-            f"{name}.{n}"
-            for n in child_params
-            if not isinstance(child, tuple(forbidden_layer_types))
-            and not any(forbidden in f"{name}.{n}".lower() for forbidden in forbidden_layer_names)
-        ]
-    # Add model specific parameters that are not in any child
-    result += [
-        k for k in model._parameters.keys() if not any(forbidden in k.lower() for forbidden in forbidden_layer_names)
-    ]
-    return result
+    for module_name, module in model.named_modules(remove_duplicates=False):
+        if not isinstance(module, forbidden_layer_types):
+            param_names = [f"{module_name}.{name}" for name in list(module._parameters.keys())]
+            allowed_names = [name for name in param_names if not any(pattern.search(name.lower()) for pattern in forbidden_layer_patterns)]
+            result.extend(allowed_names)
 
 
 def get_module_class_from_name(module, name):
