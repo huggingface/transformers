@@ -113,9 +113,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
                 dtype=torch.long,
             )
             model_kwargs["current_window"] = (
-                torch.tensor([0, 0], device=device, dtype=torch.long)
-                .expand(batch_size, -1)
-                .contiguous()
+                torch.tensor([0, 0], device=device, dtype=torch.long).expand(batch_size, -1).contiguous()
             )
 
             # let's use generate's cache preparation to prepare the cache for the codec model
@@ -189,7 +187,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
                     torch.tensor([start, end], device=current_window.device).expand(current_window.shape[0], -1)
                 )
 
-             # first cache position is for bos token, so we need to offset by -1
+            # first cache position is for bos token, so we need to offset by -1
             current_audio_tokens_idxs = (cache_position - start - 1).clamp(min=0)
             current_audio_tokens = audio_tokens[:, current_audio_tokens_idxs, :]
 
