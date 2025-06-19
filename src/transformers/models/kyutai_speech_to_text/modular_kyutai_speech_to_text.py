@@ -113,7 +113,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
                 dtype=torch.long,
             )
             model_kwargs["current_window"] = (
-                torch.tensor([0, audio_window_size], device=device, dtype=torch.long)
+                torch.tensor([0, 0], device=device, dtype=torch.long)
                 .expand(batch_size, -1)
                 .contiguous()
             )
@@ -167,7 +167,8 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
             cache_position = model_inputs["cache_position"]
             start, end = current_window[0]
 
-            if cache_position[-1] >= end:
+            # first cache position is for bos token, so we need to offset by -1
+            if cache_position[-1] - 1 >= end:
                 # we need to encode the new audio tokens
                 with torch.no_grad():
                     input_values_start_idx = start * self.config.frame_size
@@ -188,7 +189,8 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
                     torch.tensor([start, end], device=current_window.device).expand(current_window.shape[0], -1)
                 )
 
-            current_audio_tokens_idxs = (cache_position - start).clamp(min=0)
+             # first cache position is for bos token, so we need to offset by -1
+            current_audio_tokens_idxs = (cache_position - start - 1).clamp(min=0)
             current_audio_tokens = audio_tokens[:, current_audio_tokens_idxs, :]
 
             current_audio_tokens[:, cache_position == 0, :] = self.config.audio_bos_token_id
@@ -242,19 +244,20 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
 
     def generate(self, *args, **kwargs):
         padding_mask = kwargs.get("padding_mask")
-        max_length = kwargs.pop("max_length", None)
         max_new_tokens = kwargs.pop("max_new_tokens", None)
-
-        if max_length is not None and max_new_tokens is not None:
-            logger.warning(
-                "`max_length` or `max_new_tokens` has been set, yet they are not supported for this model. They will be ignored."
-            )
 
         if padding_mask is not None:
             audio_tokens_mask = self.codec_model.get_audio_codes_mask(padding_mask)
 
             # TODO: @eustlb, we should have per-batch-idx values
-            max_new_tokens = audio_tokens_mask.sum(dim=-1).max()
+            max_audio_frames = audio_tokens_mask.sum(dim=-1).max()
+
+            if max_new_tokens > max_audio_frames:
+                logger.warning(
+                    f"`max_new_tokens` ({max_new_tokens}) is greater than the maximum number of audio frames ({max_audio_frames})."
+                    f"Setting `max_new_tokens` to {max_audio_frames}."
+                )
+                max_new_tokens = max_audio_frames
 
         return GenerationMixin.generate(
             self,
