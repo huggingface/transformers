@@ -439,7 +439,7 @@ class CodeGenModel(CodeGenPreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             outputs = block(
-                hidden_states=hidden_states,
+                hidden_states,
                 layer_past=past_key_values,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
