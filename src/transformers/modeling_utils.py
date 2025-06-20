@@ -4306,11 +4306,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 "`tp_plan` and `device_map` are mutually exclusive. Choose either one for parallelization."
             )
 
-        # If torchrun was used, make sure to TP by default. This way people don't need to change tp or device map
-        if device_map == "auto" and tp_plan is None and int(os.environ.get("WORLD_SIZE", 0)):
-            tp_plan = "auto"  # device_map = "auto" in torchrun equivalent to TP plan = AUTO!
-            device_map = None
-
         # We need to correctly dispatch the model on the current process device. The easiest way for this is to use a simple
         # `device_map` pointing to the correct device
         if tp_plan is not None:
@@ -4322,6 +4317,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     raise ValueError("device_mesh must be 1 dimensional and will be used for TP")
                 device_map = torch.device(device_mesh.device_type, int(os.environ["LOCAL_RANK"]))
 
+        if device_map == "auto" and int(os.environ.get("WORLD_SIZE", 0)):
+            logger.info("You've set device_map=`auto` while triggering a distributed run with torchrun. This might lead to unexpected behavior. "
+                           "If your plan is to load the model on each device, you should set device_map={"": PartialState().process_index} where PartialState comes from accelerate library")
+            
         if use_auth_token is not None:
             warnings.warn(
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
