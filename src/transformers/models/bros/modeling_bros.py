@@ -552,11 +552,11 @@ class BrosEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             layer_outputs = layer_module(
-                hidden_states=hidden_states,
-                bbox_pos_emb=bbox_pos_emb,
-                attention_mask=attention_mask,
-                head_mask=layer_head_mask,
-                encoder_hidden_states=encoder_hidden_states,
+                hidden_states,
+                bbox_pos_emb,
+                attention_mask,
+                layer_head_mask,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
                 past_key_value=past_key_value,
                 output_attentions=output_attentions,
