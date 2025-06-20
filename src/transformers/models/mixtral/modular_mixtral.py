@@ -19,7 +19,6 @@
 # limitations under the License.
 """PyTorch Mixtral model."""
 
-from functools import partial
 from typing import Optional, Union
 
 import torch
@@ -31,8 +30,8 @@ from ...activations import ACT2FN
 from ...cache_utils import DynamicCache
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import LossKwargs, logging
 from ..mistral.modeling_mistral import (

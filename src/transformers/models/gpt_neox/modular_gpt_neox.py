@@ -9,6 +9,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -17,7 +18,6 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...modeling_layers import GradientCheckpointingLayer
 from ...processing_utils import Unpack
 from ...utils import LossKwargs, auto_docstring, can_return_tuple, logging
 from ..llama.modeling_llama import LlamaModel, LlamaPreTrainedModel, LlamaRotaryEmbedding, rotate_half

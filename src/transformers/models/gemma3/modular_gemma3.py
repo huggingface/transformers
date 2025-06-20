@@ -16,7 +16,6 @@
 import copy
 from collections.abc import Callable
 from dataclasses import dataclass
-from functools import partial
 from typing import Any, Optional, Union
 
 import torch
@@ -27,8 +26,8 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack

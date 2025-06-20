@@ -15,7 +15,6 @@
 """PyTorch BioGPT model."""
 
 import math
-from functools import partial
 from typing import Optional, Union
 
 import torch

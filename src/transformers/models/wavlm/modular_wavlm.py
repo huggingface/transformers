@@ -7,9 +7,9 @@ import torch.nn.functional as F
 
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, Wav2Vec2BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...modeling_layers import GradientCheckpointingLayer
 from ...utils import logging
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2FeatureProjection,
