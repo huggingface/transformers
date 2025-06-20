@@ -173,7 +173,7 @@ class TokenizerUtilsTest(unittest.TestCase):
 
     @require_tokenizers
     def test_batch_encoding_word_to_tokens(self):
-        tokenizer_r = BertTokenizerFast.from_pretrained("google-bert/bert-base-cased")
+        tokenizer_r = BertTokenizerFast.from_pretrained("google-bert/bert-base-cased", add_prefix_space=True)
         encoded = tokenizer_r(["Test", "\xad", "test"], is_split_into_words=True)
 
         self.assertEqual(encoded.word_to_tokens(0), TokenSpan(start=1, end=2))
