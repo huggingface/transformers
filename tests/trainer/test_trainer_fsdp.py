@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-from transformers import is_torch_available, is_torch_hpu_available
+from transformers import is_torch_available
 from transformers.testing_utils import (
     TestCasePlus,
     backend_device_count,
