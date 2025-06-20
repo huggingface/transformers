@@ -95,8 +95,8 @@ class KyutaiSpeechToTextConfig(PretrainedConfig):
 
     #TODO: add example
     ```"""
-
-    model_type = "kyutai_speech_to_text"
+    # not the best naming here for `model_type`, but original codebase already uses model type:`stt` for in the config so we keep it to simplify
+    model_type = "stt"
     keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs = {"codec_config": AutoConfig}
 
