@@ -564,10 +564,10 @@ class MarkupLMEncoder(nn.Module):
                 )
             else:
                 layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    output_attentions,
+                    hidden_states=hidden_states,
+                    attention_mask=attention_mask,
+                    head_mask=layer_head_mask,
+                    output_attentions=output_attentions,
                     **kwargs,
                 )
 
