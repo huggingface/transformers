@@ -19,7 +19,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from functools import partial
 from typing import Callable, Optional, Union
 
 import torch
@@ -42,25 +41,11 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    add_code_sample_docstrings,
-    add_end_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    can_return_tuple,
-    logging,
-    replace_return_docstrings,
-)
-from ...utils.deprecation import deprecate_kwarg
+from ...utils import auto_docstring, can_return_tuple, logging
 from .configuration_t5gemma import T5GemmaConfig, T5GemmaModuleConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-# TODO(bzhanggo): figure out these documentations
-_CHECKPOINT_FOR_DOC = "google/t5gemma-placeholder"
-_CONFIG_FOR_DOC = "T5GemmaConfig"
 
 
 class T5GemmaRMSNorm(nn.Module):
@@ -321,8 +306,6 @@ class T5GemmaCrossAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
         self.attn_logit_softcapping = self.config.attn_logit_softcapping
-        # Cross-attention only supports global attention
-        self.sliding_window = None
 
         if config.cross_attention_hidden_size is None:
             raise ValueError("Cross-attention needs cross_attention_hidden_size to be specified.")
@@ -390,7 +373,7 @@ class T5GemmaCrossAttention(nn.Module):
             attention_mask,
             dropout=self.attention_dropout if self.training else 0.0,
             scaling=self.scaling,
-            sliding_window=self.sliding_window,
+            sliding_window=None,
             softcap=self.attn_logit_softcapping,
             **kwargs,
         )
@@ -426,7 +409,6 @@ class T5GemmaEncoderLayer(GradientCheckpointingLayer):
         # dropout
         self.dropout = nn.Dropout(config.dropout_rate)
 
-    @deprecate_kwarg("last_cache_position", version="4.53.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -481,7 +463,6 @@ class T5GemmaDecoderLayer(T5GemmaEncoderLayer):
         self.pre_cross_attn_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_cross_attn_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("last_cache_position", version="4.53.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -573,27 +554,7 @@ class T5GemmaLMHead(nn.Module):
         return logits
 
 
-T5GEMMA_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`T5GemmaConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare T5Gemma Model outputting raw hidden-states without any specific head on top.",
-    T5GEMMA_START_DOCSTRING,
-)
+@auto_docstring
 class T5GemmaPreTrainedModel(PreTrainedModel):
     config_class = T5GemmaConfig
     base_model_prefix = "model"
@@ -691,7 +652,8 @@ def make_default_2d_attention_mask(
 ) -> torch.Tensor:
     """Construct the default attention mask."""
     if token_ids is not None:
-        assert pad_token_id is not None, "`pad_token_id` is required for padding information."
+        if pad_token_id is None:
+            raise ValueError("`pad_token_id` is required for padding information.")
         attention_mask = (token_ids != pad_token_id).to(hidden_states.device, torch.long)
     else:
         attention_mask = torch.ones(
@@ -726,7 +688,6 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
         self.embed_tokens = value
 
     @can_return_tuple
-    @deprecate_kwarg("last_cache_position", version="4.53.0")
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -805,24 +766,14 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    partial(layer_module.__call__, **flash_attn_kwargs),
-                    hidden_states,
-                    position_embeddings,
-                    self_attn_mask_mapping[layer_module.attention_type],
-                    position_ids,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    position_embeddings=position_embeddings,
-                    attention_mask=self_attn_mask_mapping[layer_module.attention_type],
-                    position_ids=position_ids,
-                    output_attentions=output_attentions,
-                    **flash_attn_kwargs,
-                )
+            layer_outputs = layer_module(
+                hidden_states,
+                position_embeddings,
+                self_attn_mask_mapping[layer_module.attention_type],
+                position_ids,
+                output_attentions,
+                **flash_attn_kwargs,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -854,7 +805,6 @@ class T5GemmaDecoder(T5GemmaEncoder):
         self.post_init()
 
     @can_return_tuple
-    @deprecate_kwarg("last_cache_position", version="4.53.0")
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -970,34 +920,19 @@ class T5GemmaDecoder(T5GemmaEncoder):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    partial(layer_module.__call__, **flash_attn_kwargs),
-                    hidden_states,
-                    position_embeddings,
-                    self_attn_mask_mapping[layer_module.attention_type],
-                    position_ids,
-                    None,  # no past_key_values for gradient checkpointing
-                    output_attentions,
-                    use_cache,
-                    cache_position,
-                    encoder_hidden_states,
-                    cross_attn_mask_mapping["full_attention"],
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    position_embeddings=position_embeddings,
-                    attention_mask=self_attn_mask_mapping[layer_module.attention_type],
-                    position_ids=position_ids,
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=cross_attn_mask_mapping["full_attention"],
-                    **flash_attn_kwargs,
-                )
+            layer_outputs = layer_module(
+                hidden_states,
+                position_embeddings,
+                self_attn_mask_mapping[layer_module.attention_type],
+                position_ids,
+                past_key_values,
+                output_attentions,
+                use_cache,
+                cache_position,
+                encoder_hidden_states,
+                cross_attn_mask_mapping["full_attention"],
+                **flash_attn_kwargs,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -1020,93 +955,7 @@ class T5GemmaDecoder(T5GemmaEncoder):
         )
 
 
-T5GEMMA_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
-            Indices of encoder input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            `attention_mask`.
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-            [What are input IDs?](../glossary#input-ids)
-            If `inputs_embeds` is not passed, this is a required argument for the encoder.
-        attention_mask (`torch.Tensor` of shape `(batch_size, encoder_sequence_length)` or `BlockMask`, *optional*):
-            Mask to avoid performing attention on padding token indices in the encoder. Mask values selected in `[0, 1]`:
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-            If the encoder is configured to use flex_attention, it will attempt to convert the mask Tensor into a BlockMask,
-            but you can also pass a `BlockMask` object directly here.
-            [What are attention masks?](../glossary#attention-mask)
-        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, decoder_sequence_length)`, *optional*):
-            Indices of decoder input sequence tokens in the vocabulary.
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details. [What are input IDs?](../glossary#input-ids)
-            If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
-            `past_key_values`).
-            For training, `decoder_input_ids` are automatically created by shifting `labels` one position to the right,
-            prepending the `decoder_start_token_id`, and replacing `eos_token_id` with `pad_token_id` in the shifted sequence.
-            If `decoder_inputs_embeds` is not passed, this is a required argument for the decoder (when not using `labels` for training).
-        decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, decoder_sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices in the decoder.
-            By default, a causal mask will be applied along with the padding mask.
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-        encoder_outputs (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
-            `last_hidden_state` of shape `(batch_size, encoder_sequence_length, hidden_size)` is a sequence of
-            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the
-            decoder. If `encoder_outputs` is not provided, the model will run the encoder with `input_ids`
-            (or `inputs_embeds`) and `attention_mask`.
-        past_key_values (`EncoderDecoderCache`, *optional*):
-            Pre-computed hidden-states (key and values) in the self-attention blocks of the decoder and in the
-            cross-attention blocks that can be used to speed up sequential decoding. This typically consists in the
-            `past_key_values` returned by the model at a previous stage of decoding, when `use_cache=True` or
-            `config.use_cache=True`.
-            It is an [`~cache_utils.EncoderDecoderCache`] instance, which combines a cache for the decoder's
-            self-attention and a cache for the cross-attention layers. For more details, see our
-            [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids`
-            (those that don't have their past key value states given to this model) of shape `(batch_size, 1)`
-            instead of all `decoder_input_ids` of shape `(batch_size, decoder_sequence_length)`.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation for the encoder.
-            This is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, decoder_sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded representation for the decoder.
-            This is useful if you want more control over how to convert `decoder_input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        labels (`torch.LongTensor` of shape `(batch_size, decoder_sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss (for training).
-            Indices should be in `[-100, 0, ..., config.vocab_size - 1]`. All labels set to `-100` are ignored (masked),
-            the loss is only computed for labels in `[0, ..., config.vocab_size - 1]`.
-            During training, if `labels` are provided, `decoder_input_ids` will be automatically created by shifting `labels`.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned for the decoder and can be used to speed up
-            decoding (see `past_key_values`).
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers (encoder self-attentions,
-            decoder self-attentions, and cross-attentions). See `attentions` and `cross_attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers of both the encoder and the decoder.
-            See `encoder_hidden_states` and `decoder_hidden_states` under returned tensors for more detail.
-        cache_position (`torch.LongTensor` of shape `(decoder_sequence_length)`, *optional*):
-            Indices depicting the position of the decoder input sequence tokens in the sequence. Contrarily to
-            `decoder_position_ids`, this tensor is not affected by padding. It is used to update the decoder's
-            cache in the correct position and to infer the complete sequence length for attention mechanisms.
-        position_ids (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
-            Indices of positions of each encoder input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.encoder.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
-        decoder_position_ids (`torch.LongTensor` of shape `(batch_size, decoder_sequence_length)`, *optional*):
-            Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.decoder.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
-"""
-
-
-@add_start_docstrings(
-    "The bare T5Gemma Model outputting raw hidden-states without any specific head on top.",
-    T5GEMMA_START_DOCSTRING,
-)
+@auto_docstring
 class T5GemmaModel(T5GemmaPreTrainedModel):
     def __init__(self, config: T5GemmaConfig):
         super().__init__(config)
@@ -1133,9 +982,7 @@ class T5GemmaModel(T5GemmaPreTrainedModel):
         return self.encoder.set_input_embeddings(new_embeddings)
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(T5GEMMA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
-    @deprecate_kwarg("last_cache_position", version="4.53.0")
+    @auto_docstring
     def forward(
         self,
         # encoder
@@ -1218,10 +1065,7 @@ class T5GemmaModel(T5GemmaPreTrainedModel):
             )
 
 
-@add_start_docstrings(
-    "The bare T5Gemma Encoder Model outputting raw hidden-states without any specific head on top.",
-    T5GEMMA_START_DOCSTRING,
-)
+@auto_docstring
 class T5GemmaEncoderModel(T5GemmaPreTrainedModel):
     def __init__(self, config: T5GemmaConfig):
         super().__init__(config)
@@ -1235,9 +1079,7 @@ class T5GemmaEncoderModel(T5GemmaPreTrainedModel):
         return self.encoder.set_input_embeddings(new_embeddings)
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(T5GEMMA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
-    @deprecate_kwarg("last_cache_position", version="4.53.0")
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1300,9 +1142,7 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
         return self.model.decoder
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(T5GEMMA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
-    @deprecate_kwarg("last_cache_position", version="4.53.0")
+    @auto_docstring
     def forward(
         self,
         # encoder
@@ -1400,30 +1240,7 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
         return self._shift_right(labels)
 
 
-@add_start_docstrings(
-    """
-    The T5Gemma Model transformer with a sequence classification head on top (linear layer).
-
-    [`T5GemmaForSequenceClassification`] uses the last token in order to do the classification, as other causal models
-    (e.g. GPT-2) do.
-
-    When set `is_encoder_decoder=True`, the same inputs go thought both encoder and decoder, and the final decoder outputs
-    gives the prediction; In contrast, only the encoder is used.
-
-    Since it does classification on the last token, it requires to know the position of the last token. If a
-    `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
-    no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
-    padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
-    each row of the batch).
-    """,
-    T5GEMMA_START_DOCSTRING,
-)
-@add_end_docstrings(
-    """
-        is_encoder_decoder (`Optional`, *optional*):
-            Whether use encoder_decoder for sequence classification. When set to False, only encoder is used.
-    """
-)
+@auto_docstring
 class T5GemmaForSequenceClassification(T5GemmaPreTrainedModel):
     def __init__(self, config: T5GemmaConfig, is_encoder_decoder: Optional[bool] = None):
         if is_encoder_decoder is not None:
@@ -1447,7 +1264,7 @@ class T5GemmaForSequenceClassification(T5GemmaPreTrainedModel):
         self.model.set_input_embeddings(value)
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(T5GEMMA_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         # encoder
@@ -1555,19 +1372,7 @@ class T5GemmaForSequenceClassification(T5GemmaPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    The T5Gemma Model transformer with a token classification head on top (a linear layer on top of the hidden-states
-    output) e.g. for Named-Entity-Recognition (NER) tasks.
-    """,
-    T5GEMMA_START_DOCSTRING,
-)
-@add_end_docstrings(
-    """
-        is_encoder_decoder (`Optional`, *optional*):
-            Whether use encoder_decoder for token classification. When set to False, only encoder is used.
-    """
-)
+@auto_docstring
 class T5GemmaForTokenClassification(T5GemmaPreTrainedModel):
     def __init__(self, config: T5GemmaConfig, is_encoder_decoder: Optional[bool] = None):
         if is_encoder_decoder is not None:
@@ -1592,12 +1397,7 @@ class T5GemmaForTokenClassification(T5GemmaPreTrainedModel):
         self.model.set_input_embeddings(value)
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(T5GEMMA_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TokenClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         # encoder
