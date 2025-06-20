@@ -1382,8 +1382,8 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
 
             layer_outputs = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask,
-                encoder_hidden_states=encoder_hidden_states,
+                causal_mask,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
                 past_key_value=past_key_values,
                 output_attentions=output_attentions,
