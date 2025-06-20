@@ -26,8 +26,6 @@ from ...utils import is_torch_available
 if is_torch_available():
     import torch
 
-    from ...models.dac.modeling_dac import DacModel
-
 
 class DiaAudioKwargs(AudioKwargs, total=False):
     bos_token_id: int
@@ -75,6 +73,7 @@ class DiaProcessor(ProcessorMixin):
 
     feature_extractor_class = "DiaFeatureExtractor"
     tokenizer_class = "DiaTokenizer"
+    audio_tokenizer_class = "DacModel"
 
     def __init__(self, feature_extractor, tokenizer, audio_tokenizer):
         super().__init__(feature_extractor, tokenizer, audio_tokenizer=audio_tokenizer)
@@ -136,13 +135,6 @@ class DiaProcessor(ProcessorMixin):
         data.update(encodings)
 
         # Audio
-        if not isinstance(self.audio_tokenizer, DacModel):
-            raise ValueError(
-                f"Using the `DiaProcessor` requires `DacModel` as `audio_tokenizer`, "
-                f"found `{type(self.audio_tokenizer)}` instead. "
-                f"Make sure to properly initialize the processor."
-            )
-
         delay_pattern = audio_kwargs.pop("delay_pattern", None)
         audio_bos_token_id = audio_kwargs.pop("bos_token_id", None)
         audio_eos_token_id = audio_kwargs.pop("eos_token_id", None)

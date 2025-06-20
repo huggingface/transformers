@@ -34,7 +34,7 @@ from .audio_utils import load_audio
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
 from .image_utils import ChannelDimension, is_valid_image, is_vision_available, load_image
-from .models.auto.modeling_auto import MODEL_FOR_AUDIO_TOKENIZATION_NAMES
+from .models.auto.modeling_auto import MODEL_FOR_AUDIO_TOKENIZATION_MAPPING
 from .utils.chat_template_utils import render_jinja_template
 from .video_utils import VideoMetadata, load_video
 
@@ -63,15 +63,10 @@ from .utils import (
     download_url,
     is_offline_mode,
     is_remote_url,
-    is_torch_available,
     list_repo_templates,
     logging,
 )
 from .utils.deprecation import deprecate_kwarg
-
-
-if is_torch_available():
-    from .modeling_utils import PreTrainedModel
 
 
 logger = logging.get_logger(__name__)
@@ -518,7 +513,19 @@ class ProcessorMixin(PushToHubMixin):
         # First, extract optional attributes from kwargs if present
         # Optional attributes can never be positional arguments
         for optional_attribute in self.optional_attributes:
-            setattr(self, optional_attribute, kwargs.pop(optional_attribute, None))
+            optional_attribute_value = kwargs.pop(optional_attribute, None)
+            setattr(self, optional_attribute, optional_attribute_value)
+
+            # Check audio tokenizer for its class but do not treat it as attr to avoid saving weights
+            if optional_attribute != "chat_template" and optional_attribute_value is not None:
+                proper_class = self.check_argument_for_proper_class(optional_attribute, optional_attribute_value)
+
+                if proper_class not in MODEL_FOR_AUDIO_TOKENIZATION_MAPPING.values():
+                    raise ValueError(
+                        f"Tried to use `{proper_class}` for audio tokenization. However, this class is not"
+                        " registered for audio tokenization."
+                    )
+
         # Sanitize args and kwargs
         for key in kwargs:
             if key not in self.attributes:
@@ -537,20 +544,29 @@ class ProcessorMixin(PushToHubMixin):
 
         # Check each arg is of the proper class (this will also catch a user initializing in the wrong order)
         for attribute_name, arg in kwargs.items():
-            class_name = getattr(self, f"{attribute_name}_class")
-            # Nothing is ever going to be an instance of "AutoXxx", in that case we check the base class.
-            class_name = AUTO_TO_BASE_CLASS_MAPPING.get(class_name, class_name)
-            if isinstance(class_name, tuple):
-                proper_class = tuple(self.get_possibly_dynamic_module(n) for n in class_name if n is not None)
-            else:
-                proper_class = self.get_possibly_dynamic_module(class_name)
-
-            if not isinstance(arg, proper_class):
-                raise TypeError(
-                    f"Received a {type(arg).__name__} for argument {attribute_name}, but a {class_name} was expected."
-                )
-
+            self.check_argument_for_proper_class(attribute_name, arg)
             setattr(self, attribute_name, arg)
+
+    def check_argument_for_proper_class(self, argument_name, argument):
+        """
+        Checks the passed argument's class against the expected transformers class. In case of an unexpected
+        mismatch between expected and actual class, an error is raise. Otherwise, the proper retrieved class
+        is returned.
+        """
+        class_name = getattr(self, f"{argument_name}_class")
+        # Nothing is ever going to be an instance of "AutoXxx", in that case we check the base class.
+        class_name = AUTO_TO_BASE_CLASS_MAPPING.get(class_name, class_name)
+        if isinstance(class_name, tuple):
+            proper_class = tuple(self.get_possibly_dynamic_module(n) for n in class_name if n is not None)
+        else:
+            proper_class = self.get_possibly_dynamic_module(class_name)
+
+        if not isinstance(argument, proper_class):
+            raise TypeError(
+                f"Received a {type(argument).__name__} for argument {argument_name}, but a {class_name} was expected."
+            )
+
+        return proper_class
 
     def to_dict(self) -> dict[str, Any]:
         """
@@ -748,24 +764,8 @@ class ProcessorMixin(PushToHubMixin):
                 )
 
         if self.audio_tokenizer is not None:
-            if not is_torch_available():
-                raise ValueError(
-                    "`audio_tokenizer` requires `torch` but we couldn't find it in your environment. "
-                    "You can install torch via `pip install torch`."
-                )
-            elif not isinstance(self.audio_tokenizer, PreTrainedModel):
-                raise ValueError(
-                    f"`audio_tokenizer` can only be a `PreTrainedModel` but received {type(self.audio_tokenizer)}"
-                    " instead."
-                )
-            else:
-                audio_tokenizer_class = self.audio_tokenizer.__class__.__name__
-                audio_tokenizer_name_or_path = self.audio_tokenizer.name_or_path
-                if audio_tokenizer_class not in MODEL_FOR_AUDIO_TOKENIZATION_NAMES.values():
-                    raise ValueError(
-                        f"Tried to use `{audio_tokenizer_class}` for audio tokenization. However, this class is not"
-                        " registered for audio tokenization."
-                    )
+            audio_tokenizer_class = self.audio_tokenizer.__class__.__name__
+            audio_tokenizer_name_or_path = self.audio_tokenizer.name_or_path
 
             audio_tokenizer_dict = {
                 "audio_tokenizer_class": audio_tokenizer_class,

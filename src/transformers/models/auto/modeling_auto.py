@@ -2021,6 +2021,15 @@ class AutoModelForMaskedImageModeling(_BaseAutoModelClass):
 AutoModelForMaskedImageModeling = auto_class_update(AutoModelForMaskedImageModeling, head_doc="masked image modeling")
 
 
+class AutoModelForAudioTokenization(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_AUDIO_TOKENIZATION_MAPPING
+
+
+AutoModelForAudioTokenization = auto_class_update(
+    AutoModelForAudioTokenization, head_doc="audio tokenization through codebooks"
+)
+
+
 class AutoModelWithLMHead(_AutoModelWithLMHead):
     @classmethod
     def from_config(cls, config):
@@ -2094,6 +2103,7 @@ __all__ = [
     "AutoBackbone",
     "AutoModelForAudioClassification",
     "AutoModelForAudioFrameClassification",
+    "AutoModelForAudioTokenization",
     "AutoModelForAudioXVector",
     "AutoModelForCausalLM",
     "AutoModelForCTC",
