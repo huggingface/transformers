@@ -1490,7 +1490,7 @@ Please note that you may need to restart your runtime after installation.
 """
 
 TORCHCODEC_IMPORT_ERROR = """
-{0} requires the PyAv library but it was not found in your environment. You can install it with:
+{0} requires the TorchCodec (https://github.com/pytorch/torchcodec) library, but it was not found in your environment. You can install it with:
 ```
 pip install torchcodec
 ```
