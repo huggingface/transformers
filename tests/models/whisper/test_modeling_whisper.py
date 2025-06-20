@@ -1646,7 +1646,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model.to(torch_device)
 
         ds = load_dataset(
-            "facebook/multilingual_librispeech", "german", split="test", streaming=True, trust_remote_code=True
+            "facebook/multilingual_librispeech", "german", split="test", streaming=True
         )
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
 
@@ -1714,11 +1714,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         token = os.getenv("HF_HUB_READ_TOKEN", True)
         ds = load_dataset(
-            "mozilla-foundation/common_voice_6_1",
+            "hf-internal-testing/fixtures_common_voice",
             "ja",
             split="test",
             streaming=True,
-            trust_remote_code=True,
             token=token,
         )
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))

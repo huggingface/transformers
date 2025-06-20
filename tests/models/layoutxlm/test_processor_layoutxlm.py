@@ -162,7 +162,7 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         from datasets import load_dataset
 
         # set up
-        datasets = load_dataset("nielsr/funsd", trust_remote_code=True)
+        datasets = load_dataset("nielsr/funsd")
         processor = LayoutXLMProcessor.from_pretrained("microsoft/layoutxlm-base", apply_ocr=False)
 
         def preprocess_data(examples):

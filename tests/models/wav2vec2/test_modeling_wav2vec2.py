@@ -98,7 +98,7 @@ def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
         _ = in_queue.get(timeout=timeout)
 
         ds = load_dataset(
-            "mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True, trust_remote_code=True
+            "mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True
         )
         sample = next(iter(ds))
 
@@ -1837,7 +1837,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     @require_torchaudio
     def test_wav2vec2_with_lm(self):
         ds = load_dataset(
-            "mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True, trust_remote_code=True
+            "mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True
         )
         sample = next(iter(ds))
 
@@ -1863,7 +1863,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     @require_torchaudio
     def test_wav2vec2_with_lm_pool(self):
         ds = load_dataset(
-            "mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True, trust_remote_code=True
+            "mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True
         )
         sample = next(iter(ds))
 
@@ -1964,7 +1964,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         def run_model(lang):
             ds = load_dataset(
-                "mozilla-foundation/common_voice_11_0", lang, split="test", streaming=True, trust_remote_code=True
+                "mozilla-foundation/common_voice_11_0", lang, split="test", streaming=True
             )
             sample = next(iter(ds))
 

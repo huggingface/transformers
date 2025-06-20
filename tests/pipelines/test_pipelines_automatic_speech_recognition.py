@@ -265,7 +265,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     @require_torch
     @require_pyctcdecode
     def test_large_model_pt_with_lm(self):
-        dataset = load_dataset("Narsil/asr_dummy", streaming=True, trust_remote_code=True)
+        dataset = load_dataset("Narsil/asr_dummy", streaming=True)
         third_item = next(iter(dataset["test"].skip(3)))
         filename = third_item["file"]
 
@@ -388,7 +388,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             chunk_length_s=8,
             stride_length_s=1,
         )
-        data = load_dataset("openslr/librispeech_asr", "clean", split="test", streaming=True, trust_remote_code=True)
+        data = load_dataset("openslr/librispeech_asr", "clean", split="test", streaming=True)
         sample = next(iter(data))
 
         res = pipe(sample["audio"]["array"])
@@ -434,7 +434,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             stride_length_s=1,
             return_language=True,
         )
-        data = load_dataset("openslr/librispeech_asr", "clean", split="test", streaming=True, trust_remote_code=True)
+        data = load_dataset("openslr/librispeech_asr", "clean", split="test", streaming=True)
         sample = next(iter(data))
 
         res = pipe(sample["audio"]["array"])
@@ -489,7 +489,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             task="automatic-speech-recognition",
             model="openai/whisper-tiny.en",
         )
-        data = load_dataset("openslr/librispeech_asr", "clean", split="test", streaming=True, trust_remote_code=True)
+        data = load_dataset("openslr/librispeech_asr", "clean", split="test", streaming=True)
         samples = [next(iter(data)) for _ in range(8)]
         audio = np.concatenate([sample["audio"]["array"] for sample in samples])
 
@@ -1126,7 +1126,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     def test_speculative_decoding_whisper_non_distil(self):
         # Load data:
         dataset = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:1]", trust_remote_code=True
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:1]"
         )
         sample = dataset[0]["audio"]
 
@@ -1170,7 +1170,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     def test_speculative_decoding_whisper_distil(self):
         # Load data:
         dataset = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:1]", trust_remote_code=True
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:1]"
         )
         sample = dataset[0]["audio"]
 

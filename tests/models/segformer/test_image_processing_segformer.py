@@ -86,23 +86,14 @@ class SegformerImageProcessingTester:
 
 
 def prepare_semantic_single_inputs():
-    dataset = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
-
-    image = Image.open(dataset[0]["file"])
-    map = Image.open(dataset[1]["file"])
-
-    return image, map
+    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+    example = ds[0]
+    return example["image"], example["map"]
 
 
 def prepare_semantic_batch_inputs():
-    dataset = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
-
-    image1 = Image.open(dataset[0]["file"])
-    map1 = Image.open(dataset[1]["file"])
-    image2 = Image.open(dataset[2]["file"])
-    map2 = Image.open(dataset[3]["file"])
-
-    return [image1, image2], [map1, map2]
+    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+    return list(ds["image"][:2]), list(ds["map"][:2])
 
 
 @require_torch

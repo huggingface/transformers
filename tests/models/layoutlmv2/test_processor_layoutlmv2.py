@@ -156,7 +156,7 @@ class LayoutLMv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         from datasets import load_dataset
 
         # set up
-        datasets = load_dataset("nielsr/funsd", trust_remote_code=True)
+        datasets = load_dataset("nielsr/funsd")
         processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased", revision="no_ocr")
 
         def preprocess_data(examples):

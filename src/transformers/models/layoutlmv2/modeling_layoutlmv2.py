@@ -763,9 +763,8 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
         >>> model = LayoutLMv2Model.from_pretrained("microsoft/layoutlmv2-base-uncased")
 
 
-        >>> dataset = load_dataset("hf-internal-testing/fixtures_docvqa", trust_remote_code=True)
-        >>> image_path = dataset["test"][0]["file"]
-        >>> image = Image.open(image_path).convert("RGB")
+        >>> dataset = load_dataset("hf-internal-testing/fixtures_docvqa")
+        >>> image = dataset["test"][0]["image"]
 
         >>> encoding = processor(image, return_tensors="pt")
 
@@ -953,7 +952,7 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
 
         >>> set_seed(0)
 
-        >>> dataset = load_dataset("aharley/rvl_cdip", split="train", streaming=True, trust_remote_code=True)
+        >>> dataset = load_dataset("aharley/rvl_cdip", split="train", streaming=True)
         >>> data = next(iter(dataset))
         >>> image = data["image"].convert("RGB")
 
@@ -1312,9 +1311,8 @@ class LayoutLMv2ForQuestionAnswering(LayoutLMv2PreTrainedModel):
         >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv2-base-uncased")
         >>> model = LayoutLMv2ForQuestionAnswering.from_pretrained("microsoft/layoutlmv2-base-uncased")
 
-        >>> dataset = load_dataset("hf-internal-testing/fixtures_docvqa", trust_remote_code=True)
-        >>> image_path = dataset["test"][0]["file"]
-        >>> image = Image.open(image_path).convert("RGB")
+        >>> dataset = load_dataset("hf-internal-testing/fixtures_docvqa")
+        >>> image = dataset["test"][0]["image"]
         >>> question = "When is coffee break?"
         >>> encoding = processor(image, question, return_tensors="pt")
 
