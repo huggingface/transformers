@@ -982,7 +982,7 @@ class Zamba2MLP(nn.Module):
         return output
 
 
-class Zamba2AttentionDecoderLayer(GradientCheckpointingLayer):
+class Zamba2AttentionDecoderLayer(nn.Module):
     def __init__(self, config: Zamba2Config, block_id: Optional[int] = None, layer_idx: Optional[int] = None):
         super().__init__()
         self.block_id = block_id
@@ -1114,7 +1114,7 @@ class Zamba2MambaDecoderLayer(GradientCheckpointingLayer):
         return outputs
 
 
-class Zamba2HybridLayer(nn.Module):
+class Zamba2HybridLayer(GradientCheckpointingLayer):
     def __init__(
         self, shared_transformer: Zamba2AttentionDecoderLayer, linear: nn.Linear, mamba: Zamba2MambaDecoderLayer
     ):
@@ -1352,14 +1352,14 @@ class Zamba2Model(Zamba2PreTrainedModel):
 
             layer_outputs = layer(
                 hidden_states,
-                original_hidden_states=original_hidden_states,
-                layer_idx=layer_idx,
-                attention_mask=attention_mask,
-                causal_mask=causal_mask,
-                past_key_value=past_key_values,
-                output_attentions=output_attentions,
-                use_cache=use_cache,
-                position_embeddings=position_embeddings,
+                original_hidden_states,
+                layer_idx,
+                attention_mask,
+                causal_mask,
+                past_key_values,
+                output_attentions,
+                use_cache,
+                position_embeddings,
             )
             hidden_states = layer_outputs[0]
 
