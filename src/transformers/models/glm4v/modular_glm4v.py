@@ -34,6 +34,7 @@ from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLModelOutputWithPast,
     Qwen2_5_VLPreTrainedModel,
     Qwen2_5_VLRotaryEmbedding,
+    Qwen2_5_VLTextModel,
     Qwen2_5_VLVisionBlock,
     apply_rotary_pos_emb_vision,
 )
@@ -977,7 +978,7 @@ class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
         return outputs
 
 
-class Glm4vTextModel(Glm4vPreTrainedModel):
+class Glm4vTextModel(Qwen2_5_VLTextModel):
     def __init__(self, config: Glm4vTextConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -994,12 +995,6 @@ class Glm4vTextModel(Glm4vPreTrainedModel):
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     def forward(
         self,
