@@ -445,13 +445,6 @@ CUDA_VISIBLE_DEVICES="1" pytest tests/utils/test_logging.py
 def test_example_with_multi_gpu():
 ```
 
-テストに `tensorflow` が必要な場合は、`require_tf` デコレータを使用します。例えば：
-
-```python no-style
-@require_tf
-def test_tf_thing_with_tensorflow():
-```
-
 これらのデコレータは積み重ねることができます。たとえば、テストが遅く、pytorch で少なくとも 1 つの GPU が必要な場合は、次のようになります。
 設定方法:
 
