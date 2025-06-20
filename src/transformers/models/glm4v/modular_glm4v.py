@@ -991,7 +991,7 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
         self._attn_implementation = config._attn_implementation
         self.norm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Glm4vTextRotaryEmbedding(config=config)
-
+        del self.has_sliding_layers
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()

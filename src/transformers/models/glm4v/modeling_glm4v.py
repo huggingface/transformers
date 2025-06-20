@@ -854,8 +854,6 @@ class Glm4vTextModel(Glm4vPreTrainedModel):
         self._attn_implementation = config._attn_implementation
         self.norm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Glm4vTextRotaryEmbedding(config=config)
-        self.has_sliding_layers = "sliding_attention" in self.config.layer_types
-
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
