@@ -460,37 +460,6 @@ def process_patch_lengths(patch_lengths: torch.Tensor, max_patch_length: int) ->
     return padded
 
 
-def create_causal_mask_for_blt(
-    seqlen: int,
-    batch_size: int,
-    device: torch.device,
-    dtype: torch.dtype,
-    sliding_window: Optional[int] = None,
-) -> torch.Tensor:
-    """
-    Creates a causal mask for BLT local encoder.
-    """
-    min_value = torch.finfo(dtype).min
-    mask = torch.full(
-        (batch_size, 1, seqlen, seqlen),  # Note: using seqlen, not total_seqlen
-        min_value,
-        dtype=dtype,
-        device=device,
-    )
-    
-    if sliding_window is not None:
-        # Create local causal mask with sliding window
-        for i in range(seqlen):
-            start_idx = max(0, i - sliding_window + 1)
-            mask[:, :, i, start_idx:i + 1] = 0
-    else:
-        # Create full causal mask
-        mask = torch.triu(mask, diagonal=0)
-        mask = mask.masked_fill(mask == 0, min_value)
-    
-    return mask
-
-
 class BLTRotaryEmbedding(nn.Module):
     def __init__(self, config: BLTConfig, device=None):
         super().__init__()
@@ -591,15 +560,6 @@ class BLTLocalEncoder(nn.Module):
             input_embeds = self.embed_tokens(input_ids)
 
         batch_size, seq_length, _ = input_embeds.shape
-
-        if mask is None:
-            attention_mask = create_causal_mask_for_blt(
-                seqlen=seq_length,
-                batch_size=batch_size,
-                device=input_embeds.device,
-                dtype=input_embeds.dtype,
-                sliding_window=self.sliding_window,
-            )
 
         hidden_states = input_embeds
 
@@ -773,19 +733,10 @@ class BLTLocalDecoder(nn.Module):
         cross_mask: Optional[torch.Tensor] = None,
         cache: Optional[List[Tuple[torch.Tensor, torch.Tensor, int]]] = None,
     ):
-        batch_size, sequence_length = tokens.shape
-        batch_size, seq_length, _ = embeds.shape
+        batch_size, _ = tokens.shape
+        batch_size, _, _ = embeds.shape
 
         assert embeds is not None, "Embeddings must be provided"
-
-        if mask is None:
-            attention_mask = create_causal_mask_for_blt(
-                seqlen=seq_length,
-                batch_size=batch_size,
-                device=embeds.device,
-                dtype=embeds.dtype,
-                sliding_window=self.sliding_window,
-            )
 
         hidden_states = embeds
 
@@ -924,11 +875,11 @@ class BLTGlobalTransformer(nn.Module):
         self.dropout = config.dropout
 
         self.layers = nn.ModuleList()
-        old = config.n_kv_heads 
+   #     old = config.n_kv_heads 
         config.n_kv_heads = config.n_kv_heads_global
         for _ in range(self.n_layers_global):
             self.layers.append(BLTTransformerLayer(self.dim_global, self.n_heads_global, config))
-        config.n_kv_heads = old
+  #      config.n_kv_heads = old
 
         global_config = config
         global_config.head_dim = self.dim_global // self.n_heads_global
