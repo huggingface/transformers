@@ -1481,10 +1481,10 @@ class ClapTextEncoder(nn.Module):
                 hidden_states,
                 attention_mask,
                 layer_head_mask,
-                encoder_hidden_states,
-                encoder_attention_mask,
-                past_key_value,
-                output_attentions,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                encoder_attention_mask=encoder_attention_mask,
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
             )
 
             hidden_states = layer_outputs[0]
