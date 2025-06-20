@@ -1072,6 +1072,7 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "NatBackbone",
     "PvtV2Backbone",
     "ResNetBackbone",
+    "SamImageProcessorFast",
     "SwinBackbone",
     "Swinv2Backbone",
     "TextNetBackbone",
