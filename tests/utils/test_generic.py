@@ -26,7 +26,6 @@ from transformers.utils import (
     filter_out_non_signature_kwargs,
     flatten_dict,
     is_flax_available,
-    is_tf_available,
     is_torch_available,
     reshape,
     squeeze,
@@ -37,9 +36,6 @@ from transformers.utils import (
 
 if is_flax_available():
     import jax.numpy as jnp
-
-if is_tf_available():
-    pass
 
 if is_torch_available():
     import torch

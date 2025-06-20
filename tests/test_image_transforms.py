@@ -18,14 +18,11 @@ import numpy as np
 from parameterized import parameterized
 
 from transformers.testing_utils import require_flax, require_torch, require_vision
-from transformers.utils.import_utils import is_flax_available, is_tf_available, is_torch_available, is_vision_available
+from transformers.utils.import_utils import is_flax_available, is_torch_available, is_vision_available
 
 
 if is_torch_available():
     import torch
-
-if is_tf_available():
-    pass
 
 if is_flax_available():
     import jax

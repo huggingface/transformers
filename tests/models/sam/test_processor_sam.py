@@ -18,7 +18,7 @@ import unittest
 import numpy as np
 
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
-from transformers.utils import is_tf_available, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin, prepare_image_inputs
 
@@ -32,9 +32,6 @@ if is_torch_available():
     import torch
 
     from transformers.models.sam.image_processing_sam import _mask_to_rle_pytorch
-
-if is_tf_available():
-    pass
 
 
 @require_vision

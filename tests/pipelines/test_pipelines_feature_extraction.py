@@ -23,7 +23,6 @@ from transformers import (
     TF_MODEL_MAPPING,
     FeatureExtractionPipeline,
     LxmertConfig,
-    is_tf_available,
     is_torch_available,
     pipeline,
 )
@@ -32,9 +31,6 @@ from transformers.testing_utils import is_pipeline_test, nested_simplify, requir
 
 if is_torch_available():
     import torch
-
-if is_tf_available():
-    pass
 
 
 @is_pipeline_test

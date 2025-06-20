@@ -22,14 +22,11 @@ import transformers
 # Try to import everything from transformers to ensure every object can be loaded.
 from transformers import *  # noqa F406
 from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, require_flax, require_torch
-from transformers.utils import ContextManagers, find_labels, is_flax_available, is_tf_available, is_torch_available
+from transformers.utils import ContextManagers, find_labels, is_flax_available, is_torch_available
 
 
 if is_torch_available():
     from transformers import BertForPreTraining, BertForQuestionAnswering, BertForSequenceClassification
-
-if is_tf_available():
-    pass
 
 if is_flax_available():
     from transformers import FlaxBertForPreTraining, FlaxBertForQuestionAnswering, FlaxBertForSequenceClassification

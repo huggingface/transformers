@@ -29,7 +29,6 @@ from transformers import (
     DataCollatorWithFlattening,
     DataCollatorWithPadding,
     default_data_collator,
-    is_tf_available,
     is_torch_available,
     set_seed,
 )
@@ -39,9 +38,6 @@ from transformers.utils import PaddingStrategy
 
 if is_torch_available():
     import torch
-
-if is_tf_available():
-    pass
 
 
 @require_torch
