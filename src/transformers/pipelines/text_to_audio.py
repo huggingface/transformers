@@ -245,6 +245,8 @@ class TextToAudioPipeline(Pipeline):
                 waveform = audio["waveform"]
             elif isinstance(audio, tuple):
                 waveform = audio[0]
+            else:
+                waveform = audio
         # Or we need to postprocess to get the waveform
         else:
             waveform = self.processor.decode(audio)
