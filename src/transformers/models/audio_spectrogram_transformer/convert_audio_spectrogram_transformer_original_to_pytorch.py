@@ -206,7 +206,7 @@ def convert_audio_spectrogram_transformer_checkpoint(model_name, pytorch_dump_fo
 
     if "speech-commands" in model_name:
         # TODO: Convert dataset to Parquet
-        dataset = load_dataset("google/speech_commands", "v0.02", split="validation", trust_remote_code=True)
+        dataset = load_dataset("google/speech_commands", "v0.02", split="validation")
         waveform = dataset[0]["audio"]["array"]
     else:
         filepath = hf_hub_download(

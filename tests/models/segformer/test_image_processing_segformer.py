@@ -27,8 +27,6 @@ if is_torch_available():
     import torch
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import SegformerImageProcessor
 
 
@@ -86,23 +84,14 @@ class SegformerImageProcessingTester:
 
 
 def prepare_semantic_single_inputs():
-    dataset = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
-
-    image = Image.open(dataset[0]["file"])
-    map = Image.open(dataset[1]["file"])
-
-    return image, map
+    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+    example = ds[0]
+    return example["image"], example["map"]
 
 
 def prepare_semantic_batch_inputs():
-    dataset = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
-
-    image1 = Image.open(dataset[0]["file"])
-    map1 = Image.open(dataset[1]["file"])
-    image2 = Image.open(dataset[2]["file"])
-    map2 = Image.open(dataset[3]["file"])
-
-    return [image1, image2], [map1, map2]
+    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+    return list(ds["image"][:2]), list(ds["map"][:2])
 
 
 @require_torch
@@ -138,7 +127,6 @@ class SegformerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(image_processor.size, {"height": 42, "width": 42})
         self.assertEqual(image_processor.do_reduce_labels, True)
 
-    @unittest.skip("temporary to avoid failing on circleci")
     def test_call_segmentation_maps(self):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
@@ -245,7 +233,6 @@ class SegformerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue(encoding["labels"].min().item() >= 0)
         self.assertTrue(encoding["labels"].max().item() <= 255)
 
-    @unittest.skip("temporary to avoid failing on circleci")
     def test_reduce_labels(self):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)

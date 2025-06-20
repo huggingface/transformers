@@ -156,7 +156,7 @@ class LayoutLMv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         from datasets import load_dataset
 
         # set up
-        datasets = load_dataset("nielsr/funsd", trust_remote_code=True)
+        datasets = load_dataset("nielsr/funsd")
         processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased", revision="no_ocr")
 
         def preprocess_data(examples):
@@ -192,12 +192,8 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
         # we verify our implementation on 2 document images from the DocVQA dataset
         from datasets import load_dataset
 
-        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test", trust_remote_code=True)
-
-        image_1 = Image.open(ds[0]["file"]).convert("RGB")
-        image_2 = Image.open(ds[1]["file"]).convert("RGB")
-
-        return image_1, image_2
+        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test")
+        return ds[0]["image"], ds[1]["image"]
 
     @cached_property
     def get_tokenizers(self):
