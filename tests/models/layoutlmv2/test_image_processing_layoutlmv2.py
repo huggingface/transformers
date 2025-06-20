@@ -117,7 +117,7 @@ class LayoutLMv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             # with apply_OCR = True
             image_processing = image_processing_class()
 
-            image = Image.open(ds[0]["file"]).convert("RGB")
+            image = ds[0]["image"]
 
             encoding = image_processing(image, return_tensors="pt")
 
