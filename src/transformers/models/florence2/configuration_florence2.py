@@ -61,10 +61,10 @@ class Florence2VisionConfig(PretrainedConfig):
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
         projection_dim (`int`, *optional*, defaults to 1024):
             The dimension of the projection layer.
-        max_temporal_embeddings (`int`, *optional*, defaults to 100): The configuration of the visual temporal embedding.
-        max_position_embeddings (`int`, *optional*, defaults to 50): The configuration of the image position embedding.
-        image_feature_source (`Tuple[str]`, *optional*, defaults to `('spatial_avg_pool', 'temporal_avg_pool')`):
-            The source of the image feature.
+        max_temporal_embeddings (`int`, *optional*, defaults to 100):
+            The configuration of the visual temporal embedding.
+        max_position_embeddings (`int`, *optional*, defaults to 50):
+            The configuration of the image position embedding.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     Example:
@@ -103,7 +103,6 @@ class Florence2VisionConfig(PretrainedConfig):
         projection_dim=1024,
         max_temporal_embeddings=100,
         max_position_embeddings=50,
-        image_feature_source=("spatial_avg_pool", "temporal_avg_pool"),
         initializer_range=0.02,
         **kwargs,
     ):
@@ -125,7 +124,6 @@ class Florence2VisionConfig(PretrainedConfig):
         self.projection_dim = projection_dim
         self.max_temporal_embeddings = max_temporal_embeddings
         self.max_position_embeddings = max_position_embeddings
-        self.image_feature_source = image_feature_source
         self.initializer_range = initializer_range
         self.activation_function = activation_function
 

@@ -14,7 +14,7 @@
 # limitations under the License.
 import math
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -671,7 +671,7 @@ class Florence2Seq2SeqLMOutput(Seq2SeqLMOutput):
             image_hidden_states of the model produced by the vision encoder
     """
 
-    image_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    image_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 FLORENCE2_START_DOCSTRING = r"""
@@ -902,8 +902,8 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         head_mask: Optional[torch.Tensor] = None,
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        encoder_outputs: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -913,7 +913,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
-    ) -> Union[Tuple, Florence2Seq2SeqLMOutput]:
+    ) -> Union[tuple, Florence2Seq2SeqLMOutput]:
         r"""
         Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

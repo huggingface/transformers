@@ -18,7 +18,7 @@ Processor class for FLORENCE2.
 
 import math
 import re
-from typing import List, Union
+from typing import Union
 
 import numpy as np
 
@@ -191,7 +191,7 @@ class Florence2Processor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[Florence2ProcessorKwargs],
@@ -253,7 +253,7 @@ class Florence2Processor(ProcessorMixin):
         elif not isinstance(text, list) and not isinstance(text[0], str):
             raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
-        if isinstance(text, List) and isinstance(images, List):
+        if isinstance(text, list) and isinstance(images, list):
             if len(images) < len(text):
                 raise ValueError(
                     f"Received {len(images)} images for {len(text)} prompts. Each prompt should be associated with an image."
