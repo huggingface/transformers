@@ -203,7 +203,7 @@ class AlbertTokenizer(PreTrainedTokenizer):
         pieces = self.sp_model.encode(text, out_type=str)
         new_pieces = []
         for piece in pieces:
-            if len(piece) > 1 and piece[-1] == str(",") and piece[-2].isdigit():
+            if len(piece) > 1 and piece[-1] == "," and piece[-2].isdigit():
                 # Logic to handle special cases see https://github.com/google-research/bert/blob/master/README.md#tokenization
                 # `9,9` -> ['▁9', ',', '9'] instead of [`_9,`, '9']
                 cur_pieces = self.sp_model.EncodeAsPieces(piece[:-1].replace(SPIECE_UNDERLINE, ""))
