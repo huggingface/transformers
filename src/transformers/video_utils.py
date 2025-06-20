@@ -479,7 +479,7 @@ def read_video_torchcodec(
             - Numpy array of frames in RGB (shape: [num_frames, height, width, 3]).
             - `VideoMetadata` object.
     """
-    # Lazy import av
+    # Lazy import torchcodec
     requires_backends(read_video_torchcodec, ["torchcodec"])
     from torchcodec.decoders import VideoDecoder
 
