@@ -1,6 +1,6 @@
 import types
 import warnings
-from typing import Any, Iterator, Optional, Union, overload
+from typing import Any, Optional, Union, overload
 
 import numpy as np
 
@@ -228,6 +228,12 @@ class TokenClassificationPipeline(ChunkPipeline):
                     )
         return preprocess_params, {}, postprocess_params
 
+    @overload
+    def __call__(self, inputs: str, **kwargs: Any) -> list[dict[str, str]]: ...
+
+    @overload
+    def __call__(self, inputs: list[str], **kwargs: Any) -> list[list[dict[str, str]]]: ...
+
     def __call__(
         self, inputs: Union[str, list[str]], **kwargs: Any
     ) -> Union[list[dict[str, str]], list[list[dict[str, str]]]]:
@@ -266,16 +272,6 @@ class TokenClassificationPipeline(ChunkPipeline):
             kwargs["offset_mapping"] = offset_mapping
 
         return super().__call__(inputs, **kwargs)
-
-    @overload
-    def preprocess(
-        self, sentence: str, is_split_into_words: bool = False, offset_mapping=None, **preprocess_params
-    ) -> Iterator[dict]: ...
-
-    @overload
-    def preprocess(
-        self, sentence: list[str], is_split_into_words: bool = True, offset_mapping=None, **preprocess_params
-    ) -> Iterator[dict]: ...
 
     def preprocess(self, sentence, is_split_into_words, offset_mapping=None, **preprocess_params):
         tokenizer_params = preprocess_params.pop("tokenizer_params", {})
