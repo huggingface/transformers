@@ -16,15 +16,7 @@
 from typing import Optional
 
 from ...utils import is_soundfile_available, is_torch_available
-
-
-if is_torch_available():
-    pass
-
-if is_soundfile_available():
-    pass
-
-from ...audio_utils import AudioInput
+from ...audio_utils import AudioInput, make_list_of_audio
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 
 
@@ -53,7 +45,30 @@ class KyutaiSpeechToTextProcessor(ProcessorMixin):
         audio: Optional[AudioInput] = None,
         **kwargs: Unpack[KyutaiSpeechToTextProcessorKwargs],
     ):
-        # TODO: @eustlb, add doc
+        r"""
+        Main method to prepare audio to be fed as input to the model. This method forwards the `audio`
+        arguments to KyutaiSpeechToTextFeatureExtractor's [`~KyutaiSpeechToTextFeatureExtractor.__call__`]. Please refer
+        to the docstring of the above method for more information.
+
+        Args:
+            audio (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
+                The audio or batch of audio to be prepared. Each audio can be a NumPy array or PyTorch
+                tensor.
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Acceptable values are:
+                    - `'tf'`: Return TensorFlow `tf.constant` objects.
+                    - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                    - `'np'`: Return NumPy `np.ndarray` objects.
+                    - `'jax'`: Return JAX `jnp.ndarray` objects.
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_values** -- List of audio values to be fed to a model. Returned when `audio` is not `None`.
+            - **padding_mask** -- List of indices specifying which input values should be ignored by the model.
+        """ 
+
+        if audio is None:
+            raise ValueError("`audio` is required.")
 
         output_kwargs = self._merge_kwargs(
             KyutaiSpeechToTextProcessorKwargs,
@@ -61,9 +76,17 @@ class KyutaiSpeechToTextProcessor(ProcessorMixin):
             **kwargs,
         )
 
-        # TODO: ensure audio in correct format
+        audio_kwargs = output_kwargs["audio_kwargs"]
+        common_kwargs = output_kwargs["common_kwargs"]
 
-        inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
+        # ensure audio in correct format
+        audio = make_list_of_audio(audio)
+
+        inputs = self.feature_extractor(
+            audio,
+            return_tensors=common_kwargs["return_tensors"],
+            **audio_kwargs,
+        )
 
         return inputs
 
