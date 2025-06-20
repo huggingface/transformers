@@ -248,7 +248,6 @@ class CommonPipelineTest(unittest.TestCase):
 @is_pipeline_test
 @require_torch
 class PipelineScikitCompatTest(unittest.TestCase):
-    @require_torch
     def test_pipeline_predict(self):
         data = ["This is a test"]
 

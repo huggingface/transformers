@@ -20,7 +20,7 @@ import numpy as np
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_processing_common import ProcessorTesterMixin, prepare_image_inputs
+from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
