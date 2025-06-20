@@ -15,7 +15,7 @@
 """PyTorch JetMoe model."""
 
 import math
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -48,7 +48,7 @@ logger = logging.get_logger(__name__)
 
 # Copied from transformers.models.mixtral.modeling_mixtral.load_balancing_loss_func
 def load_balancing_loss_func(
-    gate_logits: Union[torch.Tensor, Tuple[torch.Tensor], None],
+    gate_logits: Union[torch.Tensor, tuple[torch.Tensor], None],
     num_experts: Optional[int] = None,
     top_k=2,
     attention_mask: Optional[torch.Tensor] = None,
@@ -233,7 +233,7 @@ class JetMoeMoE(nn.Module):
     """
 
     def __init__(self, config: JetMoeConfig):
-        super(JetMoeMoE, self).__init__()
+        super().__init__()
 
         self.input_size = config.hidden_size
         self.hidden_size = config.intermediate_size
@@ -291,7 +291,7 @@ class JetMoeMoA(nn.Module):
     """
 
     def __init__(self, config: JetMoeConfig):
-        super(JetMoeMoA, self).__init__()
+        super().__init__()
 
         self.num_experts = config.num_local_experts
         self.input_size = config.hidden_size
@@ -497,7 +497,7 @@ class JetMoeAttention(nn.Module):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
         query_states, router_logits, topo_info = self.experts.map(hidden_states)
@@ -565,7 +565,7 @@ class JetMoeSdpaAttention(JetMoeAttention):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]], Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]], Optional[torch.Tensor]]:
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
             logger.warning_once(
@@ -655,8 +655,8 @@ class JetMoeFlashAttention2(JetMoeAttention):
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[
-        Tuple[torch.Tensor, Tuple[torch.Tensor]],
-        Optional[Tuple[torch.Tensor, Tuple[torch.Tensor], Tuple[torch.Tensor, ...]]],
+        tuple[torch.Tensor, tuple[torch.Tensor]],
+        Optional[tuple[torch.Tensor, tuple[torch.Tensor], tuple[torch.Tensor, ...]]],
     ]:
         """
         Forward pass of the JetMoeAttention module.
@@ -664,13 +664,13 @@ class JetMoeFlashAttention2(JetMoeAttention):
         Args:
             hidden_states (Optional[torch.FloatTensor]): Input hidden states.
             attention_mask (Optional[torch.FloatTensor]): Attention mask.
-            layer_past (Optional[Tuple[torch.Tensor]]): Past layer state.
+            layer_past (Optional[tuple[torch.Tensor]]): Past layer state.
             use_cache (Optional[bool]): Whether to use cached states.
             output_attentions (Optional[bool]): Whether to output attention weights.
             cache_position (Optional[torch.LongTensor]): Position of the cache.
 
         Returns:
-            Union[Tuple[torch.Tensor, Tuple[torch.Tensor]], Optional[Tuple[...]]]: Tuple containing outputs.
+            Union[tuple[torch.Tensor, tuple[torch.Tensor]], Optional[tuple[...]]]: Tuple containing outputs.
         """
         output_attentions = False
         bsz, q_len, hidden_size = hidden_states.size()
@@ -710,9 +710,14 @@ class JetMoeFlashAttention2(JetMoeAttention):
         # in fp32. (LlamaRMSNorm handles it correctly)
 
         input_dtype = query_states.dtype
+        device_type = query_states.device.type if query_states.device.type != "mps" else "cpu"
         if input_dtype == torch.float32:
             if torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_gpu_dtype()
+                target_dtype = (
+                    torch.get_autocast_dtype(device_type)
+                    if hasattr(torch, "get_autocast_dtype")
+                    else torch.get_autocast_gpu_dtype()
+                )
             # Handle the case where the model is quantized
             elif hasattr(self.config, "_pre_quantization_dtype"):
                 target_dtype = self.config._pre_quantization_dtype
@@ -778,13 +783,13 @@ class JetMoeBlock(nn.Module):
         self,
         hidden_states: Optional[torch.FloatTensor],
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
         output_router_logits: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple[torch.Tensor], Optional[Tuple[torch.Tensor, Tuple[torch.FloatTensor, ...]]]]:
+    ) -> Union[tuple[torch.Tensor], Optional[tuple[torch.Tensor, tuple[torch.FloatTensor, ...]]]]:
         # Self Attention
         attn_output, self_attn_weights, present_key_value, attn_router_logits = self.self_attention(
             hidden_states=self.input_layernorm(hidden_states),
@@ -886,7 +891,7 @@ class JetMoeModel(JetMoePreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1185,7 +1190,7 @@ class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
