@@ -12,8 +12,8 @@ on:
       slice_id:
         required: true
         type: number
-      runner:
-        required: true
+      runner_map:
+        required: false
         type: string
       docker:
         required: true
@@ -45,7 +45,7 @@ jobs:
       matrix:
         folders: ${{ fromJson(inputs.folder_slices)[inputs.slice_id] }}
     runs-on:
-      group: '${{ inputs.machine_type }}'
+      group: ${{ fromJson(inputs.runner_map)[matrix.folders][inputs.machine_type] }}
     container:
       image: ${{ inputs.docker }}
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
