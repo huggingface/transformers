@@ -29,6 +29,8 @@ rendered properly in your Markdown viewer.
 You can find all the original BLIP checkpoints under the [BLIP](https://huggingface.co/collections/Salesforce/blip-models-65242f40f1491fbf6a9e9472) collection.
 
 > [!TIP]
+> This model was contributed by [ybelkada](https://huggingface.co/ybelkada).
+> 
 > Click on the BLIP models in the right sidebar for more examples of how to apply BLIP to different vision language tasks.
 
 The example below demonstrates how to visual question answering with [`Pipeline`] or the [`AutoModel`] class.
@@ -77,10 +79,7 @@ processor.batch_decode(output, skip_special_tokens=True)[0]
 ```
 
 </hfoption>
-
 </hfoptions>
-
-![BLIP.gif](https://cdn-uploads.huggingface.co/production/uploads/1670928184033-62441d1d9fdefb55a0b7d12c.gif)
 
 ## Resources
 
