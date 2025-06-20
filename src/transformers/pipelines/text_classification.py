@@ -78,6 +78,11 @@ class TextClassificationPipeline(Pipeline):
     [huggingface.co/models](https://huggingface.co/models?filter=text-classification).
     """
 
+    _load_processor = False
+    _load_image_processor = False
+    _load_feature_extractor = False
+    _load_tokenizer = True
+
     return_all_scores = False
     function_to_apply = ClassificationFunction.NONE
 

@@ -156,6 +156,11 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
     supplied arguments.
     """
 
+    _load_processor = False
+    _load_image_processor = False
+    _load_feature_extractor = False
+    _load_tokenizer = True
+
     def normalize(self, item):
         if isinstance(item, SquadExample):
             return item
