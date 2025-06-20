@@ -1067,8 +1067,8 @@ class BlenderbotSmallDecoder(BlenderbotSmallPreTrainedModel):
 
             layer_outputs = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask,
-                encoder_hidden_states=encoder_hidden_states,
+                causal_mask,
+                encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
                 layer_head_mask=(head_mask[idx] if head_mask is not None else None),
                 cross_attn_layer_head_mask=(cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
