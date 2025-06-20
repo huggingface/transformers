@@ -27,7 +27,6 @@ from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutputWithNoAttention, CausalLMOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import auto_docstring, logging
 from ...utils.import_utils import is_torchdynamo_compiling
 from .configuration_recurrent_gemma import RecurrentGemmaConfig
@@ -56,9 +55,6 @@ class RecurrentGemmaRMSNorm(nn.Module):
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
-
-
-ALL_LAYERNORM_LAYERS.append(RecurrentGemmaRMSNorm)
 
 
 class RecurrentGemmaRotaryEmbedding(nn.Module):
