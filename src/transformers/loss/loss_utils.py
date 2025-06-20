@@ -163,4 +163,5 @@ LOSS_MAPPING = {
     "RTDetrV2ForObjectDetection": RTDetrForObjectDetectionLoss,
     "DFineForObjectDetection": DFineForObjectDetectionLoss,
     "CsmForConditionalGeneration": ForCausalLMLoss,
+    "DiaForConditionalGeneration": ForCausalLMLoss,
 }

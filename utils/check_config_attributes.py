@@ -32,6 +32,10 @@ transformers = direct_transformers_import(PATH_TO_TRANSFORMERS)
 CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 SPECIAL_CASES_TO_ALLOW = {
+    # used internally during generation to provide the custom logit processors with their necessary information
+    "DiaConfig": [
+        "delay_pattern",
+    ],
     # 'max_position_embeddings' is not used in modeling file, but needed for eval frameworks like Huggingface's lighteval (https://github.com/huggingface/lighteval/blob/af24080ea4f16eaf1683e353042a2dfc9099f038/src/lighteval/models/base_model.py#L264).
     # periods and offsets are not used in modeling file, but used in the configuration file to define `layers_block_type` and `layers_num_experts`.
     "BambaConfig": [

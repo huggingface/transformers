@@ -2975,3 +2975,224 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
             The expected mean g-value for watermarked text.
         """
         return coinflip_prob + coinflip_prob * (1 - coinflip_prob) * (1 - (1 / vocab_size))
+
+
+class DiaClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
+    r"""
+    [`LogitsProcessor`] for classifier free guidance (CFG). Similar to the original
+    `ClassifierFreeGuidanceLogitsProcessor` with some modifications on the overall
+    calculation, e.g. conditioned logits centered, and an additional top k selection
+    option.
+
+    <Tip warning={true}>
+
+    This logits processor is exclusively compatible with
+    [Dia](https://huggingface.co/docs/transformers/main/en/model_doc/dia)
+
+    </Tip>
+
+    Args:
+        guidance_scale (float):
+            The guidance scale for classifier free guidance (CFG). CFG is enabled by setting `guidance_scale > 1`.
+            Higher guidance scale encourages the model to generate samples that are more closely linked to the input
+            prompt, usually at the expense of poorer quality.
+        guidance_top_k (int, *optional*):
+            The number of highest probability vocabulary tokens to keep for top-k-filtering. However, we do not keep
+            the logits of the combined CFG output, but the conditioned output only.
+    """
+
+    def __init__(self, guidance_scale: float, guidance_top_k: Optional[int] = None):
+        if guidance_scale > 1:
+            self.guidance_scale = guidance_scale
+        else:
+            raise ValueError(
+                "Require guidance scale >1 to use the classifier free guidance processor, got guidance scale "
+                f"{guidance_scale}."
+            )
+
+        self.guidance_top_k = guidance_top_k
+        if self.guidance_top_k is not None and self.guidance_top_k < 1:
+            raise ValueError(
+                f"`guidance_top_k` has to be a strictly positive integer if given, but is {self.guidance_top_k}"
+            )
+
+    @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        # simple check to make sure we have compatible batch sizes between our
+        # logits scores (cond + uncond) and input ids (cond only)
+        if scores.shape[0] != 2 * input_ids.shape[0]:
+            raise ValueError(
+                f"Logits should have twice the batch size of the input ids, the first half of batches corresponding to "
+                f"the conditional inputs, and the second half of batches corresponding to the unconditional inputs. Got "
+                f"batch size {scores.shape[0]} for the logits and {input_ids.shape[0]} for the input ids."
+            )
+        # Base CFG with center on cond_logits
+        unguided_bsz = scores.shape[0] // 2
+        cond_logits, uncond_logits = scores.split(unguided_bsz, dim=0)
+        scores_processed = cond_logits + (cond_logits - uncond_logits) * self.guidance_scale
+
+        # Optional CFG top k filtering
+        if self.guidance_top_k is not None:
+            # Create top k based on the combined CFG output
+            _, top_k_indices = torch.topk(scores_processed, k=self.guidance_top_k, dim=-1)
+            top_k_mask = torch.ones_like(scores_processed, dtype=torch.bool)
+            top_k_mask = top_k_mask.scatter(dim=-1, index=top_k_indices, value=False)
+            # Only return conditioned logits with top k
+            scores_processed = cond_logits.masked_fill(top_k_mask, -float("inf"))
+
+        return scores_processed
+
+
+class DiaEOSChannelFilterLogitsProcessor(LogitsProcessor):
+    r"""Specialized processor that ensures certain properties around EOS sampling:
+        1. Only channel 0 can generate EOS
+        2. If channel 0 has EOS with highest logit, it will be the only candidate
+        3. If channel 0 has EOS not with highest logit, it will be suppressed
+
+    2. and 3. are especially important in contexts where we allow sampling to guarantee the
+    respective tokens to be (not) sampled.
+
+    <Tip warning={true}>
+
+    This logits processor is exclusively compatible with
+    [Dia](https://huggingface.co/docs/transformers/en/model_doc/dia).
+
+    </Tip>
+
+    Args:
+        num_channels (`int`):
+            Number of audio codebooks. Simplifies access to the first channel on the logits.
+        eos_token_id (`int`):
+            The id of *end-of-sequence* token.
+    """
+
+    def __init__(self, num_channels: int, eos_token_id: int):
+        if num_channels < 1:
+            raise ValueError(f"Audio codebooks need at least one channel, but found {num_channels} channels.")
+        if eos_token_id < 1:
+            raise ValueError(f"Expected `eos_token_id` to be a positive integer, found {eos_token_id} instead.")
+
+        self.num_channels = num_channels
+        self.eos_id = eos_token_id
+
+    @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        # Reshape for easier channel indexing [B, C, V]
+        scores = scores.reshape(-1, self.num_channels, scores.shape[-1])
+
+        # EOS filter
+        # 1. Condition: Only the first channel can generate the EOS token
+        # Side condition of disabling generation of special tokens (e.g. audio pad, bos, ...)
+        # (Assumes them to be greater than audio eos token position)
+        scores[:, 1:, self.eos_id :] = torch.full_like(
+            scores[:, 1:, self.eos_id :],
+            fill_value=-float("inf"),
+        )
+        scores[:, 0, self.eos_id + 1 :] = torch.full_like(
+            scores[:, 0, self.eos_id + 1 :],
+            fill_value=-float("inf"),
+        )
+
+        # 2+3 Conditions: Force/Suppress EOS if (not) highest logit
+        # Reshape back to original shape
+        scores = scores.view(-1, scores.shape[-1])
+
+        # Sample highest tokens
+        top_logit_indices = torch.argmax(scores, dim=-1)
+
+        # 2. Force EOS
+        eos_highest_mask = top_logit_indices == self.eos_id
+        mask_eos_highest = torch.zeros_like(scores, dtype=torch.bool)
+        mask_eos_highest[eos_highest_mask, : self.eos_id] = True
+        scores = scores.masked_fill(mask_eos_highest, -float("inf"))
+
+        # 3. Suppress EOS
+        eos_not_highest_mask = top_logit_indices != self.eos_id
+        mask_eos_unless_highest = torch.zeros_like(scores, dtype=torch.bool)
+        mask_eos_unless_highest[eos_not_highest_mask, self.eos_id] = True
+        scores = scores.masked_fill(mask_eos_unless_highest, -float("inf"))
+
+        return scores
+
+
+class DiaEOSDelayPatternLogitsProcessor(LogitsProcessor):
+    r"""Special logits processor to handle the generation of the EOS token in Dia.
+    This is due to the fact that Dia does not allow the generation of EOS in all
+    channels except the first channel (C0).
+
+    Hence, based on the delay pattern, an EOS is forced after the respective delays
+    in the channels. For example, if the delay pattern is [0, 2, 3, 4]:
+
+            s   s+1 s+2 s+3 s+4 s+5 ...
+            |   |   |   |   |   |
+        C0: EOS PAD PAD PAD PAD PAD ...
+        C1: x   x   EOS PAD PAD PAD ...
+        C2: x   x   x   EOS PAD PAD ...
+        C3: x   x   x   x   EOS PAD ...
+
+    If the first channel generated EOS at step s, channels Cx are forced to generate
+    theirs at the respective delays (s+2, s+3, s+4). Subsequent padding tokens are
+    handled by the `EosTokenCriteria` when an EOS has been detected.
+
+    <Tip warning={true}>
+
+    This logits processor is exclusively compatible with
+    [Dia](https://huggingface.co/docs/transformers/en/model_doc/dia).
+
+    </Tip>
+
+    Args:
+        delay_pattern (`List[int]`):
+            The delays per channel in the audio codebooks.
+        eos_token_id (`int`):
+            The id of *end-of-sequence* token.
+        max_generation_len (`int`):
+            The max sequence length that can be generated.
+        device (`str`, *optional*, defaults to `"cpu"`):
+            The device to allocate the tensors on.
+    """
+
+    def __init__(self, delay_pattern: list[int], eos_token_id: int, max_generation_len: int, device: str = "cpu"):
+        self.num_channels = len(delay_pattern)
+        # Update during first iteration
+        self.active_batches = None
+        self.delay_pattern = torch.tensor(delay_pattern, device=device, dtype=torch.int)[None, :]
+        self.eos_token_id = eos_token_id
+        self.max_generation_len = max_generation_len - max(delay_pattern) - 1
+        self.device = device
+
+    @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        # Reshape for easier channel indexing [B, C, V]
+        scores = scores.reshape(-1, self.num_channels, scores.shape[-1])
+
+        # Initialize / expand values on first iteration
+        if self.active_batches is None:
+            self.delay_pattern = self.delay_pattern.repeat(scores.shape[0], 1)
+            self.active_batches = torch.zeros(size=(scores.shape[0],), device=self.device, dtype=torch.bool)
+
+        # Check if eos has been generated in any batch
+        channel_generated_eos = torch.argmax(scores, dim=-1)[:, 0] == self.eos_token_id
+        # Check if max len has been reached
+        reached_max_len = input_ids.shape[1] == self.max_generation_len
+
+        # Update active batches
+        self.active_batches |= channel_generated_eos
+        self.active_batches |= reached_max_len
+
+        # Find channels that need to force eos
+        forced_eos_channels = self.active_batches[:, None] & (self.delay_pattern == 0)
+        # Use indexing to avoid issues on all `False` by having empty tensors in that case
+        idx_bsz, idx_channel = forced_eos_channels.nonzero(as_tuple=True)
+
+        # Force eos if delay is kicking in
+        scores[idx_bsz, idx_channel, :] = -float("inf")
+        scores[idx_bsz, idx_channel, self.eos_token_id] = 0.0
+
+        # Reshape back to [B * C, V]
+        scores = scores.reshape(-1, scores.shape[-1])
+
+        # Update amount of delay left for each channel
+        self.delay_pattern -= self.active_batches[:, None].int()
+
+        return scores
