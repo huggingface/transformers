@@ -101,6 +101,11 @@ class TestFSDPTrainerFP8(TestCasePlus):
             "accelerate",
             "launch",
             "--use_fsdp",
+            # this is the default and recommended format for training in
+            # accelerate 1.18.0 dataclass but the launcher sets it to e4m3
+            # TODO: remove when accelerate 1.18.1 is released
+            "--fp8_format",
+            "HYBRID",
             "--main_process_port",
             f"{get_torch_dist_unique_port()}",
             "--num_processes",
@@ -115,14 +120,6 @@ class TestFSDPTrainerFP8(TestCasePlus):
             "--report_to",
             "none",
         ]
-        if is_torch_hpu_available():
-            cmd.extend(
-                [
-                    # is the default in accelerate dataclass but not its launcher
-                    "--fp8_format",
-                    "HYBRID",
-                ]
-            )
         execute_subprocess_async(cmd, env=self.get_env())
         # successful return here == success - any errors would have caused an error in the sub-call
 
