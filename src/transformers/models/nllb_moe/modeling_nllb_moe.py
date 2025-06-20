@@ -1290,8 +1290,8 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
                 # under fsdp or deepspeed zero3 all gpus must run in sync
                 layer_outputs = decoder_layer(
                     hidden_states,
-                    attention_mask=attention_mask,
-                    encoder_hidden_states=encoder_hidden_states,
+                    attention_mask,
+                    encoder_hidden_states,  # as a positional argument for gradient checkpointing
                     encoder_attention_mask=encoder_attention_mask,
                     layer_head_mask=layer_head_mask,
                     cross_attn_layer_head_mask=cross_attn_layer_head_mask,
