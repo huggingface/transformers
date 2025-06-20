@@ -1256,6 +1256,11 @@ class AcceleratorConfig:
             Whether or not to use a pre-configured `AcceleratorState` or `PartialState` defined
             before calling `TrainingArguments`. If `True`, an `Accelerator` or `PartialState`
             must be initialized. May lead to issues using sweeps or hyperparameter tuning.
+        mixed_precision (`str`, *optional*, defaults to `"no"`):
+            Whether or not to use mixed precision training. Choose from 'no','fp16','bf16' or 'fp8'. Will default to
+            the value in the environment variable `ACCELERATE_MIXED_PRECISION`, which will use the default value in the
+            accelerate config of the current system or the flag passed with the `accelerate.launch` command. 'fp8'
+            requires the installation of `transformers-engine`.
 
     """
 
@@ -1323,6 +1328,15 @@ class AcceleratorConfig:
         metadata={
             "help": "Whether or not to use a pre-configured `AcceleratorState` or `PartialState` defined before calling `TrainingArguments`."
             "If `True`, an `Accelerator` or `PartialState` must be initialized. May lead to issues using sweeps or hyperparameter tuning."
+        },
+    )
+    mixed_precision: str = field(
+        default="no",
+        metadata={
+            "help": "Whether or not to use mixed precision training. Choose from 'no','fp16','bf16' or 'fp8'. Will default to"
+            "the value in the environment variable `ACCELERATE_MIXED_PRECISION`, which will use the default value in the"
+            "accelerate config of the current system or the flag passed with the `accelerate.launch` command. 'fp8' requires"
+            "the installation of `transformers-engine`."
         },
     )
 
