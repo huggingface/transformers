@@ -1,0 +1,49 @@
+# Copyright 2024 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"HIGGS through FLUTE (Flexible Lookup Table Engine for LUT-quantized LLMs) integration file"
+
+from ..utils import (
+    is_quartet_qat_available,
+    is_torch_available,
+)
+
+
+if is_torch_available():
+    pass
+
+
+if is_quartet_qat_available():
+    from quartet_qat import QuartetConfig, QuartetDtype
+
+from transformers.utils.quantization_config import QuartetQatConfig
+
+
+def adapt_quartet_qat_config(config: QuartetQatConfig):
+    if config.forward_dtype == "mxfp4":
+        forward_dtype = QuartetDtype.MXFP4
+    else:
+        raise ValueError(f"Unsupported forward dtype: {config.forward_dtype}")
+
+    if config.backward_dtype == "mxfp4":
+        backward_dtype = QuartetDtype.MXFP4
+    else:
+        raise ValueError(f"Unsupported backward dtype: {config.backward_dtype}")
+
+    return QuartetConfig(
+        forward_dtype=forward_dtype,
+        backward_dtype=backward_dtype,
+        store_master_weights=config.store_master_weights,
+        hadamard_group_size=config.hadamard_group_size,
+        modules_to_not_convert=config.modules_to_not_convert,
+    )
