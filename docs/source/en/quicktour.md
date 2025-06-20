@@ -32,12 +32,25 @@ To start, we recommend creating a Hugging Face [account](https://hf.co/join). An
 
 Create a [User Access Token](https://hf.co/docs/hub/security-tokens#user-access-tokens) and log in to your account.
 
+<hfoptions id="authenticate">
+<hfoption id="notebook">
+
 ```py
 from huggingface_hub import notebook_login
 
 notebook_login()
 ```
 
+Paste your User Access Token into [`~huggingface_hub.notebook_login`] when prompted to log in.
+</hfoption>
+<hfoption id="CLI">
+Make sure the [huggingface_hub[cli]](https://huggingface.co/docs/huggingface_hub/guides/cli#getting-started) package is installed and run the command below. Paste your User Access Token when prompted to log in.
+
+```bash
+huggingface-cli login
+```
+</hfoption>
+</hfoptions>
 Install a machine learning framework.
 
 <hfoptions id="installation">
