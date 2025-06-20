@@ -33,7 +33,7 @@ from huggingface_hub.errors import EntryNotFoundError
 from .audio_utils import load_audio
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
-from .image_utils import ChannelDimension, is_valid_image, is_vision_available, load_image
+from .image_utils import ChannelDimension, is_vision_available, load_image
 from .utils.chat_template_utils import render_jinja_template
 from .video_utils import VideoMetadata, load_video
 
@@ -1321,64 +1321,6 @@ class ProcessorMixin(PushToHubMixin):
 
         return unused_kwargs, valid_kwargs
 
-    def prepare_and_validate_optional_call_args(self, *args):
-        """
-        Matches optional positional arguments to their corresponding names in `optional_call_args`
-        in the processor class in the order they are passed to the processor call.
-
-        Note that this should only be used in the `__call__` method of the processors with special
-        arguments. Special arguments are arguments that aren't `text`, `images`, `audio`, nor `videos`
-        but also aren't passed to the tokenizer, image processor, etc. Examples of such processors are:
-            - `CLIPSegProcessor`
-            - `LayoutLMv2Processor`
-            - `OwlViTProcessor`
-
-        Also note that passing by position to the processor call is now deprecated and will be disallowed
-        in future versions. We only have this for backward compatibility.
-
-        Example:
-            Suppose that the processor class has `optional_call_args = ["arg_name_1", "arg_name_2"]`.
-            And we define the call method as:
-            ```python
-            def __call__(
-                self,
-                text: str,
-                images: Optional[ImageInput] = None,
-                *arg,
-                audio=None,
-                videos=None,
-            )
-            ```
-
-            Then, if we call the processor as:
-            ```python
-            images = [...]
-            processor("What is common in these images?", images, arg_value_1, arg_value_2)
-            ```
-
-            Then, this method will return:
-            ```python
-            {
-                "arg_name_1": arg_value_1,
-                "arg_name_2": arg_value_2,
-            }
-            ```
-            which we could then pass as kwargs to `self._merge_kwargs`
-        """
-        if len(args):
-            warnings.warn(
-                "Passing positional arguments to the processor call is now deprecated and will be disallowed in v4.47. "
-                "Please pass all arguments as keyword arguments."
-            )
-        if len(args) > len(self.optional_call_args):
-            raise ValueError(
-                f"Expected *at most* {len(self.optional_call_args)} optional positional arguments in processor call"
-                f"which will be matched with {' '.join(self.optional_call_args)} in the order they are passed."
-                f"However, got {len(args)} positional arguments instead."
-                "Please pass all arguments as keyword arguments instead (e.g. `processor(arg_name_1=..., arg_name_2=...))`."
-            )
-        return {arg_name: arg_value for arg_value, arg_name in zip(args, self.optional_call_args)}
-
     @deprecate_kwarg("video_fps", version="4.58", new_name="fps")
     def apply_chat_template(
         self,
@@ -1627,64 +1569,6 @@ class ProcessorMixin(PushToHubMixin):
                     f"Mismatch in `{modality}` token count between text and `input_ids`. Got ids={ids_count} and text={text_count}. "
                     "Likely due to `truncation='max_length'`. Please disable truncation or increase `max_length`."
                 )
-
-
-def _validate_images_text_input_order(images, text):
-    """
-    For backward compatibility: reverse the order of `images` and `text` inputs if they are swapped.
-    This method should only be called for processors where `images` and `text` have been swapped for uniformization purposes.
-    Note that this method assumes that two `None` inputs are valid inputs. If this is not the case, it should be handled
-    in the processor's `__call__` method before calling this method.
-    """
-
-    def is_url(val) -> bool:
-        return isinstance(val, str) and val.startswith("http")
-
-    def _is_valid_images_input_for_processor(imgs):
-        # If we have an list of images, make sure every image is valid
-        if isinstance(imgs, (list, tuple)):
-            for img in imgs:
-                if not _is_valid_images_input_for_processor(img):
-                    return False
-        # If not a list or tuple, we have been given a single image or batched tensor of images
-        elif not (is_valid_image(imgs) or is_url(imgs)):
-            return False
-        return True
-
-    def _is_valid_text_input_for_processor(t):
-        if isinstance(t, str):
-            # Strings are fine
-            return True
-        elif isinstance(t, (list, tuple)):
-            # List are fine as long as they are...
-            if len(t) == 0:
-                # ... not empty
-                return False
-            for t_s in t:
-                return _is_valid_text_input_for_processor(t_s)
-        return False
-
-    def _is_valid(input, validator):
-        return validator(input) or input is None
-
-    images_is_valid = _is_valid(images, _is_valid_images_input_for_processor)
-    images_is_text = _is_valid_text_input_for_processor(images)
-
-    text_is_valid = _is_valid(text, _is_valid_text_input_for_processor)
-    text_is_images = _is_valid_images_input_for_processor(text)
-    # Handle cases where both inputs are valid
-    if images_is_valid and text_is_valid:
-        return images, text
-
-    # Handle cases where inputs need to and can be swapped
-    if (images is None and text_is_images) or (text is None and images_is_text) or (images_is_text and text_is_images):
-        logger.warning_once(
-            "You may have used the wrong order for inputs. `images` should be passed before `text`. "
-            "The `images` and `text` inputs will be swapped. This behavior will be deprecated in transformers v4.47."
-        )
-        return text, images
-
-    raise ValueError("Invalid input type. Check that `images` and/or `text` are valid inputs.")
 
 
 ProcessorMixin.push_to_hub = copy_func(ProcessorMixin.push_to_hub)

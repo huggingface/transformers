@@ -167,16 +167,7 @@ class Zamba2HybridDynamicCache(ZambaHybridDynamicCache):
 
 
 class Zamba2RotaryEmbedding(LlamaRotaryEmbedding):
-    def __init__(
-        self,
-        config: Zamba2Config,
-        device=None,
-    ):
-        super().__init__(config, device)
-        # we cannot use the config here to parameterize because of a factor 2 for the head_dim
-        inv_freq, self.attention_scaling = self.rope_init_fn(
-            device=device, base=config.rope_theta, dim=config.attention_head_dim
-        )
+    pass
 
 
 class Zamba2Attention(ZambaAttention):
