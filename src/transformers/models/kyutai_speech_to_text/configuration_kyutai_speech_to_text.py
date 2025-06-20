@@ -81,7 +81,8 @@ class KyutaiSpeechToTextConfig(PretrainedConfig):
             Padding token id.
         bos_token_id (`int`, *optional*, defaults to 48000):
             Beginning of stream token id for text tokens.
-        codec_config (`<fill_type>`, *optional*): <fill_docstring>
+        codec_config (`PretrainedConfig`, *optional*):
+            Configuration for the codec.
         kwargs (*optional*):
             Dictionary of keyword arguments. Notably:
                 - **audio_encoder_config** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
