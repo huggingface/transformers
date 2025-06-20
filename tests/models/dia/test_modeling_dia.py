@@ -207,13 +207,10 @@ class DiaModelTester:
 
 
 @require_torch
-class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (DiaModel, DiaForConditionalGeneration) if is_torch_available() else ()
     # We only allow greedy search / sampling with one sequence; see `skip_non_greedy_generate`
     all_generative_model_classes = (DiaForConditionalGeneration,)
-    # TODO: needs processor for pipeline / do we allow pipeline here (see csm?)
-    # pipeline_model_mapping = {"text-to-audio": DiaForConditionalGeneration} if is_torch_available() else {}
-    pipeline_model_mapping = {}
     test_pruning = False
     test_head_masking = False
     test_resize_embeddings = False
