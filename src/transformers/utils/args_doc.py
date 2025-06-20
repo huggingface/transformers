@@ -207,6 +207,8 @@ class ImageProcessorArgs:
     disable_grouping = {
         "description": """
     Whether to disable grouping of images by size to process them individually and not in batches.
+    If None, will be set to True if the images are on CPU, and False otherwise. This choice is based on
+    empirical observations, as detailed here: https://github.com/huggingface/transformers/pull/38157
     """,
         "shape": None,
     }

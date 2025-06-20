@@ -342,13 +342,9 @@ class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             equal_size_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
 
             result = image_processing(equal_size_inputs, return_tensors="pt")
-            print("result slow", result.pixel_values.shape)
             self.assertNotIn("pixel_attention_mask", result)
 
     def test_convert_rgb(self):
-        if not is_vision_available():
-            return
-
         for image_processing_class in self.image_processor_list:
             rgba_image = Image.new("RGBA", (100, 100), (255, 0, 0, 128))
 

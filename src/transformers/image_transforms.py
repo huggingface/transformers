@@ -885,7 +885,7 @@ def _reconstruct_nested_structure(indices, processed_images):
 
 def group_images_by_shape(
     images: Union[list["torch.Tensor"], "torch.Tensor"],
-    disable_grouping,
+    disable_grouping: bool,
     is_nested: bool = False,
 ) -> tuple[
     dict[tuple[int, int], list["torch.Tensor"]], dict[Union[int, tuple[int, int]], tuple[tuple[int, int], int]]
