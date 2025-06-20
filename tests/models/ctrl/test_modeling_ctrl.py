@@ -10,17 +10,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-
 import unittest
 
 from transformers import CTRLConfig, is_torch_available
 from transformers.testing_utils import cleanup, require_torch, slow, torch_device
 
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
-from ...test_pipeline_mixin import PipelineTesterMixin
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 if is_torch_available():
@@ -33,155 +28,19 @@ if is_torch_available():
     )
 
 
-class CTRLModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=14,
-        seq_length=7,
-        is_training=True,
-        use_token_type_ids=True,
-        use_input_mask=True,
-        use_labels=True,
-        use_mc_token_ids=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
-        scope=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_token_type_ids = use_token_type_ids
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.use_mc_token_ids = use_mc_token_ids
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.scope = scope
-        self.pad_token_id = self.vocab_size - 1
+class CTRLModelTester(CausalLMModelTester):
+    config_class = CTRLConfig
+    if is_torch_available():
+        base_model_class = CTRLModel
+        causal_lm_class = CTRLLMHeadModel
+        sequence_classification_class = CTRLForSequenceClassification
 
-    def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-
-        input_mask = None
-        if self.use_input_mask:
-            input_mask = random_attention_mask([self.batch_size, self.seq_length])
-
-        token_type_ids = None
-        if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
-
-        mc_token_ids = None
-        if self.use_mc_token_ids:
-            mc_token_ids = ids_tensor([self.batch_size, self.num_choices], self.seq_length)
-
-        sequence_labels = None
-        token_labels = None
-        choice_labels = None
-        if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-            choice_labels = ids_tensor([self.batch_size], self.num_choices)
-
-        config = self.get_config()
-
-        head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
-
-        return (
-            config,
-            input_ids,
-            input_mask,
-            head_mask,
-            token_type_ids,
-            mc_token_ids,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        )
-
-    def get_config(self):
-        return CTRLConfig(
-            vocab_size=self.vocab_size,
-            n_embd=self.hidden_size,
-            n_layer=self.num_hidden_layers,
-            n_head=self.num_attention_heads,
-            dff=self.intermediate_size,
-            # hidden_act=self.hidden_act,
-            # hidden_dropout_prob=self.hidden_dropout_prob,
-            # attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            n_positions=self.max_position_embeddings,
-            # type_vocab_size=self.type_vocab_size,
-            # initializer_range=self.initializer_range,
-            pad_token_id=self.pad_token_id,
-        )
-
-    def create_and_check_ctrl_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
-        model = CTRLModel(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        model(input_ids, token_type_ids=token_type_ids, head_mask=head_mask)
-        model(input_ids, token_type_ids=token_type_ids)
-        result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(len(result.past_key_values), config.n_layer)
-
-    def create_and_check_lm_head_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
-        model = CTRLLMHeadModel(config)
-        model.to(torch_device)
-        model.eval()
-
-        result = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
-        self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-
-        (
-            config,
-            input_ids,
-            input_mask,
-            head_mask,
-            token_type_ids,
-            mc_token_ids,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = config_and_inputs
-
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "head_mask": head_mask}
-
-        return config, inputs_dict
+    def __init__(self, parent, num_hidden_layers=1, **kwargs):
+        super().__init__(parent=parent, num_hidden_layers=num_hidden_layers, **kwargs)
 
 
 @require_torch
-class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class CTRLModelTest(CausalLMModelTest, unittest.TestCase):
     all_model_classes = (CTRLModel, CTRLLMHeadModel, CTRLForSequenceClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -193,11 +52,8 @@ class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         if is_torch_available()
         else {}
     )
-    test_pruning = True
-    test_resize_embeddings = False
-    test_head_masking = False
+    model_tester_class = CTRLModelTester
 
-    # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
         self,
         pipeline_test_case_name,
@@ -215,32 +71,6 @@ class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             return True
 
         return False
-
-    def setUp(self):
-        self.model_tester = CTRLModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=CTRLConfig, n_embd=37)
-
-    def tearDown(self):
-        super().tearDown()
-        # clean-up as much as possible GPU memory occupied by PyTorch
-        cleanup(torch_device)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_ctrl_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_ctrl_model(*config_and_inputs)
-
-    def test_ctrl_lm_head_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_lm_head_model(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "Salesforce/ctrl"
-        model = CTRLModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 @require_torch

@@ -33,8 +33,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...models.cohere.test_modeling_cohere import CohereModelTest, CohereModelTester
-from ...test_configuration_common import ConfigTester
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 if is_torch_available():
@@ -46,15 +45,15 @@ if is_torch_available():
     )
 
 
-class Cohere2ModelTester(CohereModelTester):
+class Cohere2ModelTester(CausalLMModelTester):
     config_class = Cohere2Config
     if is_torch_available():
-        model_class = Cohere2Model
-        for_causal_lm_class = Cohere2ForCausalLM
+        base_model_class = Cohere2Model
+        causal_lm_class = Cohere2ForCausalLM
 
 
 @require_torch
-class Cohere2ModelTest(CohereModelTest, unittest.TestCase):
+class Cohere2ModelTest(CausalLMModelTest, unittest.TestCase):
     all_model_classes = (Cohere2Model, Cohere2ForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -64,11 +63,7 @@ class Cohere2ModelTest(CohereModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    _is_stateful = True
-
-    def setUp(self):
-        self.model_tester = Cohere2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Cohere2Config, hidden_size=37)
+    model_tester_class = Cohere2ModelTester
 
     @unittest.skip("Failing because of unique cache (HybridCache)")
     def test_model_outputs_equivalence(self, **kwargs):

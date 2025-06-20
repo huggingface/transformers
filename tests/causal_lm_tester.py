@@ -117,6 +117,11 @@ class CausalLMModelTester:
         mamba_chunk_size=16,
     ):
         self._verify_model_attributes()
+        # Some attributes have variable names, so we sync them here
+        self.hidden_size = self.embeddings_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.num_key_value_heads = num_key_value_heads
         self.parent = parent
         self.batch_size = batch_size
         self.seq_length = seq_length
@@ -125,10 +130,6 @@ class CausalLMModelTester:
         self.use_token_type_ids = use_token_type_ids
         self.use_labels = use_labels
         self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
@@ -229,13 +230,18 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     rotary_embedding_layer = None  # Enables RoPE tests if set
     pipeline_model_mapping = None
 
+    # This is used by test_config(). If the model doesn't have any of these three, override it
+    common_properties = ["hidden_size", "num_attention_heads", "num_hidden_layers"]
+
     def setUp(self):
         if self.model_tester_class is None:
             raise ValueError(
                 "You have inherited from CausalLMModelTest but did not set the model_tester_class attribute."
             )
         self.model_tester = self.model_tester_class(self)
-        self.config_tester = ConfigTester(self, config_class=self.model_tester.config_class)
+        self.config_tester = ConfigTester(
+            self, config_class=self.model_tester.config_class, common_properties=self.common_properties
+        )
         if self.all_model_classes is None:
             self.all_model_classes = self.model_tester.all_model_classes
         if self.pipeline_model_mapping is None:
