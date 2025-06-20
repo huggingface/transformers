@@ -502,6 +502,14 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
     def test_model_get_set_embeddings(self):
         pass
 
+    @unittest.skip(reason="See issue #38820")
+    def test_sdpa_can_compile_dynamic(self):
+        pass
+
+    @unittest.skip(reason="See issue #38820")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
     @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         """
@@ -935,6 +943,14 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
     def test_cpu_offload(self):
         pass
 
+    @unittest.skip(reason="See issue #38820")
+    def test_sdpa_can_compile_dynamic(self):
+        pass
+
+    @unittest.skip(reason="See issue #38820")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
     @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         """
@@ -1203,6 +1219,14 @@ class Blip2TextModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
+    @unittest.skip(reason="See issue #38820")
+    def test_sdpa_can_compile_dynamic(self):
+        pass
+
+    @unittest.skip(reason="See issue #38820")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -1361,6 +1385,14 @@ class Blip2VisionModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
+    @unittest.skip(reason="See issue #38820")
+    def test_sdpa_can_compile_dynamic(self):
+        pass
+
+    @unittest.skip(reason="See issue #38820")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
     def test_model_common_attributes(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -1502,6 +1534,14 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Blip2Model does not have input/output embeddings")
     def test_model_common_attributes(self):
+        pass
+
+    @unittest.skip(reason="See issue #38820")
+    def test_sdpa_can_compile_dynamic(self):
+        pass
+
+    @unittest.skip(reason="See issue #38820")
+    def test_sdpa_can_dispatch_on_flash(self):
         pass
 
     def test_forward_signature(self):

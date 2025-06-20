@@ -307,6 +307,15 @@ class GraniteSpeechForConditionalGenerationModelTest(ModelTesterMixin, Generatio
                     if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                         raise ValueError("The eager model should not have SDPA attention layers")
 
+
+    @unittest.skip(reason="See issue #38820")
+    def test_sdpa_can_compile_dynamic(self):
+        pass
+
+    @unittest.skip(reason="See issue #38820")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
     @pytest.mark.generate
     @require_torch_sdpa
     @slow
