@@ -33,7 +33,6 @@ from ...utils import (
     logging,
     torch_int,
 )
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_x_clip import XCLIPConfig, XCLIPTextConfig, XCLIPVisionConfig
 
 

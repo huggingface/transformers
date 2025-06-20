@@ -36,7 +36,6 @@ from ...utils import (
     logging,
 )
 from ...utils.deprecation import deprecate_kwarg
-
 from .configuration_splinter import SplinterConfig
 
 
