@@ -33,7 +33,6 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -1046,7 +1045,7 @@ class Zamba2AttentionDecoderLayer(nn.Module):
         return outputs
 
 
-class Zamba2MambaDecoderLayer(GradientCheckpointingLayer):
+class Zamba2MambaDecoderLayer(nn.Module):
     def __init__(self, config: Zamba2Config, layer_idx: int):
         super().__init__()
         self.mamba = Zamba2MambaMixer(config=config, layer_idx=layer_idx)
@@ -1114,7 +1113,7 @@ class Zamba2MambaDecoderLayer(GradientCheckpointingLayer):
         return outputs
 
 
-class Zamba2HybridLayer(GradientCheckpointingLayer):
+class Zamba2HybridLayer(nn.Module):
     def __init__(
         self, shared_transformer: Zamba2AttentionDecoderLayer, linear: nn.Linear, mamba: Zamba2MambaDecoderLayer
     ):
@@ -1350,17 +1349,31 @@ class Zamba2Model(Zamba2PreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            layer_outputs = layer(
-                hidden_states,
-                original_hidden_states,
-                layer_idx,
-                attention_mask,
-                causal_mask,
-                past_key_values,
-                output_attentions,
-                use_cache,
-                position_embeddings,
-            )
+            if self.gradient_checkpointing and self.training:
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer.__call__,
+                    hidden_states,
+                    original_hidden_states,
+                    layer_idx,
+                    attention_mask,
+                    causal_mask,
+                    past_key_values,
+                    output_attentions,
+                    use_cache,
+                    position_embeddings,
+                )
+            else:
+                layer_outputs = layer(
+                    hidden_states,
+                    original_hidden_states=original_hidden_states,
+                    layer_idx=layer_idx,
+                    attention_mask=attention_mask,
+                    causal_mask=causal_mask,
+                    past_key_value=past_key_values,
+                    output_attentions=output_attentions,
+                    use_cache=use_cache,
+                    position_embeddings=position_embeddings,
+                )
             hidden_states = layer_outputs[0]
 
             if output_attentions:
