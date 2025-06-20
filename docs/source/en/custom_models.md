@@ -194,7 +194,7 @@ The [AutoClass](./models#model-classes) API is a shortcut for automatically load
 Make sure you have the `model_type` attribute (must be different from existing model types) in the configuration class and `config_class` attribute in the model class. Use the [`~AutoConfig.register`] method to add the custom configuration and model to the [AutoClass](./models#model-classes) API.
 
 > [!TIP]
-> The first argument to [`AutoConfig.register`] must match the `model_type` attribute in the custom configuration class, and the first argument to [`AutoModel.register`] must match the `config_class` of the custom model class.
+> The first argument to [`AutoConfig.register`] must match the `model_type` attribute in the custom configuration class, and the second argument to [`AutoModel.register`] must match the `config_class` of the custom model class.
 
 ```py
 from transformers import AutoConfig, AutoModel, AutoModelForImageClassification
