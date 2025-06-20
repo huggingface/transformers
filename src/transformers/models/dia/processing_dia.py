@@ -215,6 +215,12 @@ class DiaProcessor(ProcessorMixin):
         else:
             raise ValueError("If you try to train, you should provide audio data as well.")
 
+        if batch_size != decoder_input_ids.shape[0]:
+            raise ValueError(
+                f"Need the same amount of samples for both text and audio, but got text samples={batch_size} and "
+                f"audio samples = {decoder_input_ids.shape[0]} instead."
+            )
+
         # prepare shift indices per delay
         max_seq_len = decoder_attention_mask.shape[-1]
         max_audio_len = max_seq_len - max_delay
@@ -257,20 +263,38 @@ class DiaProcessor(ProcessorMixin):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-    # TODO: check for proper correctness
-    def decode(
+    def batch_decode(
         self,
-        input_ids,
-        attention_mask,
-        pad_token_id,
-        delay_pattern,
-    ):
-        # +1 for the bos token
-        start_of_generation_idx = (~attention_mask.bool()).sum(dim=-1) + 1
-        end_of_generation_idx = input_ids.shape[1] - (input_ids[:, :, 0] == pad_token_id).sum(dim=-1)
+        decoder_input_ids,
+        **kwargs: Unpack[DiaProcessorKwargs],
+    ) -> list["torch.Tensor"]:
+        """
+        Decodes a batch of audio codebook sequences into their respective audio waveforms via the
+        `audio_tokenizer`. See [`~DacModel.decode`] for more information.
+        """
+        output_kwargs = self._merge_kwargs(
+            DiaProcessorKwargs,
+            **kwargs,
+        )
+        audio_kwargs = output_kwargs["audio_kwargs"]
+
+        delay_pattern = audio_kwargs.pop("delay_pattern", None)
+        audio_bos_token_id = audio_kwargs.pop("bos_token_id", None)
+        audio_pad_token_id = audio_kwargs.pop("pad_token_id", None)
+        if audio_bos_token_id is None or audio_pad_token_id is None or delay_pattern is None:
+            raise ValueError(
+                "To enable decoding for Dia, we need the `bos_token_id`, `pad_token_id`, "
+                "and `delay_pattern`. You may have accidentally overwritten one of those."
+            )
+
+        # -1 for the eos token
+        start_of_generation_idx = (decoder_input_ids[:, :, 0] == audio_bos_token_id).sum(dim=-1)
+        end_of_generation_idx = (
+            decoder_input_ids.shape[1] - (decoder_input_ids[:, :, 0] == audio_pad_token_id).sum(dim=-1) - 1
+        )
 
         # revert delay
-        bsz, seq_len, num_channels = input_ids.shape
+        bsz, seq_len, num_channels = decoder_input_ids.shape
         precomputed_idx = self.build_indices(
             bsz=bsz,
             seq_len=seq_len,
@@ -280,7 +304,7 @@ class DiaProcessor(ProcessorMixin):
         )
 
         output_sequences = self.apply_audio_delay(
-            audio=input_ids,
+            audio=decoder_input_ids,
             # We do not care about these values as we cut them out
             # with `start_of_generation_idx` and `end_of_generation_idx`
             pad_token_id=-1,
@@ -290,15 +314,33 @@ class DiaProcessor(ProcessorMixin):
 
         # retrieve the correct sequences each
         audios = []
+        # TODO: see above, dac doesn't work in batches yet
         for i in range(start_of_generation_idx.shape[0]):
-            output_i = output_sequences[i, :, start_of_generation_idx[i] : end_of_generation_idx[i]]
-            # TODO: see above, dac doesn't work in batches yet
-            audio_i = self.audio_tokenizer.decode(audio_codes=output_i).audio_values
+            output_i = output_sequences[i, :, start_of_generation_idx[i] : end_of_generation_idx[i]][None, ...]
+            audio_i = self.audio_tokenizer.decode(audio_codes=output_i).audio_values.detach()
             audios.append(audio_i)
 
-        # TODO: numpify, save, etc.
-
         return audios
+
+    def decode(
+        self,
+        decoder_input_ids: "torch.Tensor",
+        **kwargs: Unpack[DiaProcessorKwargs],
+    ) -> "torch.Tensor":
+        """
+        Decodes a single sequence of audio codebooks into the respective audio waveform via the
+        `audio_tokenizer`. See [`~DacModel.decode`] for more information.
+        """
+        if decoder_input_ids.shape[0] != 1:
+            raise ValueError(
+                f"Expecting a single output to be decoded but received {decoder_input_ids.shape[0]} samples instead."
+            )
+
+        return self.batch_decode(decoder_input_ids, **kwargs)[0]
+
+    # TODO: numpify, save, etc.
+    def save_audio(audio: Union[list["torch.Tensor"], "torch.Tensor"]):
+        pass
 
     @staticmethod
     def build_indices(
