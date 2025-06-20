@@ -295,9 +295,9 @@ def infer_framework_load_model(
                 # Stop loading on the first successful load.
                 break
             except (OSError, ValueError, TypeError, RuntimeError):
-                # First attempt failed – one common reason is that the requested dtype is not supported on the
-                # current execution device (e.g. bf16 on consumer GPUs). If that might be the case and we are
-                # working with a PyTorch model, try again with torch.float32 before giving up.
+                # `from_pretrained` may raise a `TypeError` or `RuntimeError` when the requested `torch_dtype`
+                # is not supported on the execution device (e.g. bf16 on a consumer GPU). We capture those so
+                # we can transparently retry the load in float32 before surfacing an error to the user.
                 fallback_tried = False
                 if is_torch_available() and ("torch_dtype" in kwargs):
                     import torch  # local import to avoid unnecessarily importing torch for TF/JAX users
@@ -1036,6 +1036,8 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         if is_torch_available() and torch.distributed.is_initialized():
             self.device = self.model.device
         logger.warning(f"Device set to use {self.device}")
+        
+        self.binary_output = binary_output
 
         # We shouldn't call `model.to()` for models loaded with accelerate as well as the case that model is already on device
         if (
