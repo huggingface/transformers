@@ -23,15 +23,15 @@ rendered properly in your Markdown viewer.
 
 # BLIP
 
-[BLIP](https://huggingface.co/papers/2201.12086) (Bootstrapped Language-Image Pretraining) is a multimodal model that can understand and generate images and text together, and it is distinctive in that one model can handle various vision-language tasks such as image captioning, image-text matching, and VQA all together. Unlike existing VLP models that were specialized in only one of understanding or generation, BLIP is designed to be flexibly transferred to both domains. In particular, without using noisy image-text pairs collected from the web as they are, it introduces a ‘bootstrapping caption’ technique that generates sentences with its own captioner and goes through a filtering process to increase learning quality, thereby securing cleaner and more meaningful data. As a result, BLIP achieves high performance and excellent generalization despite little artificial manual labor, and can be effectively utilized for various multimodal tasks.
+[BLIP](https://huggingface.co/papers/2201.12086) (Bootstrapped Language-Image Pretraining) is a vision-language pretraining (VLP) framework designed for *both* understanding and generation tasks. Most existing pretrained models are only good at one or the other. It uses a captioner to generate captions and a filter to remove the noisy captions. This increases training data quality and more effectively uses the messy web data.
 
 
 You can find all the original BLIP checkpoints under the [BLIP](https://huggingface.co/collections/Salesforce/blip-models-65242f40f1491fbf6a9e9472) collection.
 
 > [!TIP]
-> Click on the BLIP models in the right sidebar for more examples of how to apply BLIP to different tasks.
+> Click on the BLIP models in the right sidebar for more examples of how to apply BLIP to different vision language tasks.
 
-The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
+The example below demonstrates how to visual question answering with [`Pipeline`] or the [`AutoModel`] class.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -82,14 +82,9 @@ print(processor.batch_decode(output, skip_special_tokens=True)[0])
 
 ![BLIP.gif](https://cdn-uploads.huggingface.co/production/uploads/1670928184033-62441d1d9fdefb55a0b7d12c.gif)
 
-## Notes
-
-- This model was contributed by [ybelkada](https://huggingface.co/ybelkada).
-- The original code can be found [here](https://github.com/salesforce/BLIP).
-
 ## Resources
 
-- [Jupyter notebook](https://github.com/huggingface/notebooks/blob/main/examples/image_captioning_blip.ipynb) on how to fine-tune BLIP for image captioning on a custom dataset
+Refer to this [notebook](https://github.com/huggingface/notebooks/blob/main/examples/image_captioning_blip.ipynb) to learn how to fine-tune BLIP for image captioning on a custom dataset.
 
 ## BlipConfig
 
