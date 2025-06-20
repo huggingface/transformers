@@ -59,6 +59,7 @@ from .integrations import (
     is_sigopt_available,
     is_swanlab_available,
     is_tensorboard_available,
+    is_trackio_available,
     is_wandb_available,
 )
 from .integrations.deepspeed import is_deepspeed_available
@@ -1207,6 +1208,16 @@ def require_swanlab(test_case):
 
     """
     return unittest.skipUnless(is_swanlab_available(), "test requires swanlab")(test_case)
+
+
+def require_trackio(test_case):
+    """
+    Decorator marking a test that requires trackio.
+
+    These tests are skipped when trackio isn't installed.
+
+    """
+    return unittest.skipUnless(is_trackio_available(), "test requires trackio")(test_case)
 
 
 def require_wandb(test_case):
