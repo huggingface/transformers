@@ -90,13 +90,14 @@ class DPTImageProcessingTester:
             numpify=numpify,
             torchify=torchify,
         )
-"test"
+
 
 # Copied from transformers.tests.models.beit.test_image_processing_beit.prepare_semantic_single_inputs
 def prepare_semantic_single_inputs():
     ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
     example = ds[0]
     return example["image"], example["map"]
+
 
 # Copied from transformers.tests.models.beit.test_image_processing_beit.prepare_semantic_batch_inputs
 def prepare_semantic_batch_inputs():
