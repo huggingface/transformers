@@ -930,13 +930,9 @@ def fix_docstring(obj: Any, old_doc_args: str, new_doc_args: str):
         idx += 1
 
     if idx == len(source):
-        # Args are not defined in the docstring of this object
-        obj_file = find_source_file(obj)
-        raise ValueError(
-            f"Cannot fix docstring of {obj.__name__} in {obj_file} because no argument section was found in the docstring. "
-            f"The docstring should contain a section starting with 'Args:', 'Arguments:', 'Parameters:', or similar. "
-            f"Current docstring:\n{obj.__doc__[:200]}{'...' if len(obj.__doc__) > 200 else ''}"
-        )
+        # Args are not defined in the docstring of this object. This can happen when the docstring is inherited.
+        # In this case, we are not trying to fix it on the child object.
+        return
 
     # Get to the line where we stop documenting arguments
     indent = find_indent(source[idx])
