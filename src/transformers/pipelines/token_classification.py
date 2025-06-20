@@ -273,11 +273,12 @@ class TokenClassificationPipeline(ChunkPipeline):
 
         return super().__call__(inputs, **kwargs)
 
-    def preprocess(self, sentence, is_split_into_words, offset_mapping=None, **preprocess_params):
+    def preprocess(self, sentence, offset_mapping=None, **preprocess_params):
         tokenizer_params = preprocess_params.pop("tokenizer_params", {})
         truncation = True if self.tokenizer.model_max_length and self.tokenizer.model_max_length > 0 else False
 
         word_to_chars_map = None
+        is_split_into_words = preprocess_params["is_split_into_words"]
         if is_split_into_words:
             delimiter = preprocess_params["delimiter"]
             if not isinstance(sentence, list):
