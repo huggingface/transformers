@@ -648,7 +648,7 @@ class LxmertEncoder(nn.Module):
 
 class LxmertPooler(nn.Module):
     def __init__(self, config):
-        super(LxmertPooler, self).__init__()
+        super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
 
@@ -663,7 +663,7 @@ class LxmertPooler(nn.Module):
 
 class LxmertPredictionHeadTransform(nn.Module):
     def __init__(self, config):
-        super(LxmertPredictionHeadTransform, self).__init__()
+        super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.transform_act_fn = ACT2FN[config.hidden_act]
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=1e-12)
@@ -677,7 +677,7 @@ class LxmertPredictionHeadTransform(nn.Module):
 
 class LxmertLMPredictionHead(nn.Module):
     def __init__(self, config, lxmert_model_embedding_weights):
-        super(LxmertLMPredictionHead, self).__init__()
+        super().__init__()
         self.transform = LxmertPredictionHeadTransform(config)
 
         # The output weights are the same as the input embeddings, but there is
@@ -744,7 +744,7 @@ class LxmertVisualObjHead(nn.Module):
 
 class LxmertPreTrainingHeads(nn.Module):
     def __init__(self, config, lxmert_model_embedding_weights):
-        super(LxmertPreTrainingHeads, self).__init__()
+        super().__init__()
         self.predictions = LxmertLMPredictionHead(config, lxmert_model_embedding_weights)
         self.seq_relationship = nn.Linear(config.hidden_size, 2)
 

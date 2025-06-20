@@ -493,6 +493,33 @@ training_args = TrainingArguments(
 )
 ```
 
+You can also configure which specific kernels to apply using the `liger_kernel_config` parameter. This dict is passed as keyword arguments to the `_apply_liger_kernel_to_instance` function, allowing fine-grained control over kernel usage. Available options vary by model but typically include: `rope`, `swiglu`, `cross_entropy`, `fused_linear_cross_entropy`, `rms_norm`, etc.
+
+```py
+from transformers import TrainingArguments
+
+# Apply only specific kernels
+training_args = TrainingArguments(
+    output_dir="your-model",
+    learning_rate=2e-5,
+    per_device_train_batch_size=16,
+    per_device_eval_batch_size=16,
+    num_train_epochs=2,
+    weight_decay=0.01,
+    eval_strategy="epoch",
+    save_strategy="epoch",
+    load_best_model_at_end=True,
+    push_to_hub=True,
+    use_liger_kernel=True,
+    liger_kernel_config={
+        "rope": True,
+        "cross_entropy": True,
+        "rms_norm": False,  # Don't apply Liger's RMSNorm kernel
+        "swiglu": True,
+    }
+)
+```
+
 ### NEFTune
 
 [NEFTune](https://hf.co/papers/2310.05914) adds noise to the embedding vectors during training to improve model performance. Enable it in [`Trainer`] with the `neftune_noise_alpha` parameter in [`TrainingArguments`] to control how much noise is added.
