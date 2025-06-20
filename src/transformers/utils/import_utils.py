@@ -849,6 +849,9 @@ def is_torch_hpu_available():
 
         torch.Tensor.masked_fill_ = patched_masked_fill_
 
+    # We patch torch.gather for int64 tensors to avoid a bug on Gaudi
+    # Graph compile failed with synStatus 26 [Generic failure]
+    # This can be removed once bug is fixed but for now we need it.
     original_gather = torch.Tensor.gather
 
     def patched_gather(input: torch.Tensor, dim: int, index: torch.LongTensor) -> torch.Tensor:
