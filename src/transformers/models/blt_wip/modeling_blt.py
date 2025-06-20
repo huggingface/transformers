@@ -2,8 +2,9 @@
 
 import logging
 import os
-from typing import List, Optional, Tuple, Union
 from typing import Callable, List, Optional, Tuple, Union
+
+from ...cache_utils import Cache
 
 import torch
 import torch.nn
@@ -87,7 +88,6 @@ class BLTMLP(nn.Module):
         x3 = self.w3(x.view_as(x))
         output = self.w2(F.silu(x1) * x3)
         return output
-
 
 def eager_attention_forward(
         module: nn.Module,
@@ -238,12 +238,12 @@ class BLTTransformerLayer(nn.Module):
         # Extract parameters from dictionary
         dim = dim
         n_heads = n_heads
-        head_dim = getattr(config, "head_dim", None)
-        n_kv_heads = getattr(config, "n_kv_heads", None)
-        rope_theta = getattr(config, "rope_theta", None)
-        multiple_of = getattr(config, "multiple_of", 256)
-        ffn_dim_multiplier = getattr(config, "ffn_dim_multiplier", None)
-        norm_eps = getattr(config, "norm_eps", None)
+        head_dim = config.head_dim
+        n_kv_heads = config.n_kv_heads
+        rope_theta = config.rope_theta
+        multiple_of = config.multiple_of
+        ffn_dim_multiplier = config.ffn_dim_multiplier
+        norm_eps = config.norm_eps
 
         self.head_dim = head_dim or dim // n_heads
         self.n_heads = n_heads or dim // head_dim
@@ -501,13 +501,13 @@ class BLTLocalEncoder(nn.Module):
         self.n_heads_local_encoder = config.n_heads_local_encoder
         self.vocab_size = config.vocab_size
         self.pm_size = config.pm_size
-        self.cross_attn_encoder = getattr(config, "cross_attn_encoder", False)
+        self.cross_attn_encoder = config.cross_attn_encoder
         self.cross_attn_nheads = config.cross_attn_nheads
         self.cross_attn_all_layers_encoder = config.cross_attn_all_layers_encoder
-        self.cross_attn_init_by_pooling = getattr(config, "cross_attn_init_by_pooling", False)
-        self.cross_attn_k = getattr(config, "cross_attn_k", 1)
+        self.cross_attn_init_by_pooling = config.cross_attn_init_by_pooling
+        self.cross_attn_k = config.cross_attn_k
         self.norm_eps = config.norm_eps
-        self.sliding_window = getattr(config, "sliding_window", None)
+        self.sliding_window = config.sliding_window
         
         self.layers = nn.ModuleList([BLTTransformerLayer(self.dim_local_encoder, self.n_heads_local_encoder, config) for _ in range(self.n_layers_local_encoder)])
 
@@ -532,15 +532,9 @@ class BLTLocalEncoder(nn.Module):
         if self.cross_attn_encoder and self.cross_attn_nheads is not None:
             self.cross_attn_layers = torch.nn.ModuleList()
             layers_to_add = self.n_layers_local_encoder if self.cross_attn_all_layers_encoder else 1
-            for _ in range(layers_to_add):
+            for layer_idx in range(layers_to_add):
                 self.cross_attn_layers.append(
-                    BLTCrossAttention(
-                        dim=self.dim_local_encoder,
-                        head_dim=self.dim_local_encoder // self.cross_attn_nheads,
-                        n_heads=self.cross_attn_nheads,
-                        n_kv_heads=self.cross_attn_nheads,
-                        norm_eps=self.norm_eps,
-                    )
+                    BLTCrossAttention(config=config, layer_idx=layer_idx, hidden_size=self.dim_local_encoder)
                 )
 
     def forward(
@@ -559,11 +553,10 @@ class BLTLocalEncoder(nn.Module):
         if input_embeds is None:
             input_embeds = self.embed_tokens(input_ids)
 
-        batch_size, seq_length, _ = input_embeds.shape
+        batch_size, _, _ = input_embeds.shape
 
         hidden_states = input_embeds
 
-        residual_hidden_states = input_embeds
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training) 
 
         position_ids = torch.arange(input_ids.shape[1], device=input_embeds.device).unsqueeze(0).expand(batch_size, -1)
@@ -583,10 +576,13 @@ class BLTLocalEncoder(nn.Module):
                         patch_embeds = patch_embeds.reshape(batch_size, patch_embeds.shape[1] * self.cross_attn_k, self.dim_local_encoder)
 
                 layer_idx = idx if self.cross_attn_all_layers_encoder else 0
-                cross_attention_output = self.cross_attn_layers[layer_idx](
-                    query_states=patch_embeds,
-                    kv=hidden_states,
-                    mask=cross_mask,
+                cross_attention_output, _, _ = self.cross_attn_layers[layer_idx](
+                    hidden_states=patch_embeds,
+                    cross_attention_states=hidden_states,
+                    attention_mask=cross_mask,
+                    output_attentions=False,
+                    use_cache=False,
+                    cache_position=None,
                 )
                 patch_embeds = patch_embeds + cross_attention_output
 
@@ -603,7 +599,7 @@ class BLTLocalEncoder(nn.Module):
         if not (dimension_mismatch or cross_attn_conditions):
             return None
 
-        output_dim = config.encoder_dim_token_emb * (getattr(config, "cross_attn_k", None) or 1)
+        output_dim = config.encoder_dim_token_emb * config.cross_attn_k
 
         return nn.Linear(
             in_features=config.encoder_dim_patch_emb,
@@ -657,11 +653,11 @@ class BLTLocalDecoder(nn.Module):
         self.vocab_size = config.vocab_size
         self.norm_eps = config.norm_eps
         self.dropout = config.dropout
-        self.cross_attn_decoder = getattr(config, "cross_attn_decoder", False)
+        self.cross_attn_decoder = config.cross_attn_decoder
         self.cross_attn_nheads = config.cross_attn_nheads
         self.cross_attn_all_layers_decoder = config.cross_attn_all_layers_decoder
-        self.cross_attn_k = getattr(config, "cross_attn_k", 1)
-        self.sliding_window = getattr(config, "sliding_window", None)
+        self.cross_attn_k = config.cross_attn_k
+        self.sliding_window = config.sliding_window
 
         self.layers = nn.ModuleList([BLTTransformerLayer(self.dim_local_decoder, self.n_heads_local_decoder, config) for _ in range(self.n_layers_local_decoder)])
 
@@ -686,15 +682,9 @@ class BLTLocalDecoder(nn.Module):
         if self.cross_attn_decoder and self.cross_attn_nheads is not None:
             self.cross_attn_layers = torch.nn.ModuleList()
             layers_to_add = self.n_layers_local_decoder if self.cross_attn_all_layers_decoder else 1
-            for _ in range(layers_to_add):
+            for layer_idx in range(layers_to_add):
                 self.cross_attn_layers.append(
-                    BLTCrossAttention(
-                        dim=self.dim_local_decoder,
-                        head_dim=self.dim_local_decoder // self.cross_attn_nheads,
-                        n_heads=self.cross_attn_nheads,
-                        n_kv_heads=self.cross_attn_nheads,
-                        norm_eps=self.norm_eps,
-                    )
+                    BLTCrossAttention(config=config, layer_idx=layer_idx, hidden_size=self.dim_local_decoder)
                 )
 
         self.output = nn.Linear(self.dim_local_decoder, self.vocab_size, bias=False)
@@ -710,7 +700,7 @@ class BLTLocalDecoder(nn.Module):
         if not (dimension_mismatch or cross_attn_conditions):
             return None
 
-        output_dim = config.decoder_dim_token_emb * (getattr(config, "cross_attn_k", None) or 1)
+        output_dim = config.decoder_dim_token_emb * config.cross_attn_k
 
         return nn.Linear(
             in_features=config.dim_global,
@@ -733,8 +723,8 @@ class BLTLocalDecoder(nn.Module):
         cross_mask: Optional[torch.Tensor] = None,
         cache: Optional[List[Tuple[torch.Tensor, torch.Tensor, int]]] = None,
     ):
-        batch_size, _ = tokens.shape
-        batch_size, _, _ = embeds.shape
+        batch_size, sequence_length = tokens.shape
+        batch_size, seq_length, _ = embeds.shape
 
         assert embeds is not None, "Embeddings must be provided"
 
@@ -756,10 +746,13 @@ class BLTLocalDecoder(nn.Module):
         for i, layer in enumerate(self.layers):
             if self.cross_attn_decoder and (i == 0 or self.cross_attn_all_layers_decoder):
                 # Use cross attention to extract info from patch_embeds into hidden_states
-                cross_attention_output = self.cross_attn_layers[i](
-                    query_states=hidden_states,
-                    kv=patch_embeds,
-                    mask=cross_mask,
+                cross_attention_output, _, _ = self.cross_attn_layers[i](
+                    hidden_states=hidden_states,
+                    cross_attention_states=patch_embeds,
+                    attention_mask=cross_mask,
+                    output_attentions=False,
+                    use_cache=False,
+                    cache_position=None,
                 )
                 hidden_states = hidden_states + cross_attention_output
 
@@ -773,95 +766,102 @@ class BLTLocalDecoder(nn.Module):
 
 
 class BLTCrossAttention(nn.Module):
-    def __init__(
-        self,
-        dim: int,
-        head_dim: int,
-        n_heads: int,
-        n_kv_heads: int,
-        norm_eps: float,
-    ):
+    """Cross-attention module for BLT, following transformers style"""
+
+    def __init__(self, config: BLTConfig, layer_idx: int, hidden_size: Optional[int] = None):
         super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        # Use provided hidden_size or fallback to encoder dimension
+        self.hidden_size = hidden_size or config.dim_local_encoder
+        self.num_heads = config.cross_attn_nheads
+        self.num_key_value_heads = config.cross_attn_nheads  # Assuming same for cross attention
+        self.head_dim = self.hidden_size // self.num_heads
+        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
+        self.scaling = self.head_dim ** -0.5
+        self.dropout = config.dropout
 
-        self.dim = dim
-        self.head_dim = head_dim
+        self.wq = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
+        self.wk = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.wv = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.wo = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
-        self.n_heads = n_heads
-        self.n_kv_heads = n_kv_heads
-        self.heads_per_group = self.n_heads // self.n_kv_heads
-
-        self.cross_attn_norm_q = nn.RMSNorm(dim, eps=norm_eps)
-        self.cross_attn_norm_kv = RMSNorm(dim, eps=norm_eps)
-
-        self.wq = nn.Linear(
-            dim,
-            n_heads * head_dim,
-            bias=False,
-        )
-        self.wk = nn.Linear(
-            dim,
-            n_kv_heads * head_dim,
-            bias=False,
-        )
-        self.wv = nn.Linear(
-            dim,
-            n_kv_heads * head_dim,
-            bias=False,
-        )
-
-        self.wo = nn.Linear(
-            n_heads * head_dim,
-            dim,
-            bias=False,
-        )
+        self.cross_attn_norm_q = nn.RMSNorm(self.hidden_size, eps=config.norm_eps)
+        self.cross_attn_norm_kv = nn.RMSNorm(self.hidden_size, eps=config.norm_eps)
 
     def forward(
         self,
-        query_states: torch.Tensor,
-        kv: torch.Tensor,
-        mask: Optional[Union[BlockMask, str]] = None,
-    ) -> torch.Tensor:
-        # B S D
-        batch_size, seq_len, _ = query_states.shape
-        _, kv_seq_len, _ = kv.shape
+        hidden_states: torch.Tensor,
+        cross_attention_states: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Cache] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+        use_cache: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        """Input shape: Batch x Time x Channel"""
+        bsz, q_len, _ = hidden_states.size()
         
-        # Store original input for residual connection
-        residual = query_states
-        
-        query_norm = self.cross_attn_norm_q(query_states)
-        kv = self.cross_attn_norm_kv(kv)
+        query_states = self.cross_attn_norm_q(hidden_states) # BLT normalizes first
+        query_states = self.wq(query_states)
 
-        query_proj = self.wq(query_norm)
-        key_states = self.wk(kv)
-        value_states = self.wv(kv)
+        if cross_attention_states is not None:
+            cross_attention_states = self.cross_attn_norm_kv(cross_attention_states)  # BLT normalizes first
+            key_states = self.wk(cross_attention_states)
+            value_states = self.wv(cross_attention_states)
+            if past_key_value is not None:
+                # if we have a new cross attention states + new tokens, we only computed key_states on that new cross attention states
+                # we still update the cross key states, past_cross_states, new_cross_states. And use it!
+                key_states, value_states = past_key_value.update(
+                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
+                )
+        elif cache_position is not None and cache_position[0] != 0:
+            key_states, value_states = (
+                past_key_value.key_cache[self.layer_idx],
+                past_key_value.value_cache[self.layer_idx],
+            )
+        else:
+            if cross_attention_states is None:
+                raise ValueError(
+                    "Cross attention layer can't find neither `cross_attention_states` nor cached values for key/values!"
+                )
 
-        output_shape = query_proj.shape
-        # B S D -> B S H D
-        query_proj = query_proj.view(batch_size, seq_len, self.n_heads, self.head_dim)
-        key_states = key_states.view(batch_size, kv_seq_len, self.n_kv_heads, self.head_dim)
-        value_states = value_states.view(batch_size, kv_seq_len, self.n_kv_heads, self.head_dim)
+        attention_interface: Callable = eager_attention_forward
 
-        key_states = repeat_kv(key_states, self.heads_per_group, dim=2)
-        value_states = repeat_kv(value_states, self.heads_per_group, dim=2)
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and output_attentions:
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        # assert mask is None or isinstance(mask, BlockMask)
-        query_proj, key_states, value_states = (e.transpose(1, 2) for e in (query_proj, key_states, value_states))
-        # output = flex_attention_comp(query_proj, key_states, value_states, block_mask=mask)
-        is_causal = (mask == "causal") if isinstance(mask, str) else False
-        mask = mask if isinstance(mask, torch.Tensor) else None
-        mask = mask.to(dtype=query_proj.dtype).to(query_proj.device)
-        output = F.scaled_dot_product_attention(
-            query_proj,
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
             key_states,
             value_states,
-            is_causal=is_causal,
-            attn_mask=mask,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout,
+            scaling=self.scaling,
+            **kwargs,
         )
-        output = output.transpose(1, 2).contiguous()  # B H S D -> B S H D
 
-        output = self.wo(output.reshape(output_shape))
+        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
+        attn_output = self.wo(attn_output)
 
-        return residual + output
+        attn_output = attn_output + hidden_states #TODO: they add the residual twice?? move this out
+
+        if not output_attentions:
+            attn_weights = None
+
+        return attn_output, attn_weights, past_key_value
 
 
 class BLTGlobalTransformer(nn.Module):
@@ -875,11 +875,11 @@ class BLTGlobalTransformer(nn.Module):
         self.dropout = config.dropout
 
         self.layers = nn.ModuleList()
-   #     old = config.n_kv_heads 
+        old = config.n_kv_heads 
         config.n_kv_heads = config.n_kv_heads_global
         for _ in range(self.n_layers_global):
             self.layers.append(BLTTransformerLayer(self.dim_global, self.n_heads_global, config))
-  #      config.n_kv_heads = old
+        config.n_kv_heads = old
 
         global_config = config
         global_config.head_dim = self.dim_global // self.n_heads_global
@@ -1041,12 +1041,12 @@ class BLTModel(BLTPreTrainedModel):
         self.max_patch_length = config.max_patch_length
         self.patching_batch_size = config.patching_batch_size
         self.patching_device = config.patching_device
-        self.cross_attn_encoder = getattr(config, "cross_attn_encoder", False)
-        self.cross_attn_decoder = getattr(config, "cross_attn_decoder", False)
-        self.cross_attn_k = getattr(config, "cross_attn_k", None)
-        self.cross_attn_window_encoder = getattr(config, "cross_attn_window_encoder", None)
-        self.cross_attn_window_decoder = getattr(config, "cross_attn_window_decoder", None)
-        self.cross_attn_use_flex_attention = getattr(config, "cross_attn_use_flex_attention", True)
+        self.cross_attn_encoder = config.cross_attn_encoder
+        self.cross_attn_decoder = config.cross_attn_decoder
+        self.cross_attn_k = config.cross_attn_k
+        self.cross_attn_window_encoder = config.cross_attn_window_encoder
+        self.cross_attn_window_decoder = config.cross_attn_window_decoder
+        self.cross_attn_use_flex_attention = config.cross_attn_use_flex_attention
         self.boe_id = config.boe_id
         self.eos_token_id = config.eos_token_id
 
