@@ -32,11 +32,46 @@ To start, we recommend creating a Hugging Face [account](https://hf.co/join). An
 
 Create a [User Access Token](https://hf.co/docs/hub/security-tokens#user-access-tokens) and log in to your account.
 
+### Authenticate with Hugging Face
+<hfoptions id="authenticate">
+1. For Jupyter Notebooks:
+<hfoption id="notebook">
+If you're working in a Jupyter Notebook, you can log in to your Hugging Face account using the `notebook_login` function from the `huggingface_hub` library. Here's how to do it:
+- Install the necessary library if you haven't already:
+```bash
+pip install huggingface_hub
+```
+- Use the following code to log in:
 ```py
 from huggingface_hub import notebook_login
 
 notebook_login()
 ```
+This will trigger a login prompt that will ask you to paste your Hugging Face token.
+You can find your token on your [Hugging Face settings page](https://huggingface.co/settings/tokens)
+</hfoption>
+
+2. For IDEs (PyCharm, VS Code, etc.):
+<hfoption id="CLI">
+If you're using an IDE like PyCharm or VS Code, follow these steps to log in to your Hugging Face account via the command line interface (CLI):
+- Install the `huggingface_hub` CLI:
+You need to install the `huggingface_hub[cli]` package. You can do this by running the following command:
+```bash
+pip install -U "huggingface_hub[cli]"
+```
+- Log in using the CLI:
+Run the following command in your terminal:
+```huggingface-cli login```
+This will prompt you to enter your Hugging Face token. Paste your token and hit Enter.
+Once you input the token, the CLI will authenticate your session, and you will be logged into Hugging Face.
+For more details and available options for huggingface-cli, you can use:
+```bash
+huggingface-cli --help
+``` 
+Or check the official [documentation](https://huggingface.co/docs/huggingface_hub/guides/cli
+) for further information.
+</hfoption>
+</hfoptions>
 
 Install a machine learning framework.
 
