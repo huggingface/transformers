@@ -31,6 +31,7 @@ class TokenClassificationArgumentHandler(ArgumentHandler):
 
     def __call__(self, inputs: Union[str, list[str]], **kwargs):
         is_split_into_words = kwargs.get("is_split_into_words", False)
+        delimiter = kwargs.get("delimiter", None)
 
         if inputs is not None and isinstance(inputs, (list, tuple)) and len(inputs) > 0:
             inputs = list(inputs)
@@ -39,7 +40,7 @@ class TokenClassificationArgumentHandler(ArgumentHandler):
             inputs = [inputs]
             batch_size = 1
         elif Dataset is not None and isinstance(inputs, Dataset) or isinstance(inputs, types.GeneratorType):
-            return inputs, is_split_into_words, None
+            return inputs, is_split_into_words, None, delimiter
         else:
             raise ValueError("At least one input is required.")
 
@@ -49,7 +50,7 @@ class TokenClassificationArgumentHandler(ArgumentHandler):
                 offset_mapping = [offset_mapping]
             if len(offset_mapping) != batch_size:
                 raise ValueError("offset_mapping should have the same batch size as the input")
-        return inputs, is_split_into_words, offset_mapping
+        return inputs, is_split_into_words, offset_mapping, delimiter
 
 
 class AggregationStrategy(ExplicitEnum):
@@ -156,9 +157,14 @@ class TokenClassificationPipeline(ChunkPipeline):
         offset_mapping: Optional[list[tuple[int, int]]] = None,
         is_split_into_words: Optional[bool] = False,
         stride: Optional[int] = None,
+        delimiter: Optional[str] = None,
     ):
         preprocess_params = {}
         preprocess_params["is_split_into_words"] = is_split_into_words
+
+        if is_split_into_words:
+            preprocess_params["delimiter"] = " " if delimiter is None else delimiter
+
         if offset_mapping is not None:
             preprocess_params["offset_mapping"] = offset_mapping
 
@@ -251,8 +257,9 @@ class TokenClassificationPipeline(ChunkPipeline):
               exists if the offsets are available within the tokenizer
         """
 
-        _inputs, is_split_into_words, offset_mapping = self._args_parser(inputs, **kwargs)
+        _inputs, is_split_into_words, offset_mapping, delimiter = self._args_parser(inputs, **kwargs)
         kwargs["is_split_into_words"] = is_split_into_words
+        kwargs["delimiter"] = delimiter
         if is_split_into_words and not all(isinstance(input, list) for input in inputs):
             return super().__call__([inputs], **kwargs)
         if offset_mapping:
@@ -276,16 +283,18 @@ class TokenClassificationPipeline(ChunkPipeline):
 
         word_to_chars_map = None
         if is_split_into_words:
+            delimiter = preprocess_params["delimiter"]
             if not isinstance(sentence, list):
                 raise ValueError("When `is_split_into_words=True`, `sentence` must be a list of tokens.")
             words = sentence
-            sentence = " ".join(words)  # Recreate the sentence string for later display and slicing
+            sentence = delimiter.join(words)  # Recreate the sentence string for later display and slicing
             # This map will allows to convert back word => char indices
             word_to_chars_map = []
+            delimiter_len = len(delimiter)
             char_offset = 0
             for word in words:
                 word_to_chars_map.append((char_offset, char_offset + len(word)))
-                char_offset += len(word) + 1
+                char_offset += len(word) + delimiter_len
 
             # We use `words` as the actual input for the tokenizer
             text_to_tokenize = words
