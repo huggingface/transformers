@@ -46,8 +46,8 @@ pipeline = pipeline(
     torch_dtype=torch.float16,
     device=0
 )
-url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-print(pipeline(question="What is cat doing?", image=url))
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+pipeline(question="What is the weather in this image?", image=url)
 ```
 
 </hfoption>
@@ -66,14 +66,14 @@ model = AutoModelForVisualQuestionAnswering.from_pretrained(
     device_map="auto"
 )
 
-url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
 
-question = "What is cat doing?"
+question = "What is the weather in this image?"
 inputs = processor(images=image, text=question, return_tensors="pt").to("cuda", torch.float16)
 
 output = model.generate(**inputs)
-print(processor.batch_decode(output, skip_special_tokens=True)[0])
+processor.batch_decode(output, skip_special_tokens=True)[0]
 ```
 
 </hfoption>
