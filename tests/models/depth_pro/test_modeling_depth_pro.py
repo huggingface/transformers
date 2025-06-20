@@ -319,7 +319,9 @@ class DepthProModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                         n_elements_to_skip_on_each_side = int(n_elements * 0.025)
                         data_to_check = torch.sort(data).values
                         if n_elements_to_skip_on_each_side > 0:
-                            data_to_check = data_to_check[n_elements_to_skip_on_each_side:-n_elements_to_skip_on_each_side]
+                            data_to_check = data_to_check[
+                                n_elements_to_skip_on_each_side:-n_elements_to_skip_on_each_side
+                            ]
                         self.assertIn(
                             ((data_to_check.mean() * 1e9).round() / 1e9).item(),
                             [0.0, 1.0],
