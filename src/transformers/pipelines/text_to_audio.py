@@ -80,14 +80,21 @@ class TextToAudioPipeline(Pipeline):
     See the list of available models on [huggingface.co/models](https://huggingface.co/models?filter=text-to-speech).
     """
 
+    # Introducing the processor at load time for new behaviour
+    _load_processor = True
+
     _pipeline_calls_generate = True
     # Make sure the docstring is updated when the default generation config is changed
     _default_generation_config = GenerationConfig(
         max_new_tokens=256,
     )
 
-    def __init__(self, *args, vocoder=None, sampling_rate=None, **kwargs):
+    def __init__(self, *args, vocoder=None, sampling_rate=None, legacy=True, **kwargs):
         super().__init__(*args, **kwargs)
+
+        # Legacy behaviour just uses the tokenizer while new models use the processor as a whole
+        # at any given time
+        self.legacy = legacy
 
         if self.framework == "tf":
             raise ValueError("The TextToAudioPipeline is only available in PyTorch.")
@@ -136,7 +143,8 @@ class TextToAudioPipeline(Pipeline):
 
             kwargs = new_kwargs
 
-        output = self.tokenizer(text, **kwargs, return_tensors="pt")
+        preprocessor = self.tokenizer if self.legacy else self.processor
+        output = preprocessor(text, **kwargs, return_tensors="pt")
 
         return output
 
@@ -228,12 +236,19 @@ class TextToAudioPipeline(Pipeline):
 
         return preprocess_params, params, postprocess_params
 
-    def postprocess(self, waveform):
+    def postprocess(self, audio):
         output_dict = {}
-        if isinstance(waveform, dict):
-            waveform = waveform["waveform"]
-        elif isinstance(waveform, tuple):
-            waveform = waveform[0]
+
+        # We directly get the waveform
+        if self.legacy:
+            if isinstance(audio, dict):
+                waveform = audio["waveform"]
+            elif isinstance(audio, tuple):
+                waveform = audio[0]
+        # Or we need to postprocess to get the waveform
+        else:
+            waveform = self.processor.decode(audio)
+
         output_dict["audio"] = waveform.to(device="cpu", dtype=torch.float).numpy()
         output_dict["sampling_rate"] = self.sampling_rate
 
