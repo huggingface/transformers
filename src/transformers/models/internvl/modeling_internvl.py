@@ -397,8 +397,8 @@ class InternVLVisionLayer(nn.Module):
         self.layernorm_after = NORM2FN[config.norm_type](config.hidden_size, eps=config.layer_norm_eps)
 
         init_values = config.layer_scale_init_value
-        self.lambda_1 = nn.Parameter(init_values * torch.ones((config.hidden_size)), requires_grad=True)
-        self.lambda_2 = nn.Parameter(init_values * torch.ones((config.hidden_size)), requires_grad=True)
+        self.lambda_1 = nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True)
+        self.lambda_2 = nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(
@@ -626,6 +626,12 @@ class InternVLModel(InternVLPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
+
+    def set_decoder(self, decoder):
+        self.language_model = decoder
+
+    def get_decoder(self):
+        return self.language_model
 
     def get_image_features(
         self,
@@ -878,10 +884,10 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
         self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
-        self.model = decoder
+        self.model.set_decoder(decoder)
 
     def get_decoder(self):
-        return self.model
+        return self.model.get_decoder
 
     def get_image_features(
         self,

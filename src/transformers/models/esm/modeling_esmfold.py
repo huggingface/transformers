@@ -133,9 +133,14 @@ class EsmForProteinFoldingOutput(ModelOutput):
     max_predicted_aligned_error: Optional[torch.FloatTensor] = None
 
 
-def is_fp16_enabled():
+def is_fp16_enabled(device_type):
     # Autocast world
-    fp16_enabled = torch.get_autocast_gpu_dtype() == torch.float16
+    autocast_dtype = (
+        torch.get_autocast_dtype(device_type)
+        if hasattr(torch, "get_autocast_dtype")
+        else torch.get_autocast_gpu_dtype()
+    )
+    fp16_enabled = autocast_dtype == torch.float16
     fp16_enabled = fp16_enabled and torch.is_autocast_enabled()
 
     return fp16_enabled
@@ -885,8 +890,9 @@ class EsmFoldTriangleMultiplicativeUpdate(nn.Module):
         b = b * self.sigmoid(self.linear_b_g(z))
         b = b * self.linear_b_p(z)
 
-        if is_fp16_enabled():
-            with torch.cuda.amp.autocast(enabled=False):
+        device_type = a.device.type if a.device.type != "mps" else "cpu"
+        if is_fp16_enabled(device_type):
+            with torch.autocast(device_type=device_type, enabled=False):
                 x = self._combine_projections(a.float(), b.float())
         else:
             x = self._combine_projections(a, b)
@@ -1414,7 +1420,7 @@ class EsmFoldInvariantPointAttention(nn.Module):
 
         self.linear_b = EsmFoldLinear(c_z, config.num_heads_ipa)
 
-        self.head_weights = nn.Parameter(torch.zeros((config.num_heads_ipa)))
+        self.head_weights = nn.Parameter(torch.zeros(config.num_heads_ipa))
 
         concat_out_dim = config.num_heads_ipa * (c_z + config.ipa_dim + config.num_v_points * 4)
         self.linear_out = EsmFoldLinear(concat_out_dim, c_s, init="final")
@@ -1499,8 +1505,9 @@ class EsmFoldInvariantPointAttention(nn.Module):
             z[0] = z[0].cpu()
 
         # [*, H, N_res, N_res]
-        if is_fp16_enabled():
-            with torch.cuda.amp.autocast(enabled=False):
+        device_type = q.device.type if q.device.type != "mps" else "cpu"
+        if is_fp16_enabled(device_type):
+            with torch.autocast(device_type=device_type, enabled=False):
                 a = torch.matmul(
                     permute_final_dims(q.float(), (1, 0, 2)),  # [*, H, N_res, C_hidden]
                     permute_final_dims(k.float(), (1, 2, 0)),  # [*, H, C_hidden, N_res]

@@ -35,7 +35,6 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import auto_docstring, logging
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
 from .configuration_zamba import ZambaConfig
@@ -79,9 +78,6 @@ class ZambaRMSNorm(nn.Module):
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-ALL_LAYERNORM_LAYERS.append(ZambaRMSNorm)
 
 
 # Copied from transformers.models.llama.modeling_llama.repeat_kv
@@ -332,12 +328,10 @@ class ZambaMambaMixer(nn.Module):
         # weight associated to the selective projection used to make dt, B and C input dependent
         # each mamba head is processed independently
         self.x_proj_weight = nn.Parameter(
-            (
-                torch.zeros(
-                    self.n_mamba_heads,
-                    self.time_step_rank + self.ssm_state_size * 2,
-                    self.mamba_head_dim,
-                )
+            torch.zeros(
+                self.n_mamba_heads,
+                self.time_step_rank + self.ssm_state_size * 2,
+                self.mamba_head_dim,
             )
         )
         # time step projection (discretization)
