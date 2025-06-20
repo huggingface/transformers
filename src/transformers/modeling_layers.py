@@ -52,7 +52,7 @@ class GradientCheckpointingLayer(nn.Module):
             do_warn = False
             layer_name = self.__class__.__name__
             message = f"Caching is incompatible with gradient checkpointing in {layer_name}. Setting"
-            
+
             if "use_cache" in kwargs and kwargs["use_cache"]:
                 kwargs["use_cache"] = False
                 message += " `use_cache=False`,"
@@ -73,7 +73,7 @@ class GradientCheckpointingLayer(nn.Module):
                 kwargs["layer_past"] = None
                 message += " `layer_past=None`,"
                 do_warn = True
-            
+
             # warn if anything was changed
             if do_warn:
                 message = message.rstrip(",") + "."

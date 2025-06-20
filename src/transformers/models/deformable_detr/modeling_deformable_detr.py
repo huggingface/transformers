@@ -1268,7 +1268,7 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
                 spatial_shapes,
                 spatial_shapes_list,
                 level_start_index,
-                encoder_hidden_states,   # as a positional argument for gradient checkpointing
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask,
                 output_attentions,
             )
