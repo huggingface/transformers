@@ -33,7 +33,7 @@ jobs:
   run_models_gpu:
     name: " "
     strategy:
-      max-parallel: 1
+      max-parallel: 8
       fail-fast: false
       matrix:
         folders: ${{ fromJson(inputs.folder_slices)[inputs.slice_id] }}
