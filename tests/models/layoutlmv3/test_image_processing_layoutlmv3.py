@@ -110,7 +110,7 @@ class LayoutLMv3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         for image_processing_class in self.image_processor_list:
             image_processor = image_processing_class()
 
-            image = ds[0]["image"]
+            image = ds[0]["image"].convert("RGB")
 
             encoding = image_processor(image, return_tensors="pt")
 
