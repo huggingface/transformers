@@ -25,14 +25,15 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
 from ...modeling_outputs import (
-    BaseModelOutputWithPastAndCrossAttentions,
+    BaseModelOutputWithCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
     MaskedLMOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_esm import EsmConfig
 
 
@@ -186,12 +187,16 @@ class EsmEmbeddings(nn.Module):
         self.mask_token_id = config.mask_token_id
 
     def forward(
-        self, input_ids=None, attention_mask=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
+        self,
+        input_ids=None,
+        attention_mask=None,
+        position_ids=None,
+        inputs_embeds=None,
     ):
         if position_ids is None:
             if input_ids is not None:
                 # Create the position ids from the input token ids. Any padded tokens remain padded.
-                position_ids = create_position_ids_from_input_ids(input_ids, self.padding_idx, past_key_values_length)
+                position_ids = create_position_ids_from_input_ids(input_ids, self.padding_idx)
             else:
                 position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
 
@@ -285,6 +290,7 @@ class EsmSelfAttention(nn.Module):
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
+    @deprecate_kwarg("past_key_value", version="4.54.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -302,20 +308,10 @@ class EsmSelfAttention(nn.Module):
         # such that the encoder's padding tokens are not attended to.
         is_cross_attention = encoder_hidden_states is not None
 
-        if is_cross_attention and past_key_value is not None:
-            # reuse k,v, cross_attentions
-            key_layer = past_key_value[0]
-            value_layer = past_key_value[1]
-            attention_mask = encoder_attention_mask
-        elif is_cross_attention:
+        if is_cross_attention:
             key_layer = self.transpose_for_scores(self.key(encoder_hidden_states))
             value_layer = self.transpose_for_scores(self.value(encoder_hidden_states))
             attention_mask = encoder_attention_mask
-        elif past_key_value is not None:
-            key_layer = self.transpose_for_scores(self.key(hidden_states))
-            value_layer = self.transpose_for_scores(self.value(hidden_states))
-            key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
-            value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
         else:
             key_layer = self.transpose_for_scores(self.key(hidden_states))
             value_layer = self.transpose_for_scores(self.value(hidden_states))
@@ -327,16 +323,6 @@ class EsmSelfAttention(nn.Module):
         # but not when rotary embeddings get involved. Therefore, we scale the query here to match the original
         # ESM code and fix rotary embeddings.
         query_layer = query_layer * self.attention_head_size**-0.5
-
-        if self.is_decoder:
-            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
-            # Further calls to cross_attention layer can then reuse all cross-attention
-            # key/value_states (first "if" case)
-            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
-            # all previous decoder key/value_states. Further calls to uni-directional self-attention
-            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-            # if encoder bi-directional self-attention `past_key_value` is always `None`
-            past_key_value = (key_layer, value_layer)
 
         if self.position_embedding_type == "rotary":
             query_layer, key_layer = self.rotary_embeddings(query_layer, key_layer)
@@ -384,7 +370,7 @@ class EsmSelfAttention(nn.Module):
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         if self.is_decoder:
-            outputs = outputs + (past_key_value,)
+            outputs = outputs + (None,)
         return outputs
 
 
@@ -417,6 +403,7 @@ class EsmFlashAttention2(EsmSelfAttention):
         self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
         self.dropout_prob = config.attention_probs_dropout_prob
 
+    @deprecate_kwarg("past_key_value", version="4.54.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -440,7 +427,6 @@ class EsmFlashAttention2(EsmSelfAttention):
                 head_mask,
                 encoder_hidden_states,
                 encoder_attention_mask,
-                past_key_value,
                 output_attentions,
             )
 
@@ -449,9 +435,6 @@ class EsmFlashAttention2(EsmSelfAttention):
         query_layer = self.transpose_for_scores(self.query(hidden_states))
         key_layer = self.transpose_for_scores(self.key(hidden_states))
         value_layer = self.transpose_for_scores(self.value(hidden_states))
-        if past_key_value is not None:
-            key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
-            value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
 
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
@@ -508,7 +491,7 @@ class EsmFlashAttention2(EsmSelfAttention):
 
         outputs = (attn_output, None)
         if self.is_decoder:
-            outputs = outputs + (past_key_value,)
+            outputs = outputs + (None,)
 
         return outputs
 
@@ -545,6 +528,7 @@ class EsmAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
+    @deprecate_kwarg("past_key_value", version="4.54.0")
     def forward(
         self,
         hidden_states,
@@ -558,12 +542,11 @@ class EsmAttention(nn.Module):
         hidden_states_ln = self.LayerNorm(hidden_states)
         self_outputs = self.self(
             hidden_states_ln,
-            attention_mask,
-            head_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
-            past_key_value,
-            output_attentions,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            output_attentions=output_attentions,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -610,6 +593,7 @@ class EsmLayer(nn.Module):
         self.output = EsmOutput(config)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
+    @deprecate_kwarg("past_key_value", version="4.54.0")
     def forward(
         self,
         hidden_states,
@@ -620,25 +604,20 @@ class EsmLayer(nn.Module):
         past_key_value=None,
         output_attentions=False,
     ):
-        # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
         self_attention_outputs = self.attention(
             hidden_states,
-            attention_mask,
-            head_mask,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
             output_attentions=output_attentions,
-            past_key_value=self_attn_past_key_value,
         )
         attention_output = self_attention_outputs[0]
 
         # if decoder, the last output is tuple of self-attn cache
         if self.is_decoder:
             outputs = self_attention_outputs[1:-1]
-            present_key_value = self_attention_outputs[-1]
         else:
             outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
-        cross_attn_present_key_value = None
         if self.is_decoder and encoder_hidden_states is not None:
             if not hasattr(self, "crossattention"):
                 raise AttributeError(
@@ -646,23 +625,16 @@ class EsmLayer(nn.Module):
                     " with cross-attention layers by setting `config.add_cross_attention=True`"
                 )
 
-            # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
-            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
             cross_attention_outputs = self.crossattention(
                 attention_output,
-                attention_mask,
-                head_mask,
-                encoder_hidden_states,
-                encoder_attention_mask,
-                cross_attn_past_key_value,
-                output_attentions,
+                attention_mask=attention_mask,
+                head_mask=head_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                output_attentions=output_attentions,
             )
             attention_output = cross_attention_outputs[0]
             outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
-
-            # add cross-attn cache to positions 3,4 of present_key_value tuple
-            cross_attn_present_key_value = cross_attention_outputs[-1]
-            present_key_value = present_key_value + cross_attn_present_key_value
 
         layer_output = self.feed_forward_chunk(attention_output)
 
@@ -670,7 +642,7 @@ class EsmLayer(nn.Module):
 
         # if decoder, return the attn key/values as the last output
         if self.is_decoder:
-            outputs = outputs + (present_key_value,)
+            outputs = outputs + (None,)
         return outputs
 
     def feed_forward_chunk(self, attention_output):
@@ -688,6 +660,9 @@ class EsmEncoder(nn.Module):
         self.emb_layer_norm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.gradient_checkpointing = False
 
+    @deprecate_kwarg("past_key_value", version="4.54.0")
+    @deprecate_kwarg("use_cache", version="4.54.0")
+    @can_return_tuple
     def forward(
         self,
         hidden_states,
@@ -701,24 +676,15 @@ class EsmEncoder(nn.Module):
         output_hidden_states=False,
         return_dict=True,
     ):
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
-                    "`use_cache=False`..."
-                )
-                use_cache = False
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
-        next_decoder_cache = () if use_cache else None
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
-            past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
@@ -728,7 +694,6 @@ class EsmEncoder(nn.Module):
                     layer_head_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
-                    past_key_value,
                     output_attentions,
                 )
             else:
@@ -738,13 +703,10 @@ class EsmEncoder(nn.Module):
                     layer_head_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
-                    past_key_value,
                     output_attentions,
                 )
 
             hidden_states = layer_outputs[0]
-            if use_cache:
-                next_decoder_cache = next_decoder_cache + (layer_outputs[-1],)
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
                 if self.config.add_cross_attention:
@@ -756,21 +718,8 @@ class EsmEncoder(nn.Module):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    next_decoder_cache,
-                    all_hidden_states,
-                    all_self_attentions,
-                    all_cross_attentions,
-                ]
-                if v is not None
-            )
-        return BaseModelOutputWithPastAndCrossAttentions(
+        return BaseModelOutputWithCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=next_decoder_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
             cross_attentions=all_cross_attentions,
@@ -869,6 +818,9 @@ class EsmModel(EsmPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
+    @deprecate_kwarg("past_key_values", version="4.54.0")
+    @deprecate_kwarg("use_cache", version="4.54.0")
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -909,11 +861,6 @@ class EsmModel(EsmPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if self.config.is_decoder:
-            use_cache = use_cache if use_cache is not None else self.config.use_cache
-        else:
-            use_cache = False
-
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -927,11 +874,8 @@ class EsmModel(EsmPreTrainedModel):
         batch_size, seq_length = input_shape
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
-        # past_key_values_length
-        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
-
         if attention_mask is None:
-            attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
+            attention_mask = torch.ones(((batch_size, seq_length)), device=device)
 
         if self.config._attn_implementation == "flash_attention_2":
             extended_attention_mask = attention_mask
@@ -964,7 +908,6 @@ class EsmModel(EsmPreTrainedModel):
             position_ids=position_ids,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            past_key_values_length=past_key_values_length,
         )
         encoder_outputs = self.encoder(
             embedding_output,
@@ -972,22 +915,17 @@ class EsmModel(EsmPreTrainedModel):
             head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_extended_attention_mask,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
-        if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
-
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
-            past_key_values=encoder_outputs.past_key_values,
+            past_key_values=None,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
             cross_attentions=encoder_outputs.cross_attentions,
@@ -1031,6 +969,7 @@ class EsmForMaskedLM(EsmPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head.decoder = new_embeddings
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1064,7 +1003,7 @@ class EsmForMaskedLM(EsmPreTrainedModel):
             encoder_attention_mask=encoder_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
         sequence_output = outputs[0]
         prediction_scores = self.lm_head(sequence_output)
@@ -1075,10 +1014,6 @@ class EsmForMaskedLM(EsmPreTrainedModel):
 
             labels = labels.to(prediction_scores.device)
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
-
-        if not return_dict:
-            output = (prediction_scores,) + outputs[2:]
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
         return MaskedLMOutput(
             loss=masked_lm_loss,
@@ -1131,6 +1066,7 @@ class EsmForSequenceClassification(EsmPreTrainedModel):
 
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1160,7 +1096,7 @@ class EsmForSequenceClassification(EsmPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
         sequence_output = outputs[0]
         logits = self.classifier(sequence_output)
@@ -1190,10 +1126,6 @@ class EsmForSequenceClassification(EsmPreTrainedModel):
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
 
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
-
         return SequenceClassifierOutput(
             loss=loss,
             logits=logits,
@@ -1216,6 +1148,7 @@ class EsmForTokenClassification(EsmPreTrainedModel):
 
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1243,7 +1176,7 @@ class EsmForTokenClassification(EsmPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
         sequence_output = outputs[0]
@@ -1257,10 +1190,6 @@ class EsmForTokenClassification(EsmPreTrainedModel):
 
             labels = labels.to(logits.device)
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
             loss=loss,
@@ -1289,7 +1218,7 @@ class EsmClassificationHead(nn.Module):
         return x
 
 
-def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_length=0):
+def create_position_ids_from_input_ids(input_ids, padding_idx):
     """
     Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
     are ignored. This is modified from fairseq's `utils.make_positions`.
@@ -1301,7 +1230,7 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     """
     # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
     mask = input_ids.ne(padding_idx).int()
-    incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
+    incremental_indices = torch.cumsum(mask, dim=1).type_as(mask) * mask
     return incremental_indices.long() + padding_idx
 
 

@@ -271,6 +271,9 @@ SPECIAL_CASES_TO_ALLOW = {
         "attention_chunk_size",
     ],
     "Llama4VisionConfig": ["multi_modal_projector_bias", "norm_eps"],
+    # position_embedding_type not used and deprecated. Should be deleted in v4.55
+    "LayoutLMConfig": ["position_embedding_type"],
+    "MarkupLMConfig": ["position_embedding_type"],
 }
 
 
