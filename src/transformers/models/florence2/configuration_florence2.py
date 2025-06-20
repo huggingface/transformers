@@ -32,8 +32,6 @@ class Florence2VisionConfig(PretrainedConfig):
     Args:
         in_channels (`int`, *optional*, defaults to 3):
             Number of input image channels.
-        num_classes (`int`, *optional*, defaults to 1000):
-            Number of classes for classification head
         depths (`Tuple[int]`, *optional*, defaults to `(1, 1, 9, 1)`):
             The depth of the model.
         patch_size (`Tuple[int]`, *optional*, defaults to `(7, 3, 3, 3)`):
@@ -44,11 +42,11 @@ class Florence2VisionConfig(PretrainedConfig):
             The patch padding of the image.
         patch_prenorm (`Tuple[bool]`, *optional*, defaults to `(False, True, True, True)`):
             Whether to apply layer normalization before the patch embedding layer.
-        embed_dim (`Tuple[int]`, *optional*, defaults to `(256, 512, 1024, 2048)`):
+        embed_dim (`Tuple[int]`, *optional*, defaults to `(128, 256, 512, 1024)`):
             The dimension of the embedding layer.
-        num_heads (`Tuple[int]`, *optional*, defaults to `(8, 16, 32, 64)`):
+        num_heads (`Tuple[int]`, *optional*, defaults to `(4, 8, 16, 32)`):
             The number of attention heads.
-        num_groups (`Tuple[int]`, *optional*, defaults to `(8, 16, 32, 64)`):
+        num_groups (`Tuple[int]`, *optional*, defaults to `(4, 8, 16, 32)`):
             The number of groups.
         window_size (`int`, *optional*, defaults to 12):
             The window size of the model.
@@ -63,10 +61,8 @@ class Florence2VisionConfig(PretrainedConfig):
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
         projection_dim (`int`, *optional*, defaults to 1024):
             The dimension of the projection layer.
-        visual_temporal_embedding (`dict`, *optional*, defaults to `{'type': 'COSINE', 'max_temporal_embeddings': 100}`):
-            The configuration of the visual temporal embedding.
-        image_pos_embed (`dict`, *optional*, defaults to `{'type': 'learned_abs_2d', 'max_pos_embeddings': 50}`):
-            The configuration of the image position embedding.
+        max_temporal_embeddings (`int`, *optional*, defaults to 100): The configuration of the visual temporal embedding.
+        max_position_embeddings (`int`, *optional*, defaults to 50): The configuration of the image position embedding.
         image_feature_source (`Tuple[str]`, *optional*, defaults to `('spatial_avg_pool', 'temporal_avg_pool')`):
             The source of the image feature.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -91,23 +87,22 @@ class Florence2VisionConfig(PretrainedConfig):
     def __init__(
         self,
         in_channels=3,
-        num_classes=1000,
         depths=(1, 1, 9, 1),
         patch_size=(7, 3, 3, 3),
         patch_stride=(4, 2, 2, 2),
         patch_padding=(3, 1, 1, 1),
         patch_prenorm=(False, True, True, True),
-        embed_dim=(256, 512, 1024, 2048),
-        num_heads=(8, 16, 32, 64),
-        num_groups=(8, 16, 32, 64),
+        embed_dim=(128, 256, 512, 1024),
+        num_heads=(4, 8, 16, 32),
+        num_groups=(4, 8, 16, 32),
         window_size=12,
         drop_path_rate=0.1,
         mlp_ratio=4.0,
         qkv_bias=True,
         activation_function="gelu",
         projection_dim=1024,
-        visual_temporal_embedding={"type": "COSINE", "max_temporal_embeddings": 100},
-        image_pos_embed={"type": "learned_abs_2d", "max_pos_embeddings": 50},
+        max_temporal_embeddings=100,
+        max_position_embeddings=50,
         image_feature_source=("spatial_avg_pool", "temporal_avg_pool"),
         initializer_range=0.02,
         **kwargs,
@@ -115,7 +110,6 @@ class Florence2VisionConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         self.in_channels = in_channels
-        self.num_classes = num_classes
         self.depths = depths
         self.patch_size = patch_size
         self.patch_stride = patch_stride
@@ -129,8 +123,8 @@ class Florence2VisionConfig(PretrainedConfig):
         self.mlp_ratio = mlp_ratio
         self.qkv_bias = qkv_bias
         self.projection_dim = projection_dim
-        self.visual_temporal_embedding = visual_temporal_embedding
-        self.image_pos_embed = image_pos_embed
+        self.max_temporal_embeddings = max_temporal_embeddings
+        self.max_position_embeddings = max_position_embeddings
         self.image_feature_source = image_feature_source
         self.initializer_range = initializer_range
         self.activation_function = activation_function
@@ -297,13 +291,6 @@ class Florence2Config(PretrainedConfig):
             Dictionary of configuration options used to initialize [`Florence2LanguageConfig`].
         vision_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`Florence2VisionConfig`].
-        vocab_size (`int`, *optional*, defaults to 51289):
-            Vocabulary size of the Florence2model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`~Florence2ForConditionalGeneration`]
-        projection_dim (`int`, *optional*, defaults to 1024):
-            Dimension of the multimodal projection space.
-        is_encoder_decoder (`bool`, *optional*, defaults to `True`):
-            Whether the model is used as an encoder/decoder or not.
 
     Example:
 
@@ -336,31 +323,28 @@ class Florence2Config(PretrainedConfig):
         self,
         text_config=None,
         vision_config=None,
-        vocab_size=51289,
-        projection_dim=1024,
-        is_encoder_decoder=True,
         **kwargs,
     ):
-        self.vocab_size = vocab_size
-        self.projection_dim = projection_dim
+        super().__init__(**kwargs)
 
-        if text_config is None:
-            text_config = {}
+        if isinstance(text_config, dict):
+            text_config = Florence2LanguageConfig(**text_config)
+        elif text_config is None:
+            text_config = Florence2LanguageConfig()
             logger.info("text_config is None.  Initializing the Florence2LanguageConfig with default values.")
 
-        if vision_config is None:
-            vision_config = {}
+        if isinstance(vision_config, dict):
+            vision_config = Florence2VisionConfig(**vision_config)
+        elif vision_config is None:
             logger.info("vision_config is None. Initializing the Florence2VisionConfig with default values.")
+            vision_config = Florence2VisionConfig()
 
-        self.vision_config = Florence2VisionConfig(**vision_config)
-        self.text_config = Florence2LanguageConfig(**text_config)
+        self.text_config = text_config
+        self.vision_config = vision_config
 
-        super().__init__(
-            vocab_size=vocab_size,
-            projection_dim=projection_dim,
-            is_encoder_decoder=is_encoder_decoder,
-            **kwargs,
-        )
+        self.vocab_size = self.text_config.vocab_size
+        self.is_encoder_decoder = self.text_config.is_encoder_decoder
+        self.projection_dim = self.vision_config.projection_dim
 
 
 __all__ = ["Florence2Config", "Florence2LanguageConfig", "Florence2VisionConfig"]

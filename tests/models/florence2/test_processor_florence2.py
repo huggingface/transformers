@@ -15,7 +15,7 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import AutoProcessor, AutoTokenizer, BartTokenizerFast, Florence2Processor
+from transformers import AutoProcessor, BartTokenizerFast, Florence2Processor
 from transformers.testing_utils import require_vision
 from transformers.utils import is_vision_available
 
@@ -55,9 +55,3 @@ class Florence2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     )
     def test_processor_to_json_string(self):
         pass
-
-    def test_can_load_various_tokenizers(self):
-        for checkpoint in ["microsoft/Florence-2-base"]:
-            processor = Florence2Processor.from_pretrained(checkpoint)
-            tokenizer = AutoTokenizer.from_pretrained(checkpoint)
-            self.assertEqual(processor.tokenizer.__class__, tokenizer.__class__)

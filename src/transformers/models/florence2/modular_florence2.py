@@ -504,7 +504,6 @@ class Florence2VisionBackbone(Florence2VisionPreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self.num_classes = config.num_classes
         self.embed_dim = config.embed_dim
         self.num_heads = config.num_heads
         self.num_groups = config.num_groups
@@ -809,36 +808,23 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         self.vision_tower = Florence2VisionBackbone(config=config.vision_config)
         self.vocab_size = config.vocab_size
         self._attn_implementation = config._attn_implementation
-        self._build_image_projection_layers(config)
+        self.vision_embedding_dim = config.vision_config.embed_dim[-1]
+        self.vision_projection_dim = config.vision_config.projection_dim
+        self.image_projection = nn.Parameter(torch.ones(self.vision_embedding_dim, self.vision_projection_dim))
+        self.image_proj_norm = nn.LayerNorm(self.vision_projection_dim)
+
+        self.image_position_embed = Florence2VisionLearnedAbsolutePositionEmbedding2D(
+            embedding_dim=self.vision_embedding_dim, num_pos=config.vision_config.max_position_embeddings
+        )
+
+        self.visual_temporal_embed = Florence2VisionPositionalEmbeddingCosine1D(
+            embed_dim=self.vision_embedding_dim, max_seq_len=config.vision_config.max_temporal_embeddings
+        )
 
         self.language_model = Florence2LanguageForConditionalGeneration(config=config.text_config)
 
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
-
-    def _build_image_projection_layers(self, config: Florence2Config):
-        image_dim_out = config.vision_config.embed_dim[-1]
-        dim_projection = config.vision_config.projection_dim
-        self.image_projection = nn.Parameter(torch.ones(image_dim_out, dim_projection))
-        self.image_proj_norm = nn.LayerNorm(dim_projection)
-        image_pos_embed_config = config.vision_config.image_pos_embed
-        if image_pos_embed_config["type"] == "learned_abs_2d":
-            self.image_pos_embed = Florence2VisionLearnedAbsolutePositionEmbedding2D(
-                embedding_dim=image_dim_out, num_pos=image_pos_embed_config["max_pos_embeddings"]
-            )
-        else:
-            raise NotImplementedError("Not implemented yet")
-
-        self.image_feature_source = config.vision_config.image_feature_source
-
-        # temporal embedding
-        visual_temporal_embedding_config = config.vision_config.visual_temporal_embedding
-        if visual_temporal_embedding_config["type"] == "COSINE":
-            self.visual_temporal_embed = Florence2VisionPositionalEmbeddingCosine1D(
-                embed_dim=image_dim_out, max_seq_len=visual_temporal_embedding_config["max_temporal_embeddings"]
-            )
-        else:
-            raise NotImplementedError("Not implemented yet")
 
     def get_encoder(self) -> Florence2LanguageEncoder:
         return self.language_model.get_encoder()
@@ -860,58 +846,25 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
 
     def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
         model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
-        # update vocab size
         self.config.text_config.vocab_size = model_embeds.num_embeddings
         self.config.vocab_size = model_embeds.num_embeddings
         self.vocab_size = model_embeds.num_embeddings
         return model_embeds
 
-    def _encode_image(self, pixel_values: torch.Tensor):
-        if len(pixel_values.shape) == 4:
-            batch_size, C, H, W = pixel_values.shape
-            T = 1
-            x = self.vision_tower.forward_features_unpool(pixel_values)
-        else:
-            raise ValueError(f"invalid image shape {pixel_values.shape}")
-
-        if self.image_pos_embed is not None:
-            x = x.view(batch_size * T, -1, x.shape[-1])
-            num_tokens = x.shape[-2]
-            h, w = int(num_tokens**0.5), int(num_tokens**0.5)
-            if h * w != num_tokens:
-                raise ValueError("only support square feature maps for now")
-            x = x.view(batch_size * T, h, w, x.shape[-1])
-            pos_embed = self.image_pos_embed(x)
-            x = x + pos_embed
-            x = x.view(batch_size, T * h * w, x.shape[-1])
-
-        if self.visual_temporal_embed is not None:
-            visual_temporal_embed = self.visual_temporal_embed(x.view(batch_size, T, -1, x.shape[-1])[:, :, 0])
-            x = x.view(batch_size, T, -1, x.shape[-1]) + visual_temporal_embed.view(1, T, 1, x.shape[-1])
-
-        x_feat_dict = {}
-
-        spatial_avg_pool_x = x.view(batch_size, T, -1, x.shape[-1]).mean(dim=2)
-        x_feat_dict["spatial_avg_pool"] = spatial_avg_pool_x
-
-        temporal_avg_pool_x = x.view(batch_size, T, -1, x.shape[-1]).mean(dim=1)
-        x_feat_dict["temporal_avg_pool"] = temporal_avg_pool_x
-
-        x = x.view(batch_size, T, -1, x.shape[-1])[:, -1]
-        x_feat_dict["last_frame"] = x
-
-        new_x = []
-        for _image_feature_source in self.image_feature_source:
-            if _image_feature_source not in x_feat_dict:
-                raise ValueError("invalid image feature source: {}".format(_image_feature_source))
-            new_x.append(x_feat_dict[_image_feature_source])
-
-        x = torch.cat(new_x, dim=1)
-
-        x = x @ self.image_projection
-        x = self.image_proj_norm(x)
-
-        return x
+    def get_image_features(self, pixel_values: torch.Tensor):
+        vision_features = self.vision_tower.forward_features_unpool(pixel_values)
+        position_features = vision_features + self.image_position_embed(vision_features)
+        position_features = position_features.flatten(2).transpose(1, 2)
+        temporal_features = self.visual_temporal_embed(position_features[:, :, 0])
+        temporal_features = temporal_features.unsqueeze(1)
+        visual_token_features = position_features + temporal_features
+        visual_token_features = visual_token_features.unsqueeze(1)
+        spatial_image_features = visual_token_features.mean(dim=2)
+        temporal_image_features = visual_token_features.mean(dim=1)
+        image_features = torch.cat([spatial_image_features, temporal_image_features], dim=1)
+        image_features = image_features @ self.image_projection
+        image_features = self.image_proj_norm(image_features)
+        return image_features
 
     def _merge_input_ids_with_image_features(
         self,
@@ -959,6 +912,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[Tuple, Florence2Seq2SeqLMOutput]:
         r"""
         Args:
@@ -1004,7 +958,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
             # 2. Merge text and images
             if pixel_values is not None:
                 # (batch_size, num_image_tokens, hidden_size)
-                image_features = self._encode_image(pixel_values)
+                image_features = self.get_image_features(pixel_values)
                 inputs_embeds, attention_mask = self._merge_input_ids_with_image_features(
                     image_features, inputs_embeds, attention_mask
                 )
@@ -1029,6 +983,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
+            **kwargs,
         )
 
         if not return_dict:
@@ -1075,7 +1030,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
                 inputs_embeds = self.get_input_embeddings()(input_ids)
             # 2. Merge text and images
             if pixel_values is not None:
-                image_features = self._encode_image(pixel_values)
+                image_features = self.get_image_features(pixel_values)
                 inputs_embeds, attention_mask = self._merge_input_ids_with_image_features(
                     image_features, inputs_embeds, attention_mask
                 )

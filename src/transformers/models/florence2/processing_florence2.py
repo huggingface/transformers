@@ -18,29 +18,29 @@ Processor class for FLORENCE2.
 
 import math
 import re
-from typing import List, Optional, Union
+from typing import List, Union
 
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ChannelDimension, ImageInput, is_valid_image
-from ...processing_utils import ProcessorMixin
+from ...image_utils import ImageInput, is_valid_image
+from ...processing_utils import (
+    MultiModalData,
+    ProcessingKwargs,
+    ProcessorMixin,
+    Unpack,
+    _validate_images_text_input_order,
+)
 from ...tokenization_utils_base import (
-    PaddingStrategy,
     PreTokenizedInput,
     TextInput,
-    TruncationStrategy,
 )
-from ...utils import TensorType, is_torch_available, is_vision_available, logging
-from ..bart.tokenization_bart import BartTokenizer
-from ..bart.tokenization_bart_fast import BartTokenizerFast
+from ...utils import is_torch_available, logging
 
 
 if is_torch_available():
     import torch
 
-if is_vision_available():
-    from ...image_utils import PILImageResampling
 
 logger = logging.get_logger(__name__)
 
@@ -59,6 +59,13 @@ def _is_str_or_image(elem):
     return isinstance(elem, (str)) or is_image_or_image_url(elem)
 
 
+class Florence2ProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {"padding": False, "return_token_type_ids": False},
+        "images_kwargs": {},
+    }
+
+
 class Florence2Processor(ProcessorMixin):
     r"""
     Constructs a Florence2 processor which wraps a Florence2 image processor and a Florence2 tokenizer into a single processor.
@@ -69,12 +76,12 @@ class Florence2Processor(ProcessorMixin):
     Args:
         image_processor ([`CLIPImageProcessor`], *optional*):
             The image processor is a required input.
-        tokenizer ([`BartTokenizerFast`], *optional*):
+        tokenizer ([`BartTokenizer`, `BartTokenizerFast`], *optional*):
             The tokenizer is a required input.
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "CLIPImageProcessor"
+    image_processor_class = "AutoImageProcessor"
     tokenizer_class = ("BartTokenizer", "BartTokenizerFast")
 
     def __init__(
@@ -183,59 +190,29 @@ class Florence2Processor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         images: ImageInput = None,
-        tokenize_newline_separately: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
-        do_resize: Optional[bool] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        data_format: Optional[ChannelDimension] = "channels_first",
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        resample: Optional["PILImageResampling"] = None,
-        do_convert_rgb: Optional[bool] = None,
-        do_thumbnail: Optional[bool] = None,
-        do_align_long_axis: Optional[bool] = None,
-        do_rescale: Optional[bool] = None,
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        audio=None,
+        videos=None,
+        **kwargs: Unpack[Florence2ProcessorKwargs],
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to BartTokenizerFast's [`~BartTokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
-        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
+        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
         Args:
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. Both channels-first and channels-last formats are supported.
             text (`str`, `List[str]`, `List[List[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
-                number of channels, H and W are image height and width.
-            tokenize_newline_separately (`bool`, defaults to `True`):
-                Adds a separately tokenized '\n' at the end of the prompt.
-            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
-                Select a strategy to pad the returned sequences (according to the model's padding side and padding
-                index) among:
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-                  sequence if provided).
-                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
-                  acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
-                  lengths).
-            max_length (`int`, *optional*):
-                Maximum length of the returned list and optionally padding length (see above).
-            truncation (`bool`, *optional*):
-                Activates truncation to cut input sequences longer than `max_length` to `max_length`.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
-
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
@@ -244,82 +221,89 @@ class Florence2Processor(ProcessorMixin):
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`. If `suffix`
-              is provided, the `input_ids` will also contain the suffix input ids.
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
               `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-            - **labels** -- Labels compatible with training if `suffix` is not None
         """
 
-        return_token_type_ids = False
+        if images is None and text is None:
+            raise ValueError("You have to specify at least one of `images` or `text`.")
 
-        if images is None:
+        # check if images and text inputs are reversed for BC
+        images, text = _validate_images_text_input_order(images, text)
+
+        output_kwargs = self._merge_kwargs(
+            Florence2ProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+        if images is not None:
+            pixel_values = self.image_processor(images, **output_kwargs["images_kwargs"])["pixel_values"]
+        else:
             raise ValueError("`images` are expected as arguments to a `Florence2Processor` instance.")
+
         if text is None:
-            logger.warning_once("You are using Florence-2 without a text prompt.")
+            logger.warning_once("You are using Florence-2 without a text prefix.")
             text = ""
+
+        if isinstance(text, str):
+            text = [text]
+        elif not isinstance(text, list) and not isinstance(text[0], str):
+            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
         if isinstance(text, List) and isinstance(images, List):
             if len(images) < len(text):
                 raise ValueError(
                     f"Received {len(images)} images for {len(text)} prompts. Each prompt should be associated with an image."
                 )
-        if _is_str_or_image(text):
-            text = [text]
-        elif isinstance(text, list) and _is_str_or_image(text[0]):
-            pass
 
-        pixel_values = self.image_processor(
-            images,
-            do_resize=do_resize,
-            do_normalize=do_normalize,
-            return_tensors=return_tensors,
-            image_mean=image_mean,
-            image_std=image_std,
-            input_data_format=input_data_format,
-            data_format=data_format,
-            resample=resample,
-            do_convert_rgb=do_convert_rgb,
-        )["pixel_values"]
+        prompt_strings = self._construct_prompts(text)
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"], return_tensors=return_tensors)
 
-        if max_length is not None:
-            max_length -= self.image_seq_length  # max_length has to account for the image tokens
+        return_data = {**text_inputs, "pixel_values": pixel_values}
 
-        text = self._construct_prompts(text)
-
-        inputs = self.tokenizer(
-            text,
-            return_tensors=return_tensors,
-            padding=padding,
-            max_length=max_length,
-            truncation=truncation,
-            return_token_type_ids=return_token_type_ids,
-        )
-
-        return_data = {**inputs, "pixel_values": pixel_values}
-
-        if return_token_type_ids:
-            labels = inputs["input_ids"].masked_fill(inputs["token_type_ids"] == 0, -100)
-            return_data.update({"labels": labels})
         return BatchFeature(data=return_data)
 
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (List[List[str]], *optional*):
+                The input sizes formatted as (height, width) per each image.
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            num_image_tokens = [self.image_seq_length] * len(image_sizes)
+            num_image_patches = [1] * len(image_sizes)
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+        return MultiModalData(**vision_data)
+
+    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Gemma
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to BartTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
+        This method forwards all its arguments to GemmaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
         refer to the docstring of this method for more information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
+    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.decode with CLIP->Gemma
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to BartTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
+        This method forwards all its arguments to GemmaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
 
     @property
+    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.model_input_names with CLIP->PaliGemma
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
@@ -515,6 +499,61 @@ class CoordinatesQuantizer(object):
         return dequantized_coordinates
 
 
+class PointsQuantizer(object):
+    """
+    Quantize points (Nx2)
+    """
+
+    def __init__(self, mode, bins):
+        self.mode = mode
+        self.bins = bins
+
+    def quantize(self, coordinates, size):
+        bins_w, bins_h = self.bins  # Quantization bins.
+        size_w, size_h = size  # Original image size.
+        size_per_bin_w = size_w / bins_w
+        size_per_bin_h = size_h / bins_h
+        assert coordinates.shape[-1] == 2, "coordinates should be shape (N, 2)"
+        x, y = coordinates.split(1, dim=-1)  # Shape: 4 * [N, 1].
+
+        if self.mode == "floor":
+            quantized_x = (x / size_per_bin_w).floor().clamp(0, bins_w - 1)
+            quantized_y = (y / size_per_bin_h).floor().clamp(0, bins_h - 1)
+
+        elif self.mode == "round":
+            raise NotImplementedError()
+
+        else:
+            raise ValueError("Incorrect quantization type.")
+
+        quantized_coordinates = torch.cat((quantized_x, quantized_y), dim=-1).int()
+
+        return quantized_coordinates
+
+    def dequantize(self, coordinates, size):
+        bins_w, bins_h = self.bins  # Quantization bins.
+        size_w, size_h = size  # Original image size.
+        size_per_bin_w = size_w / bins_w
+        size_per_bin_h = size_h / bins_h
+        assert coordinates.shape[-1] == 2, "coordinates should be shape (N, 2)"
+        x, y = coordinates.split(1, dim=-1)  # Shape: 4 * [N, 1].
+
+        if self.mode == "floor":
+            # Add 0.5 to use the center position of the bin as the coordinate.
+            dequantized_x = (x + 0.5) * size_per_bin_w
+            dequantized_y = (y + 0.5) * size_per_bin_h
+
+        elif self.mode == "round":
+            raise NotImplementedError()
+
+        else:
+            raise ValueError("Incorrect quantization type.")
+
+        dequantized_coordinates = torch.cat((dequantized_x, dequantized_y), dim=-1)
+
+        return dequantized_coordinates
+
+
 class Florence2PostProcessor(object):
     r"""
     Florence-2 post process for converting text prediction to various tasks results.
@@ -522,22 +561,6 @@ class Florence2PostProcessor(object):
     Args:
         config: A dict of configs.
         tokenizer: A tokenizer for decoding text to spans.
-        sample config:
-            UNIFIED_POST_PROCESS:
-                # commom configs
-                NUM_BBOX_HEIGHT_BINS: 1000
-                NUM_BBOX_WIDTH_BINS: 1000
-                COORDINATES_HEIGHT_BINS: 1000
-                COORDINATES_WIDTH_BINS: 1000
-                # task specific configs, override the common configs
-                PRASE_TASKS:
-                    - TASK_NAME: 'video_dense_caption'
-                      PATTERN: r'<time_(\d+)><time_(\d+)>([a-zA-Z0-9 ]+)'
-                      SCORE_MODE: 'avg_cat_name_scores'
-                      NUM_BINS: 100
-                    - TASK_NAME: 'od'
-                      PATTERN: 'r<loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)>([a-zA-Z0-9 ]+)'
-                      SCORE_MODE: 'avg_cat_name_scores'
 
     Returns:
         parsed_dict (dict): A dict of parsed results.
@@ -746,23 +769,17 @@ class Florence2PostProcessor(object):
     def decode_with_spans(self, tokenizer, token_ids):
         filtered_tokens = tokenizer.convert_ids_to_tokens(token_ids, skip_special_tokens=False)
         assert len(filtered_tokens) == len(token_ids)
-        sub_texts = []
-        for token in filtered_tokens:
-            if token in self.all_special_tokens:
-                sub_texts.append(token)
-            else:
-                if isinstance(tokenizer, (BartTokenizer, BartTokenizerFast)):
-                    sub_text = tokenizer.convert_tokens_to_string([token])
-                else:
-                    raise ValueError(f"type {type(tokenizer)} not supported")
-                sub_texts.append(sub_text)
-
         text = ""
         spans = []
-        for sub_text in sub_texts:
-            span = (len(text), len(text) + len(sub_text))  # [start index, end index).
+        for token in filtered_tokens:
+            if token in self.all_special_tokens:
+                sub_text = token
+            else:
+                sub_text = tokenizer.convert_tokens_to_string([token])
+            span = (len(text), len(text) + len(sub_text))
             text += sub_text
             spans.append(span)
+
         return text, spans
 
     def parse_od_from_text_and_spans(self, text, pattern, image_size, phrase_centric=False):
@@ -807,7 +824,7 @@ class Florence2PostProcessor(object):
             quad_box = ocr_line[1:]
             quad_box = [int(i) for i in quad_box]
             quad_box = (
-                self.coordinates_quantizer.dequantize(torch.tensor(np.array(quad_box).reshape(-1, 2)), size=image_size)
+                self.coordinates_quantizer.dequantize(torch.tensor(quad_box).reshape(-1, 2), size=image_size)
                 .reshape(-1)
                 .tolist()
             )
@@ -860,12 +877,14 @@ class Florence2PostProcessor(object):
                 cur_span += len(pharse_text)
                 continue
 
-            # Prepare instance.
-            instance = {}
-
             # parse phrase, get string
             phrase = re.search(pattern, phrase_text_strip)
             if phrase is None:
+                cur_span += len(pharse_text)
+                continue
+
+            phrase = phrase.group().strip()
+            if phrase in self.black_list_of_phrase_grounding:
                 cur_span += len(pharse_text)
                 continue
 
@@ -875,15 +894,8 @@ class Florence2PostProcessor(object):
                 cur_span += len(pharse_text)
                 continue
 
-            phrase = phrase.group()
-            # remove leading and trailing spaces
-            phrase = phrase.strip()
-
-            if phrase in self.black_list_of_phrase_grounding:
-                cur_span += len(pharse_text)
-                continue
-
-            # a list of list
+            # Prepare instance.
+            instance = {}
             bbox_bins = [[int(_bboxes_parsed.group(j)) for j in range(1, 5)] for _bboxes_parsed in bboxes_parsed]
             instance["bbox"] = self.box_quantizer.dequantize(boxes=torch.tensor(bbox_bins), size=image_size).tolist()
 
@@ -1044,12 +1056,7 @@ class Florence2PostProcessor(object):
             phrase = re.search(phrase_string_pattern, phrase_text_strip)
             if phrase is None:
                 continue
-            phrase = phrase.group()
-            # remove leading and trailing spaces
-            phrase = phrase.strip()
-
-            # parse bboxes by box_pattern
-
+            phrase = phrase.group().strip()
             # split by polygon_start_token and polygon_end_token first using polygons_instance_pattern
             if polygon_start_token in phrase_text and polygon_end_token in phrase_text:
                 polygons_instances_parsed = list(re.finditer(polygons_instance_pattern, phrase_text))

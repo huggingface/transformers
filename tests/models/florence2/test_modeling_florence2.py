@@ -59,7 +59,6 @@ class Florence2VisionText2TextModelTester:
         seq_length=13,
         encoder_seq_length=18,
         is_training=True,
-        use_labels=False,
         vocab_size=99,
         max_position_embeddings=64,
         encoder_layers=1,
@@ -68,7 +67,7 @@ class Florence2VisionText2TextModelTester:
         decoder_ffn_dim=8,
         num_attention_heads=1,
         d_model=8,
-        hidden_act="gelu",
+        activation_function="gelu",
         dropout=0.1,
         eos_token_id=2,
         bos_token_id=0,
@@ -78,7 +77,7 @@ class Florence2VisionText2TextModelTester:
         patch_stride=[4],
         patch_padding=[3],
         patch_prenorm=[False],
-        dim_embed=[8],
+        embed_dim=[8],
         num_heads=[1],
         num_groups=[1],
         window_size=12,
@@ -104,7 +103,7 @@ class Florence2VisionText2TextModelTester:
         self.decoder_ffn_dim = decoder_ffn_dim
         self.num_attention_heads = num_attention_heads
         self.d_model = d_model
-        self.activation_function = hidden_act
+        self.activation_function = activation_function
         self.dropout = dropout
         self.eos_token_id = eos_token_id
         self.bos_token_id = bos_token_id
@@ -117,7 +116,7 @@ class Florence2VisionText2TextModelTester:
         self.patch_stride = patch_stride
         self.patch_padding = patch_padding
         self.patch_prenorm = patch_prenorm
-        self.dim_embed = dim_embed
+        self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.num_groups = num_groups
         self.window_size = window_size
@@ -150,14 +149,15 @@ class Florence2VisionText2TextModelTester:
             patch_stride=self.patch_stride,
             patch_padding=self.patch_padding,
             patch_prenorm=self.patch_prenorm,
-            dim_embed=self.dim_embed,
+            embed_dim=self.embed_dim,
             num_heads=self.num_heads,
             num_groups=self.num_groups,
             window_size=self.window_size,
+            activation_function=self.activation_function,
             projection_dim=self.projection_dim,
         )
 
-        return Florence2Config.from_text_vision_configs(text_config=text_config, vision_config=vision_config)
+        return Florence2Config(text_config=text_config, vision_config=vision_config)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor(
