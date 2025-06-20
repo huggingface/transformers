@@ -192,24 +192,3 @@ class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(rle), 1)
         self.assertEqual(rle[0]["size"], [2, 2])
         self.assertEqual(rle[0]["counts"], [1, 3])  # 1 zero, followed by 3 ones
-
-
-@require_vision
-@require_torchvision
-class SamProcessorEquivalenceTest(unittest.TestCase):
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
-        image_processor = SamImageProcessor()
-        processor = SamProcessor(image_processor)
-        processor.save_pretrained(self.tmpdirname)
-
-    def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
-
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
-
-    # This is to avoid repeating the skipping of the common tests
-    def prepare_image_inputs(self):
-        """This function prepares a list of PIL images."""
-        return prepare_image_inputs()
