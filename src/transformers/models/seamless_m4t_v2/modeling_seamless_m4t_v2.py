@@ -2607,7 +2607,6 @@ class SeamlessM4Tv2CodeHifiGan(PreTrainedModel):
         unit_lengths = torch.clamp(unit_lengths, 0, dur_out.shape[1] - 1)
 
         cumulative_dur_out = torch.cumsum(dur_out, dim=1)
-
         unit_lengths = cumulative_dur_out.gather(dim=1, index=unit_lengths.unsqueeze(1)).squeeze()
 
         return unit_lengths

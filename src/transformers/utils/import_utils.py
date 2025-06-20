@@ -806,6 +806,7 @@ def is_torch_musa_available(check_device=False):
 
 @lru_cache
 def is_torch_hpu_available():
+    "Checks if `torch.hpu` is available and potentially if a HPU is in the environment"
     if (
         not _torch_available
         or importlib.util.find_spec("habana_frameworks") is None
@@ -818,7 +819,7 @@ def is_torch_hpu_available():
         return False
 
     import torch
-    print(f"Checking if torch.hpu is available with version {torch.__version__}")
+
     if os.environ.get("PT_HPU_LAZY_MODE", "1") == "1":
         # import habana_frameworks.torch in case of lazy mode to patch torch with torch.hpu
         import habana_frameworks.torch  # noqa: F401
@@ -849,7 +850,8 @@ def is_torch_hpu_available():
         torch.Tensor.masked_fill_ = patched_masked_fill_
 
     original_gather = torch.Tensor.gather
-    def patched_gather(input:torch.Tensor, dim: int, index: torch.LongTensor)-> torch.Tensor:
+
+    def patched_gather(input: torch.Tensor, dim: int, index: torch.LongTensor) -> torch.Tensor:
         if input.dtype == torch.int64:
             logger.warning_once(
                 "torch.gather is not supported for int64 tensors on Gaudi. "
