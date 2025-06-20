@@ -358,11 +358,9 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
-        self_attn_cache = (
-            past_key_values.self_attention_cache
-            if isinstance(past_key_values, EncoderDecoderCache)
-            else past_key_values
-        )
+        self_attn_cache = past_key_values
+        if isinstance(self_attn_cache, EncoderDecoderCache):
+            self_attn_cache = self_attn_cache.self_attention_cache
 
         residual = hidden_states
         normed_states = self.pre_sa_norm(hidden_states)
