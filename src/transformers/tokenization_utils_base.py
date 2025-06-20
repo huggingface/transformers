@@ -2506,6 +2506,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             f.write(out_str)
         logger.info(f"tokenizer config file saved in {tokenizer_config_file}")
 
+        # Save remote code to local
+        custom_object_save(self, save_directory)
+
         # Sanitize AddedTokens in special_tokens_map
 
         # kept for forward compatibility, will be removed in transoformers 5. Typefields are not saved for FC, special should not be save either
