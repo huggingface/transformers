@@ -33,6 +33,7 @@ from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLModel,
     Qwen2_5_VLModelOutputWithPast,
     Qwen2_5_VLPreTrainedModel,
+    Qwen2_5_VLVisionBlock,
     apply_rotary_pos_emb_vision,
 )
 from transformers.models.qwen2_5_vl.processing_qwen2_5_vl import (
@@ -421,7 +422,7 @@ class Glm4vRMSNorm(Glm4RMSNorm):
     pass
 
 
-class Glm4vPatchMerger(nn.Module):
+class Glm4vVisionPatchMerger(nn.Module):
     def __init__(self, dim: int, context_dim: int, hidden_act: str, bias: bool = False) -> None:
         super().__init__()
         self.proj = nn.Linear(dim, dim, bias=bias)
@@ -611,18 +612,7 @@ class Glm4vVisionAttention(nn.Module):
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
         q, k, v = self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
-        if position_embeddings is None:
-            logger.warning_once(
-                "The attention layers in this model are transitioning from computing the RoPE embeddings internally "
-                "through `rotary_pos_emb` (2D tensor of RoPE theta values), to using externally computed "
-                "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.54 `rotary_pos_emb` will be "
-                "removed and `position_embeddings` will be mandatory."
-            )
-            emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-            cos = emb.cos()
-            sin = emb.sin()
-        else:
-            cos, sin = position_embeddings
+        cos, sin = position_embeddings
         q, k = apply_rotary_pos_emb_vision(q, k, cos, sin)
 
         attention_mask = torch.zeros([1, seq_length, seq_length], device=q.device, dtype=torch.bool)
@@ -655,29 +645,13 @@ class Glm4vVisionAttention(nn.Module):
         return attn_output
 
 
-class Glm4vVisionBlock(nn.Module):
+class Glm4vVisionBlock(Qwen2_5_VLVisionBlock):
     def __init__(self, config) -> None:
         super().__init__()
         self.norm1 = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.norm2 = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.attn = Glm4vVisionAttention(config)
         self.mlp = Glm4VisionMlp(config, bias=False)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        cu_seqlens: torch.Tensor,
-        rotary_pos_emb: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-    ) -> torch.Tensor:
-        hidden_states = hidden_states + self.attn(
-            self.norm1(hidden_states),
-            cu_seqlens=cu_seqlens,
-            rotary_pos_emb=rotary_pos_emb,
-            position_embeddings=position_embeddings,
-        )
-        hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
-        return hidden_states
 
 
 class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
@@ -690,7 +664,6 @@ class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_self_attn_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_mlp_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.attention_type = "full_attention"
 
     def forward(
         self,
@@ -809,7 +782,7 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         self.rotary_pos_emb = Glm4vVisionRotaryEmbedding(head_dim // 2)
 
         self.blocks = nn.ModuleList([Glm4vVisionBlock(config) for _ in range(config.depth)])
-        self.merger = Glm4vPatchMerger(
+        self.merger = Glm4vVisionPatchMerger(
             dim=config.out_hidden_size, context_dim=config.intermediate_size, hidden_act=config.hidden_act
         )
 
