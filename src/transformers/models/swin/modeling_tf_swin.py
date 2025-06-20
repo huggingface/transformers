@@ -476,7 +476,7 @@ class TFSwinDropPath(keras.layers.Layer):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob: Optional[float] = None, scale_by_keep: bool = True, **kwargs) -> None:
-        super(TFSwinDropPath, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.drop_prob = drop_prob
         self.scale_by_keep = scale_by_keep
 
