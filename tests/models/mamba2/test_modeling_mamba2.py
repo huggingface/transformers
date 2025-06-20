@@ -462,7 +462,7 @@ class Mamba2IntegrationTest(unittest.TestCase):
         config = Mamba2Config(num_heads=24, head_dim=64, hidden_size=768, expand=2, n_groups=1)
 
         torch.manual_seed(42)
-        with torch.amp.autocast(device_type=torch_device, dtype=dtype):
+        with torch.autocast(device_type=torch_device, dtype=dtype):
             with torch.no_grad():
                 mixer = Mamba2Mixer(config, layer_idx=0).to(torch_device)
                 hidden_states = torch.rand(size=(B, T, D), dtype=dtype, device=torch_device)

@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -118,7 +118,7 @@ class SamHQVisionEncoderOutput(SamVisionEncoderOutput):
         This is specific to SAM-HQ and not present in base SAM.
     """
 
-    intermediate_embeddings: Optional[List[torch.FloatTensor]] = None
+    intermediate_embeddings: Optional[list[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -133,7 +133,7 @@ class SamHQVisionEncoder(SamVisionEncoder):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SamHQVisionEncoderOutput]:
+    ) -> Union[tuple, SamHQVisionEncoderOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -259,11 +259,11 @@ class SamHQMaskDecoder(nn.Module):
         dense_prompt_embeddings: torch.Tensor,
         multimask_output: bool,
         hq_token_only: bool,
-        intermediate_embeddings: Optional[List[torch.Tensor]] = None,
+        intermediate_embeddings: Optional[list[torch.Tensor]] = None,
         output_attentions: Optional[bool] = None,
         attention_similarity: Optional[torch.Tensor] = None,
         target_embedding: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Predict high-quality masks given image and prompt embeddings.
 
@@ -495,9 +495,9 @@ class SamHQModel(SamModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        intermediate_embeddings: Optional[List[torch.FloatTensor]] = None,
+        intermediate_embeddings: Optional[list[torch.FloatTensor]] = None,
         **kwargs,
-    ) -> List[Dict[str, torch.Tensor]]:
+    ) -> list[dict[str, torch.Tensor]]:
         r"""
         input_points (`torch.FloatTensor` of shape `(batch_size, num_points, 2)`):
             Input 2D spatial points, this is used by the prompt encoder to encode the prompt. Generally yields to much
@@ -550,10 +550,10 @@ class SamHQModel(SamModel):
             This is specific to SAM-HQ's architecture.
         attention_similarity (`torch.FloatTensor`, *optional*):
             Attention similarity tensor, to be provided to the mask decoder for target-guided attention in case the
-            model is used for personalization as introduced in [PerSAM](https://arxiv.org/abs/2305.03048).
+            model is used for personalization as introduced in [PerSAM](https://huggingface.co/papers/2305.03048).
         target_embedding (`torch.FloatTensor`, *optional*):
             Embedding of the target concept, to be provided to the mask decoder for target-semantic prompting in case
-            the model is used for personalization as introduced in [PerSAM](https://arxiv.org/abs/2305.03048).
+            the model is used for personalization as introduced in [PerSAM](https://huggingface.co/papers/2305.03048).
         intermediate_embeddings (`List[torch.FloatTensor]`, *optional*):
             Intermediate embeddings from vision encoder's non-windowed blocks, used by SAM-HQ for enhanced mask quality.
             Required when providing pre-computed image_embeddings instead of pixel_values.
@@ -615,9 +615,7 @@ class SamHQModel(SamModel):
             box_batch_size = input_boxes.shape[1]
             if point_batch_size != box_batch_size:
                 raise ValueError(
-                    "You should provide as many bounding boxes as input points per box. Got {} and {}.".format(
-                        point_batch_size, box_batch_size
-                    )
+                    f"You should provide as many bounding boxes as input points per box. Got {point_batch_size} and {box_batch_size}."
                 )
 
         image_positional_embeddings = self.get_image_wide_positional_embeddings()
