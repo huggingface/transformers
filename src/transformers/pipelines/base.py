@@ -294,8 +294,35 @@ def infer_framework_load_model(
                     model = model.eval()
                 # Stop loading on the first successful load.
                 break
-            except (OSError, ValueError):
-                all_traceback[model_class.__name__] = traceback.format_exc()
+            except (OSError, ValueError, TypeError, RuntimeError):
+                # First attempt failed – one common reason is that the requested dtype is not supported on the
+                # current execution device (e.g. bf16 on consumer GPUs). If that might be the case and we are
+                # working with a PyTorch model, try again with torch.float32 before giving up.
+                fallback_tried = False
+                if is_torch_available() and ("torch_dtype" in kwargs):
+                    import torch  # local import to avoid unnecessarily importing torch for TF/JAX users
+
+                    fallback_tried = True
+                    fp32_kwargs = kwargs.copy()
+                    fp32_kwargs["torch_dtype"] = torch.float32
+
+                    try:
+                        model = model_class.from_pretrained(model, **fp32_kwargs)
+                        if hasattr(model, "eval"):
+                            model = model.eval()
+                        logger.warning(
+                            "Falling back to torch.float32 because loading with the original dtype failed on the"
+                            " target device."
+                        )
+                        break
+                    except Exception:
+                        # If it still fails, capture the traceback and continue to the next class.
+                        all_traceback[model_class.__name__] = traceback.format_exc()
+                        continue
+
+                # If no fallback was attempted or it also failed, record the original traceback.
+                if not fallback_tried:
+                    all_traceback[model_class.__name__] = traceback.format_exc()
                 continue
 
         if isinstance(model, str):
@@ -1010,27 +1037,6 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             self.device = self.model.device
         logger.warning(f"Device set to use {self.device}")
 
-        # Ensure the dtype chosen (possibly coming from `torch_dtype="auto"`) is actually supported on the
-        # execution device. If it is not (e.g. the model weights were loaded as bfloat16 but the target device
-        # does not have bfloat16 capabilities), silently fall back to FP32 so that users still get a working
-        # pipeline instead of a runtime error. The original dtype is preserved when possible.
-        if is_torch_available() and self.framework == "pt":
-            model_dtype = getattr(self.model, "dtype", None)
-            if model_dtype is not None and isinstance(self.device, torch.device):
-                try:
-                    # Allocation will fail fast if the dtype is not supported on the target device.
-                    _ = torch.empty(1, dtype=model_dtype, device=self.device)
-                except (TypeError, RuntimeError):
-                    logger.warning(
-                        f"torch_dtype={model_dtype} is not supported on device {self.device}. "
-                        "Falling back to torch.float32."
-                    )
-                    # Cast the model weights to fp32 and update the config so subsequent saves are correct.
-                    self.model = self.model.to(dtype=torch.float32)
-                    if hasattr(self.model, "config") and hasattr(self.model.config, "torch_dtype"):
-                        self.model.config.torch_dtype = torch.float32
-
-        self.binary_output = binary_output
         # We shouldn't call `model.to()` for models loaded with accelerate as well as the case that model is already on device
         if (
             self.framework == "pt"
