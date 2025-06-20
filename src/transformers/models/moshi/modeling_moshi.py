@@ -31,6 +31,7 @@ from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask,
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, ModelOutput, Seq2SeqLMOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import auto_docstring, is_torch_flex_attn_available, is_torchdynamo_compiling, logging
 from ..auto.modeling_auto import AutoModel
 from .configuration_moshi import MoshiConfig, MoshiDepthConfig
@@ -231,6 +232,9 @@ class MoshiRMSNorm(nn.Module):
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
+
+
+ALL_LAYERNORM_LAYERS.append(MoshiRMSNorm)
 
 
 class MoshiFlexibleLinear(nn.Module):

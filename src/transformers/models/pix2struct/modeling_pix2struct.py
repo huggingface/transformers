@@ -33,6 +33,7 @@ from ...modeling_outputs import (
     Seq2SeqModelOutput,
 )
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
@@ -94,6 +95,8 @@ except ImportError:
 except Exception:
     logger.warning("Discovered apex but it failed to load, falling back to Pix2StructLayerNorm")
     pass
+
+ALL_LAYERNORM_LAYERS.append(Pix2StructLayerNorm)
 
 
 class Pix2StructVisionEmbeddings(nn.Module):

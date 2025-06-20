@@ -27,6 +27,7 @@ from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask,
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import auto_docstring, logging
 from .configuration_olmoe import OlmoeConfig
 
@@ -139,6 +140,9 @@ class OlmoeRMSNorm(nn.Module):
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
+ALL_LAYERNORM_LAYERS.append(OlmoeRMSNorm)
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Olmoe
