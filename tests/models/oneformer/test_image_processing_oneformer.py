@@ -21,7 +21,7 @@ import unittest
 import numpy as np
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -31,6 +31,9 @@ if is_torch_available():
 
     if is_vision_available():
         from transformers import OneFormerImageProcessor
+
+    if is_torchvision_available():
+        from transformers import OneFormerImageProcessorFast
         from transformers.models.oneformer.image_processing_oneformer import binary_mask_to_rle, prepare_metadata
         from transformers.models.oneformer.modeling_oneformer import OneFormerForUniversalSegmentationOutput
 
@@ -156,6 +159,7 @@ class OneFormerImageProcessorTester:
 @require_vision
 class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = OneFormerImageProcessor if (is_vision_available() and is_torch_available()) else None
+    fast_image_processing_class = OneFormerImageProcessorFast if is_torchvision_available() else None
     # only for test_image_processing_common.test_image_proc_to_json_string
     image_processing_class = image_processing_class
 
@@ -168,18 +172,19 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_proc_properties(self):
-        image_processor = self.image_processing_class(**self.image_processor_dict)
-        self.assertTrue(hasattr(image_processor, "image_mean"))
-        self.assertTrue(hasattr(image_processor, "image_std"))
-        self.assertTrue(hasattr(image_processor, "do_normalize"))
-        self.assertTrue(hasattr(image_processor, "do_resize"))
-        self.assertTrue(hasattr(image_processor, "size"))
-        self.assertTrue(hasattr(image_processor, "ignore_index"))
-        self.assertTrue(hasattr(image_processor, "class_info_file"))
-        self.assertTrue(hasattr(image_processor, "num_text"))
-        self.assertTrue(hasattr(image_processor, "repo_path"))
-        self.assertTrue(hasattr(image_processor, "metadata"))
-        self.assertTrue(hasattr(image_processor, "do_reduce_labels"))
+        for image_processing_class in self.image_processor_list:
+            image_processor = self.image_processing_class(**self.image_processor_dict)
+            self.assertTrue(hasattr(image_processor, "image_mean"))
+            self.assertTrue(hasattr(image_processor, "image_std"))
+            self.assertTrue(hasattr(image_processor, "do_normalize"))
+            self.assertTrue(hasattr(image_processor, "do_resize"))
+            self.assertTrue(hasattr(image_processor, "size"))
+            self.assertTrue(hasattr(image_processor, "ignore_index"))
+            self.assertTrue(hasattr(image_processor, "class_info_file"))
+            self.assertTrue(hasattr(image_processor, "num_text"))
+            self.assertTrue(hasattr(image_processor, "repo_path"))
+            self.assertTrue(hasattr(image_processor, "metadata"))
+            self.assertTrue(hasattr(image_processor, "do_reduce_labels"))
 
     def comm_get_image_processor_inputs(
         self, with_segmentation_maps=False, is_instance_map=False, segmentation_type="np"
@@ -251,86 +256,89 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(rle[1], 45)
 
     def test_post_process_semantic_segmentation(self):
-        fature_extractor = self.image_processing_class(
-            num_labels=self.image_processor_tester.num_classes,
-            max_seq_length=77,
-            task_seq_length=77,
-            class_info_file="ade20k_panoptic.json",
-            num_text=self.image_processor_tester.num_text,
-            repo_path="shi-labs/oneformer_demo",
-        )
-        outputs = self.image_processor_tester.get_fake_oneformer_outputs()
+        for image_processing_class in self.image_processor_list:
+            fature_extractor = self.image_processing_class(
+                num_labels=self.image_processor_tester.num_classes,
+                max_seq_length=77,
+                task_seq_length=77,
+                class_info_file="ade20k_panoptic.json",
+                num_text=self.image_processor_tester.num_text,
+                repo_path="shi-labs/oneformer_demo",
+            )
+            outputs = self.image_processor_tester.get_fake_oneformer_outputs()
 
-        segmentation = fature_extractor.post_process_semantic_segmentation(outputs)
+            segmentation = fature_extractor.post_process_semantic_segmentation(outputs)
 
-        self.assertEqual(len(segmentation), self.image_processor_tester.batch_size)
-        self.assertEqual(
-            segmentation[0].shape,
-            (
-                self.image_processor_tester.height,
-                self.image_processor_tester.width,
-            ),
-        )
+            self.assertEqual(len(segmentation), self.image_processor_tester.batch_size)
+            self.assertEqual(
+                segmentation[0].shape,
+                (
+                    self.image_processor_tester.height,
+                    self.image_processor_tester.width,
+                ),
+            )
 
-        target_sizes = [(1, 4) for i in range(self.image_processor_tester.batch_size)]
-        segmentation = fature_extractor.post_process_semantic_segmentation(outputs, target_sizes=target_sizes)
+            target_sizes = [(1, 4) for i in range(self.image_processor_tester.batch_size)]
+            segmentation = fature_extractor.post_process_semantic_segmentation(outputs, target_sizes=target_sizes)
 
-        self.assertEqual(segmentation[0].shape, target_sizes[0])
+            self.assertEqual(segmentation[0].shape, target_sizes[0])
 
     def test_post_process_instance_segmentation(self):
-        image_processor = self.image_processing_class(
-            num_labels=self.image_processor_tester.num_classes,
-            max_seq_length=77,
-            task_seq_length=77,
-            class_info_file="ade20k_panoptic.json",
-            num_text=self.image_processor_tester.num_text,
-            repo_path="shi-labs/oneformer_demo",
-        )
-        outputs = self.image_processor_tester.get_fake_oneformer_outputs()
-        segmentation = image_processor.post_process_instance_segmentation(outputs, threshold=0)
-
-        self.assertTrue(len(segmentation) == self.image_processor_tester.batch_size)
-        for el in segmentation:
-            self.assertTrue("segmentation" in el)
-            self.assertTrue("segments_info" in el)
-            self.assertEqual(type(el["segments_info"]), list)
-            self.assertEqual(
-                el["segmentation"].shape, (self.image_processor_tester.height, self.image_processor_tester.width)
+        for image_processing_class in self.image_processor_list:
+            image_processor = self.image_processing_class(
+                num_labels=self.image_processor_tester.num_classes,
+                max_seq_length=77,
+                task_seq_length=77,
+                class_info_file="ade20k_panoptic.json",
+                num_text=self.image_processor_tester.num_text,
+                repo_path="shi-labs/oneformer_demo",
             )
+            outputs = self.image_processor_tester.get_fake_oneformer_outputs()
+            segmentation = image_processor.post_process_instance_segmentation(outputs, threshold=0)
 
-        segmentation_with_opts = image_processor.post_process_instance_segmentation(
-            outputs,
-            threshold=0,
-            target_sizes=[(1, 4) for _ in range(self.image_processor_tester.batch_size)],
-            task_type="panoptic",
-        )
-        self.assertTrue(len(segmentation_with_opts) == self.image_processor_tester.batch_size)
-        for el in segmentation_with_opts:
-            self.assertTrue("segmentation" in el)
-            self.assertTrue("segments_info" in el)
-            self.assertEqual(type(el["segments_info"]), list)
-            self.assertEqual(el["segmentation"].shape, (1, 4))
+            self.assertTrue(len(segmentation) == self.image_processor_tester.batch_size)
+            for el in segmentation:
+                self.assertTrue("segmentation" in el)
+                self.assertTrue("segments_info" in el)
+                self.assertEqual(type(el["segments_info"]), list)
+                self.assertEqual(
+                    el["segmentation"].shape, (self.image_processor_tester.height, self.image_processor_tester.width)
+                )
+
+            segmentation_with_opts = image_processor.post_process_instance_segmentation(
+                outputs,
+                threshold=0,
+                target_sizes=[(1, 4) for _ in range(self.image_processor_tester.batch_size)],
+                task_type="panoptic",
+            )
+            self.assertTrue(len(segmentation_with_opts) == self.image_processor_tester.batch_size)
+            for el in segmentation_with_opts:
+                self.assertTrue("segmentation" in el)
+                self.assertTrue("segments_info" in el)
+                self.assertEqual(type(el["segments_info"]), list)
+                self.assertEqual(el["segmentation"].shape, (1, 4))
 
     def test_post_process_panoptic_segmentation(self):
-        image_processor = self.image_processing_class(
-            num_labels=self.image_processor_tester.num_classes,
-            max_seq_length=77,
-            task_seq_length=77,
-            class_info_file="ade20k_panoptic.json",
-            num_text=self.image_processor_tester.num_text,
-            repo_path="shi-labs/oneformer_demo",
-        )
-        outputs = self.image_processor_tester.get_fake_oneformer_outputs()
-        segmentation = image_processor.post_process_panoptic_segmentation(outputs, threshold=0)
-
-        self.assertTrue(len(segmentation) == self.image_processor_tester.batch_size)
-        for el in segmentation:
-            self.assertTrue("segmentation" in el)
-            self.assertTrue("segments_info" in el)
-            self.assertEqual(type(el["segments_info"]), list)
-            self.assertEqual(
-                el["segmentation"].shape, (self.image_processor_tester.height, self.image_processor_tester.width)
+        for image_processing_class in self.image_processor_list:
+            image_processor = self.image_processing_class(
+                num_labels=self.image_processor_tester.num_classes,
+                max_seq_length=77,
+                task_seq_length=77,
+                class_info_file="ade20k_panoptic.json",
+                num_text=self.image_processor_tester.num_text,
+                repo_path="shi-labs/oneformer_demo",
             )
+            outputs = self.image_processor_tester.get_fake_oneformer_outputs()
+            segmentation = image_processor.post_process_panoptic_segmentation(outputs, threshold=0)
+
+            self.assertTrue(len(segmentation) == self.image_processor_tester.batch_size)
+            for el in segmentation:
+                self.assertTrue("segmentation" in el)
+                self.assertTrue("segments_info" in el)
+                self.assertEqual(type(el["segments_info"]), list)
+                self.assertEqual(
+                    el["segmentation"].shape, (self.image_processor_tester.height, self.image_processor_tester.width)
+                )
 
     def test_can_load_with_local_metadata(self):
         # Create a temporary json file
