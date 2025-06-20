@@ -34,8 +34,6 @@ from ...utils import (
     TensorType,
     add_start_docstrings,
     is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
     is_vision_available,
 )
 from .image_processing_glm4v import smart_resize
@@ -55,11 +53,7 @@ from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 if is_vision_available():
     from ...image_utils import PILImageResampling
 
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
+import torch.nn.functional as F
 
 
 class Glm4vVideoProcessorInitKwargs(VideosKwargs):
@@ -144,7 +138,7 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
         frame_indices = uniq
         sampled_video = video[frame_indices]
         full_second_idxs = [int(idx / video_fps) for idx in frame_indices]
-        second_idxs = full_second_idxs[::2] # mrope
+        second_idxs = full_second_idxs[::2]  # mrope
         return sampled_video, second_idxs
 
     def _preprocess(
@@ -154,7 +148,6 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
         do_convert_rgb: bool = True,
         do_resize: bool = True,
         size: SizeDict = None,
-        interpolation: Optional[str] = F.InterpolationMode.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255.0,
         do_normalize: bool = True,
@@ -186,7 +179,8 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
         resized_videos_grouped = {}
 
         for shape, stacked_videos in grouped_videos.items():
-            num_frames, height, width = stacked_videos.shape[1], stacked_videos.shape[3], stacked_videos.shape[4]
+            B, T, C, H, W = stacked_videos.shape
+            num_frames, height, width = T, H, W
             if do_resize:
                 resized_height, resized_width = smart_resize(
                     num_frames=num_frames,
@@ -195,9 +189,11 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
                     temporal_factor=temporal_patch_size,
                     factor=patch_size * merge_size,
                 )
-                stacked_videos = F.resize(
-                    stacked_videos, size=(resized_height, resized_width), interpolation=interpolation
+                stacked_videos = stacked_videos.view(B * T, C, H, W)
+                stacked_videos = F.interpolate(
+                    stacked_videos, size=(resized_height, resized_width), mode="bicubic", align_corners=False
                 )
+                stacked_videos = stacked_videos.view(B, T, C, resized_height, resized_width)
             resized_videos_grouped[shape] = stacked_videos
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
         # Group videos by size for further processing
