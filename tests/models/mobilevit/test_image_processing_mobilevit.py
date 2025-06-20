@@ -27,8 +27,6 @@ if is_torch_available():
     import torch
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import MobileViTImageProcessor
 
 
