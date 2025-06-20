@@ -17,7 +17,7 @@ Processor class for SAMHQ.
 """
 
 from copy import deepcopy
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -34,9 +34,9 @@ if is_torch_available():
 
 class SamHQImagesKwargs(ImagesKwargs):
     segmentation_maps: Optional[ImageInput]
-    input_points: Optional[List[List[float]]]
-    input_labels: Optional[List[List[int]]]
-    input_boxes: Optional[List[List[List[float]]]]
+    input_points: Optional[list[list[float]]]
+    input_labels: Optional[list[list[int]]]
+    input_boxes: Optional[list[list[list[float]]]]
     point_pad_value: Optional[int]
 
 
@@ -77,7 +77,7 @@ class SamHQProcessor(ProcessorMixin):
     def __call__(
         self,
         images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
         audio: Optional[AudioInput] = None,
         video: Optional[VideoInput] = None,
         **kwargs: Unpack[SamHQProcessorKwargs],
