@@ -263,15 +263,15 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
             # TODO: @eustlb, we should have per-batch-idx values
             max_audio_frames = audio_tokens_mask.sum(dim=-1).max()
 
-            if max_new_tokens > max_audio_frames:
+            if max_new_tokens is not None and max_new_tokens > max_audio_frames:
                 logger.warning(
                     f"`max_new_tokens` ({max_new_tokens}) is greater than the maximum number of audio frames ({max_audio_frames})."
                     f"Setting `max_new_tokens` to {max_audio_frames}."
                 )
-                max_new_tokens = max_audio_frames
+            
+            max_new_tokens = max_audio_frames
 
         return GenerationMixin.generate(
-            self,
             *args,
             max_new_tokens=max_new_tokens,
             **kwargs,

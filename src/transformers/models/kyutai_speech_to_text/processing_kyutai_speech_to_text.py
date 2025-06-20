@@ -84,7 +84,6 @@ class KyutaiSpeechToTextProcessor(ProcessorMixin):
 
         inputs = self.feature_extractor(
             audio,
-            return_tensors=common_kwargs["return_tensors"],
             **audio_kwargs,
         )
 
