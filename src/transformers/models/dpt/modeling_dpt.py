@@ -109,7 +109,7 @@ class DPTViTHybridEmbeddings(nn.Module):
         patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
 
-        self.backbone = load_backbone(config)
+        self.backbone = load_backbone(config.backbone_config)
         feature_dim = self.backbone.channels[-1]
         if len(self.backbone.channels) != 3:
             raise ValueError(f"Expected backbone to have 3 output features, got {len(self.backbone.channels)}")
@@ -1054,7 +1054,7 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
 
         self.backbone = None
         if config.is_hybrid is False and (config.backbone_config is not None or config.backbone is not None):
-            self.backbone = load_backbone(config)
+            self.backbone = load_backbone(config.backbone_config)
         else:
             self.dpt = DPTModel(config, add_pooling_layer=False)
 

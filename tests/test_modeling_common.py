@@ -3332,7 +3332,7 @@ class ModelTesterMixin:
 
             # set eager as it will be the one supported in all models
             # we just need to test if passing 'attn_implementation' as a dict fails or not
-            attn_implementation_per_subconfig = {}
+            attn_implementation_per_subconfig = {"": "eager"}
             for key in config.sub_configs.keys():
                 attn_implementation_per_subconfig[key] = "eager"
 
