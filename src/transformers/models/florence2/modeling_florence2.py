@@ -177,8 +177,8 @@ class Florence2VisionMLP(nn.Module):
     def __init__(
         self,
         in_features: int,
-        hidden_features: int | None = None,
-        out_features: int | None = None,
+        hidden_features: Optional[int] = None,
+        out_features: Optional[int] = None,
         activation_function: str = "gelu",
     ):
         super().__init__()
