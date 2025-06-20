@@ -22,8 +22,6 @@ from ...test_image_processing_common import ImageProcessingTestMixin, prepare_im
 
 
 if is_pytesseract_available():
-    from PIL import Image
-
     from transformers import LayoutLMv3ImageProcessor
 
     if is_torchvision_available():

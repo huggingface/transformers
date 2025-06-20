@@ -28,8 +28,6 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_pytesseract_available():
-    from PIL import Image
-
     from transformers import LayoutLMv3ImageProcessor
 
 
