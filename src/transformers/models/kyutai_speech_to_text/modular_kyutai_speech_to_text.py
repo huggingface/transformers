@@ -27,9 +27,22 @@ from ..auto import AutoModel
 from ..llama.modeling_llama import LlamaForCausalLM
 from ..mimi.modeling_mimi import MimiConv1dPaddingCache
 from ..moshi.modeling_moshi import MoshiModel
+from ..encodec.feature_extraction_encodec import EncodecFeatureExtractor
 
 
 logger = logging.get_logger(__name__)
+
+
+class KyutaiSpeechToTextFeatureExtractor(EncodecFeatureExtractor):
+    def __init__(
+        self,
+        audio_delay_seconds: Optional[float] = 0.0,
+        audio_silence_prefix_seconds: Optional[float] = 0.0,
+        **super_kwargs,
+    ):
+        super().__init__(**super_kwargs)
+        self.audio_delay_seconds = audio_delay_seconds
+        self.audio_silence_prefix_seconds = audio_silence_prefix_seconds
 
 
 class KyutaiSpeechToTextConv1dPaddingCache(MimiConv1dPaddingCache):
@@ -265,4 +278,4 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
         )
 
 
-__all__ = ["KyutaiSpeechToTextModel", "KyutaiSpeechToTextForConditionalGeneration"]
+__all__ = ["KyutaiSpeechToTextModel", "KyutaiSpeechToTextForConditionalGeneration", "KyutaiSpeechToTextFeatureExtractor"]
