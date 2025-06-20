@@ -1263,14 +1263,14 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
 
             layer_outputs = decoder_layer(
                 hidden_states,
-                position_embeddings=position_embeddings,
-                encoder_hidden_states=encoder_hidden_states,
-                reference_points=reference_points_input,
-                spatial_shapes=spatial_shapes,
-                spatial_shapes_list=spatial_shapes_list,
-                level_start_index=level_start_index,
-                encoder_attention_mask=encoder_attention_mask,
-                output_attentions=output_attentions,
+                position_embeddings,
+                reference_points_input,
+                spatial_shapes,
+                spatial_shapes_list,
+                level_start_index,
+                encoder_hidden_states,   # as a positional argument for gradient checkpointing
+                encoder_attention_mask,
+                output_attentions,
             )
 
             hidden_states = layer_outputs[0]
