@@ -411,7 +411,7 @@ class BLTConfig(PretrainedConfig):
         cross_attn_decoder=False,
         cross_attn_window_encoder=None,
         cross_attn_window_decoder=None,
-        cross_attn_k=None,
+        cross_attn_k=1,
         cross_attn_nheads=None,
         cross_attn_all_layers_decoder=False,
         cross_attn_all_layers_encoder=False,
@@ -569,7 +569,6 @@ class BLTConfig(PretrainedConfig):
         self.max_position_embeddings=max_seqlen
         self.hidden_size=dim_local_encoder
         self.num_attention_heads=n_heads_local_encoder
-     #   self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
 
         super().__init__(
             bos_token_id=bos_token_id,
@@ -579,10 +578,8 @@ class BLTConfig(PretrainedConfig):
         )
 
 
-
     @property
     def encoder_dim_token_emb(self):
-        """Compute encoder token embedding dimension."""
         if self.dim_token is not None:
             return self.dim_token
         elif self.use_local_encoder_transformer:
@@ -594,7 +591,6 @@ class BLTConfig(PretrainedConfig):
 
     @property
     def encoder_dim_patch_emb(self):
-        """Compute encoder patch embedding dimension."""
         if self.cross_attn_encoder:
             if self.cross_attn_init_by_pooling:
                 return self.dim_local_encoder
@@ -604,7 +600,6 @@ class BLTConfig(PretrainedConfig):
 
     @property
     def global_dim_patch_emb(self):
-        """Compute global patch embedding dimension."""
         dim_token_emb = self.encoder_dim_token_emb
         if self.cross_attn_encoder:
             cross_attn_k = self.cross_attn_k if self.cross_attn_k is not None else 1
@@ -614,7 +609,6 @@ class BLTConfig(PretrainedConfig):
             or not self.downsampling_by_pooling
             or len(self.downsampling_by_pooling) == 0
         ):
-            # Use default patch_size of 8 if not set
             patch_size = self.patch_size if self.patch_size is not None else 8
             return dim_token_emb * patch_size
         else:
@@ -622,7 +616,6 @@ class BLTConfig(PretrainedConfig):
 
     @property
     def decoder_dim_token_emb(self):
-        """Compute decoder token embedding dimension."""
         if self.share_encoder_decoder_emb:
             return self.encoder_dim_token_emb
         elif self.dim_token is not None:

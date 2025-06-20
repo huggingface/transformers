@@ -101,7 +101,7 @@ def generate(
 def main(prompt: str = "my name is", model_name: str = "blt-1b"):
     device = "cuda"
 
-    blt_repo = "itazap/blt-1b"
+    blt_repo = "itazap/blt-1b-converted"
 
     model = BLTModel.from_pretrained(blt_repo).to(device)
     tokenizer = BLTTokenizer(add_bos_token=True, add_eos_token=True)
@@ -111,10 +111,13 @@ def main(prompt: str = "my name is", model_name: str = "blt-1b"):
     outputs = generate(prompts, model=model, tokenizer=tokenizer, max_gen_len=200, device=device)
 
     text_outputs = [tokenizer.decode(t) for t in outputs]
+    
     for p, t in zip(prompts, text_outputs):
         print(f'Prompt: "{p}"')
         print(f'Completion: "{t}"')
         print()
+
+    print('here')
 
 
 if __name__ == "__main__":
