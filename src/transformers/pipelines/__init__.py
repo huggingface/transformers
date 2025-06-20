@@ -441,13 +441,6 @@ SUPPORTED_TASKS = {
     },
 }
 
-# Those model configs are special, they are generic over their task, meaning
-# any tokenizer/feature_extractor might be use for a given model so we cannot
-# use the statically defined TOKENIZER_MAPPING and FEATURE_EXTRACTOR_MAPPING to
-# see if the model defines such objects or not.
-MULTI_MODEL_AUDIO_CONFIGS = {"SpeechEncoderDecoderConfig"}
-MULTI_MODEL_VISION_CONFIGS = {"VisionEncoderDecoderConfig", "VisionTextDualEncoderConfig"}
-
 PIPELINE_REGISTRY = PipelineRegistry(supported_tasks=SUPPORTED_TASKS, task_aliases=TASK_ALIASES)
 
 
