@@ -177,8 +177,6 @@ class Glm4vTextConfig(PretrainedConfig):
             `inputs_ids` passed when calling [`Glm4vModel`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
-        attention_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to the queries, keys and values.
         intermediate_size (`int`, *optional*, defaults to 13696):
             Dimension of the MLP representations.
         num_hidden_layers (`int`, *optional*, defaults to 40):
