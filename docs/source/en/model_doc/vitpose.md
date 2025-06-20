@@ -29,9 +29,6 @@ You can find all ViTPose and ViTPose++ checkpoints under the [ViTPose collection
 
 The example below demonstrates pose estimation with the [`AutoModel`] class.
 
-<hfoptions id="usage">
-<hfoption id="AutoModel">
-
 ```py
 import torch
 import requests
@@ -98,9 +95,6 @@ annotated_frame = vertex_annotator.annotate(
 )
 annotated_frame
 ```
-
-</hfoption>
-</hfoptions>
 
 <div class="flex justify-center">
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/vitpose.png"/>
