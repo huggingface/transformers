@@ -1009,7 +1009,6 @@ class ProcessorMixin(PushToHubMixin):
                 )
                 audio_tokenizer_path = audio_tokenizer_references["audio_tokenizer_name_or_path"]
 
-            # TODO: kwargs that could clash here? allow separate kwargs for these?
             audio_tokenizer = audio_tokenizer_class.from_pretrained(audio_tokenizer_path, **audio_tokenizer_kwargs)
 
         if audio_tokenizer is not None:
