@@ -90,6 +90,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("transfo-xl", "TFTransfoXLModel"),
         ("vision-text-dual-encoder", "TFVisionTextDualEncoderModel"),
         ("vit", "TFViTModel"),
+        ("dust3r", "TFDust3RModel"),
         ("vit_mae", "TFViTMAEModel"),
         ("wav2vec2", "TFWav2Vec2Model"),
         ("whisper", "TFWhisperModel"),
@@ -221,6 +222,7 @@ TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("swiftformer", "TFSwiftFormerForImageClassification"),
         ("swin", "TFSwinForImageClassification"),
         ("vit", "TFViTForImageClassification"),
+        ("dust3r", "TFDust3RForImageClassification"),
     ]
 )
 
