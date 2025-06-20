@@ -3331,16 +3331,16 @@ class Expectations(UserDict[PackedDeviceProperties, Any]):
 
     def find_expectation(self, properties: DeviceProperties = (None, None, None)) -> Any:
         """
-        Find best matching expectation based on provided device properties. We score each expectation, and to 
-        distinguish between expectations with the same score, we use the major and minor version numbers, prioritizing 
+        Find best matching expectation based on provided device properties. We score each expectation, and to
+        distinguish between expectations with the same score, we use the major and minor version numbers, prioritizing
         most recent versions.
         """
         (result_key, result) = max(
-            self.unpacked(), 
+            self.unpacked(),
             key=lambda x: (
-                Expectations.score(properties, x[0]),
-                x[0][1] if x[0][1] is not None else -1, # This key is the major version, -1 if major is None
-                x[0][2] if x[0][2] is not None else -1, # This key is the minor version, -1 if minor is None
+                Expectations.score(properties, x[0]),  # x[0] is a device properties tuple (device_type, major, minor)
+                x[0][1] if x[0][1] is not None else -1,  # This key is the major version, -1 if major is None
+                x[0][2] if x[0][2] is not None else -1,  # This key is the minor version, -1 if minor is None
             ),
         )
 
