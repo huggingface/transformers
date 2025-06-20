@@ -1,10 +1,10 @@
+#blt old
+
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import logging
 import os
-from typing import Callable, List, Optional, Tuple, Union
-
-from ...cache_utils import Cache
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn
@@ -12,10 +12,8 @@ import torch.nn as nn
 from torch.nn import functional as F
 from torch.nn.attention.flex_attention import BlockMask, create_block_mask, flex_attention
 
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from .configuration_blt import (
+from ...modeling_utils import PreTrainedModel
+from .configuration_blt_og import (
     BLTConfig,
     PatchingModeEnum,
 )
@@ -25,6 +23,38 @@ RMSNorm = nn.RMSNorm
 logger = logging.getLogger()
 
 flex_attention_comp = flex_attention
+
+
+def causal_mask(b, h, q_idx, kv_idx):
+    return q_idx >= kv_idx
+
+
+def create_causal_mask(
+    seqlen,
+    attn_impl: str,
+    attn_bias_type: str | None,
+    *,
+    eos_id: int | None = None,
+    tokens: torch.Tensor | None = None,
+    sliding_window: int | None = None,
+):
+    if attn_impl == "sdpa":
+        BLT_SUPPRESS_ATTN_ERROR = int(os.environ.get("BLT_SUPPRESS_ATTN_ERROR", 0))
+
+        if attn_bias_type == "causal":
+            return "causal"
+
+        if BLT_SUPPRESS_ATTN_ERROR == 1:
+            return "causal"
+        else:
+            raise ValueError(
+                "SDPA attention being used, which doesn't have specialized attention implementations for block_causal and local_block_causal attention. To suppress this error and run the model anyway, set the environment variable BLT_SUPPRESS_ATTN_ERROR=1"
+            )
+    elif attn_impl == "flex_attention":
+        return create_block_mask(causal_mask, None, None, seqlen, seqlen)
+    else:
+        raise NotImplementedError(f"Attention {attn_impl} with {sliding_window} sliding window not implemented")
+
 
 def cross_entropy(pred, target, **kwargs):
     return F.nll_loss(
@@ -37,14 +67,241 @@ def cross_entropy(pred, target, **kwargs):
 def repeat_kv(x: torch.Tensor, n_rep: int, dim: int) -> torch.Tensor:
     """torch.repeat_interleave(x, dim=2, repeats=n_rep)"""
     assert dim == 2, "Only dim=2 is supported. Check the implementation for other dims."
-    batch_size, slen, n_kv_heads, head_dim = x.shape
+    bs, slen, n_kv_heads, head_dim = x.shape
     if n_rep == 1:
         return x
     return (
         x[:, :, :, None, :]
-        .expand(batch_size, slen, n_kv_heads, n_rep, head_dim)
-        .reshape(batch_size, slen, n_kv_heads * n_rep, head_dim)
+        .expand(bs, slen, n_kv_heads, n_rep, head_dim)
+        .reshape(bs, slen, n_kv_heads * n_rep, head_dim)
     )
+
+
+def precompute_freqs_cis(
+    dim: int,
+    end: int,
+    theta: float = 10000.0,
+    rope_use_fp32_in_outer_product: bool = False,
+):
+    """
+    Precompute the frequency tensor for complex exponentials (cis) with given dimensions.
+
+    This function calculates a frequency tensor with complex exponentials using the given dimension 'dim'
+    and the end index 'end'. The 'theta' parameter scales the frequencies.
+    The returned tensor contains complex values in complex64 data type.
+
+    Args:
+        dim (int): Dimension of the frequency tensor.
+        end (int): End index for precomputing frequencies.
+        theta (float, optional): Scaling factor for frequency computation. Defaults to 10000.0.
+
+    Returns:
+        torch.Tensor: Precomputed frequency tensor with complex exponentials.
+    """
+    freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
+    t = torch.arange(end, device=freqs.device)
+    if rope_use_fp32_in_outer_product:
+        t = t.to(torch.float32)
+
+    freqs = torch.outer(t, freqs).float()
+
+    cos, sin = freqs.cos(), freqs.sin()
+
+    return torch.stack((cos, -sin, sin, cos), dim=-1).view(*freqs.size(), 2, 2)
+
+
+def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor, seq_dim: int):
+    """
+    Reshape frequency tensor for broadcasting it with another tensor.
+
+    This function reshapes the frequency tensor to have the same shape as the target tensor 'x'
+    for the purpose of broadcasting the frequency tensor during element-wise operations.
+
+    Args:
+        freqs_cis (torch.Tensor): Frequency tensor to be reshaped.
+        x (torch.Tensor): Target tensor for broadcasting compatibility.
+        seq_dim (int): Sequence dimension index.
+
+    Returns:
+        torch.Tensor: Reshaped frequency tensor.
+    """
+    ndim = x.ndim
+    assert 0 <= seq_dim < ndim
+    assert freqs_cis.shape == (
+        x.shape[seq_dim],
+        x.shape[-3],
+        2,
+        2,
+    ), f"freqs_cis vs x: {(freqs_cis.shape, x.shape)}"
+    shape = [d if i == seq_dim or i == ndim - 3 else 1 for i, d in enumerate(x.shape[:-2])] + [2, 2]
+    return freqs_cis.view(*shape)
+
+
+def apply_rotary_emb(
+    xq: torch.Tensor,
+    xk: torch.Tensor,
+    seq_dim: int,
+    freqs_cis: torch.Tensor,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    
+    xq_ = xq.reshape(*xq.shape[:-1], -1, 1, 2)  # B S H D -> B S H D/2 1 2
+    xk_ = xk.reshape(*xk.shape[:-1], -1, 1, 2)  # B S H D -> B S H D/2 1 2
+    freqs_cis = reshape_for_broadcast(freqs_cis, xq_, seq_dim).float()  # S D/2 2 2 -> 1 S 1 D/2 2 2
+    xq_out = (xq_ * freqs_cis).sum(5).flatten(3)
+    xk_out = (xk_ * freqs_cis).sum(5).flatten(3)
+    return xq_out.type_as(xq), xk_out.type_as(xk)
+
+
+# Rotary embedding as in xformer, see if torchtrain implementation is not better. Also might be usefull to make it work with batch*seqlen collapsed.
+class RotaryEmbedding(torch.nn.Module):
+    """
+    RotaryEmbedding Module
+    """
+
+    def __init__(
+        self,
+        theta: float,
+        head_dim: int,
+        max_seqlen: int = 1024,
+        rope_use_fp32_in_outer_product: bool = False,
+    ):
+        super().__init__()
+
+        self.theta = theta
+        self.head_dim = head_dim
+        self.max_seqlen = max_seqlen
+        self.rope_use_fp32_in_outer_product = rope_use_fp32_in_outer_product
+
+        self.register_buffer(
+            "freqs_cis",
+            precompute_freqs_cis(
+                dim=head_dim,
+                end=max_seqlen,
+                theta=theta,
+                rope_use_fp32_in_outer_product=self.rope_use_fp32_in_outer_product,
+            ),
+            persistent=False,
+        )
+
+
+    def forward(self, seqlen: Optional[int] = None, tok_idx: Optional[torch.Tensor] = None):
+        """
+        Return freqs_cis corresponding to consecutive seqlen positions or the corresponding tok_idx positions
+        Args:
+            seqlen (int): Contiguous sequence length
+            tok_idx (torch.Tensor[int]): Position indices of each token this overrides seqlen
+
+        Returns:
+            Tuple(torch.Tensor, torch.Tensor): Embedded input tensor and freqs_cis
+        """
+        test = (seqlen is not None) or (tok_idx is not None)
+        assert test, "Should provide atleast seqlen or tok_idx"
+        if tok_idx is not None:
+            return self.freqs_cis[tok_idx]
+        elif seqlen is not None:
+            return self.freqs_cis[0:seqlen]
+
+
+class BLTSelfAttention(nn.Module):
+    def __init__(
+        self,
+        dim: int,
+        head_dim: int,
+        n_heads: int,
+        n_kv_heads: int,
+        rope_theta: float,
+    ):
+        super().__init__()
+
+        self.dim = dim
+        self.head_dim = head_dim
+        self.rope_theta = rope_theta
+
+        self.n_heads = n_heads
+        self.n_kv_heads = n_kv_heads
+        self.heads_per_group = self.n_heads // self.n_kv_heads
+
+        self.wq = nn.Linear(
+            dim,
+            n_heads * head_dim,
+            bias=False,
+        )
+        self.wk = nn.Linear(
+            dim,
+            n_kv_heads * head_dim,
+            bias=False,
+        )
+        self.wv = nn.Linear(
+            dim,
+            n_kv_heads * head_dim,
+            bias=False,
+        )
+
+        self.wo = nn.Linear(
+            n_heads * head_dim,
+            dim,
+            bias=False,
+        )
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        freq_cis: torch.Tensor,
+        tok_idx: Optional[torch.Tensor] = None,
+        mask: Optional[Union[BlockMask, str]] = None,
+        attn_impl: str = "sdpa",
+    ) -> torch.Tensor:
+        # B S D
+        bsz, seq_len, dim = x.shape
+
+        xq = self.wq(x.view_as(x))
+        xk = self.wk(x.view_as(x))
+        xv = self.wv(x.view_as(x))
+
+        output_shape = xq.shape
+        # B S D -> B S H D
+        xq = xq.view(bsz, seq_len, self.n_heads, self.head_dim)
+        xk = xk.view(bsz, seq_len, self.n_kv_heads, self.head_dim)
+        xv = xv.view(bsz, seq_len, self.n_kv_heads, self.head_dim)
+
+        xq, xk = apply_rotary_emb(xq, xk, 1, freq_cis[0:seq_len])
+
+        # This condition helps us be easily compatible
+        # with inference by adding a pluggable KVCache
+        if hasattr(self, "kv_cache"):
+            xk, xv = self.kv_cache.update(xk, xv, tok_idx)
+
+        xk = repeat_kv(xk, self.heads_per_group, dim=2)
+        xv = repeat_kv(xv, self.heads_per_group, dim=2)
+
+        if attn_impl == "flex_attention":
+            assert mask is None or isinstance(mask, BlockMask)
+            xq, xk, xv = (e.transpose(1, 2) for e in (xq, xk, xv))
+            output = flex_attention_comp(xq, xk, xv, block_mask=mask)
+            output = output.transpose(1, 2).contiguous()  # B H S D -> B S H D
+
+        elif attn_impl == "sdpa":
+            xq, xk, xv = (e.transpose(1, 2) for e in (xq, xk, xv))
+            assert mask is None or isinstance(mask, (str, torch.Tensor))
+            is_causal = (mask == "causal") if isinstance(mask, str) else False
+            mask = mask.to(xq.device) if isinstance(mask, torch.Tensor) else None
+            output = F.scaled_dot_product_attention(
+                xq,
+                xk,
+                xv,
+                is_causal=is_causal,
+                attn_mask=mask,
+            )
+            output = output.transpose(1, 2).contiguous()  # B H S D -> B S H D
+        else:
+            raise NotImplementedError(f"Attention implementation {attn_impl} not supported")
+
+        output_reshaped = output.reshape(output_shape)
+
+        output = self.wo(output_reshaped)
+
+        return output
+
 
 class BLTMLP(nn.Module):
     def __init__(
@@ -89,170 +346,38 @@ class BLTMLP(nn.Module):
         output = self.w2(F.silu(x1) * x3)
         return output
 
-def eager_attention_forward(
-        module: nn.Module,
-        query: torch.Tensor,
-        key: torch.Tensor,
-        value: torch.Tensor,
-        attention_mask: Optional[torch.Tensor],
-        scaling: float,
-        dropout: float = 0.0,
-        **kwargs,
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
 
 
-
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    # TODO: not exactly equivalent to other transformers implementations,, need feedback
-    # Extract first head_dim//2 elements which correspond to the unique frequencies
-    # This matches the original BLT approach which uses head_dim//2 frequency pairs
-    head_dim = q.shape[-1]
-    cos_freqs = cos[..., :head_dim//2]  # [B, S, D/2]
-    sin_freqs = sin[..., :head_dim//2]  # [B, S, D/2]
-    
-    # Expand cos/sin to match query/key tensor format [B, H, S, D/2]
-    cos_freqs = cos_freqs.unsqueeze(1).expand(-1, q.shape[1], -1, -1)  # [B, 1, S, D/2] -> [B, H, S, D/2]
-    sin_freqs = sin_freqs.unsqueeze(1).expand(-1, q.shape[1], -1, -1)  # [B, 1, S, D/2] -> [B, H, S, D/2]
-    
-    # Split q and k into pairs for rotation: (d0, d1), (d2, d3), ...
-    q_pairs = q.view(*q.shape[:-1], head_dim//2, 2)  # [B, H, S, D/2, 2]
-    k_pairs = k.view(*k.shape[:-1], head_dim//2, 2)  # [B, H, S, D/2, 2]
-    
-    # Extract real and i parts
-    q_real, q_imag = q_pairs[..., 0], q_pairs[..., 1]  # [B, H, S, D/2]
-    k_real, k_imag = k_pairs[..., 0], k_pairs[..., 1]  # [B, H, S, D/2]
-    
-    # Apply rotation: [real', imag'] = [cos*real - sin*imag, sin*real + cos*imag]
-    q_real_rot = cos_freqs * q_real - sin_freqs * q_imag
-    q_imag_rot = sin_freqs * q_real + cos_freqs * q_imag
-    k_real_rot = cos_freqs * k_real - sin_freqs * k_imag
-    k_imag_rot = sin_freqs * k_real + cos_freqs * k_imag
-    
-    # Recombine pairs and reshape back to original format
-    q_rot = torch.stack([q_real_rot, q_imag_rot], dim=-1).view(*q.shape)  # [B, H, S, D]
-    k_rot = torch.stack([k_real_rot, k_imag_rot], dim=-1).view(*k.shape)  # [B, H, S, D]
-    
-    return q_rot.type_as(q), k_rot.type_as(k)
-
-
-
-class BLTSelfAttention(nn.Module):
-    def __init__(self, config: BLTConfig, layer_idx: int):
-        super().__init__()
-        self.config = config
-        self.num_heads = config.num_attention_heads
-        self.dropout = config.dropout
-        self.hidden_size = config.hidden_size
-        self.num_key_value_heads = config.num_key_value_heads
-        self.head_dim = config.hidden_size // self.num_heads
-        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.scaling = self.head_dim ** -0.5
-        self.rope_theta = config.rope_theta
-        self.layer_idx = layer_idx
-
-        self.wq = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
-        self.wk = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
-        self.wv = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
-        self.wo = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
-
-    def forward(
-            self,
-            hidden_states: torch.Tensor,
-            attention_mask: torch.Tensor,
-            position_embeddings: torch.Tensor,
-            output_attentions: bool = False,
-            use_cache: bool = False,
-            past_key_value=None,
-            cache_position=None,
-            **kwargs,
-    ):
-        bsz, q_len, _ = hidden_states.size()
-
-        query_states = self.wq(hidden_states)
-        key_states = self.wk(hidden_states)
-        value_states = self.wv(hidden_states)
-        
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-
-        cos, sin = position_embeddings
-        
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-        
-        if past_key_value is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
-        attention_interface: Callable = eager_attention_forward
-        output_attentions = False
-        self.config._attn_implementation = "sdpa"
-        self.scaling = None
-        if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and output_attentions:
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
-        attn_output = self.wo(attn_output)
-
-        if not output_attentions:
-            attn_weights = None
-
-        return attn_output, attn_weights, past_key_value
 
 class BLTTransformerLayer(nn.Module):
-    def __init__(self, dim, n_heads, config, layer_idx=0):
+    def __init__(self, args):
         super().__init__()
 
         # Extract parameters from dictionary
-        dim = dim
-        n_heads = n_heads
-        head_dim = config.head_dim
-        n_kv_heads = config.n_kv_heads
-        rope_theta = config.rope_theta
-        multiple_of = config.multiple_of
-        ffn_dim_multiplier = config.ffn_dim_multiplier
-        norm_eps = config.norm_eps
+        dim = args["dim"]
+        n_heads = args["n_heads"]
+        head_dim = args["head_dim"]
+        n_kv_heads = args["n_kv_heads"]
+        rope_theta = args["rope_theta"]
+        multiple_of = args["multiple_of"]
+        ffn_dim_multiplier = args["ffn_dim_multiplier"]
+        norm_eps = args["norm_eps"]
 
+        assert (head_dim is not None) or (n_heads is not None), "Should specify at least head_dim or n_heads"
         self.head_dim = head_dim or dim // n_heads
         self.n_heads = n_heads or dim // head_dim
         self.n_kv_heads = n_kv_heads or self.n_heads
 
-        config.hidden_size = dim
+        assert n_heads % self.n_kv_heads == 0
+        assert dim % n_heads == 0
 
-        self.attention = BLTSelfAttention(config=config, layer_idx=layer_idx)
-
+        self.attention = BLTSelfAttention(
+            dim=dim,
+            head_dim=self.head_dim,
+            n_heads=self.n_heads,
+            n_kv_heads=self.n_kv_heads,
+            rope_theta=rope_theta,
+        )
         self.feed_forward = BLTMLP(
             dim=dim,
             hidden_dim=4 * dim,
@@ -264,36 +389,24 @@ class BLTTransformerLayer(nn.Module):
 
     def forward(
         self,
-        hidden_states: torch.Tensor,
-        past_key_value: Optional[bool] = None,
-        position_embeddings: Optional[torch.Tensor] = None,
-
-        attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-
+        x: torch.Tensor,
+        freq_cis: torch.Tensor,
+        tok_idx: Optional[torch.Tensor] = None,
+        mask: Optional[Union[BlockMask, str]] = None,
+        attn_impl: str = "sdpa",
     ) -> torch.Tensor:
-
-        residual = hidden_states
-        norm_hidden_states = self.attention_norm(hidden_states)
-
-
-        hidden_states, self_attn_weights, present_key_value = self.attention(
-            hidden_states=norm_hidden_states,
-            # TODO: = BLT, attn_out = self.attention(self.attention_norm(x), in TransformerBlock.forward,
-            past_key_value=past_key_value,
-            attention_mask=attention_mask,
-            layer_head_mask=layer_head_mask,
-            output_attentions=output_attentions,
-            cache_position=cache_position,
-            position_embeddings=position_embeddings
+        norm_x = self.attention_norm(x)
+        attn_out = self.attention(
+            norm_x,
+            freq_cis,
+            tok_idx=tok_idx,
+            mask=mask,
+            attn_impl=attn_impl,
         )
-
-        hidden_states = residual + hidden_states
-        normalized_hidden_states = self.ffn_norm(hidden_states)
-        hidden_states = hidden_states + self.feed_forward(normalized_hidden_states)
-        return hidden_states
+        h = x + attn_out
+        h_norm = self.ffn_norm(h)
+        out = h + self.feed_forward(h_norm)
+        return out
 
 def check_non_zero_after_zero(tensor):
     zero_mask = tensor == 0
@@ -307,7 +420,7 @@ def check_non_zero_after_zero(tensor):
     non_zero_after_zero = (tensor != 0) & shifted_mask
     return non_zero_after_zero.any()
 
-def rolling_polynomial_hash(token_tensor, hash_func_nb: int = 0):
+def rolling_polynomial_hash(t, hash_func_nb: int = 0):
     primes = [
         1000000007,
         5915587277,
@@ -321,25 +434,25 @@ def rolling_polynomial_hash(token_tensor, hash_func_nb: int = 0):
         5463458053,
         3367900313,
     ]
-    prime = torch.tensor(primes[hash_func_nb], dtype=torch.int64, device=token_tensor.device)
-    prime_powers = torch.stack([prime**i for i in range(token_tensor.shape[-1])])
-    return torch.sum(token_tensor * prime_powers, dim=-1)
+    prime = torch.tensor(primes[hash_func_nb], dtype=torch.int64, device=t.device)
+    prime_powers = torch.stack([prime**i for i in range(t.shape[-1])])
+    return torch.sum(t * prime_powers, dim=-1)
 
 
-def byte_group_hash_function(token_ids: torch.Tensor, group_size: int = 2, hash_func_nb: int = 0, max_hash: int = 30000):
+def byte_group_hash_function(x: torch.Tensor, group_size: int = 2, hash_func_nb: int = 0, max_hash: int = 30000):
     """
-    Returns a hash of the input token_ids and maps it to a value in the range [0, max_hash].
+    Returns a hash of the input x and maps it to a value in the range [0, max_hash].
 
-    expects: token_ids of shape (batch_size, seq_len) with values as ids in the token vocab.
+    expects: x of shape (batch_size, seq_len) with values as ids in the token vocab.
     returns a tensor  of shape (batch_size, seq_len) with values in the range [0, max_hash].
 
     Note: max hash can make a big difference on the number of collisions.
     """
     with torch.no_grad():
-        batch_size, seq_len = token_ids.shape
-        prefix = torch.zeros(batch_size, group_size - 1, dtype=torch.int64, device=token_ids.device)
-        token_ids = torch.cat([prefix, token_ids], dim=1)
-        windows = token_ids.unfold(1, group_size, 1)
+        bs, seq_len = x.shape
+        prefix = torch.zeros(bs, group_size - 1, dtype=torch.int64, device=x.device)
+        x = torch.cat([prefix, x], dim=1)
+        windows = x.unfold(1, group_size, 1)
         # hashes = get_rolling_polynomial_hash_fn(hash_func_nb, group_size)(windows)
         hashes = rolling_polynomial_hash(windows, hash_func_nb)
         hash_values_range = hashes % max_hash
@@ -349,32 +462,32 @@ def byte_group_hash_function(token_ids: torch.Tensor, group_size: int = 2, hash_
 
 def create_patch_mask_from_ids(patch_ids, num_patches, window=None, patches_as_queries=False):
     """
-    Creates a tensor of shape [batch_size, seq_len, num_patches] where each element at position (i, j, k)
+    Creates a tensor of shape [bs, seq_len, num_patches] where each element at position (i, j, k)
     is True if the patch id at position (i, j) is less than or equal to k.
     Args:
-        patch_ids (torch.Tensor): Tensor of shape [batch_size, seq_len] containing patch ids.
+        patch_ids (torch.Tensor): Tensor of shape [bs, seq_len] containing patch ids.
         num_patches (int): Total number of patches.
         window (int): If not None, only considers patches within a window of size window.
         patches_as_queries (bool): If True, the patches are used as queries
     Returns:
-        torch.Tensor: Tensor of shape [batch_size, q_len, kv_len] with the desired mask.
+        torch.Tensor: Tensor of shape [bs, q_len, kv_len] with the desired mask.
     """
-    batch_size, seq_len = patch_ids.shape
+    bs, seq_len = patch_ids.shape
     if not patches_as_queries:
-        q_ids = patch_ids.unsqueeze(-1).expand(batch_size, seq_len, num_patches)
+        q_ids = patch_ids.unsqueeze(-1).expand(bs, seq_len, num_patches)
         kv_ids = (
             torch.arange(num_patches, device=patch_ids.device)
             .unsqueeze(0)
             .unsqueeze(0)
-            .expand(batch_size, seq_len, num_patches)
+            .expand(bs, seq_len, num_patches)
         )
     else:
-        kv_ids = patch_ids.unsqueeze(1).expand(batch_size, num_patches, seq_len)
+        kv_ids = patch_ids.unsqueeze(1).expand(bs, num_patches, seq_len)
         q_ids = (
             torch.arange(num_patches, device=patch_ids.device)
             .unsqueeze(0)
             .unsqueeze(-1)
-            .expand(batch_size, num_patches, seq_len)
+            .expand(bs, num_patches, seq_len)
         )
     if window is None:
         mask = q_ids == kv_ids
@@ -392,7 +505,7 @@ def cross_attn_mask(
     window=None,
     block_mask=True,
 ):
-    batch_size = patch_ids.shape[0]
+    bs = patch_ids.shape[0]
     with torch.no_grad():
         # Create the patch mask
         cross_mask = create_patch_mask_from_ids(
@@ -404,19 +517,19 @@ def cross_attn_mask(
         q_len = patch_lengths.shape[1] * cross_attn_k if patches_as_queries else N
         kv_len = N if patches_as_queries else patch_lengths.shape[1] * cross_attn_k
         assert cross_mask.shape == (
-            batch_size,
+            bs,
             q_len,
             kv_len,
-        ), f"{cross_mask.shape} != {(batch_size, q_len, kv_len)}"
+        ), f"{cross_mask.shape} != {(bs, q_len, kv_len)}"
         block_mask = None
         if block_mask:
 
-            def patch_mask(b, num_heads, q_idx, kv_idx):
+            def patch_mask(b, h, q_idx, kv_idx):
                 return cross_mask[b, q_idx, kv_idx]
 
             block_mask = create_block_mask(
                 patch_mask,
-                B=batch_size,
+                B=bs,
                 H=None,
                 Q_LEN=q_len,
                 KV_LEN=kv_len,
@@ -426,7 +539,7 @@ def cross_attn_mask(
         else:
             return torch.where(cross_mask, torch.tensor(0.0), torch.tensor(float("-inf"))).unsqueeze(
                 1
-            )  # [batch_size, 1, q_len, kv_len]
+            )  # [bs, 1, q_len, kv_len]
 
 
 def process_patch_lengths(patch_lengths: torch.Tensor, max_patch_length: int) -> torch.Tensor:
@@ -459,251 +572,106 @@ def process_patch_lengths(patch_lengths: torch.Tensor, max_patch_length: int) ->
 
     return padded
 
-
-class BLTRotaryEmbedding(nn.Module):
-    def __init__(self, config: BLTConfig, device=None):
+class BLTLocalModelBase(nn.Module):
+    def __init__(self, config: BLTConfig, component_type: str = "encoder"):
         super().__init__()
-        self.rope_type = config.rope_scaling["rope_type"]
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
 
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-
-
-class BLTLocalEncoder(nn.Module):
-    def __init__(self, config: BLTConfig):
-        super().__init__()
-        
-        # Extract config values to instance attributes
-        self.dropout = config.dropout
-        self.dim_local_encoder = config.dim_local_encoder
-        self.n_layers_local_encoder = config.n_layers_local_encoder
-        self.n_heads_local_encoder = config.n_heads_local_encoder
-        self.vocab_size = config.vocab_size
-        self.pm_size = config.pm_size
-        self.cross_attn_encoder = config.cross_attn_encoder
-        self.cross_attn_nheads = config.cross_attn_nheads
-        self.cross_attn_all_layers_encoder = config.cross_attn_all_layers_encoder
-        self.cross_attn_init_by_pooling = config.cross_attn_init_by_pooling
-        self.cross_attn_k = config.cross_attn_k
-        self.norm_eps = config.norm_eps
-        self.sliding_window = config.sliding_window
-        
-        self.layers = nn.ModuleList([BLTTransformerLayer(self.dim_local_encoder, self.n_heads_local_encoder, config) for _ in range(self.n_layers_local_encoder)])
-
-        # Set up config for rotary embedding
-        encoder_config = config
-        encoder_config.head_dim = self.dim_local_encoder // self.n_heads_local_encoder
-        encoder_config.max_position_embeddings = config.max_encoder_seq_length or config.max_seqlen
-        self.rotary_emb = BLTRotaryEmbedding(config=encoder_config)
-
-        self.token_embedding_projection = (
-            nn.Linear(config.encoder_dim_token_emb, self.dim_local_encoder, bias=False)
-            if config.encoder_dim_token_emb is not None and config.encoder_dim_token_emb != self.dim_local_encoder
-            else None
-        )
-
-        self.patch_embedding_projection = self._create_patch_projection(config)
-
-        self.tok_embeddings = nn.Embedding(self.vocab_size + self.pm_size, self.dim_local_encoder)
-
-        # Initialize cross attention layers only if cross attention is enabled
-        self.cross_attn_layers = None
-        if self.cross_attn_encoder and self.cross_attn_nheads is not None:
-            self.cross_attn_layers = torch.nn.ModuleList()
-            layers_to_add = self.n_layers_local_encoder if self.cross_attn_all_layers_encoder else 1
-            for layer_idx in range(layers_to_add):
-                self.cross_attn_layers.append(
-                    BLTCrossAttention(config=config, layer_idx=layer_idx, hidden_size=self.dim_local_encoder)
-                )
-
-    def forward(
-        self,
-        input_ids: torch.Tensor,
-        input_embeds: Optional[torch.Tensor] = None,
-        patch_embeds: Optional[torch.Tensor] = None,
-        mask: Optional[Union["BlockMask", torch.Tensor, str]] = None,
-        cross_mask: Optional[torch.Tensor] = None,
-        num_patches: Optional[int] = None,
-        patch_ids: Optional[torch.Tensor] = None,
-        cache: Optional[List[Tuple[torch.Tensor, torch.Tensor, int]]] = None,
-    ):
-        """ """
-        batch_size, sequence_length = input_ids.shape
-        if input_embeds is None:
-            input_embeds = self.embed_tokens(input_ids)
-
-        batch_size, _, _ = input_embeds.shape
-
-        hidden_states = input_embeds
-
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training) 
-
-        position_ids = torch.arange(input_ids.shape[1], device=input_embeds.device).unsqueeze(0).expand(batch_size, -1)
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)  
-
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
-
-        for idx, layer in enumerate(self.layers):
-            hidden_states = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None)
-
-            if self.cross_attn_encoder and (idx == len(self.layers) - 1 or self.cross_attn_all_layers_encoder):
-                # Initialize patch_embeds if not provided when cross attention is enabled
-                if patch_embeds is None:
-                    patch_embeds = self.patch_reduce(hidden_states, num_patches, "amax", patch_ids)
-                    if self.patch_embedding_projection is not None:
-                        patch_embeds = self.patch_embedding_projection(patch_embeds)
-                        patch_embeds = patch_embeds.reshape(batch_size, patch_embeds.shape[1] * self.cross_attn_k, self.dim_local_encoder)
-
-                layer_idx = idx if self.cross_attn_all_layers_encoder else 0
-                cross_attention_output, _, _ = self.cross_attn_layers[layer_idx](
-                    hidden_states=patch_embeds,
-                    cross_attention_states=hidden_states,
-                    attention_mask=cross_mask,
-                    output_attentions=False,
-                    use_cache=False,
-                    cache_position=None,
-                )
-                patch_embeds = patch_embeds + cross_attention_output
-
-        encoder_cross_states = patch_embeds if self.cross_attn_encoder else None
-        return (hidden_states, encoder_cross_states), cache
-    
-    def _create_patch_projection(self, config):
-        dimension_mismatch = config.encoder_dim_patch_emb is not None and config.encoder_dim_patch_emb != config.dim_local_encoder
-
-        cross_attn_conditions = (config.cross_attn_encoder and config.cross_attn_init_by_pooling) or (
-            config.cross_attn_decoder and config.cross_attn_init_by_pooling
-        )
-
-        if not (dimension_mismatch or cross_attn_conditions):
-            return None
-
-        output_dim = config.encoder_dim_token_emb * config.cross_attn_k
-
-        return nn.Linear(
-            in_features=config.encoder_dim_patch_emb,
-            out_features=output_dim,
-            bias=False,
-        )
-
-    def embed_tokens(self, tokens, embeds=None):
-        if embeds is not None:
-            assert self.config.encoder_hash_byte_group_size is not None, "Not expecting embeddings to be passed."
-            return embeds
+        if component_type == "encoder":
+            self.dim = config.dim_local_encoder
+            self.n_layers = config.n_layers_local_encoder
+            self.n_heads = config.n_heads_local_encoder
+            self.max_seqlen = config.max_encoder_seq_length or config.max_seqlen
+            self.attn_bias_type = "local_block_causal"
+            self.sliding_window = config.local_attention_window_len
+        elif component_type == "decoder":
+            self.dim = config.dim_local_decoder
+            self.n_layers = config.n_layers_local_decoder
+            self.n_heads = config.n_heads_local_decoder
+            self.max_seqlen = config.max_encoder_seq_length or config.max_seqlen
+            self.attn_bias_type = "local_block_causal"
+            self.sliding_window = config.local_attention_window_len
         else:
-            return self.tok_embeddings(tokens)
+            raise ValueError(f"Unknown component_type: {component_type}")
 
-    def patch_reduce(self, hidden_states, max_num_patches, reduction, patch_ids):
-        """
-        Reduce variable length patches to single embedding per patch
-        Note: this works with variable number of patches for different sequences in the batch
-        It handles variable length patches by assuming that patch_lengths will be 0 for any
-        extra patches on the *right*. Since there can be a variable number of patches
-        this function also return the number of patches for each sequence in the batch.
-        Any embeddings on the right that are not allocated to a patch
-        (i.e. if the sum(patch_lengths[i]) < seq_len for any i)
-        will be sent to a dummy patch, which is trimmed before returning.
-        """
-        batch_size, seq_len, embedding_dim = hidden_states.shape
-
-        patch_ids = patch_ids.unsqueeze(-1).expand(-1, -1, hidden_states.shape[-1])
-
-        reduced_embeddings = torch.zeros((batch_size, max_num_patches, embedding_dim), dtype=hidden_states.dtype, device=hidden_states.device)
-        reduced_embeddings = reduced_embeddings.scatter_reduce(
-            src=hidden_states,
-            dim=1,
-            index=patch_ids,
-            reduce=reduction,
-            include_self=False,
-        )
-        reduced_embeddings = reduced_embeddings[:, :max_num_patches, :]
-
-        return reduced_embeddings
-
-
-class BLTLocalDecoder(nn.Module):
-    def __init__(self, config: BLTConfig):
-        super().__init__()
-
-        # Extract config values to instance attributes
-        self.dim_local_decoder = config.dim_local_decoder
-        self.n_heads_local_decoder = config.n_heads_local_decoder
-        self.n_layers_local_decoder = config.n_layers_local_decoder
-        self.vocab_size = config.vocab_size
-        self.norm_eps = config.norm_eps
         self.dropout = config.dropout
-        self.cross_attn_decoder = config.cross_attn_decoder
-        self.cross_attn_nheads = config.cross_attn_nheads
-        self.cross_attn_all_layers_decoder = config.cross_attn_all_layers_decoder
-        self.cross_attn_k = config.cross_attn_k
-        self.sliding_window = config.sliding_window
+        self.vocab_size = config.vocab_size + config.pm_size
+        self.patch_size = config.patch_size
 
-        self.layers = nn.ModuleList([BLTTransformerLayer(self.dim_local_decoder, self.n_heads_local_decoder, config) for _ in range(self.n_layers_local_decoder)])
+        self.attn_impl = config.attn_impl
+        self.use_rope = config.use_rope
+        self.init_std_factor = config.init_std_factor
+        self.init_base_std = config.init_base_std
+        self.cross_attn_encoder = getattr(config, "cross_attn_encoder", None)
+        self.cross_attn_decoder = getattr(config, "cross_attn_decoder", None)
+        self.cross_attn_k = getattr(config, "cross_attn_k", None)
+        self.eos_id = config.eos_token_id
 
-        decoder_config = config
-        decoder_config.head_dim = self.dim_local_decoder // self.n_heads_local_decoder
-        decoder_config.max_position_embeddings = config.max_encoder_seq_length or config.max_seqlen
+        self.boe_id = config.boe_id
 
-        self.rotary_emb = BLTRotaryEmbedding(config=decoder_config)
+        # Initialize cross attention layers as None (will be set by subclasses if needed)
+        self.cross_attn_layers = None
+
+        # Create parameter dict for BLTTransformerLayers
+        layer_params = {
+            "dim": self.dim,
+            "n_heads": self.n_heads,
+            "head_dim": config.head_dim,
+            "n_kv_heads": getattr(config, "n_kv_heads", None),
+            "rope_theta": config.rope_theta,
+            "multiple_of": getattr(config, "multiple_of", 256),
+            "ffn_dim_multiplier": getattr(config, "ffn_dim_multiplier", None),
+            "norm_eps": config.norm_eps,
+        }
+
+        self.layers = nn.ModuleList([BLTTransformerLayer(layer_params) for _ in range(self.n_layers)])
+
+        if not self.use_rope:
+            self.pos_embeddings = nn.Embedding(2048, self.dim)  # fallback max_length
+        else:
+            self.rope = RotaryEmbedding(
+                theta=config.rope_theta,
+                head_dim=config.head_dim or self.dim // self.n_heads,
+                max_seqlen=self.max_seqlen,
+                rope_use_fp32_in_outer_product=config.rope_use_fp32_in_outer_product,
+            )
+            self.pos_embeddings = None
+
+        # Set dimension-specific embedding dimensions
+        if component_type == "encoder":
+            self.dim_token_emb = config.encoder_dim_token_emb
+            self.dim_patch_emb = config.encoder_dim_patch_emb
+        elif component_type == "decoder":
+            self.dim_token_emb = config.decoder_dim_token_emb
+            self.dim_patch_emb = config.dim_global
 
         self.token_embedding_projection = (
-            nn.Linear(config.decoder_dim_token_emb, self.dim_local_decoder, bias=False)
-            if config.decoder_dim_token_emb is not None and config.decoder_dim_token_emb != self.dim_local_decoder
+            nn.Linear(self.dim_token_emb, self.dim, bias=False)
+            if self.dim_token_emb is not None and self.dim_token_emb != self.dim
             else None
         )
 
         self.patch_embedding_projection = self._create_patch_projection(config)
 
-        self.norm = RMSNorm(self.dim_local_decoder, eps=self.norm_eps)
-
-        # Initialize cross attention layers only if cross attention is enabled
-        self.cross_attn_layers = None
-        if self.cross_attn_decoder and self.cross_attn_nheads is not None:
-            self.cross_attn_layers = torch.nn.ModuleList()
-            layers_to_add = self.n_layers_local_decoder if self.cross_attn_all_layers_decoder else 1
-            for layer_idx in range(layers_to_add):
-                self.cross_attn_layers.append(
-                    BLTCrossAttention(config=config, layer_idx=layer_idx, hidden_size=self.dim_local_decoder)
-                )
-
-        self.output = nn.Linear(self.dim_local_decoder, self.vocab_size, bias=False)
-
-    def _create_patch_projection(self, config):
-        dimension_mismatch = config.dim_global is not None and config.dim_global != config.dim_local_decoder
+    def _should_create_patch_projection(self, config: BLTConfig):
+        dimension_mismatch = self.dim_patch_emb is not None and self.dim_patch_emb != self.dim
 
         # Check cross attention conditions
         cross_attn_conditions = (config.cross_attn_encoder and config.cross_attn_init_by_pooling) or (
             config.cross_attn_decoder and config.cross_attn_init_by_pooling
         )
 
-        if not (dimension_mismatch or cross_attn_conditions):
+        return dimension_mismatch or cross_attn_conditions
+
+    def _create_patch_projection(self, config):
+        if not self._should_create_patch_projection(config):
             return None
 
-        output_dim = config.decoder_dim_token_emb * config.cross_attn_k
+        output_dim = self.dim_token_emb * (self.cross_attn_k or 1)
 
         return nn.Linear(
-            in_features=config.dim_global,
+            in_features=self.dim_patch_emb,
             out_features=output_dim,
             bias=False,
         )
@@ -714,6 +682,155 @@ class BLTLocalDecoder(nn.Module):
         else:
             return self.tok_embeddings(tokens)
 
+
+class BLTLocalEncoder(BLTLocalModelBase):
+    def __init__(self, config: BLTConfig):
+        super().__init__(config, component_type="encoder")
+
+        self.apply_transformer = config.use_local_encoder_transformer
+        self.downsampling_by_pooling = config.downsampling_by_pooling
+        self.expects_hash_embeddings = config.encoder_hash_byte_group_size is not None
+        self.cross_attn_encoder = config.cross_attn_encoder
+        self.cross_attn_all_layers_encoder = config.cross_attn_all_layers_encoder
+        self.cross_attn_init_by_pooling = config.cross_attn_init_by_pooling
+        self.cross_attn_nheads = config.cross_attn_nheads
+
+        self.tok_embeddings = nn.Embedding(self.vocab_size, self.dim)
+
+        if self.cross_attn_encoder:
+            self.cross_attn_layers = torch.nn.ModuleList()
+            layers_to_add = self.n_layers if self.cross_attn_all_layers_encoder else 1
+            for _ in range(layers_to_add):
+                self.cross_attn_layers.append(
+                    BLTCrossAttention(
+                        dim=self.dim,
+                        head_dim=self.dim // self.cross_attn_nheads,
+                        n_heads=self.cross_attn_nheads,
+                        n_kv_heads=self.cross_attn_nheads,
+                        norm_eps=config.norm_eps,
+                    )
+                )
+
+    def apply_embedding(self, tokens, embeds):
+        if embeds is not None:
+            assert self.expects_hash_embeddings, "Not expecting embeddings to be passed."
+            return embeds
+        else:
+            return self.tok_embeddings(tokens)
+
+    def forward(
+        self,
+        tokens: torch.Tensor,
+        embeds: Optional[torch.Tensor] = None,
+        patch_embeds: Optional[torch.Tensor] = None,
+        mask: Optional[Union["BlockMask", torch.Tensor, str]] = None,
+        cross_mask: Optional[torch.Tensor] = None,
+        num_patches: Optional[int] = None,
+        patch_ids: Optional[torch.Tensor] = None,
+        cache: Optional[List[Tuple[torch.Tensor, torch.Tensor, int]]] = None,
+    ):
+        """ """
+        bs, seqlen = tokens.shape
+        if mask is None:
+            mask = create_causal_mask(
+                seqlen,
+                self.attn_impl,
+                "local_block_causal",
+                sliding_window=self.sliding_window,
+                tokens=tokens,
+                eos_id=self.eos_id,
+            )
+
+        h = self.apply_embedding(tokens, embeds)
+        
+        
+        freqs_cis = self.rope(seqlen=seqlen) if self.use_rope else None
+        
+
+        h = F.dropout(h, p=self.dropout, training=self.training)
+
+        for i, layer in enumerate(self.layers):
+            h = layer(h, freqs_cis, tok_idx=None, mask=mask, attn_impl=self.attn_impl)
+            # check if cross attention should be applied to either all layer or only the last layer
+            if self.cross_attn_encoder and (i == len(self.layers) - 1 or self.cross_attn_all_layers_encoder):
+                # apply pooling and project
+                if self.cross_attn_init_by_pooling and patch_embeds is None:
+                    patch_embeds = self.patch_reduce(h, num_patches, "amax", patch_ids)
+                    if self.patch_embedding_projection is not None:
+                        patch_embeds = self.patch_embedding_projection(patch_embeds)
+                        patch_embeds = patch_embeds.reshape(bs, patch_embeds.shape[1] * self.cross_attn_k, self.dim)
+
+                layer_idx = i if self.cross_attn_all_layers_encoder else 0
+                patch_embeds_cross = self.cross_attn_layers[layer_idx](
+                    x=patch_embeds,
+                    kv=h,
+                    mask=cross_mask,
+                )
+                patch_embeds = patch_embeds + patch_embeds_cross
+
+        h_residual = patch_embeds if self.cross_attn_encoder else None
+        return (h, h_residual), cache
+
+    def patch_reduce(self, h, max_num_patches, reduction, patch_ids):
+        """
+        Reduce variable length patches to single embedding per patch
+        Note: this works with variable number of patches for different sequences in the batch
+        It handles variable length patches by assuming that patch_lengths will be 0 for any
+        extra patches on the *right*. Since there can be a variable number of patches
+        this function also return the number of patches for each sequence in the batch.
+        Any embeddings on the right that are not allocated to a patch
+        (i.e. if the sum(patch_lengths[i]) < seq_len for any i)
+        will be sent to a dummy patch, which is trimmed before returning.
+        """
+        bs, seq_len, emb_dim = h.shape
+
+        patch_ids = patch_ids.unsqueeze(-1).expand(-1, -1, h.shape[-1])
+
+        reduced_embs = torch.zeros((bs, max_num_patches, emb_dim), dtype=h.dtype, device=h.device)
+        reduced_embs = reduced_embs.scatter_reduce(
+            src=h,
+            dim=1,
+            index=patch_ids,
+            reduce=reduction,
+            include_self=False,
+        )
+        reduced_embs = reduced_embs[:, :max_num_patches, :]
+
+        return reduced_embs
+
+
+class BLTLocalDecoder(BLTLocalModelBase):
+    def __init__(self, config: BLTConfig):
+        super().__init__(config, component_type="decoder")
+
+        # Model configuration flags
+        self.cross_attn_decoder = config.cross_attn_decoder
+        self.cross_attn_all_layers_decoder = config.cross_attn_all_layers_decoder
+        self.cross_attn_init_by_pooling = config.cross_attn_init_by_pooling
+        self.cross_attn_nheads = config.cross_attn_nheads
+
+        self.norm = RMSNorm(self.dim, eps=config.norm_eps)
+
+        if self.cross_attn_decoder:
+            self.cross_attn_layers = torch.nn.ModuleList()
+            layers_to_add = self.n_layers if self.cross_attn_all_layers_decoder else 1
+            for _ in range(layers_to_add):
+                self.cross_attn_layers.append(
+                    BLTCrossAttention(
+                        dim=self.dim,
+                        head_dim=self.dim // self.cross_attn_nheads,
+                        n_heads=self.cross_attn_nheads,
+                        n_kv_heads=self.cross_attn_nheads,
+                        norm_eps=config.norm_eps,
+                    )
+                )
+
+        self.output = nn.Linear(
+            self.dim,
+            config.vocab_size,
+            bias=False,
+        )
+
     def forward(
         self,
         tokens: torch.Tensor,
@@ -723,201 +840,214 @@ class BLTLocalDecoder(nn.Module):
         cross_mask: Optional[torch.Tensor] = None,
         cache: Optional[List[Tuple[torch.Tensor, torch.Tensor, int]]] = None,
     ):
-        batch_size, sequence_length = tokens.shape
-        batch_size, seq_length, _ = embeds.shape
-
+        bs, seqlen = tokens.shape
         assert embeds is not None, "Embeddings must be provided"
 
-        hidden_states = embeds
+        if mask is None:
+            mask = create_causal_mask(
+                seqlen,
+                self.attn_impl,
+                "local_block_causal",
+                sliding_window=self.sliding_window,
+                tokens=tokens,
+                eos_id=self.eos_id,
+            )
+
+        h = embeds
 
         if self.patch_embedding_projection is not None:
             assert patch_embeds is not None, "Patch embeddings must be passed."
             patch_embeds = self.patch_embedding_projection(patch_embeds)
             if self.cross_attn_k is not None:
-                patch_embeds = patch_embeds.reshape(batch_size, patch_embeds.shape[1] * self.cross_attn_k, self.dim_local_decoder)
+                patch_embeds = patch_embeds.reshape(bs, patch_embeds.shape[1] * self.cross_attn_k, self.dim)
 
         if patch_embeds is not None and not self.cross_attn_decoder:
-            hidden_states = hidden_states + patch_embeds
+            h = h + patch_embeds
 
-        position_ids = torch.arange(tokens.shape[1], device=embeds.device).unsqueeze(0).expand(batch_size, -1)
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)  
+        freqs_cis = self.rope(seqlen=seqlen) if self.use_rope else None
 
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        h = F.dropout(h, p=self.dropout, training=self.training)
         for i, layer in enumerate(self.layers):
             if self.cross_attn_decoder and (i == 0 or self.cross_attn_all_layers_decoder):
-                # Use cross attention to extract info from patch_embeds into hidden_states
-                cross_attention_output, _, _ = self.cross_attn_layers[i](
-                    hidden_states=hidden_states,
-                    cross_attention_states=patch_embeds,
-                    attention_mask=cross_mask,
-                    output_attentions=False,
-                    use_cache=False,
-                    cache_position=None,
+                # Use cross attention to extract info from patch_embeds into h
+                h_cross = self.cross_attn_layers[i](
+                    x=h,
+                    kv=patch_embeds,
+                    mask=cross_mask,
                 )
-                hidden_states = hidden_states + cross_attention_output
+                h = h + h_cross
 
-            hidden_states = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None)
+            h = layer(h, freqs_cis, tok_idx=None, mask=mask, attn_impl=self.attn_impl)
 
-        logits = self.norm(hidden_states)
-        logits = F.dropout(logits, p=self.dropout, training=self.training)
-        logits = self.output(logits)
-        logits = logits.float()
-        return logits, cache
+        h_preds = self.norm(h)
+        h_preds = F.dropout(h_preds, p=self.dropout, training=self.training)
+        h_preds = self.output(h_preds)
+        h_preds = h_preds.float()
+        return h_preds, cache
 
 
 class BLTCrossAttention(nn.Module):
-    """Cross-attention module for BLT, following transformers style"""
-
-    def __init__(self, config: BLTConfig, layer_idx: int, hidden_size: Optional[int] = None):
+    def __init__(
+        self,
+        dim: int,
+        head_dim: int,
+        n_heads: int,
+        n_kv_heads: int,
+        norm_eps: float,
+    ):
         super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        # Use provided hidden_size or fallback to encoder dimension
-        self.hidden_size = hidden_size or config.dim_local_encoder
-        self.num_heads = config.cross_attn_nheads
-        self.num_key_value_heads = config.cross_attn_nheads  # Assuming same for cross attention
-        self.head_dim = self.hidden_size // self.num_heads
-        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.scaling = None #self.head_dim ** -0.5
-        self.dropout = config.dropout
 
-        self.wq = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
-        self.wk = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
-        self.wv = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
-        self.wo = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
+        self.dim = dim
+        self.head_dim = head_dim
 
-        self.cross_attn_norm_q = nn.RMSNorm(self.hidden_size, eps=config.norm_eps)
-        self.cross_attn_norm_kv = nn.RMSNorm(self.hidden_size, eps=config.norm_eps)
+        self.n_heads = n_heads
+        self.n_kv_heads = n_kv_heads
+        self.heads_per_group = self.n_heads // self.n_kv_heads
+
+        self.cross_attn_norm_q = nn.RMSNorm(dim, eps=norm_eps)
+        self.cross_attn_norm_kv = RMSNorm(dim, eps=norm_eps)
+
+        self.wq = nn.Linear(
+            dim,
+            n_heads * head_dim,
+            bias=False,
+        )
+        self.wk = nn.Linear(
+            dim,
+            n_kv_heads * head_dim,
+            bias=False,
+        )
+        self.wv = nn.Linear(
+            dim,
+            n_kv_heads * head_dim,
+            bias=False,
+        )
+
+        self.wo = nn.Linear(
+            n_heads * head_dim,
+            dim,
+            bias=False,
+        )
 
     def forward(
         self,
-        hidden_states: torch.Tensor,
-        cross_attention_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        """Input shape: Batch x Time x Channel"""
-        bsz, q_len, _ = hidden_states.size()
-        
-        query_states = self.cross_attn_norm_q(hidden_states) # BLT normalizes first
-        query_states = self.wq(query_states)
+        x: torch.Tensor,
+        kv: torch.Tensor,
+        mask: Optional[Union[BlockMask, str]] = None,
+    ) -> torch.Tensor:
+        # B S D
+        bsz, seq_len, _ = x.shape
+        _, slen_kv, _ = kv.shape
+        x_norm = self.cross_attn_norm_q(x)
+        kv = self.cross_attn_norm_kv(kv)
 
-        if cross_attention_states is not None:
-            cross_attention_states = self.cross_attn_norm_kv(cross_attention_states)  # BLT normalizes first
-            key_states = self.wk(cross_attention_states)
-            value_states = self.wv(cross_attention_states)
-            if past_key_value is not None:
-                # if we have a new cross attention states + new tokens, we only computed key_states on that new cross attention states
-                # we still update the cross key states, past_cross_states, new_cross_states. And use it!
-                key_states, value_states = past_key_value.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
-        elif cache_position is not None and cache_position[0] != 0:
-            key_states, value_states = (
-                past_key_value.key_cache[self.layer_idx],
-                past_key_value.value_cache[self.layer_idx],
-            )
-        else:
-            if cross_attention_states is None:
-                raise ValueError(
-                    "Cross attention layer can't find neither `cross_attention_states` nor cached values for key/values!"
-                )
+        xq = self.wq(x_norm)
+        xk = self.wk(kv)
+        xv = self.wv(kv)
 
-        attention_interface: Callable = eager_attention_forward
+        output_shape = xq.shape
+        # B S D -> B S H D
+        xq = xq.view(bsz, seq_len, self.n_heads, self.head_dim)
+        xk = xk.view(bsz, slen_kv, self.n_kv_heads, self.head_dim)
+        xv = xv.view(bsz, slen_kv, self.n_kv_heads, self.head_dim)
 
-        if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and output_attentions:
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        xk = repeat_kv(xk, self.heads_per_group, dim=2)
+        xv = repeat_kv(xv, self.heads_per_group, dim=2)
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0, #if not self.training else self.dropout,
-            scaling=self.scaling,
-            **kwargs,
+        # assert mask is None or isinstance(mask, BlockMask)
+        xq, xk, xv = (e.transpose(1, 2) for e in (xq, xk, xv))
+        # output = flex_attention_comp(xq, xk, xv, block_mask=mask)
+        is_causal = (mask == "causal") if isinstance(mask, str) else False
+        mask = mask if isinstance(mask, torch.Tensor) else None
+        mask = mask.to(dtype=xq.dtype).to(xq.device)
+        output = F.scaled_dot_product_attention(
+            xq,
+            xk,
+            xv,
+            is_causal=is_causal,
+            attn_mask=mask,
         )
+        output = output.transpose(1, 2).contiguous()  # B H S D -> B S H D
 
-        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
-        attn_output = self.wo(attn_output)
+        output = self.wo(output.reshape(output_shape))
 
-        attn_output = attn_output + hidden_states #TODO: they add the residual twice?? move this out
-
-        if not output_attentions:
-            attn_weights = None
-
-        return attn_output, attn_weights, past_key_value
+        return x + output
 
 
 class BLTGlobalTransformer(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        # Extract config values to instance attributes
-        self.dim_global = config.dim_global
-        self.n_heads_global = config.n_heads_global
-        self.n_layers_global = config.n_layers_global
-        self.dropout = config.dropout
+        self.config = config
+
+        self.dim = config.dim_global
+        self.rope_embeddings = RotaryEmbedding(
+            theta=config.rope_theta,
+            head_dim=config.head_dim or self.config.dim_global // config.n_heads_global,
+            max_seqlen=config.max_seqlen,
+            rope_use_fp32_in_outer_product=config.rope_use_fp32_in_outer_product,
+        )
+        # Handle both eos_id and eos_token_id for compatibility
+        self.eos_id = getattr(config, "eos_id", getattr(config, "eos_token_id", 2))
+
+        # Create parameter dict for BLTTransformerLayers
+        layer_params = {
+            "dim": self.dim,
+            "n_heads": config.n_heads_global,
+            "head_dim": config.head_dim,
+            "n_kv_heads": getattr(config, "n_kv_heads_global", None),
+            "rope_theta": config.rope_theta,
+            "multiple_of": getattr(config, "multiple_of", 256),
+            "ffn_dim_multiplier": getattr(config, "ffn_dim_multiplier", None),
+            "norm_eps": config.norm_eps,
+        }
 
         self.layers = nn.ModuleList()
-        old = config.n_kv_heads 
-        config.n_kv_heads = config.n_kv_heads_global
-        for _ in range(self.n_layers_global):
-            self.layers.append(BLTTransformerLayer(self.dim_global, self.n_heads_global, config))
-        config.n_kv_heads = old
-
-        global_config = config
-        global_config.head_dim = self.dim_global // self.n_heads_global
-
-        self.rotary_emb = BLTRotaryEmbedding(config=global_config)
+        for _ in range(config.n_layers_global):
+            self.layers.append(BLTTransformerLayer(layer_params))
 
         self.token_embedding_projection = None
-        if config.global_dim_patch_emb is not None and config.global_dim_patch_emb != self.dim_global:
+        if config.global_dim_patch_emb is not None and config.global_dim_patch_emb != self.dim:
             self.token_embedding_projection = nn.Linear(
                 config.global_dim_patch_emb,
-                self.dim_global,
+                config.dim_global,
                 bias=False,
             )
 
     def forward(
         self,
-        input_ids: torch.Tensor,
+        tokens: torch.Tensor,
         tok_idx: Optional[torch.Tensor] = None,
-        input_embeds: Optional[torch.Tensor] = None,
+        embeds: Optional[torch.Tensor] = None,
         mask: Optional[Union[BlockMask, torch.Tensor, str]] = None,
         cache: Optional[List[Tuple[torch.Tensor, torch.Tensor, int]]] = None,
     ):
-        batch_size, seq_length, _ = input_embeds.shape
+        bs, seqlen = tokens.shape
 
-        hidden_states = input_embeds
+        h = embeds
 
-        if self.token_embedding_projection is not None and hidden_states.shape[-1] != self.dim_global:
-            hidden_states = self.token_embedding_projection(hidden_states)
+        mask = (
+            mask
+            if mask is not None
+            else create_causal_mask(
+                seqlen,
+                self.config.attn_impl,
+                self.config.attn_bias_type,
+                tokens=tokens,
+                eos_id=self.eos_id,
+            )
+        )
 
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        if self.token_embedding_projection is not None and h.shape[-1] != self.dim:
+            h = self.token_embedding_projection(h)
 
-        position_ids = torch.arange(input_ids.shape[1], device=input_embeds.device).unsqueeze(0).expand(batch_size, -1)
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)  
+        h = F.dropout(h, p=self.config.dropout, training=self.training)
+        freq_cis = self.rope_embeddings(seqlen=self.config.max_seqlen, tok_idx=tok_idx)
 
         for i, layer in enumerate(self.layers):
-            hidden_states = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None)
+            h = layer(h, freq_cis, tok_idx=None, mask=mask, attn_impl=self.config.attn_impl)
 
-        return hidden_states, cache
+        return h, cache
 
 
 def compute_hash_embeddings(
@@ -998,33 +1128,39 @@ class BLTPreTrainedModel(PreTrainedModel):
                 a=-3 * std,
                 b=3 * std,
             )
-             
+            
+        elif isinstance(module, (nn.RMSNorm, nn.LayerNorm)):
+            nn.init.ones_(module.weight)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+                
+        elif isinstance(module, RotaryEmbedding):
+            module.freqs_cis[...] = precompute_freqs_cis(
+                dim=module.head_dim,
+                end=module.max_seqlen,
+                theta=module.theta,
+                rope_use_fp32_in_outer_product=module.rope_use_fp32_in_outer_product,
+            )
+            
         elif isinstance(module, BLTModel):
             if module.encoder_hash_tok_embedding is not None:
-                emb_std = module.config.dim_local_encoder ** (-0.5)
+                emb_std = module.local_encoder.dim ** (-0.5)
                 for emb in module.encoder_hash_tok_embedding:
                     emb._custom_std = emb_std
                     
-        elif isinstance(module, BLTLocalEncoder):
+        elif isinstance(module, (BLTLocalEncoder, BLTLocalDecoder)):
             if module.token_embedding_projection is not None:
-                module.token_embedding_projection._custom_std = module.config.dim_local_encoder ** (-0.5)
+                module.token_embedding_projection._custom_std = module.dim ** (-0.5)
                 
             if module.patch_embedding_projection is not None:
-                module.patch_embedding_projection._custom_std = module.config.encoder_dim_patch_emb ** (-0.5)
-                
-        elif isinstance(module, BLTLocalDecoder):
-            if module.token_embedding_projection is not None:
-                module.token_embedding_projection._custom_std = module.config.dim_local_decoder ** (-0.5)
-                
-            if module.patch_embedding_projection is not None:
-                module.patch_embedding_projection._custom_std = module.config.dim_global ** (-0.5)
+                module.patch_embedding_projection._custom_std = module.dim_patch_emb ** (-0.5)
                 
         elif isinstance(module, BLTGlobalTransformer):
             if module.token_embedding_projection is not None:
                 module.token_embedding_projection._custom_std = module.dim_token_emb ** (-0.5)
                 
         elif isinstance(module, BLTPatcher):
-            emb_std = module.config.dim ** (-0.5)
+            emb_std = module.config.patcher_dim ** (-0.5)
             module.tok_embeddings._custom_std = emb_std
             module.output._custom_std = emb_std
 
@@ -1033,34 +1169,18 @@ class BLTModel(BLTPreTrainedModel):
     def __init__(self, config: BLTConfig):
         super().__init__(config)
 
-        # Extract frequently used config values
-        self.patch_in_forward = config.patch_in_forward
-        self.patching_mode = config.patching_mode
-        self.patch_size = config.patch_size
-        self.patching_threshold = config.patching_threshold
-        self.max_patch_length = config.max_patch_length
-        self.patching_batch_size = config.patching_batch_size
-        self.patching_device = config.patching_device
-        self.cross_attn_encoder = config.cross_attn_encoder
-        self.cross_attn_decoder = config.cross_attn_decoder
-        self.cross_attn_k = config.cross_attn_k
-        self.cross_attn_window_encoder = config.cross_attn_window_encoder
-        self.cross_attn_window_decoder = config.cross_attn_window_decoder
-        self.cross_attn_use_flex_attention = config.cross_attn_use_flex_attention
-        self.boe_id = config.boe_id
-        self.eos_token_id = config.eos_token_id
-
+        self.config = config
         self.local_encoder = BLTLocalEncoder(config)
         self.global_transformer = BLTGlobalTransformer(config)
         self.local_decoder = BLTLocalDecoder(config)
 
         self.encoder_hash_tok_embedding = init_hash_embeddings(
             config,
-            local_encoder_dim=config.dim_local_encoder,
+            local_encoder_dim=self.local_encoder.dim,
             encoder_hash_byte_group_size=config.encoder_hash_byte_group_size,
         )
 
-        if self.patch_in_forward:
+        if config.patch_in_forward:
             self.patcher = BLTPatcher(config)
             self.patcher.eval()
             for param in self.patcher.parameters():
@@ -1076,36 +1196,36 @@ class BLTModel(BLTPreTrainedModel):
         # NOTE: ngram_ids parameter removed since frequency-based n-gram embeddings
         # are no longer used in the final BLT model
 
-        batch_size, sequence_length = tokens.shape  # Batch size and sequence length
+        bs, N = tokens.shape  # Batch size and sequence length
 
         local_encoder_tokens, local_decoder_tokens = tokens, tokens
 
         # Patching
         if patch_lengths is None:
             # assert (
-            #     getattr(self, "patch_in_forward", None) is not None and self.patch_in_forward
+            #     getattr(self.config, "patch_in_forward", None) is not None and self.config.patch_in_forward
             # ), "Patch in forward not enabled and no patch_lengths passed."
 
             # PATCHER MODEL DEFINED
-            if self.patching_mode == PatchingModeEnum.entropy:
+            if self.config.patching_mode == PatchingModeEnum.entropy:
                 _, patch_lengths, _ = self.patcher(
                     local_encoder_tokens,
-                    patch_size=self.patch_size,
+                    patch_size=self.config.patch_size,
                     include_next_token=True,
-                    threshold=self.patching_threshold,
-                    max_patch_length=self.max_patch_length,
-                    patching_batch_size=self.patching_batch_size,
-                    device=self.patching_device,
+                    threshold=self.config.patching_threshold,
+                    max_patch_length=self.config.max_patch_length,
+                    patching_batch_size=self.config.patching_batch_size,
+                    device=self.config.patching_device,
                 )
             else:
-                # self.patching_mode == PatchingModeEnum.byte
-                batch_size_tokens, seq_len = local_encoder_tokens.shape
+                # self.config.patching_mode == PatchingModeEnum.byte
+                bs, seq_len = local_encoder_tokens.shape
                 seq_len_next_tok = seq_len + 1  # include_next_token=True
                 patch_lengths = torch.ones(
-                    (batch_size_tokens, seq_len_next_tok), dtype=local_encoder_tokens.dtype, device=local_encoder_tokens.device
+                    (bs, seq_len_next_tok), dtype=local_encoder_tokens.dtype, device=local_encoder_tokens.device
                 )
 
-                patch_lengths = process_patch_lengths(patch_lengths, self.max_patch_length)
+                patch_lengths = process_patch_lengths(patch_lengths, self.config.max_patch_length)
 
         #assert torch.min(patch_lengths) >= 0
         # Generate patch IDs from patch_lengths
@@ -1116,15 +1236,15 @@ class BLTModel(BLTPreTrainedModel):
 
         cross_attn_mask_enc = None
         # Cross-attention encoder
-        if self.cross_attn_encoder:
+        if self.config.cross_attn_encoder:
             cross_attn_mask_enc = cross_attn_mask(
                 patch_ids,
                 patch_lengths,
-                sequence_length,
+                N,
                 patches_as_queries=True,
-                cross_attn_k=self.cross_attn_k,
-                window=self.cross_attn_window_encoder,
-                block_mask=self.cross_attn_use_flex_attention,
+                cross_attn_k=self.config.cross_attn_k,
+                window=self.config.cross_attn_window_encoder,
+                block_mask=self.config.cross_attn_use_flex_attention,
             )
 
         # Hashing and embedding
@@ -1141,9 +1261,9 @@ class BLTModel(BLTPreTrainedModel):
         # The final BLT model uses only hash-based n-gram embeddings
 
         # Local encoder
-        (encoder_hidden_states, encoder_cross_states), cache_encoder = self.local_encoder(
-            input_ids=local_encoder_tokens,
-            input_embeds=local_encoder_embeds,
+        (h_encoder, h_cross), cache_encoder = self.local_encoder(
+            tokens=local_encoder_tokens,
+            embeds=local_encoder_embeds,
             patch_embeds=None,
             cross_mask=cross_attn_mask_enc,
             num_patches=patch_lengths.shape[1],
@@ -1151,58 +1271,50 @@ class BLTModel(BLTPreTrainedModel):
         )
 
         # Downsampling
-        if encoder_cross_states is not None:
-            # Cross attention is enabled - use cross states
-            global_hidden_states = encoder_cross_states.view(batch_size, patch_lengths.shape[1], -1)
-        else:
-            # Cross attention is disabled - use reduced embeddings from encoder hidden states
-            global_hidden_states = self.local_encoder.patch_reduce(
-                encoder_hidden_states, patch_lengths.shape[1], "amax", patch_ids
-            )
+        h = h_cross.view(bs, patch_lengths.shape[1], -1)
 
         # Global transformer
-        global_tokens = tokens.new(global_hidden_states.shape[0], global_hidden_states.shape[1]).fill_(self.boe_id)
-        rows, cols = torch.where(local_encoder_tokens == self.eos_token_id)
+        global_tokens = tokens.new(h.shape[0], h.shape[1]).fill_(self.config.boe_id)
+        rows, cols = torch.where(local_encoder_tokens == self.config.eos_token_id)
         eos_patch_ids = patch_ids[rows, cols]
-        global_tokens[rows, eos_patch_ids] = self.eos_token_id
+        global_tokens[rows, eos_patch_ids] = self.config.eos_token_id
 
-        global_hidden_states, _ = self.global_transformer(
-            input_embeds=global_hidden_states,
-            input_ids=global_tokens,
+        h, _ = self.global_transformer(
+            embeds=h,
+            tokens=global_tokens,
         )
 
         # Unpatching
 
-        decoder_embeds = encoder_hidden_states
+        dec_embeds = h_encoder
 
         # Decoder uses patches 1,2,3,... (skipping patch 0 which contains BOE tokens), so we need to map decoder positions to the remaining patches.
         decoder_patch_ids = self._patch_ids_from_lengths(patch_lengths[:, 1:], local_decoder_tokens.shape[-1])
-        # assert torch.max(decoder_patch_ids) + 1 <= global_hidden_states.shape[1], f"{torch.max(decoder_patch_ids) + 1} > {global_hidden_states.shape[1]}"
-        # assert decoder_patch_ids.shape[1] == decoder_embeds.shape[1], (
-        #     f"{decoder_patch_ids.shape[1]} != {decoder_embeds.shape[1]}"
+        # assert torch.max(decoder_patch_ids) + 1 <= h.shape[1], f"{torch.max(decoder_patch_ids) + 1} > {h.shape[1]}"
+        # assert decoder_patch_ids.shape[1] == dec_embeds.shape[1], (
+        #     f"{decoder_patch_ids.shape[1]} != {dec_embeds.shape[1]}"
         # )
 
         # Cross-attention decoder
-        if not self.cross_attn_decoder:
-            patch_hidden_states = torch.gather(global_hidden_states, 1, decoder_patch_ids.unsqueeze(-1).expand(-1, -1, global_hidden_states.shape[-1]))
+        if not self.config.cross_attn_decoder:
+            h = torch.gather(h, 1, decoder_patch_ids.unsqueeze(-1).expand(-1, -1, h.shape[-1]))
             cross_attn_mask_dec = None
-            # assert local_decoder_tokens.shape == patch_hidden_states.shape[:-1]
+            # assert local_decoder_tokens.shape == h.shape[:-1]
         else:
-            patch_hidden_states = global_hidden_states
             cross_attn_mask_dec = cross_attn_mask(
                 decoder_patch_ids,
                 patch_lengths,
-                sequence_length,
+                N,
                 patches_as_queries=False,
-                cross_attn_k=self.cross_attn_k,
-                window=self.cross_attn_window_decoder,
-                block_mask=self.cross_attn_use_flex_attention,
+                cross_attn_k=self.config.cross_attn_k,
+                window=self.config.cross_attn_window_decoder,
+                block_mask=self.config.cross_attn_use_flex_attention,
             )
 
         # Local decoder
         output, _ = self.local_decoder(
-            embeds=decoder_embeds,
-            patch_embeds=patch_hidden_states,
+            embeds=dec_embeds,
+            patch_embeds=h,
             tokens=local_decoder_tokens,
             cross_mask=cross_attn_mask_dec,
         )
@@ -1253,28 +1365,41 @@ class BLTModel(BLTPreTrainedModel):
 
 class BLTPatcher(BLTPreTrainedModel):
     def __init__(self, config):
-        # Store reference to main config for accessing non-patcher settings
-        self.main_config = config
-        
-        # Initialize with patcher config directly
-        super().__init__(config.patcher_config)
+        super().__init__(config)
 
-        # Initialize rotary embeddings with patcher config
-        self.rotary_emb = BLTRotaryEmbedding(config=self.config)
+        self.rope_embeddings = RotaryEmbedding(
+            theta=config.patcher_rope_theta,
+            head_dim=config.patcher_head_dim or config.patcher_dim // config.patcher_n_heads,
+            max_seqlen=config.patcher_max_seqlen,
+            rope_use_fp32_in_outer_product=config.patcher_rope_use_fp32_in_outer_product,
+        )
 
         self.layers = nn.ModuleList()
-        for _ in range(self.config.n_layers):
-            self.layers.append(BLTTransformerLayer(self.config.dim, self.config.n_heads, self.config))
+        for _ in range(config.patcher_n_layers):
+            self.layers.append(
+                BLTTransformerLayer(
+                    {
+                        "dim": config.patcher_dim,
+                        "n_heads": config.patcher_n_heads,
+                        "head_dim": config.patcher_head_dim,
+                        "n_kv_heads": config.patcher_n_kv_heads,
+                        "rope_theta": config.patcher_rope_theta,
+                        "multiple_of": config.patcher_multiple_of,
+                        "ffn_dim_multiplier": config.patcher_ffn_dim_multiplier,
+                        "norm_eps": config.patcher_norm_eps,
+                    }
+                )
+            )
 
-        #assert self.config.vocab_size > 0
+        #assert config.patcher_vocab_size > 0
 
-        self.tok_embeddings = torch.nn.Embedding(self.config.vocab_size, self.config.dim)
+        self.tok_embeddings = torch.nn.Embedding(config.patcher_vocab_size, config.patcher_dim)
 
-        self.norm = RMSNorm(self.config.dim, eps=self.config.norm_eps)
+        self.norm = RMSNorm(config.patcher_dim, eps=config.patcher_norm_eps)
 
         self.output = nn.Linear(
-            self.config.dim,
-            self.config.vocab_size,
+            config.patcher_dim,
+            config.patcher_vocab_size,
             bias=False,
         )
 
@@ -1291,8 +1416,8 @@ class BLTPatcher(BLTPreTrainedModel):
 
         # Handle chunked processing for entropy calculation
         entropies = []
-        predictions = []
-        max_length = self.config.max_seqlen
+        preds = []
+        max_length = self.config.patcher_max_seqlen
         batch_numel = max_length * patching_batch_size
         splits = torch.split(token_values.flatten(), batch_numel)
 
@@ -1305,33 +1430,34 @@ class BLTPatcher(BLTPreTrainedModel):
                 split = split.to(device)
 
             # Process chunk: embeddings -> layers -> output
-            batch_size, sequence_length = split.shape
-            input_embeds = self.tok_embeddings(split)
+            bsz, seqlen = split.shape
+            h = self.tok_embeddings(split)
+            chunk_mask = create_causal_mask(
+                seqlen,
+                self.config.patcher_attn_impl ,
+                self.config.patcher_attn_bias_type,
+                sliding_window=self.config.patcher_sliding_window,
+                tokens=split,
+                eos_id=self.config.eos_id,
+            )
 
-            hidden_states = input_embeds
+            freq_cis = self.rope_embeddings(seqlen=seqlen, tok_idx=None)
 
-
-            batch_size, seq_length, _ = input_embeds.shape
-
-            position_ids = torch.arange(split.shape[1], device=input_embeds.device).unsqueeze(0).expand(batch_size, -1)
-            
-            position_embeddings = self.rotary_emb(hidden_states, position_ids)  # = BLT self.rope
-            
             for i, layer in enumerate(self.layers):
-                hidden_states = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None) #, attn_impl=self.config.patcher_attn_impl )
+                h = layer(h, freq_cis, tok_idx=None, mask=chunk_mask, attn_impl=self.config.patcher_attn_impl)
 
-            logits = self.output(self.norm(hidden_states))
-            logits = logits.reshape(-1, logits.shape[-1])[: split.numel() - pad_size, :]  # [batch_size * seq_len, vocab]
-            predictions.append(logits)
-            prediction_entropies = self.entropy(logits)
-            entropies.append(prediction_entropies)
+            pred = self.output(self.norm(h))
+            pred = pred.reshape(-1, pred.shape[-1])[: split.numel() - pad_size, :]  # [batch_size * seq_len, vocab]
+            preds.append(pred)
+            pred_entropies = self.entropy(pred)
+            entropies.append(pred_entropies)
 
         concat_entropies = torch.cat(entropies, dim=0).reshape(token_values.shape)
-        concat_predictions = torch.cat(predictions, dim=0).reshape(token_values.shape[0], -1)
+        concat_preds = torch.cat(preds, dim=0).reshape(token_values.shape[0], -1)
 
         # Always compute patch lengths from concatenated entropies
-        batch_size, sequence_length = token_values.shape
-        seq_len_next_tok = sequence_length + 1 if include_next_token else sequence_length
+        bs, seq_len = token_values.shape
+        seq_len_next_tok = seq_len + 1 if include_next_token else seq_len
 
         # Find patch start IDs based on entropy
         if patch_size is not None:
@@ -1344,17 +1470,17 @@ class BLTPatcher(BLTPreTrainedModel):
             patch_lengths = self.patch_lengths_from_start_ids(patch_start_ids, seq_len_next_tok)
         else:
             # Default to byte-level patching
-            patch_lengths = torch.ones((batch_size, seq_len_next_tok), dtype=token_values.dtype, device=token_values.device)
+            patch_lengths = torch.ones((bs, seq_len_next_tok), dtype=token_values.dtype, device=token_values.device)
 
         patch_lengths = process_patch_lengths(patch_lengths, max_patch_length)
-        return concat_entropies, patch_lengths, concat_predictions
+        return concat_entropies, patch_lengths, concat_preds
 
 
     @staticmethod
     def entropy(scores):
         """
-        scores: [batch_size, seq_len, vocab]
-        returns [batch_size, seq_len]
+        scores: [bs, seq_len, vocab]
+        returns [bs, seq_len]
 
         Computes the entropy for each token in the batch.
         Note: uses natural log.
@@ -1367,26 +1493,26 @@ class BLTPatcher(BLTPreTrainedModel):
 
     @staticmethod
     def patch_start_ids_from_patch_start_mask(patch_start_mask):
-        batch_size, trunc_seq_len = patch_start_mask.shape
+        bs, trunc_seq_len = patch_start_mask.shape
         max_patches = patch_start_mask.sum(dim=1).max()
         if max_patches == 0:
             patch_start_ids = torch.full(
-                (batch_size, trunc_seq_len),
+                (bs, trunc_seq_len),
                 trunc_seq_len,
                 dtype=torch.long,
                 device=patch_start_mask.device,
             )
         else:
-            patch_ids = torch.arange(trunc_seq_len, device=patch_start_mask.device).unsqueeze(0).repeat(batch_size, 1)
+            patch_ids = torch.arange(trunc_seq_len, device=patch_start_mask.device).unsqueeze(0).repeat(bs, 1)
             extra_patch_ids = torch.full(
-                (batch_size, trunc_seq_len),
+                (bs, trunc_seq_len),
                 trunc_seq_len,
                 dtype=torch.long,
                 device=patch_start_mask.device,
             )
             all_patch_ids = torch.cat((patch_ids, extra_patch_ids), dim=1)
             patch_start_mask_padded = torch.cat((patch_start_mask, ~patch_start_mask), dim=1)
-            patch_start_ids = all_patch_ids[patch_start_mask_padded].reshape(batch_size, trunc_seq_len)[:, :max_patches]
+            patch_start_ids = all_patch_ids[patch_start_mask_padded].reshape(bs, trunc_seq_len)[:, :max_patches]
         return patch_start_ids
 
     @staticmethod
@@ -1422,13 +1548,13 @@ class BLTPatcher(BLTPreTrainedModel):
         different sequences, but patches can be identified incrementally rather than
         decided globally using the entire sequence.
         """
-        batch_size, sequence_length = entropies.shape[:2]
+        bs, seq_len = entropies.shape[:2]
 
-        first_ids = torch.tensor([0, 1], dtype=torch.long, device=entropies.device).unsqueeze(0).repeat(batch_size, 1)
-        predictions_truncation_len = first_ids.shape[1]  # remove the first predictions because they will be start of patches.
+        first_ids = torch.tensor([0, 1], dtype=torch.long, device=entropies.device).unsqueeze(0).repeat(bs, 1)
+        preds_truncation_len = first_ids.shape[1]  # remove the first preds because they will be start of patches.
         entropies = entropies[:, 1:]
         if threshold is None:
-            num_patches = sequence_length // patch_size
+            num_patches = seq_len // patch_size
             patch_start_ids = entropies.topk(num_patches - 2, dim=1).indices
             patch_start_ids = patch_start_ids.sort(dim=1).values
         else:
@@ -1438,7 +1564,7 @@ class BLTPatcher(BLTPreTrainedModel):
             # patch_start_mask[1:] |= tokens[:-1] < OFFSET
             patch_start_ids = BLTPatcher.patch_start_ids_from_patch_start_mask(patch_start_mask)
 
-        patch_start_ids = torch.cat((first_ids, patch_start_ids + predictions_truncation_len), dim=1)
+        patch_start_ids = torch.cat((first_ids, patch_start_ids + preds_truncation_len), dim=1)
         return patch_start_ids
 
 def init_hash_embeddings(
