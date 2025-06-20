@@ -50,10 +50,14 @@ if __name__ == "__main__":
         "https://huggingface.co/datasets/hf-internal-testing/transformers_daily_ci/resolve/main/runner_map.json"
     )
     # The models that we want to run with T4 runners
-    runner_map = response.json()
+    jobs_using_t4 = response.json()
 
+    runner_map = {}
     for key in d:
-        if key in runner_map:
+        modified_key = key
+        if modified_key.startswith("models/"):
+            modified_key = key[len("models/") :]
+        if modified_key in jobs_using_t4:
             runner_map[key] = t4_runners
         else:
             runner_map[key] = a10_runners
