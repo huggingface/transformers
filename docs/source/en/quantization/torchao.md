@@ -311,16 +311,20 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 <hfoption id="int4-weight-only">
 
 > [!TIP]
-> If you want to run torchao model on CPU even you have GPU or XPU, please assign `layout` to `Int4CPULayout()` and `device_map` to `"cpu"`.
+> Please assign different data layout for CPU/XPU. The CPU need to assign `layout` to `Int4CPULayout()`. The XPU need to assign `layout` to `Int4XPULayout()` and assign `zero_point_domain` to `ZeroPointDomain.INT`
 
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
 from torchao.quantization import Int4WeightOnlyConfig
-#from torchao.dtypes import Int4CPULayout
+from torchao.dtypes import Int4CPULayout, Int4XPULayout
+from torchao.quantization.quant_primitives import ZeroPointDomain
 
-# quant_config = Int4WeightOnlyConfig(group_size=128, layout=Int4CPULayout())
-quant_config = Int4WeightOnlyConfig(group_size=128)
+if hasattr(torch, "xpu") and torch.xpu.is_available():
+    quant_config = Int4WeightOnlyConfig(group_size=128, layout=Int4XPULayout(), zero_point_domain=ZeroPointDomain.INT)
+else:
+    quant_config = Int4WeightOnlyConfig(group_size=128, layout=Int4CPULayout())
+
 quantization_config = TorchAoConfig(quant_type=quant_config)
 
 # Load and quantize the model
