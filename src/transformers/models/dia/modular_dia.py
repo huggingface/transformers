@@ -586,11 +586,8 @@ class DiaModel(DiaPreTrainedModel):
             Dia to calculate embeddings and subsequent steps more efficiently.
 
             If no `decoder_input_ids` are provided, it will create a tensor of `bos_token_id` with shape
-            `(batch_size, 1, num_codebooks)`.
-
-            # TODO: indices from processor via dac encode
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
+            `(batch_size, 1, num_codebooks)`. Indices can be obtained using the [`DiaProcessor`]. See
+            [`DiaProcessor.__call__`] for more details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`):
@@ -730,11 +727,8 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, DiaGenerationMixin):
             Dia to calculate embeddings and subsequent steps more efficiently.
 
             If no `decoder_input_ids` are provided, it will create a tensor of `bos_token_id` with shape
-            `(batch_size, 1, num_codebooks)`.
-
-            # TODO: indices from processor via dac encode
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
+            `(batch_size, 1, num_codebooks)`. Indices can be obtained using the [`DiaProcessor`]. See
+            [`DiaProcessor.__call__`] for more details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`):
