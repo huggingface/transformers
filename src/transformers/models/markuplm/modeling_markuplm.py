@@ -53,7 +53,7 @@ class XPathEmbeddings(nn.Module):
     """
 
     def __init__(self, config):
-        super(XPathEmbeddings, self).__init__()
+        super().__init__()
         self.max_depth = config.max_depth
 
         self.xpath_unitseq2_embeddings = nn.Linear(config.xpath_unit_hidden_size * self.max_depth, config.hidden_size)
@@ -117,7 +117,7 @@ class MarkupLMEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config):
-        super(MarkupLMEmbeddings, self).__init__()
+        super().__init__()
         self.config = config
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
@@ -611,9 +611,7 @@ class MarkupLMPreTrainedModel(PreTrainedModel):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):
-        return super(MarkupLMPreTrainedModel, cls).from_pretrained(
-            pretrained_model_name_or_path, *model_args, **kwargs
-        )
+        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
 
 @auto_docstring

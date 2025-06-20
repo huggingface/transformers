@@ -56,7 +56,7 @@ class GraniteMoeSharedMLP(nn.Module):
     """
 
     def __init__(self, config: GraniteMoeSharedConfig):
-        super(GraniteMoeSharedMLP, self).__init__()
+        super().__init__()
 
         self.input_size = config.hidden_size
         self.hidden_size = config.shared_intermediate_size
@@ -195,7 +195,7 @@ class GraniteMoeSharedMoE(nn.Module):
     """
 
     def __init__(self, config: GraniteMoeSharedConfig):
-        super(GraniteMoeSharedMoE, self).__init__()
+        super().__init__()
 
         self.input_size = config.hidden_size
         self.hidden_size = config.intermediate_size
