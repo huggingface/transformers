@@ -103,7 +103,6 @@ class LayoutLMv3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)
             self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
-    @unittest.skip("temporary to avoid failing on circleci")
     def test_LayoutLMv3_integration_test(self):
         from datasets import load_dataset
 

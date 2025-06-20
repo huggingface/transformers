@@ -126,7 +126,6 @@ class MobileViTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(image_processor.size, {"shortest_edge": 42})
         self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
 
-    @unittest.skip("temporary to avoid failing on circleci")
     def test_call_segmentation_maps(self):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
