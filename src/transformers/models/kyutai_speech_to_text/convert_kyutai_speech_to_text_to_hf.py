@@ -23,7 +23,7 @@ import sentencepiece
 import torch
 
 from transformers import (
-    AutoFeatureExtractor,
+    KyutaiSpeechToTextFeatureExtractor,
     KyutaiSpeechToTextConfig,
     KyutaiSpeechToTextForConditionalGeneration,
     KyutaiSpeechToTextProcessor,
@@ -260,6 +260,8 @@ def write_processor(
     tokenizer_model_name,
     codec_model_path_or_repo,
     output_dir,
+    audio_delay_seconds,
+    audio_silence_prefix_seconds,
 ):
     tokenizer_path = cached_file(
         input_path_or_repo,
@@ -280,10 +282,14 @@ def write_processor(
         pad_token_id=original_tokenizer.pad_id(),
     )
 
-    feature_extractor = AutoFeatureExtractor.from_pretrained(codec_model_path_or_repo)
+    feature_extractor = KyutaiSpeechToTextFeatureExtractor(
+        audio_delay_seconds=audio_delay_seconds,
+        audio_silence_prefix_seconds=audio_silence_prefix_seconds,
+    )
 
     processor = KyutaiSpeechToTextProcessor(feature_extractor, tokenizer)
     processor.save_pretrained(output_dir)
+    print(f"Processor saved successfully to {output_dir}")
 
 
 def main():
@@ -331,6 +337,18 @@ def main():
     parser.add_argument(
         "--safe_serialization", action="store_true", default=True, help="Whether or not to save using `safetensors`."
     )
+    parser.add_argument(
+        "--audio_delay_seconds",
+        type=float,
+        required=True,
+        help="Audio delay in seconds to add to the right of the input",
+    )
+    parser.add_argument(
+        "--audio_silence_prefix_seconds", 
+        type=float,
+        required=True,
+        help="Audio silence prefix in seconds to add to the left of the input",
+    )
     args = parser.parse_args()
 
     write_model(
@@ -347,6 +365,8 @@ def main():
         args.tokenizer_model_name,
         args.preprocessor_model_path_or_repo,
         args.output_dir,
+        args.audio_delay_seconds,
+        args.audio_silence_prefix_seconds,
     )
 
 
