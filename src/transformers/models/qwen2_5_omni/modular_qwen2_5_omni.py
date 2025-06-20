@@ -1900,19 +1900,8 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
             )
         ).to(torch.int32)
 
-        for idx, encoder_layer in enumerate(self.layers):
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    encoder_layer.__call__,
-                    hidden_states,
-                    cu_seqlens,
-                )
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    cu_seqlens,
-                )
-
+        for encoder_layer in self.layers:
+            layer_outputs = encoder_layer(hidden_states, cu_seqlens)
             hidden_states = layer_outputs[0]
 
         hidden_states_list = hidden_states.split(aftercnn_lens.tolist(), dim=0)
@@ -2166,16 +2155,11 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
                 cu_seqlens_now = cu_seqlens
             else:
                 cu_seqlens_now = cu_window_seqlens
-            if self.gradient_checkpointing and self.training:
-                hidden_states = self._gradient_checkpointing_func(
-                    blk.__call__, hidden_states, cu_seqlens_now, rotary_pos_emb
-                )
-            else:
-                hidden_states = blk(
-                    hidden_states,
-                    cu_seqlens=cu_seqlens_now,
-                    rotary_pos_emb=rotary_pos_emb,
-                )
+            hidden_states = blk(
+                hidden_states,
+                cu_seqlens=cu_seqlens_now,
+                rotary_pos_emb=rotary_pos_emb,
+            )
         hidden_states = self.merger(hidden_states)
         reverse_indices = torch.argsort(window_index)
         hidden_states = hidden_states[reverse_indices, :]

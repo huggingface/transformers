@@ -889,12 +889,8 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
             )
         ).to(torch.int32)
 
-        for idx, encoder_layer in enumerate(self.layers):
-            layer_outputs = encoder_layer(
-                hidden_states,
-                cu_seqlens,
-            )
-
+        for encoder_layer in self.layers:
+            layer_outputs = encoder_layer(hidden_states, cu_seqlens)
             hidden_states = layer_outputs[0]
 
         hidden_states_list = hidden_states.split(aftercnn_lens.tolist(), dim=0)
