@@ -99,12 +99,12 @@ annotated_frame = vertex_annotator.annotate(
 annotated_frame
 ```
 
+</hfoption>
+</hfoptions>
+
 <div class="flex justify-center">
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/vitpose.png"/>
 </div>
-
-</hfoption>
-</hfoptions>
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
