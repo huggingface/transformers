@@ -265,9 +265,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     @require_torch
     @require_pyctcdecode
     def test_large_model_pt_with_lm(self):
-        dataset = load_dataset("Narsil/asr_dummy", streaming=True)
-        third_item = next(iter(dataset["test"].skip(3)))
-        filename = third_item["file"]
+        filename = hf_hub_download("Narsil/asr_dummy", filename="4.flac", repo_type="dataset")
 
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
