@@ -3,7 +3,6 @@ LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-ARG PYTORCH='2.6.0'
 ARG TORCH_VISION='0.21.0'
 ARG TORCH_AUDIO='2.6.0'
 
