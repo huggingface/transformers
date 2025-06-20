@@ -317,7 +317,7 @@ def get_cached_module_file(
         resume_download:
             Deprecated and ignored. All downloads are now resumed by default when possible.
             Will be removed in v5 of Transformers.
-        proxies (`Dict[str, str]`, *optional*):
+        proxies (`dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
         token (`str` or *bool*, *optional*):
@@ -507,7 +507,7 @@ def get_class_from_dynamic_module(
         resume_download:
             Deprecated and ignored. All downloads are now resumed by default when possible.
             Will be removed in v5 of Transformers.
-        proxies (`Dict[str, str]`, *optional*):
+        proxies (`dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
         token (`str` or `bool`, *optional*):
@@ -593,7 +593,7 @@ def custom_object_save(obj: Any, folder: Union[str, os.PathLike], config: Option
             A config in which to register the auto_map corresponding to this custom object.
 
     Returns:
-        `List[str]`: The list of files saved.
+        `list[str]`: The list of files saved.
     """
     if obj.__module__ == "__main__":
         logger.warning(
@@ -762,7 +762,7 @@ def check_python_requirements(path_or_repo_id, requirements_file="requirements.t
             This can be either:
             - a string, the *model id* of a model repo on huggingface.co.
             - a path to a *directory* potentially containing the file.
-        kwargs (`Dict[str, Any]`, *optional*):
+        kwargs (`dict[str, Any]`, *optional*):
             Additional arguments to pass to `cached_file`.
     """
     failed = []  # error messages regarding requirements

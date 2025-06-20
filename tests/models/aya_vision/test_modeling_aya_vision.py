@@ -338,7 +338,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        del cls.model_checkpoint
+        del cls.model
         cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):

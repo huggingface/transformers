@@ -17,7 +17,7 @@ import inspect
 import os
 import textwrap
 from pathlib import Path
-from typing import List, Optional, Tuple, Union, get_args
+from typing import Optional, Union, get_args
 
 import regex as re
 
@@ -239,7 +239,7 @@ class ModelArgs:
     input_values = {
         "description": """
     Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-    into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+    into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
     soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
     conversion into a tensor of type `torch.FloatTensor`. See [`{processor_class}.__call__`] for details.
     """,
@@ -796,7 +796,7 @@ def parse_docstring(docstring, max_indent_level=0):
     return params, remainder_docstring
 
 
-def contains_type(type_hint, target_type) -> Tuple[bool, Optional[object]]:
+def contains_type(type_hint, target_type) -> tuple[bool, Optional[object]]:
     """
     Check if a "nested" type hint contains a specific target type,
     return the first-level type containing the target_type if found.
@@ -833,7 +833,7 @@ def get_model_name(obj):
         return "model"
 
 
-def get_placeholders_dict(placeholders: List, model_name: str) -> dict:
+def get_placeholders_dict(placeholders: list, model_name: str) -> dict:
     """
     Get the dictionary of placeholders for the given model name.
     """
@@ -861,7 +861,7 @@ def format_args_docstring(args, model_name):
     deducted from the model name and the auto modules.
     """
     # first check if there are any placeholders in the args, if not return them as is
-    placeholders = set(re.findall(r"{(.*?)}", "".join((args[arg]["description"] for arg in args))))
+    placeholders = set(re.findall(r"{(.*?)}", "".join(args[arg]["description"] for arg in args)))
     if not placeholders:
         return args
 
@@ -880,7 +880,7 @@ def format_args_docstring(args, model_name):
     return args
 
 
-def source_args_doc(args_classes: Union[object, List[object]]) -> dict:
+def source_args_doc(args_classes: Union[object, list[object]]) -> dict:
     if isinstance(args_classes, (list, tuple)):
         args_classes_dict = {}
         for args_class in args_classes:
