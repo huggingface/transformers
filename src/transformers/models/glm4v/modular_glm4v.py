@@ -413,7 +413,7 @@ class Glm4vVisionRotaryEmbedding(Qwen2_5_VisionRotaryEmbedding):
     pass
 
 
-class Glm4vMLP(Glm4MLP):
+class Glm4vTextMLP(Glm4MLP):
     pass
 
 
@@ -685,7 +685,6 @@ class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = Glm4vAttention(config, layer_idx)
-        self.mlp = Glm4vMLP(config)
         self.mlp = Glm4vTextMLP(config)
         self.input_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
