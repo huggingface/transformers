@@ -16,8 +16,9 @@
 
 import math
 import random
+from collections.abc import Iterable
 from functools import lru_cache
-from typing import Any, Dict, Iterable, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
@@ -59,7 +60,7 @@ if is_torchvision_available():
 class FlavaMaskingGenerator:
     def __init__(
         self,
-        input_size: Union[int, Tuple[int, int]] = 14,
+        input_size: Union[int, tuple[int, int]] = 14,
         total_mask_patches: int = 75,
         mask_group_max_patches: Optional[int] = None,
         mask_group_min_patches: int = 16,
@@ -160,7 +161,7 @@ class FlavaFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         codebook_do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the input for codebook to a certain. Can be overridden by the `codebook_do_resize`
             parameter in `preprocess`. `codebook_size`.
-        codebook_size (`Dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
+        codebook_size (`dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
             Resize the input for codebook to the given size. Can be overridden by the `codebook_size` parameter in
             `preprocess`.
         codebook_resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.LANCZOS`):
@@ -170,7 +171,7 @@ class FlavaFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
             Whether to crop the input for codebook at the center. If the input size is smaller than
             `codebook_crop_size` along any edge, the image is padded with 0's and then center cropped. Can be
             overridden by the `codebook_do_center_crop` parameter in `preprocess`.
-        codebook_crop_size (`Dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
+        codebook_crop_size (`dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
             Desired output size for codebook input when applying center-cropping. Can be overridden by the
             `codebook_crop_size` parameter in `preprocess`.
         codebook_do_rescale (`bool`, *optional*, defaults to `True`):
@@ -260,7 +261,7 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
         return super().preprocess(images, **kwargs)
 
     @classmethod
-    def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
+    def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
         """
         Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
         created using from_dict and kwargs e.g. `FlavaImageProcessor.from_pretrained(checkpoint, codebook_size=600)`
@@ -272,7 +273,7 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
             image_processor_dict["codebook_crop_size"] = kwargs.pop("codebook_crop_size")
         return super().from_dict(image_processor_dict, **kwargs)
 
-    @lru_cache()
+    @lru_cache
     def masking_generator(
         self,
         input_size_patches,

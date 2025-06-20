@@ -63,13 +63,13 @@ class PretrainedConfig(PushToHubMixin):
       Some configurations requires inputs to be defined at init and have no default values, usually these are composite configs,
       (but not necessarily) such as [`~transformers.EncoderDecoderConfig`] or [`~RagConfig`]. They have to be initialized from
       two or more configs of type [`~transformers.PretrainedConfig`].
-    - **keys_to_ignore_at_inference** (`List[str]`) -- A list of keys to ignore by default when looking at dictionary
+    - **keys_to_ignore_at_inference** (`list[str]`) -- A list of keys to ignore by default when looking at dictionary
       outputs of the model during inference.
-    - **attribute_map** (`Dict[str, str]`) -- A dict that maps model specific attribute names to the standardized
+    - **attribute_map** (`dict[str, str]`) -- A dict that maps model specific attribute names to the standardized
       naming of attributes.
-    - **base_model_tp_plan** (`Dict[str, Any]`) -- A dict that maps sub-modules FQNs of a base model to a tensor
+    - **base_model_tp_plan** (`dict[str, Any]`) -- A dict that maps sub-modules FQNs of a base model to a tensor
       parallel plan applied to the sub-module when `model.tensor_parallel` is called.
-    - **base_model_pp_plan** (`Dict[str, Tuple[List[str]]]`) -- A dict that maps child-modules of a base model to a
+    - **base_model_pp_plan** (`dict[str, tuple[list[str]]]`) -- A dict that maps child-modules of a base model to a
       pipeline parallel plan that enables users to place the child-module on the appropriate device.
 
     Common attributes (present in all subclasses):
@@ -115,7 +115,7 @@ class PretrainedConfig(PushToHubMixin):
         tie_encoder_decoder (`bool`, *optional*, defaults to `False`):
             Whether all encoder weights should be tied to their equivalent decoder weights. This requires the encoder
             and decoder model to have the exact same parameter names.
-        prune_heads (`Dict[int, List[int]]`, *optional*, defaults to `{}`):
+        prune_heads (`dict[int, list[int]]`, *optional*, defaults to `{}`):
             Pruned heads of the model. The keys are the selected layer indices and the associated values, the list of
             heads to prune in said layer.
 
@@ -128,17 +128,17 @@ class PretrainedConfig(PushToHubMixin):
 
         > Parameters for fine-tuning tasks
 
-        architectures (`List[str]`, *optional*):
+        architectures (`list[str]`, *optional*):
             Model architectures that can be used with the model pretrained weights.
         finetuning_task (`str`, *optional*):
             Name of the task used to fine-tune the model. This can be used when converting from an original (TensorFlow
             or PyTorch) checkpoint.
-        id2label (`Dict[int, str]`, *optional*):
+        id2label (`dict[int, str]`, *optional*):
             A map from index (for instance prediction index, or target index) to label.
-        label2id (`Dict[str, int]`, *optional*): A map from label to index for the model.
+        label2id (`dict[str, int]`, *optional*): A map from label to index for the model.
         num_labels (`int`, *optional*):
             Number of labels to use in the last layer added to the model, typically for a classification task.
-        task_specific_params (`Dict[str, Any]`, *optional*):
+        task_specific_params (`dict[str, Any]`, *optional*):
             Additional keyword arguments to store for the current task.
         problem_type (`str`, *optional*):
             Problem type for `XxxForSequenceClassification` models. Can be one of `"regression"`,
@@ -394,7 +394,7 @@ class PretrainedConfig(PushToHubMixin):
                 Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
                 repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
                 namespace).
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
         self._set_token_in_kwargs(kwargs)
@@ -505,7 +505,7 @@ class PretrainedConfig(PushToHubMixin):
             resume_download:
                 Deprecated and ignored. All downloads are now resumed by default when possible.
                 Will be removed in v5 of Transformers.
-            proxies (`Dict[str, str]`, *optional*):
+            proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
             token (`str` or `bool`, *optional*):
@@ -531,7 +531,7 @@ class PretrainedConfig(PushToHubMixin):
             subfolder (`str`, *optional*, defaults to `""`):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
                 specify the folder name here.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 The values in kwargs of any keys which are configuration attributes will be used to override the loaded
                 values. Behavior concerning key/value pairs whose keys are *not* configuration attributes is controlled
                 by the `return_unused_kwargs` keyword parameter.
@@ -599,7 +599,7 @@ class PretrainedConfig(PushToHubMixin):
                 The identifier of the pre-trained checkpoint from which we want the dictionary of parameters.
 
         Returns:
-            `Tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the configuration object.
+            `tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the configuration object.
 
         """
         cls._set_token_in_kwargs(kwargs)
@@ -723,10 +723,10 @@ class PretrainedConfig(PushToHubMixin):
         Instantiates a [`PretrainedConfig`] from a Python dictionary of parameters.
 
         Args:
-            config_dict (`Dict[str, Any]`):
+            config_dict (`dict[str, Any]`):
                 Dictionary that will be used to instantiate the configuration object. Such a dictionary can be
                 retrieved from a pretrained checkpoint by leveraging the [`~PretrainedConfig.get_config_dict`] method.
-            kwargs (`Dict[str, Any]`):
+            kwargs (`dict[str, Any]`):
                 Additional parameters from which to initialize the configuration object.
 
         Returns:
@@ -816,7 +816,7 @@ class PretrainedConfig(PushToHubMixin):
         Python dictionary.
 
         Returns:
-            Dict[str, Any]: Dictionary of all the attributes that make up this configuration instance.
+            dict[str, Any]: Dictionary of all the attributes that make up this configuration instance.
         """
         config_dict = self.to_dict()
 
@@ -874,7 +874,7 @@ class PretrainedConfig(PushToHubMixin):
         Serializes this instance to a Python dictionary.
 
         Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
+            `dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
         output = copy.deepcopy(self.__dict__)
         if hasattr(self.__class__, "model_type"):
@@ -940,7 +940,7 @@ class PretrainedConfig(PushToHubMixin):
         Updates attributes of this class with attributes from `config_dict`.
 
         Args:
-            config_dict (`Dict[str, Any]`): Dictionary of attributes that should be updated for this class.
+            config_dict (`dict[str, Any]`): Dictionary of attributes that should be updated for this class.
         """
         for key, value in config_dict.items():
             setattr(self, key, value)
@@ -1163,7 +1163,7 @@ def get_configuration_file(configuration_files: list[str]) -> str:
     Get the configuration file to use for this version of transformers.
 
     Args:
-        configuration_files (`List[str]`): The list of available configuration files.
+        configuration_files (`list[str]`): The list of available configuration files.
 
     Returns:
         `str`: The configuration file to use.
@@ -1218,6 +1218,7 @@ ALLOWED_LAYER_TYPES = (
     "full_attention",
     "sliding_attention",
     "chunked_attention",
+    "linear_attention",  # used in minimax
 )
 
 

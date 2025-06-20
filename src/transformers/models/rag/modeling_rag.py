@@ -16,7 +16,7 @@
 
 import copy
 from dataclasses import dataclass
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 import torch
 from torch import nn
@@ -47,7 +47,7 @@ class RetrievAugLMMarginOutput(ModelOutput):
         doc_scores (`torch.FloatTensor` of shape `(batch_size, config.n_docs)`):
             Score between each retrieved document embeddings (see `retrieved_doc_embeds`) and
             `question_encoder_last_hidden_state`.
-        past_key_values (`List[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`list[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
             num_heads, sequence_length, embed_size_per_head)`).
 
@@ -112,20 +112,20 @@ class RetrievAugLMMarginOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
     doc_scores: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[List[torch.FloatTensor]] = None
+    past_key_values: Optional[list[torch.FloatTensor]] = None
     retrieved_doc_embeds: Optional[torch.FloatTensor] = None
     retrieved_doc_ids: Optional[torch.LongTensor] = None
     context_input_ids: Optional[torch.LongTensor] = None
     context_attention_mask: Optional[torch.LongTensor] = None
     question_encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    question_enc_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    question_enc_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    question_enc_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    question_enc_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     generator_enc_last_hidden_state: Optional[torch.FloatTensor] = None
-    generator_enc_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    generator_enc_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    generator_dec_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    generator_dec_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    generator_cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    generator_enc_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    generator_enc_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    generator_dec_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    generator_dec_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    generator_cross_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -138,7 +138,7 @@ class RetrievAugLMOutput(ModelOutput):
         doc_scores (`torch.FloatTensor` of shape `(batch_size, config.n_docs)`):
             Score between each retrieved document embeddings (see `retrieved_doc_embeds`) and
             `question_encoder_last_hidden_state`.
-        past_key_values (`List[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`list[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
             num_heads, sequence_length, embed_size_per_head)`).
 
@@ -202,26 +202,26 @@ class RetrievAugLMOutput(ModelOutput):
 
     logits: Optional[torch.FloatTensor] = None
     doc_scores: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[List[torch.FloatTensor]] = None
+    past_key_values: Optional[list[torch.FloatTensor]] = None
     retrieved_doc_embeds: Optional[torch.FloatTensor] = None
     retrieved_doc_ids: Optional[torch.LongTensor] = None
     context_input_ids: Optional[torch.LongTensor] = None
     context_attention_mask: Optional[torch.LongTensor] = None
     question_encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    question_enc_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    question_enc_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    question_enc_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    question_enc_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     generator_enc_last_hidden_state: Optional[torch.FloatTensor] = None
-    generator_enc_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    generator_enc_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    generator_dec_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    generator_dec_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    generator_cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    generator_enc_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    generator_enc_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    generator_dec_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    generator_dec_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    generator_cross_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @auto_docstring(
     custom_intro="""
     RAG models were released with the paper [Retrieval-Augmented Generation for Knowledge-Intensive NLP
-    Tasks](https://arxiv.org/abs/2005.11401) by Patrick Lewis, Ethan Perez, Aleksandra Piktus et al.
+    Tasks](https://huggingface.co/papers/2005.11401) by Patrick Lewis, Ethan Perez, Aleksandra Piktus et al.
 
     RAG is a retriever augmented model and encapsulate three components: a question encoder, a dataset retriever and a
     generator, the encoder and generator are trainable while the retriever is just an indexed dataset.
@@ -432,10 +432,10 @@ class RagModel(RagPreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         doc_scores: Optional[torch.FloatTensor] = None,
         context_input_ids: Optional[torch.LongTensor] = None,
         context_attention_mask: Optional[torch.LongTensor] = None,
@@ -444,7 +444,7 @@ class RagModel(RagPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_retrieved: Optional[bool] = None,
         n_docs: Optional[int] = None,
-    ) -> Union[Tuple[torch.Tensor], RetrievAugLMOutput]:
+    ) -> Union[tuple[torch.Tensor], RetrievAugLMOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. [`RagConfig`], used to initialize the model, specifies
@@ -706,10 +706,10 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        encoder_outputs: Optional[tuple[tuple[torch.Tensor]]] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         context_input_ids: Optional[torch.LongTensor] = None,
         context_attention_mask: Optional[torch.LongTensor] = None,
         doc_scores: Optional[torch.FloatTensor] = None,
@@ -930,7 +930,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
                 Number of beams for beam search. 1 means no beam search.
             n_docs (`int`, *optional*, defaults to `config.n_docs`)
                 Number of documents to retrieve and/or number of documents for which to generate an answer.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Additional kwargs will be passed to [`~generation.GenerationMixin.generate`].
 
         Return:
@@ -1216,10 +1216,10 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        encoder_outputs: Optional[tuple[tuple[torch.Tensor]]] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         context_input_ids: Optional[torch.LongTensor] = None,
         context_attention_mask: Optional[torch.LongTensor] = None,
         doc_scores: Optional[torch.FloatTensor] = None,
@@ -1394,7 +1394,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         doc_scores: Optional[torch.FloatTensor] = None,
         n_docs: Optional[int] = None,
         generation_config: Optional[GenerationConfig] = None,
-        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
+        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], list[int]]] = None,
         logits_processor: Optional[LogitsProcessorList] = LogitsProcessorList(),
         stopping_criteria: Optional[StoppingCriteriaList] = StoppingCriteriaList(),
         **kwargs,
@@ -1440,13 +1440,13 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
                 priority: 1) from the `generation_config.json` model file, if it exists; 2) from the model
                 configuration. Please note that unspecified parameters will inherit [`~generation.GenerationConfig`]'s
                 default values, whose documentation should be checked to parameterize generation.
-            prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], List[int]]`, *optional*):
+            prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], list[int]]`, *optional*):
                 If provided, this function constraints the beam search to allowed tokens only at each step. If not
                 provided no constraint is applied. This function takes 2 arguments `inputs_ids` and the batch ID
                 `batch_id`. It has to return a list with the allowed tokens for the next generation step conditioned on
                 the previously generated tokens `inputs_ids` and the batch ID `batch_id`. This argument is useful for
                 constrained generation conditioned on the prefix, as described in [Autoregressive Entity
-                Retrieval](https://arxiv.org/abs/2010.00904).
+                Retrieval](https://huggingface.co/papers/2010.00904).
             logits_processor (`LogitsProcessorList`, *optional*):
                 Custom logits processors that complement the default logits processors built from arguments and a
                 model's config. If a logit processor is passed that is already created with the arguments or a model's
@@ -1455,7 +1455,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
                 Custom stopping criteria that complement the default stopping criteria built from arguments and a
                 model's config. If a stopping criteria is passed that is already created with the arguments or a
                 model's config an error is thrown.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model.
 
