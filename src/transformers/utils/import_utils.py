@@ -852,7 +852,7 @@ def is_torch_hpu_available():
     original_gather = torch.Tensor.gather
 
     def patched_gather(input: torch.Tensor, dim: int, index: torch.LongTensor) -> torch.Tensor:
-        if input.dtype == torch.int64:
+        if input.dtype == torch.int64 and input.device.type == "hpu":
             logger.warning_once(
                 "torch.gather is not supported for int64 tensors on Gaudi. "
                 "This operation will be performed patched_gather using indexing."
