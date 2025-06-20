@@ -540,12 +540,10 @@ class SamHQVisionEncoder(nn.Module):
         all_self_attentions = () if output_attentions else None
         intermediate_embeddings = []
 
-        for i, layer_module in enumerate(self.layers):
+        for layer_module in self.layers:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
-
             layer_outputs = layer_module(hidden_states, output_attentions=output_attentions)
-
             hidden_states = layer_outputs[0]
 
             # Collect embeddings from non-windowed blocks
