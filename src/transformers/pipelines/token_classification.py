@@ -222,12 +222,6 @@ class TokenClassificationPipeline(ChunkPipeline):
                     )
         return preprocess_params, {}, postprocess_params
 
-    @overload
-    def __call__(self, inputs: str, **kwargs: Any) -> list[dict[str, str]]: ...
-
-    @overload
-    def __call__(self, inputs: list[str], **kwargs: Any) -> list[list[dict[str, str]]]: ...
-
     def __call__(
         self, inputs: Union[str, list[str]], **kwargs: Any
     ) -> Union[list[dict[str, str]], list[list[dict[str, str]]]]:
