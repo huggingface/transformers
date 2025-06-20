@@ -311,8 +311,19 @@ class DepthProModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 ]
                 if param.requires_grad:
                     if any(x in name for x in non_uniform_init_parms):
+                        # See PR #38607 (to avoid flakiness)
+                        data = torch.flatten(param.data)
+                        n_elements = torch.numel(data)
+                        # skip 2.5% of elements on each side to avoid issues caused by `nn.init.trunc_normal_` described in
+                        # https://github.com/huggingface/transformers/pull/27906#issuecomment-1846951332
+                        n_elements_to_skip_on_each_side = int(n_elements * 0.025)
+                        data_to_check = torch.sort(data).values
+                        if n_elements_to_skip_on_each_side > 0:
+                            data_to_check = data_to_check[
+                                n_elements_to_skip_on_each_side:-n_elements_to_skip_on_each_side
+                            ]
                         self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
+                            ((data_to_check.mean() * 1e9).round() / 1e9).item(),
                             [0.0, 1.0],
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
