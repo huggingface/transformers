@@ -778,7 +778,7 @@ class BLTCrossAttention(nn.Module):
         self.num_key_value_heads = config.cross_attn_nheads  # Assuming same for cross attention
         self.head_dim = self.hidden_size // self.num_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = None #self.head_dim ** -0.5
         self.dropout = config.dropout
 
         self.wq = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
@@ -848,7 +848,7 @@ class BLTCrossAttention(nn.Module):
             key_states,
             value_states,
             attention_mask,
-            dropout=0.0 if not self.training else self.dropout,
+            dropout=0.0, #if not self.training else self.dropout,
             scaling=self.scaling,
             **kwargs,
         )
