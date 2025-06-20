@@ -1298,9 +1298,9 @@ class UdopStack(UdopPreTrainedModel):
                 hidden_states,
                 causal_mask,
                 position_bias,
-                encoder_hidden_states,  # as a positional argument for gradient checkpointing
-                encoder_attention_mask=encoder_extended_attention_mask,
-                encoder_decoder_position_bias=encoder_decoder_position_bias,
+                encoder_hidden_states,  
+                encoder_extended_attention_mask,
+                encoder_decoder_position_bias, # as a positional argument for gradient checkpointing
                 layer_head_mask=head_mask[i],
                 past_key_value=past_key_values,
                 use_cache=use_cache,
