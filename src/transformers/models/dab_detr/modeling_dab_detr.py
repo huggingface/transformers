@@ -1132,11 +1132,11 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
 
             layer_outputs = decoder_layer(
                 hidden_states,
-                attention_mask=None,
-                object_queries=object_queries,
-                query_position_embeddings=query_pos,
-                query_sine_embed=query_sine_embed,
-                encoder_hidden_states=encoder_hidden_states,
+                None, # attention_mask
+                object_queries,
+                query_pos,
+                query_sine_embed,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=memory_key_padding_mask,
                 output_attentions=output_attentions,
             )

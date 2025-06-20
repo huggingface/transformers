@@ -1867,10 +1867,10 @@ class Mask2FormerMaskedAttentionDecoder(nn.Module):
 
             layer_outputs = decoder_layer(
                 hidden_states,
-                level_index=level_index,
-                position_embeddings=multi_stage_positional_embeddings,
-                query_position_embeddings=query_position_embeddings,
-                encoder_hidden_states=encoder_hidden_states,
+                level_index,
+                multi_stage_positional_embeddings,
+                query_position_embeddings,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=attention_mask,
                 output_attentions=output_attentions,
             )

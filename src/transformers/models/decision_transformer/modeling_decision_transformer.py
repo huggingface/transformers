@@ -657,11 +657,11 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
 
             outputs = block(
                 hidden_states,
-                past_key_value=past_key_values,
-                cache_position=cache_position,
-                attention_mask=attention_mask,
-                head_mask=head_mask[i],
-                encoder_hidden_states=encoder_hidden_states,
+                past_key_values if not (self.gradient_checkpointing and self.training) else None,
+                cache_position,
+                attention_mask,
+                head_mask[i],
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
                 use_cache=use_cache,
                 output_attentions=output_attentions,

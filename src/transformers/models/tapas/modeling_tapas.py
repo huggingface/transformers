@@ -594,9 +594,9 @@ class TapasEncoder(nn.Module):
 
             layer_outputs = layer_module(
                 hidden_states,
-                attention_mask=attention_mask,
-                head_mask=layer_head_mask,
-                encoder_hidden_states=encoder_hidden_states,
+                attention_mask,
+                layer_head_mask,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
                 past_key_value=past_key_values,
                 output_attentions=output_attentions,
