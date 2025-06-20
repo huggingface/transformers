@@ -1132,7 +1132,7 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
 
             layer_outputs = decoder_layer(
                 hidden_states,
-                None, # attention_mask
+                None,  # attention_mask
                 object_queries,
                 query_pos,
                 query_sine_embed,

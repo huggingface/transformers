@@ -745,7 +745,7 @@ class DetrDecoder(nn.Module):
 
             layer_outputs = decoder_layer(
                 hidden_states,
-                None, # attention_mask
+                None,  # attention_mask
                 object_queries,
                 query_position_embeddings,
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
