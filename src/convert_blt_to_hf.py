@@ -17,40 +17,18 @@ logger = transformers_logging.get_logger(__name__)
 transformers_logging.set_verbosity_info()
 
 
-def download_model_files(model_id: str, cache_dir: Optional[str] = None) -> Dict[str, str]:
-    config_path = hf_hub_download(repo_id=model_id, filename="config.json", cache_dir=cache_dir)
-
-    weights_path = hf_hub_download(repo_id=model_id, filename="model.safetensors", cache_dir=cache_dir)
-
-    entropy_params_path = hf_hub_download(repo_id=model_id, filename="entropy_model/params.json", cache_dir=cache_dir)
-
-    entropy_weights_path = hf_hub_download(
-        repo_id=model_id, filename="entropy_model/consolidated.pth", cache_dir=cache_dir
-    )
-
-    return {
-        "config": config_path,
-        "weights": weights_path,
-        "entropy_params": entropy_params_path,
-        "entropy_weights": entropy_weights_path,
-    }
-
-
 def merge_configurations(config_path: str, entropy_params_path: str) -> Dict[str, Any]:
-    logger.info("Merging confi")
+    logger.info("Merging configurations")
 
-    # Load BLT configuration
     with open(config_path, "r") as f:
         main_config = json.load(f)
 
-    # Load Patcher entropy model parameters
     with open(entropy_params_path, "r") as f:
         entropy_data = json.load(f)
 
     entropy_model_params = entropy_data.get("entropy_model", {})
     patcher_args = entropy_data.get("data", {}).get("patcher_args", {})
 
-    # Create unified configuration
     unified_config = main_config.copy()["args"]
 
     for key in ["vocab_size", "dim", "n_layers", "n_heads", "max_seqlen"]:
@@ -61,7 +39,6 @@ def merge_configurations(config_path: str, entropy_params_path: str) -> Dict[str
     if isinstance(patch_size, float):
         patch_size = int(patch_size)
 
-    # Create patcher configuration dictionary
     patcher_config = {
         "vocab_size": int(entropy_model_params.get("vocab_size", 256)),
         "dim": int(entropy_model_params.get("dim", 512)),
@@ -69,10 +46,10 @@ def merge_configurations(config_path: str, entropy_params_path: str) -> Dict[str
         "n_heads": int(entropy_model_params.get("n_heads", 8)),
         "head_dim": int(entropy_model_params.get("head_dim"))
         if entropy_model_params.get("head_dim") is not None
-        else None,  # Let BLTPatcherConfig compute this from dim // n_heads
+        else None,
         "n_kv_heads": int(entropy_model_params.get("n_kv_heads"))
         if entropy_model_params.get("n_kv_heads") is not None
-        else None,  # Let BLTPatcherConfig default this to n_heads
+        else None,
         "max_seqlen": int(entropy_model_params.get("max_seqlen", 1024)),
         "norm_eps": entropy_model_params.get("norm_eps", 1e-5),
         "dropout": entropy_model_params.get("dropout", 0.0),
@@ -115,11 +92,41 @@ def merge_configurations(config_path: str, entropy_params_path: str) -> Dict[str
     return unified_config
 
 
-def merge_weights(weights_path: str, entropy_weights_path: str) -> Dict[str, torch.Tensor]:
-    logger.info("Merging model weights")
+def apply_weight_mapping(state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:    
+    component_mappings = {
+        ".attention.": ".self_attn.",
+        ".feed_forward.": ".mlp.",
+        ".attention_norm.": ".input_layernorm.",
+        ".ffn_norm.": ".post_attention_layernorm.",
+        ".tok_embeddings.": ".embed_tokens.",
+        ".cross_attn_norm_q.": ".q_norm.",
+        ".cross_attn_norm_kv.": ".k_norm.",
+        ".w1.": ".gate_proj.",
+        ".w2.": ".down_proj.",
+        ".w3.": ".up_proj.",
+        ".wq.": ".q_proj.",
+        ".wk.": ".k_proj.",
+        ".wv.": ".v_proj.",
+        ".wo.": ".o_proj.",
+        ".output.": ".lm_head.",
+    }
+    
+    new_state_dict = {}
+    
+    for old_key, tensor in state_dict.items():
+        new_key = old_key
+        
+        for old_pattern, new_pattern in component_mappings.items():
+            if old_pattern in new_key:
+                new_key = new_key.replace(old_pattern, new_pattern)
+        
+        new_state_dict[new_key] = tensor
+    
+    return new_state_dict
 
+
+def merge_weights(weights_path: str, entropy_weights_path: str) -> Dict[str, torch.Tensor]:
     main_weights = load_file(weights_path)
-    logger.info(f"Loaded main model weights: {len(main_weights)} tensors")
 
     entropy_weights = torch.load(entropy_weights_path, map_location="cpu", weights_only=True)
 
@@ -130,21 +137,18 @@ def merge_weights(weights_path: str, entropy_weights_path: str) -> Dict[str, tor
 
     logger.info(f"Loaded entropy model weights: {len(entropy_weights)} tensors")
 
-    # unified state dict
     unified_weights = main_weights.copy()
 
-    # Add entropy model weights with "patcher." prefix
     for key, tensor in entropy_weights.items():
         patcher_key = f"patcher.{key}"
         unified_weights[patcher_key] = tensor
-
-    logger.info(f"Merged weights: {len(unified_weights)} tensors total")
+    
+    unified_weights = apply_weight_mapping(unified_weights)
+    
     return unified_weights
 
 
 def create_tokenizer_config(output_dir: str, config: Dict[str, Any]):
-    logger.info("Creating tokenizer config")
-
     tokenizer_config = {
         "tokenizer_class": "BltTokenizer",
         "vocab_size": config.get("vocab_size", 256),
@@ -164,54 +168,6 @@ def create_tokenizer_config(output_dir: str, config: Dict[str, Any]):
     logger.info(f"Tokenizer config saved to {tokenizer_path}")
 
 
-def validate_unified_model(config: Dict[str, Any], weights: Dict[str, torch.Tensor]):
-    logger.info("Validating unified model")
-
-    required_keys = [
-        "vocab_size",
-        "dim",
-        "n_layers",
-        "n_heads",
-        "patch_in_forward",
-        "patcher_args",
-    ]
-
-    missing_keys = [key for key in required_keys if key not in config]
-    if missing_keys:
-        logger.warning(f"Missing configuration keys: {missing_keys}")
-
-    # Check for patcher weights
-    patcher_weights = [key for key in weights.keys() if key.startswith("patcher.")]
-    if not patcher_weights:
-        logger.warning("No patcher weights found in unified weights")
-    else:
-        logger.info(f"Found {len(patcher_weights)} patcher weight tensors")
-
-    main_weights = [key for key in weights.keys() if not key.startswith("patcher.")]
-    logger.info(f"Found {len(main_weights)} main model weight tensors")
-
-    try:
-        logger.info("Testing model instantiation...")
-        blt_config = BLTConfig(**config)
-        model = BLTModel(blt_config)
-
-        logger.info("Testing weight loading...")
-        try:
-            missing_keys, unexpected_keys = model.load_state_dict(weights, strict=False)
-            if missing_keys:
-                logger.warning(f"Missing keys during weight loading: {missing_keys}")
-            if unexpected_keys:
-                logger.warning(f"Unexpected keys during weight loading: {unexpected_keys}")
-            logger.info("Weight loading successful")
-        except Exception as weight_error:
-            logger.warning(f"Weight loading failed: {weight_error}")
-
-    except Exception as e:
-        logger.error(f"Model validation failed: {e}")
-
-    logger.info("Model validation completed")
-
-
 def push_to_hub(
     local_dir: str,
     repo_id: str,
@@ -220,7 +176,6 @@ def push_to_hub(
     token: Optional[str] = None,
 ) -> None:
     try:
-        # Upload the entire directory to the Hub
         upload_folder(
             folder_path=local_dir,
             repo_id=repo_id,
@@ -246,17 +201,16 @@ def convert_hf_blt_to_unified(
     hub_private: bool = False,
     hub_token: Optional[str] = None,
 ) -> None:
-    logger.info(f"Converting {model_id} to unified transformers format")
+    # Download model files
+    config_path = hf_hub_download(repo_id=model_id, filename="config.json", cache_dir=cache_dir)
+    weights_path = hf_hub_download(repo_id=model_id, filename="model.safetensors", cache_dir=cache_dir)
+    entropy_params_path = hf_hub_download(repo_id=model_id, filename="entropy_model/params.json", cache_dir=cache_dir)
+    entropy_weights_path = hf_hub_download(
+        repo_id=model_id, filename="entropy_model/consolidated.pth", cache_dir=cache_dir
+    )
 
-    file_paths = download_model_files(model_id, cache_dir)
-
-    # Merge configurations
-    unified_config = merge_configurations(file_paths["config"], file_paths["entropy_params"])
-
-    # Merge weights
-    unified_weights = merge_weights(file_paths["weights"], file_paths["entropy_weights"])
-
-    validate_unified_model(unified_config, unified_weights)
+    unified_config = merge_configurations(config_path, entropy_params_path)
+    unified_weights = merge_weights(weights_path, entropy_weights_path)
 
     os.makedirs(output_dir, exist_ok=True)
 
@@ -274,8 +228,6 @@ def convert_hf_blt_to_unified(
         save_file(unified_weights, weights_path)
     else:
         torch.save(unified_weights, weights_path)
-
-    logger.info(f"Unified config and weights saved to {weights_path}")
 
     create_tokenizer_config(output_dir, unified_config)
 
@@ -305,10 +257,8 @@ def main():
     parser.add_argument(
         "--output_dir",
         type=str,
-        default="./new_unified_blt_debug",
+        default="./blt_converted",
     )
-
-    # Optional
     parser.add_argument(
         "--config_name",
         type=str,
@@ -339,11 +289,10 @@ def main():
         action="store_true",
         default=True,
     )
-
     parser.add_argument(
         "--push_to_hub",
         type=str,
-        default="itazap/blt-1b-hf",
+        default="itazap/blt-1b-converted",
     )
     parser.add_argument(
         "--hub_private",
