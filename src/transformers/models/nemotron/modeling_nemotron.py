@@ -37,7 +37,6 @@ from ...modeling_outputs import (
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
 from .configuration_nemotron import NemotronConfig
 
@@ -83,9 +82,6 @@ class NemotronLayerNorm1P(nn.LayerNorm):
         )
         with torch.autocast(device_type=input.device.type, enabled=False):
             return F.layer_norm(*args)
-
-
-ALL_LAYERNORM_LAYERS.append(NemotronLayerNorm1P)
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron

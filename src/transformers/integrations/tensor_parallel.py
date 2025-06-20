@@ -27,8 +27,6 @@ from ..utils import is_torch_greater_or_equal, logging
 from ..utils.generic import GeneralInterface
 
 
-ALL_LAYERNORM_LAYERS = [nn.LayerNorm]
-
 logger = logging.get_logger(__name__)
 
 # Cache this result has it's a C FFI call which can be pretty time-consuming
