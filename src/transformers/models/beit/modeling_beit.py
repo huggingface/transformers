@@ -526,7 +526,7 @@ class BeitLayer(GradientCheckpointingLayer):
         output_attentions: bool = False,
         relative_position_bias: Optional[torch.Tensor] = None,
         interpolate_pos_encoding: bool = False,
-        resolution: Optional[tuple[int]] = None,
+        resolution: Optional[tuple[int, int]] = None,
     ) -> Union[tuple[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in BEiT, layernorm is applied before self-attention
@@ -698,11 +698,11 @@ class BeitEncoder(nn.Module):
 
             layer_outputs = layer_module(
                 hidden_states,
-                layer_head_mask,
-                output_attentions,
-                relative_position_bias,
-                interpolate_pos_encoding,
-                resolution,
+                head_mask=layer_head_mask,
+                output_attentions=output_attentions,
+                relative_position_bias=relative_position_bias,
+                interpolate_pos_encoding=interpolate_pos_encoding,
+                resolution=resolution,
             )
 
             hidden_states = layer_outputs[0]

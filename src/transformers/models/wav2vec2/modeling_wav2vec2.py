@@ -272,7 +272,7 @@ def _sample_negative_indices(
     return sampled_negative_indices
 
 
-class Wav2Vec2NoLayerNormConvLayer(nn.Module):
+class Wav2Vec2NoLayerNormConvLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -293,7 +293,7 @@ class Wav2Vec2NoLayerNormConvLayer(nn.Module):
         return hidden_states
 
 
-class Wav2Vec2LayerNormConvLayer(nn.Module):
+class Wav2Vec2LayerNormConvLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -320,7 +320,7 @@ class Wav2Vec2LayerNormConvLayer(nn.Module):
         return hidden_states
 
 
-class Wav2Vec2GroupNormConvLayer(nn.Module):
+class Wav2Vec2GroupNormConvLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
