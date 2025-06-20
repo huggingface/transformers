@@ -594,12 +594,12 @@ class TapasEncoder(nn.Module):
 
             layer_outputs = layer_module(
                 hidden_states,
-                attention_mask,
-                layer_head_mask,
-                encoder_hidden_states,
-                encoder_attention_mask,
-                past_key_values,
-                output_attentions,
+                attention_mask=attention_mask,
+                head_mask=layer_head_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
             )
             hidden_states = layer_outputs[0]
             if output_attentions:
