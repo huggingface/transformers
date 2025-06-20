@@ -2339,7 +2339,6 @@ class GenerationTesterMixin:
                 model_eager = model_class.from_pretrained(
                     tmpdirname,
                     torch_dtype=torch.float16,
-                    low_cpu_mem_usage=True,
                     attn_implementation="eager",
                 ).to(torch_device)
                 res_eager = model_eager.generate(**inputs_dict, **generate_kwargs)
@@ -2349,7 +2348,6 @@ class GenerationTesterMixin:
                 model_attn = model_class.from_pretrained(
                     tmpdirname,
                     torch_dtype=torch.float16,
-                    low_cpu_mem_usage=True,
                     attn_implementation=attn_implementation,
                 ).to(torch_device)
                 res_attn = model_attn.generate(**inputs_dict, **generate_kwargs)
@@ -3726,7 +3724,6 @@ class GenerationIntegrationTests(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(model_id)
         model = AutoModelForSpeechSeq2Seq.from_pretrained(
             model_id,
-            low_cpu_mem_usage=True,
             use_safetensors=True,
         )
         model.to(torch_device)
@@ -3745,7 +3742,6 @@ class GenerationIntegrationTests(unittest.TestCase):
         # Load its decoder only version:
         assistant_causal_lm = AutoModelForCausalLM.from_pretrained(
             assistant_distil_model_id,
-            low_cpu_mem_usage=True,
             use_safetensors=True,
         ).to(torch_device)
         self.assertTrue(model.generate(**features, assistant_model=assistant_causal_lm).sum())
@@ -3761,7 +3757,6 @@ class GenerationIntegrationTests(unittest.TestCase):
         # Load its decoder only version:
         assistant_causal_lm = AutoModelForCausalLM.from_pretrained(
             assistant_distil_model_id,
-            low_cpu_mem_usage=True,
             use_safetensors=True,
         ).to(torch_device)
         # It will raise an error as the encoder of the main and assistant model are not compatible:
@@ -4899,7 +4894,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         # If the generate doesn't infer the DECODER device map correctly, this will fail
         _ = model.generate(**inputs, max_new_tokens=2, do_sample=False)
 
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_cpu_offload_doesnt_compile(self):
         """Test that CPU offload doesn't trigger compilation"""
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")

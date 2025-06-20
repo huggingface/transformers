@@ -38,6 +38,7 @@ torchao supports the [quantization techniques](https://github.com/pytorch/ao/blo
 - A8W8 Int8 Dynamic Quantization
 - A16W8 Int8 Weight Only Quantization
 - A16W4 Int4 Weight Only Quantization
+- A16W4 Int4 Weight Only Quantization + 2:4 Sparsity
 - Autoquantization
 
 torchao also supports module level configuration by specifying a dictionary from fully qualified name of module and its corresponding quantization config. This allows skip quantizing certain layers and using different quantization config for different modules.
@@ -147,6 +148,37 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 </hfoption>
 </hfoptions>
 
+</hfoption>
+<hfoption id="int4-weight-only-24sparse">
+
+```py
+import torch
+from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
+from torchao.quantization import Int4WeightOnlyConfig
+from torchao.dtypes import MarlinSparseLayout
+
+quant_config = Int4WeightOnlyConfig(layout=MarlinSparseLayout())
+quantization_config = TorchAoConfig(quant_type=quant_config)
+
+# Load and quantize the model with sparsity. A sparse checkpoint is needed to accelerate without accuraccy loss
+quantized_model = AutoModelForCausalLM.from_pretrained(
+    "RedHatAI/Sparse-Llama-3.1-8B-2of4",
+    torch_dtype=torch.float16,
+    device_map="cuda",
+    quantization_config=quantization_config
+)
+
+tokenizer = AutoTokenizer.from_pretrained("RedHatAI/Sparse-Llama-3.1-8B-2of4")
+input_text = "What are we having for dinner?"
+input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+
+# auto-compile the quantized model with `cache_implementation="static"` to get speed up
+output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+</hfoption>
+</hfoptions>
+
 ### A100 GPU
 <hfoptions id="examples-A100-GPU">
 <hfoption id="int8-dynamic-and-weight-only">
@@ -205,6 +237,37 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 )
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
+input_text = "What are we having for dinner?"
+input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+
+# auto-compile the quantized model with `cache_implementation="static"` to get speed up
+output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+</hfoption>
+</hfoptions>
+
+</hfoption>
+<hfoption id="int4-weight-only-24sparse">
+
+```py
+import torch
+from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
+from torchao.quantization import Int4WeightOnlyConfig
+from torchao.dtypes import MarlinSparseLayout
+
+quant_config = Int4WeightOnlyConfig(layout=MarlinSparseLayout())
+quantization_config = TorchAoConfig(quant_type=quant_config)
+
+# Load and quantize the model with sparsity. A sparse checkpoint is needed to accelerate without accuraccy loss
+quantized_model = AutoModelForCausalLM.from_pretrained(
+    "RedHatAI/Sparse-Llama-3.1-8B-2of4",
+    torch_dtype=torch.float16,
+    device_map="cuda",
+    quantization_config=quantization_config
+)
+
+tokenizer = AutoTokenizer.from_pretrained("RedHatAI/Sparse-Llama-3.1-8B-2of4")
 input_text = "What are we having for dinner?"
 input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
 
