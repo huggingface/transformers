@@ -667,7 +667,7 @@ class KyutaiSpeechToTextSdpaAttention(KyutaiSpeechToTextAttention):
         return attn_output, None, past_key_value
 
 
-KYUTAI_SPEECH_TO_TEXT_ATTENTION_CLASSES = {
+STT_ATTENTION_CLASSES = {
     "eager": KyutaiSpeechToTextAttention,
     "flash_attention_2": KyutaiSpeechToTextFlashAttention2,
     "sdpa": KyutaiSpeechToTextSdpaAttention,
@@ -680,7 +680,7 @@ class KyutaiSpeechToTextDecoderLayer(nn.Module):
         self.hidden_size = config.hidden_size
         self.use_flexible_linear = use_flexible_linear
 
-        self.self_attn = KYUTAI_SPEECH_TO_TEXT_ATTENTION_CLASSES[config._attn_implementation](
+        self.self_attn = STT_ATTENTION_CLASSES[config._attn_implementation](
             config=config, layer_idx=layer_idx, use_flexible_linear=use_flexible_linear, use_rope=use_rope
         )
 
