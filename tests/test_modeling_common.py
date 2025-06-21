@@ -3801,6 +3801,10 @@ class ModelTesterMixin:
                 self.skipTest(
                     "PaliGemma-like models currently (transformers==4.41.0) requires an attention_mask input"
                 )
+            if config.model_type in ["modernbert"]:
+                self.skipTest(
+                    reason="ModernBert currently (transformers==4.52.0) automatically adds an attention_mask input"
+                )
             if config.model_type in ["idefics", "idefics2", "idefics3"]:
                 self.skipTest(reason="Idefics currently (transformers==4.39.1) requires an image_attention_mask input")
             if config.model_type in ["sam"]:
