@@ -240,7 +240,10 @@ def write_model(
     model.generation_config._from_model_config = False
     model.generation_config.audio_window_size = 1
     model.generation_config.cache_implementation = "sliding_window"
-    model.generation_config.codec_cache_implementation = "sliding_window"
+
+    model.codec_model.generation_config._from_model_config = False
+    model.codec_model.generation_config.cache_implementation = "sliding_window"
+    model.codec_model.generation_config.use_cache = True
 
     print("Saving the model.")
     model.save_pretrained(output_dir, safe_serialization=safe_serialization)

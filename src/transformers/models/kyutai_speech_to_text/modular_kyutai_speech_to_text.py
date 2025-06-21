@@ -43,6 +43,148 @@ class KyutaiSpeechToTextFeatureExtractor(EncodecFeatureExtractor):
         super().__init__(**super_kwargs)
         self.audio_delay_seconds = audio_delay_seconds
         self.audio_silence_prefix_seconds = audio_silence_prefix_seconds
+    
+    def __call__(
+        self,
+        raw_audio: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
+        padding: Optional[Union[bool, str, PaddingStrategy]] = None,
+        truncation: Optional[bool] = False,
+        max_length: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        sampling_rate: Optional[int] = None,
+    ) -> BatchFeature:
+        """
+        Main method to featurize and prepare for the model one or several sequence(s).
+
+        Args:
+            raw_audio (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`):
+                The sequence or batch of sequences to be processed. Each sequence can be a numpy array, a list of float
+                values, a list of numpy arrays or a list of list of float values. The numpy array must be of shape
+                `(num_samples,)` for mono audio (`feature_size = 1`), or `(2, num_samples)` for stereo audio
+                (`feature_size = 2`).
+            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
+                Select a strategy to pad the returned sequences (according to the model's padding side and padding
+                index) among:
+
+                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+                  sequence if provided).
+                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+                  acceptable input length for the model if that argument is not provided.
+                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+                  lengths).
+            truncation (`bool`, *optional*, defaults to `False`):
+                Activates truncation to cut input sequences longer than `max_length` to `max_length`.
+            max_length (`int`, *optional*):
+                Maximum length of the returned list and optionally padding length (see above).
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors instead of list of python integers. Acceptable values are:
+
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return Numpy `np.ndarray` objects.
+            sampling_rate (`int`, *optional*):
+                The sampling rate at which the `audio` input was sampled. It is strongly recommended to pass
+                `sampling_rate` at the forward call to prevent silent errors.
+        """
+        if sampling_rate is not None:
+            if sampling_rate != self.sampling_rate:
+                raise ValueError(
+                    f"The model corresponding to this feature extractor: {self} was trained using a sampling rate of"
+                    f" {self.sampling_rate}. Please make sure that the provided audio input was sampled with"
+                    f" {self.sampling_rate} and not {sampling_rate}."
+                )
+        else:
+            logger.warning(
+                f"It is strongly recommended to pass the `sampling_rate` argument to `{self.__class__.__name__}()`. "
+                "Failing to do so can result in silent errors that might be hard to debug."
+            )
+
+        if padding and truncation:
+            raise ValueError("Both padding and truncation were set. Make sure you only set one.")
+        elif padding is None:
+            # by default let's pad the inputs
+            padding = True
+
+        is_batched = bool(
+            isinstance(raw_audio, (list, tuple)) and (isinstance(raw_audio[0], (np.ndarray, tuple, list)))
+        )
+
+        if is_batched:
+            raw_audio = [np.asarray(audio, dtype=np.float32).T for audio in raw_audio]
+        elif not is_batched and not isinstance(raw_audio, np.ndarray):
+            raw_audio = np.asarray(raw_audio, dtype=np.float32)
+        elif isinstance(raw_audio, np.ndarray) and raw_audio.dtype is np.dtype(np.float64):
+            raw_audio = raw_audio.astype(np.float32)
+
+        # always return batch
+        if not is_batched:
+            raw_audio = [np.asarray(raw_audio).T]
+
+        # verify inputs are valid
+        for idx, example in enumerate(raw_audio):
+            if example.ndim > 2:
+                raise ValueError(f"Expected input shape (channels, length) but got shape {example.shape}")
+            if self.feature_size == 1 and example.ndim != 1:
+                raise ValueError(f"Expected mono audio but example has {example.shape[-1]} channels")
+            if self.feature_size == 2 and example.shape[-1] != 2:
+                raise ValueError(f"Expected stereo audio but example has {example.shape[-1]} channels")
+
+        padded_inputs = None
+        input_values = BatchFeature({"input_values": raw_audio})
+        if self.chunk_stride is not None and self.chunk_length is not None and max_length is None:
+            if truncation:
+                max_length = min(array.shape[0] for array in raw_audio)
+                nb_step = int(np.floor(max_length / self.chunk_stride))
+                max_length = (nb_step - 1) * self.chunk_stride + self.chunk_length
+            elif padding:
+                max_length = max(array.shape[0] for array in raw_audio)
+                nb_step = int(np.ceil(max_length / self.chunk_stride))
+                max_length = (nb_step - 1) * self.chunk_stride + self.chunk_length
+                padding = "max_length"
+            else:
+                padded_inputs = input_values
+
+        # normal padding on batch
+        if padded_inputs is None:
+            padded_inputs = self.pad(
+                input_values,
+                max_length=max_length,
+                truncation=truncation,
+                padding=padding,
+                return_attention_mask=padding,
+            )
+
+            if padding:
+                padded_inputs["padding_mask"] = padded_inputs.pop("attention_mask")
+
+        # now let's padd left and right
+        pad_left = int(self.audio_silence_prefix_seconds * self.sampling_rate)
+        pad_right = int((self.audio_delay_seconds + 1.0) * self.sampling_rate)
+        padded_inputs["input_values"] = np.pad(
+            padded_inputs["input_values"],
+            ((0, 0), (pad_left, pad_right)),
+            mode="constant",
+            constant_values=0.0,
+        )
+        if padding:
+            padded_inputs["padding_mask"] = np.pad(
+                padded_inputs["padding_mask"],
+                ((0, 0), (pad_left, pad_right)),
+                mode="constant",
+                constant_values=0,
+            )
+
+        input_values = []
+        for example in padded_inputs.pop("input_values"):
+            if self.feature_size == 1:
+                example = example[..., None]
+            input_values.append(example.T)
+
+        padded_inputs["input_values"] = input_values
+        if return_tensors is not None:
+            padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
+
+        return padded_inputs
 
 
 class KyutaiSpeechToTextConv1dPaddingCache(MimiConv1dPaddingCache):
@@ -254,21 +396,19 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
         PreTrainedModel.save_pretrained(self, *args, **kwargs)
 
     def generate(self, *args, **kwargs):
-        padding_mask = kwargs.get("padding_mask")
         max_new_tokens = kwargs.pop("max_new_tokens", None)
+        input_values = kwargs.get("input_values")
 
-        if padding_mask is not None:
-            audio_tokens_mask = self.codec_model.get_audio_codes_mask(padding_mask)
+        # TODO: @eustlb, we should have per-batch-idx values
+        # here we do not use padding_mask to be aligned to what's done in the original codebase
+        max_audio_frames = int(input_values.shape[-1] / self.codec_model.config.frame_size)
 
-            # TODO: @eustlb, we should have per-batch-idx values
-            max_audio_frames = audio_tokens_mask.sum(dim=-1).max()
-
-            if max_new_tokens is not None and max_new_tokens > max_audio_frames:
+        if max_new_tokens is None or max_new_tokens > max_audio_frames:
+            if max_new_tokens is not None:
                 logger.warning(
                     f"`max_new_tokens` ({max_new_tokens}) is greater than the maximum number of audio frames ({max_audio_frames})."
                     f"Setting `max_new_tokens` to {max_audio_frames}."
                 )
-            
             max_new_tokens = max_audio_frames
 
         return GenerationMixin.generate(
