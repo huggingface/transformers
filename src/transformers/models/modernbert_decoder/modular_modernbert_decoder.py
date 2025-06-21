@@ -17,13 +17,13 @@ from typing import Callable, Optional, Union
 
 import torch
 from torch import nn
-from torch.nn import CrossEntropyLoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...cache_utils import HybridCache
 from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...models.modernbert.modeling_modernbert import (
     ModernBertEmbeddings,
@@ -109,6 +109,8 @@ class ModernBertDecoderConfig(PretrainedConfig):
             Every `global_attn_every_n_layers` layers will use global attention instead of local attention.
         local_rope_theta (`float`, *optional*):
             The base period of the local RoPE embeddings. If not specified, uses the same value as `global_rope_theta`.
+        num_labels (`int`, *optional*, defaults to 2):
+            Number of labels for sequence classification.
 
     Examples:
 
@@ -157,6 +159,7 @@ class ModernBertDecoderConfig(PretrainedConfig):
         local_attention=128,
         global_attn_every_n_layers=3,
         local_rope_theta=None,
+        num_labels=2,
         **kwargs,
     ):
         # Set default attention implementation
@@ -193,6 +196,7 @@ class ModernBertDecoderConfig(PretrainedConfig):
         self.local_attention = local_attention
         self.global_attn_every_n_layers = global_attn_every_n_layers
         self.local_rope_theta = local_rope_theta
+        self.num_labels = num_labels
 
     def to_dict(self):
         output = super().to_dict()
@@ -884,9 +888,148 @@ class ModernBertDecoderForCausalLM(ModernBertDecoderPreTrainedModel, GenerationM
         return reordered_past
 
 
+@auto_docstring(
+    custom_intro="""
+    The ModernBert Decoder Model with a sequence classification head on top (linear layer).
+
+    [`ModernBertDecoderForSequenceClassification`] uses the last token in order to do the classification, as other causal models
+    (e.g. GPT-1, GPT-2) do.
+
+    Since it does classification on the last token, it requires to know the position of the last token. If a
+    `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
+    no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
+    padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
+    each row of the batch).
+    """
+)
+class ModernBertDecoderForSequenceClassification(ModernBertDecoderPreTrainedModel):
+    def __init__(self, config: ModernBertDecoderConfig):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+        self.model = ModernBertDecoderModel(config)
+        self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.model.embeddings.tok_embeddings
+
+    def set_input_embeddings(self, value):
+        self.model.embeddings.tok_embeddings = value
+
+    def get_output_embeddings(self):
+        return None
+
+    def set_output_embeddings(self, new_embeddings):
+        pass
+
+    def set_decoder(self, decoder):
+        self.model = decoder
+
+    def get_decoder(self):
+        return self.model
+
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        **kwargs,
+    ) -> Union[tuple, SequenceClassifierOutputWithPast]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        transformer_outputs = self.model(
+            input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        hidden_states = transformer_outputs[0]
+        logits = self.score(hidden_states)
+
+        if input_ids is not None:
+            batch_size, sequence_length = input_ids.shape[:2]
+        else:
+            batch_size, sequence_length = inputs_embeds.shape[:2]
+
+        if self.config.pad_token_id is None and batch_size != 1:
+            raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
+        if self.config.pad_token_id is None:
+            last_non_pad_token = -1
+        elif input_ids is not None:
+            # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
+            non_pad_mask = (input_ids != self.config.pad_token_id).to(logits.device, torch.int32)
+            token_indices = torch.arange(input_ids.shape[-1], device=logits.device, dtype=torch.int32)
+            last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
+        else:
+            last_non_pad_token = -1
+            logger.warning_once(
+                f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
+                "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
+            )
+
+        pooled_logits = logits[torch.arange(batch_size, device=logits.device), last_non_pad_token]
+
+        loss = None
+        if labels is not None:
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
+                loss_fct = MSELoss()
+                if self.num_labels == 1:
+                    loss = loss_fct(pooled_logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(pooled_logits, labels)
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(pooled_logits, labels)
+
+        if not return_dict:
+            output = (pooled_logits,) + transformer_outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return SequenceClassifierOutputWithPast(
+            loss=loss,
+            logits=pooled_logits,
+            past_key_values=transformer_outputs.past_key_values,
+            hidden_states=transformer_outputs.hidden_states,
+            attentions=transformer_outputs.attentions,
+        )
+
+
 __all__ = [
     "ModernBertDecoderConfig",
     "ModernBertDecoderModel",
     "ModernBertDecoderPreTrainedModel",
     "ModernBertDecoderForCausalLM",
+    "ModernBertDecoderForSequenceClassification",
 ]
