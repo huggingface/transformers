@@ -573,21 +573,52 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
             past_seen_tokens = 0
         else:
             past_seen_tokens = past_key_values[0][0].shape[-2] if past_key_values[0] is not None else 0
-        cache_position = torch.arange(
-            past_seen_tokens,
-            past_seen_tokens + seq_length,
-            device=input_ids.device if input_ids is not None else inputs_embeds.device,
-        )
 
-        if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
-
-        # Handle attention mask for cached scenarios
-        if attention_mask is None:
-            # Create a mask that only covers the current input tokens
-            attention_mask = torch.ones(
-                batch_size, seq_length, device=input_ids.device if input_ids is not None else inputs_embeds.device
+        # Create cache_position using position_ids if available (to respect padding)
+        if position_ids is not None:
+            # Use the actual positions from position_ids for cache_position
+            cache_position = (
+                position_ids[0] if position_ids.shape[0] > 0 else torch.arange(seq_length, device=position_ids.device)
             )
+        else:
+            cache_position = torch.arange(
+                past_seen_tokens,
+                past_seen_tokens + seq_length,
+                device=input_ids.device if input_ids is not None else inputs_embeds.device,
+            )
+
+        # Create position_ids that respect padding tokens if not provided
+        if position_ids is None:
+            device = input_ids.device if input_ids is not None else inputs_embeds.device
+            if past_key_values is None:
+                # For initial forward pass, create position_ids that respect padding
+                if attention_mask is not None:
+                    # Create cumulative sum of attention_mask to get proper positions
+                    # This ensures padding tokens don't increment position
+                    position_ids = attention_mask.long().cumsum(-1) - 1
+                    position_ids.masked_fill_(attention_mask == 0, 0)
+                else:
+                    # Fallback: sequential positions
+                    position_ids = torch.arange(seq_length, dtype=torch.long, device=device)
+                    position_ids = position_ids.unsqueeze(0).expand(batch_size, -1)
+            else:
+                # For cached generation, continue from where we left off
+                past_seen_tokens = past_key_values[0][0].shape[-2] if past_key_values[0] is not None else 0
+
+                if attention_mask is not None and attention_mask.shape[-1] > seq_length:
+                    # Full attention mask provided - use it to calculate proper positions
+                    # Count real tokens in the past to get proper starting position
+                    past_attention = attention_mask[..., :-seq_length]
+                    past_real_tokens = past_attention.sum(dim=-1, keepdim=True)
+                    current_positions = past_real_tokens + torch.arange(seq_length, device=device)
+                    # Only increment for non-padding tokens in current sequence
+                    current_mask = attention_mask[..., -seq_length:]
+                    position_ids = current_positions.masked_fill(current_mask == 0, 0)
+                else:
+                    # Fallback: continue sequentially
+                    position_ids = torch.arange(
+                        past_seen_tokens, past_seen_tokens + seq_length, dtype=torch.long, device=device
+                    ).unsqueeze(0)
 
         # Calculate embeddings first, as we need them for mask creation
         hidden_states = self.embeddings(input_ids=input_ids, inputs_embeds=inputs_embeds)
