@@ -15,7 +15,6 @@
 
 from typing import Optional
 
-from ...utils import is_soundfile_available, is_torch_available
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 
@@ -65,7 +64,7 @@ class KyutaiSpeechToTextProcessor(ProcessorMixin):
 
             - **input_values** -- List of audio values to be fed to a model. Returned when `audio` is not `None`.
             - **padding_mask** -- List of indices specifying which input values should be ignored by the model.
-        """ 
+        """
 
         if audio is None:
             raise ValueError("`audio` is required.")
@@ -75,9 +74,7 @@ class KyutaiSpeechToTextProcessor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-
         audio_kwargs = output_kwargs["audio_kwargs"]
-        common_kwargs = output_kwargs["common_kwargs"]
 
         # ensure audio in correct format
         audio = make_list_of_audio(audio)

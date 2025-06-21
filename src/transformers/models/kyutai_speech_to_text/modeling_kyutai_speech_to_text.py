@@ -99,7 +99,6 @@ class KyutaiSpeechToTextConv1dPaddingCache:
 class KyutaiSpeechToTextEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
-        # TODO: should it be splitted to audio and text embeddings?
         self.embed_tokens = nn.Embedding(
             config.vocab_size + (config.num_codebooks * config.codebook_vocab_size) + 1,
             config.hidden_size,
@@ -1130,18 +1129,28 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, KyutaiSpeechToTextForConditionalGeneration
+        >>> import torch
+        >>> from datasets import load_dataset, Audio
+        >>> from transformers import KyutaiSpeechToTextProcessor, KyutaiSpeechToTextForConditionalGeneration
 
-        >>> model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained("meta-kyutai_speech_to_text/KyutaiSpeechToText-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-kyutai_speech_to_text/KyutaiSpeechToText-2-7b-hf")
+        >>> torch_device = "cuda" if torch.cuda.is_available() else "cpu"
+        >>> model_id = "/home/eustache_lebihan/add-moshi-asr/stt-2.6b-en"
 
-        >>> prompt = "Hey, are you conscious? Can you talk to me?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
+        >>> processor = KyutaiSpeechToTextProcessor.from_pretrained(model_id)
+        >>> model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
 
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+        >>> ds = load_dataset(
+        ...     "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+        ... )
+
+        >>> ds = ds.cast_column("audio", Audio(sampling_rate=24000))
+        >>> inputs = processor(
+        ...     ds[0]["audio"]["array"],
+        ... )
+        >>> inputs.to(torch_device)
+
+        >>> output_tokens = model.generate(**inputs)
+        >>> print(processor.batch_decode(output_tokens, skip_special_tokens=True))
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1199,53 +1208,52 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
             model_kwargs=model_kwargs,
         )
 
-        if "input_values" in model_kwargs:  # TODO: @eustlb, better handling of edge case here
-            audio_window_size = model_kwargs.get("audio_window_size", None)
-            if audio_window_size is None:
-                audio_window_size = int(model_kwargs["input_values"].shape[-1] / self.config.frame_size)
-                model_kwargs["audio_window_size"] = audio_window_size
+        audio_window_size = model_kwargs.get("audio_window_size", None)
+        if audio_window_size is None:
+            audio_window_size = int(model_kwargs["input_values"].shape[-1] / self.config.frame_size)
+            model_kwargs["audio_window_size"] = audio_window_size
 
-            batch_size = inputs.shape[0]
-            device = inputs.device
+        batch_size = inputs.shape[0]
+        device = inputs.device
 
-            # initialize audio tokens
-            model_kwargs["audio_tokens"] = torch.zeros(
-                (batch_size, audio_window_size, self.config.num_codebooks),
-                device=device,
-                dtype=torch.long,
-            )
-            model_kwargs["current_window"] = (
-                torch.tensor([0, 0], device=device, dtype=torch.long).expand(batch_size, -1).contiguous()
-            )
+        # initialize audio tokens
+        model_kwargs["audio_tokens"] = torch.zeros(
+            (batch_size, audio_window_size, self.config.num_codebooks),
+            device=device,
+            dtype=torch.long,
+        )
+        model_kwargs["current_window"] = (
+            torch.tensor([0, 0], device=device, dtype=torch.long).expand(batch_size, -1).contiguous()
+        )
 
-            # let's use generate's cache preparation to prepare the cache for the codec model
-            temporary_model_kwargs = {}
+        # let's use generate's cache preparation to prepare the cache for the codec model
+        temporary_model_kwargs = {}
 
-            # monkey patching the codec model with cache preparation methods since we don't want it to inherit fully from GenerationMixin
-            # Add cache-related methods from GenerationMixin to codec model
-            cache_methods = [
-                "_prepare_cache_for_generation",
-                "_get_cache",
-                "_supports_default_dynamic_cache",
-                "_get_layer_device_map_for_cache_init",
-            ]
-            for method in cache_methods:
-                setattr(self.codec_model, method, types.MethodType(getattr(self, method).__func__, self.codec_model))
+        # monkey patching the codec model with cache preparation methods since we don't want it to inherit fully from GenerationMixin
+        # Add cache-related methods from GenerationMixin to codec model
+        cache_methods = [
+            "_prepare_cache_for_generation",
+            "_get_cache",
+            "_supports_default_dynamic_cache",
+            "_get_layer_device_map_for_cache_init",
+        ]
+        for method in cache_methods:
+            setattr(self.codec_model, method, types.MethodType(getattr(self, method).__func__, self.codec_model))
 
-            self.codec_model._prepare_cache_for_generation(
-                generation_config=self.codec_model.generation_config,
-                model_kwargs=temporary_model_kwargs,
-                assistant_model=None,
-                batch_size=batch_size,
-                max_cache_length=self.config.codec_config.sliding_window,
-                device=device,
-            )
+        self.codec_model._prepare_cache_for_generation(
+            generation_config=self.codec_model.generation_config,
+            model_kwargs=temporary_model_kwargs,
+            assistant_model=None,
+            batch_size=batch_size,
+            max_cache_length=self.config.codec_config.sliding_window,
+            device=device,
+        )
 
-            if "past_key_values" in temporary_model_kwargs:
-                model_kwargs["encoder_past_key_values"] = temporary_model_kwargs["past_key_values"]
+        if "past_key_values" in temporary_model_kwargs:
+            model_kwargs["encoder_past_key_values"] = temporary_model_kwargs["past_key_values"]
 
-            # initialize the padding cache for the codec model
-            model_kwargs["padding_cache"] = KyutaiSpeechToTextConv1dPaddingCache()
+        # initialize the padding cache for the codec model
+        model_kwargs["padding_cache"] = KyutaiSpeechToTextConv1dPaddingCache()
 
         return inputs, input_name, model_kwargs
 

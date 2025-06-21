@@ -14,26 +14,55 @@
 # limitations under the License.
 
 import types
-from typing import Optional
+from typing import Optional, Union
 
+import numpy as np
 import torch
 import torch.nn as nn
 
 from ...cache_utils import Cache
+from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationConfig, GenerationMixin
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
+from ...utils import PaddingStrategy, TensorType, logging
 from ..auto import AutoModel
+from ..encodec.feature_extraction_encodec import EncodecFeatureExtractor
 from ..llama.modeling_llama import LlamaForCausalLM
 from ..mimi.modeling_mimi import MimiConv1dPaddingCache
 from ..moshi.modeling_moshi import MoshiModel
-from ..encodec.feature_extraction_encodec import EncodecFeatureExtractor
 
 
 logger = logging.get_logger(__name__)
 
 
 class KyutaiSpeechToTextFeatureExtractor(EncodecFeatureExtractor):
+    r"""
+    Constructs an KyutaiSpeechToText feature extractor.
+
+    This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
+    most of the main methods. Users should refer to this superclass for more information regarding those methods.
+
+    Instantiating a feature extractor with the defaults will yield a similar configuration to that of the
+    [facebook/kyutai_speech_to_text_24khz](https://huggingface.co/facebook/kyutai_speech_to_text_24khz) architecture.
+
+    Args:
+        feature_size (`int`, *optional*, defaults to 1):
+            The feature dimension of the extracted features. Use 1 for mono, 2 for stereo.
+        sampling_rate (`int`, *optional*, defaults to 24000):
+            The sampling rate at which the audio waveform should be digitalized expressed in hertz (Hz).
+        padding_value (`float`, *optional*, defaults to 0.0):
+            The value that is used to fill the padding values.
+        chunk_length_s (`float`, *optional*):
+            If defined the audio is pre-processed into chunks of lengths `chunk_length_s` and then encoded.
+        overlap (`float`, *optional*):
+            Defines the overlap between each chunk. It is used to compute the `chunk_stride` using the following
+            formulae : `int((1.0 - self.overlap) * self.chunk_length)`.
+        audio_delay_seconds (`float`, *optional*, defaults to 0.0):
+            The delay in seconds to add after the audio (right padding).
+        audio_silence_prefix_seconds (`float`, *optional*, defaults to 0.0):
+            The silence prefix in seconds to add before the audio (left padding).
+    """
+
     def __init__(
         self,
         audio_delay_seconds: Optional[float] = 0.0,
@@ -43,7 +72,7 @@ class KyutaiSpeechToTextFeatureExtractor(EncodecFeatureExtractor):
         super().__init__(**super_kwargs)
         self.audio_delay_seconds = audio_delay_seconds
         self.audio_silence_prefix_seconds = audio_silence_prefix_seconds
-    
+
     def __call__(
         self,
         raw_audio: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
@@ -194,7 +223,6 @@ class KyutaiSpeechToTextConv1dPaddingCache(MimiConv1dPaddingCache):
 class KyutaiSpeechToTextEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
-        # TODO: should it be splitted to audio and text embeddings?
         self.embed_tokens = nn.Embedding(
             config.vocab_size + (config.num_codebooks * config.codebook_vocab_size) + 1,
             config.hidden_size,
@@ -232,6 +260,41 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
         # we therefore initialize a generation config for the codec model
         self.codec_model.generation_config = GenerationConfig.from_model_config(config.codec_config)
 
+    def forward(self, **super_kwargs):
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from datasets import load_dataset, Audio
+        >>> from transformers import KyutaiSpeechToTextProcessor, KyutaiSpeechToTextForConditionalGeneration
+
+        >>> torch_device = "cuda" if torch.cuda.is_available() else "cpu"
+        >>> model_id = "/home/eustache_lebihan/add-moshi-asr/stt-2.6b-en"
+
+        >>> processor = KyutaiSpeechToTextProcessor.from_pretrained(model_id)
+        >>> model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
+
+        >>> ds = load_dataset(
+        ...     "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+        ... )
+
+        >>> ds = ds.cast_column("audio", Audio(sampling_rate=24000))
+        >>> inputs = processor(
+        ...     ds[0]["audio"]["array"],
+        ... )
+        >>> inputs.to(torch_device)
+
+        >>> output_tokens = model.generate(**inputs)
+        >>> print(processor.batch_decode(output_tokens, skip_special_tokens=True))
+        ```"""
+        super().forward(**super_kwargs)
+
     def _prepare_generation_config(self, *args, **kwargs):
         generation_config, model_kwargs = GenerationMixin._prepare_generation_config(*args, **kwargs)
         # this should be passed to the model kwargs for the input preparation
@@ -252,53 +315,52 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
             model_kwargs=model_kwargs,
         )
 
-        if "input_values" in model_kwargs:  # TODO: @eustlb, better handling of edge case here
-            audio_window_size = model_kwargs.get("audio_window_size", None)
-            if audio_window_size is None:
-                audio_window_size = int(model_kwargs["input_values"].shape[-1] / self.config.frame_size)
-                model_kwargs["audio_window_size"] = audio_window_size
+        audio_window_size = model_kwargs.get("audio_window_size", None)
+        if audio_window_size is None:
+            audio_window_size = int(model_kwargs["input_values"].shape[-1] / self.config.frame_size)
+            model_kwargs["audio_window_size"] = audio_window_size
 
-            batch_size = inputs.shape[0]
-            device = inputs.device
+        batch_size = inputs.shape[0]
+        device = inputs.device
 
-            # initialize audio tokens
-            model_kwargs["audio_tokens"] = torch.zeros(
-                (batch_size, audio_window_size, self.config.num_codebooks),
-                device=device,
-                dtype=torch.long,
-            )
-            model_kwargs["current_window"] = (
-                torch.tensor([0, 0], device=device, dtype=torch.long).expand(batch_size, -1).contiguous()
-            )
+        # initialize audio tokens
+        model_kwargs["audio_tokens"] = torch.zeros(
+            (batch_size, audio_window_size, self.config.num_codebooks),
+            device=device,
+            dtype=torch.long,
+        )
+        model_kwargs["current_window"] = (
+            torch.tensor([0, 0], device=device, dtype=torch.long).expand(batch_size, -1).contiguous()
+        )
 
-            # let's use generate's cache preparation to prepare the cache for the codec model
-            temporary_model_kwargs = {}
+        # let's use generate's cache preparation to prepare the cache for the codec model
+        temporary_model_kwargs = {}
 
-            # monkey patching the codec model with cache preparation methods since we don't want it to inherit fully from GenerationMixin
-            # Add cache-related methods from GenerationMixin to codec model
-            cache_methods = [
-                "_prepare_cache_for_generation",
-                "_get_cache",
-                "_supports_default_dynamic_cache",
-                "_get_layer_device_map_for_cache_init",
-            ]
-            for method in cache_methods:
-                setattr(self.codec_model, method, types.MethodType(getattr(self, method).__func__, self.codec_model))
+        # monkey patching the codec model with cache preparation methods since we don't want it to inherit fully from GenerationMixin
+        # Add cache-related methods from GenerationMixin to codec model
+        cache_methods = [
+            "_prepare_cache_for_generation",
+            "_get_cache",
+            "_supports_default_dynamic_cache",
+            "_get_layer_device_map_for_cache_init",
+        ]
+        for method in cache_methods:
+            setattr(self.codec_model, method, types.MethodType(getattr(self, method).__func__, self.codec_model))
 
-            self.codec_model._prepare_cache_for_generation(
-                generation_config=self.codec_model.generation_config,
-                model_kwargs=temporary_model_kwargs,
-                assistant_model=None,
-                batch_size=batch_size,
-                max_cache_length=self.config.codec_config.sliding_window,
-                device=device,
-            )
+        self.codec_model._prepare_cache_for_generation(
+            generation_config=self.codec_model.generation_config,
+            model_kwargs=temporary_model_kwargs,
+            assistant_model=None,
+            batch_size=batch_size,
+            max_cache_length=self.config.codec_config.sliding_window,
+            device=device,
+        )
 
-            if "past_key_values" in temporary_model_kwargs:
-                model_kwargs["encoder_past_key_values"] = temporary_model_kwargs["past_key_values"]
+        if "past_key_values" in temporary_model_kwargs:
+            model_kwargs["encoder_past_key_values"] = temporary_model_kwargs["past_key_values"]
 
-            # initialize the padding cache for the codec model
-            model_kwargs["padding_cache"] = KyutaiSpeechToTextConv1dPaddingCache()
+        # initialize the padding cache for the codec model
+        model_kwargs["padding_cache"] = KyutaiSpeechToTextConv1dPaddingCache()
 
         return inputs, input_name, model_kwargs
 
@@ -418,4 +480,8 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
         )
 
 
-__all__ = ["KyutaiSpeechToTextModel", "KyutaiSpeechToTextForConditionalGeneration", "KyutaiSpeechToTextFeatureExtractor"]
+__all__ = [
+    "KyutaiSpeechToTextModel",
+    "KyutaiSpeechToTextForConditionalGeneration",
+    "KyutaiSpeechToTextFeatureExtractor",
+]

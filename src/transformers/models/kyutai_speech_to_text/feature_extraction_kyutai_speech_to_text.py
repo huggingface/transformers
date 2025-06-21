@@ -53,6 +53,10 @@ class KyutaiSpeechToTextFeatureExtractor(SequenceFeatureExtractor):
         overlap (`float`, *optional*):
             Defines the overlap between each chunk. It is used to compute the `chunk_stride` using the following
             formulae : `int((1.0 - self.overlap) * self.chunk_length)`.
+        audio_delay_seconds (`float`, *optional*, defaults to 0.0):
+            The delay in seconds to add after the audio (right padding).
+        audio_silence_prefix_seconds (`float`, *optional*, defaults to 0.0):
+            The silence prefix in seconds to add before the audio (left padding).
     """
 
     model_input_names = ["input_values", "padding_mask"]

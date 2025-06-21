@@ -23,8 +23,8 @@ import sentencepiece
 import torch
 
 from transformers import (
-    KyutaiSpeechToTextFeatureExtractor,
     KyutaiSpeechToTextConfig,
+    KyutaiSpeechToTextFeatureExtractor,
     KyutaiSpeechToTextForConditionalGeneration,
     KyutaiSpeechToTextProcessor,
     PreTrainedTokenizerFast,
@@ -347,7 +347,7 @@ def main():
         help="Audio delay in seconds to add to the right of the input",
     )
     parser.add_argument(
-        "--audio_silence_prefix_seconds", 
+        "--audio_silence_prefix_seconds",
         type=float,
         required=True,
         help="Audio silence prefix in seconds to add to the left of the input",
