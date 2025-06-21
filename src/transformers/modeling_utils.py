@@ -790,7 +790,10 @@ def _load_state_dict_into_meta_model(
             hf_quantizer,
         )
 
-        if device_mesh is not None:  # In this case, the param is already on the correct device!
+        if (
+            device_mesh is not None and device_map == "auto"
+        ):  # In this case, the param is already on the correct device!
+            # TODO: Fix this properly
             shard_and_distribute_module(
                 model,
                 param,
@@ -4317,8 +4320,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             if device_mesh is None and tp_plan is not None:
                 tp_plan, device_map, device_mesh = initialize_tensor_parallelism(tp_plan, tp_size=None)
             else:
+                assert device_mesh is not None and "tp" in device_mesh.mesh_dim_names, (
+                    "device_mesh must contain a 'tp' dimension"
+                )
                 device_mesh = device_mesh["tp"]
                 device_map = torch.device(device_mesh.device_type, int(os.environ["LOCAL_RANK"]))
+                tp_size = device_mesh["tp"].size()
 
         if use_auth_token is not None:
             warnings.warn(
