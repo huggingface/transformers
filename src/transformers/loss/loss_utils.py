@@ -23,6 +23,7 @@ from .loss_deformable_detr import DeformableDetrForObjectDetectionLoss, Deformab
 from .loss_for_object_detection import ForObjectDetectionLoss, ForSegmentationLoss
 from .loss_grounding_dino import GroundingDinoForObjectDetectionLoss
 from .loss_rt_detr import RTDetrForObjectDetectionLoss
+from .number_token_loss import ForCausalLMWithNTLWAS, ForCausalLMWithNTLMSE
 
 
 def fixed_cross_entropy(
@@ -146,6 +147,8 @@ def ForTokenClassification(logits: torch.Tensor, labels, config, **kwargs):
 
 LOSS_MAPPING = {
     "ForCausalLM": ForCausalLMLoss,
+    "ForCausalLMWithNTLWAS": ForCausalLMWithNTLWAS,
+    "ForCausalLMWithNTLMSE": ForCausalLMWithNTLMSE,
     "ForMaskedLM": ForMaskedLMLoss,
     "ForQuestionAnswering": ForQuestionAnsweringLoss,
     "ForSequenceClassification": ForSequenceClassificationLoss,
