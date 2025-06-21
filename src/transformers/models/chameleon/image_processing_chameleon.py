@@ -19,11 +19,7 @@ from typing import Optional, Union
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import (
-    get_resize_output_image_size,
-    resize,
-    to_channel_dimension_format,
-)
+from ...image_transforms import get_resize_output_image_size, resize, to_channel_dimension_format
 from ...image_utils import (
     ChannelDimension,
     ImageInput,

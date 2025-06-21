@@ -770,6 +770,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
                     split_image_array, rows, cols = self.split_image(
                         image,
                         max_image_size=max_image_size,
+                        resample=resample,
                         input_data_format=input_data_format,
                     )
                     split_image_arrays.extend(split_image_array)

@@ -139,6 +139,7 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
         do_convert_rgb: bool,
         input_data_format: Optional[Union[str, ChannelDimension]],
         device: Optional[Union[str, torch.device]],
+        disable_grouping: Optional[bool],
     ):
         """
         Preprocess an image or batch of images. Copy of the `preprocess` method from `CLIPImageProcessor`.
@@ -191,7 +192,7 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
         resized_height, resized_width = height, width
 
         # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
@@ -210,7 +211,7 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
 
         # Group images by size for further processing
         # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             # Fused rescale and normalize
@@ -270,6 +271,7 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         device: Optional["torch.device"] = None,
+        disable_grouping: Optional[bool] = False,
         **kwargs,
     ):
         r"""
@@ -360,6 +362,7 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
                     do_convert_rgb=do_convert_rgb,
                     input_data_format=input_data_format,
                     device=device,
+                    disable_grouping=disable_grouping,
                 )
                 pixel_values.extend(patches)
                 vision_grid_thws.append(image_grid_thw)
@@ -393,6 +396,7 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
                     do_convert_rgb=do_convert_rgb,
                     input_data_format=input_data_format,
                     device=device,
+                    disable_grouping=disable_grouping,
                 )
                 pixel_values_videos.extend(patches)
                 vision_grid_thws_videos.append(video_grid_thw)
