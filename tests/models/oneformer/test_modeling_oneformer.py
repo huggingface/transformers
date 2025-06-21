@@ -375,6 +375,7 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.is_training = True
         config.contrastive_temperature = 1
         config.backbone_config.initializer_range = 0
 
@@ -387,6 +388,10 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
                         "self_attn.sampling_offsets.bias" in name
                         or "self_attn.value_proj.weight" in name
                         or "self_attn.output_proj.weight" in name
+                        or "self_attn.in_proj_weight" in name
+                        or "self_attn.out_proj.weight" in name
+                        or "mlp.fc1.weight" in name
+                        or "mlp.fc2.weight" in name
                     ):
                         continue
                     self.assertIn(

@@ -2756,13 +2756,7 @@ class OneFormerPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module: nn.Module):
         xavier_std = self.config.init_xavier_std
         std = self.config.init_std
-        if isinstance(module, OneFormerTransformerModule):
-            if module.input_projections is not None:
-                for input_projection in module.input_projections:
-                    if not isinstance(input_projection, nn.Sequential):
-                        nn.init.xavier_uniform_(input_projection.weight, gain=xavier_std)
-                        nn.init.constant_(input_projection.bias, 0)
-        elif isinstance(module, OneFormerTransformerDecoder):
+        if isinstance(module, OneFormerTransformerDecoder):
             nn.init.xavier_uniform_(module.query_input_projection.weight, gain=xavier_std)
             nn.init.constant_(module.query_input_projection.bias, 0)
             module.query_input_projection._is_hf_initialized = True
@@ -2791,24 +2785,10 @@ class OneFormerPreTrainedModel(PreTrainedModel):
             for p in module.parameters():
                 if p.dim() > 1:
                     nn.init.xavier_uniform_(p, gain=xavier_std)
-        elif isinstance(module, OneFormerTransformerDecoderCrossAttentionLayer):
+        elif isinstance(module, OneFormerTransformerDecoderLayer):
             for p in module.parameters():
                 if p.dim() > 1:
                     nn.init.xavier_uniform_(p, gain=xavier_std)
-        elif isinstance(module, OneFormerTransformerDecoderFFNLayer):
-            for p in module.parameters():
-                if p.dim() > 1:
-                    nn.init.xavier_uniform_(p, gain=xavier_std)
-        elif isinstance(module, OneFormerTransformerDecoderQueryTransformer):
-            for p in module.parameters():
-                if p.dim() > 1:
-                    nn.init.xavier_uniform_(p, gain=xavier_std)
-        elif isinstance(module, OneFormerTextContextDecoder):
-            for submodule in module.modules():
-                if isinstance(submodule, nn.Linear):
-                    nn.init.trunc_normal_(submodule.weight, std=0.02)
-                    if isinstance(submodule, nn.Linear) and submodule.bias is not None:
-                        nn.init.constant_(submodule.bias, 0)
         elif isinstance(module, OneFormerTextTransformer):
             proj_std = (module.width**-0.5) * ((2 * module.num_layers) ** -0.5)
             attn_std = module.width**-0.5
@@ -2819,8 +2799,8 @@ class OneFormerPreTrainedModel(PreTrainedModel):
                 nn.init.normal_(layer.mlp.fc1.weight, std=fc_std)
                 nn.init.normal_(layer.mlp.fc2.weight, std=proj_std)
         elif isinstance(module, OneFormerTextEncoder):
-            nn.init.normal_(module.token_embedding.weight, std=0.02)
-            nn.init.normal_(module.positional_embedding, std=0.01)
+            nn.init.normal_(module.token_embedding.weight, std=std)
+            nn.init.normal_(module.positional_embedding, std=std)
         if hasattr(module, "reference_points"):
             nn.init.xavier_uniform_(module.reference_points.weight.data, gain=1.0)
             nn.init.constant_(module.reference_points.bias.data, 0.0)
