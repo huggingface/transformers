@@ -40,7 +40,7 @@ from transformers import pipeline
 
 pipe = pipeline(
     task="text-generation",
-    model="HuggingFaceTB/SmolLM3-11T-32k-v1-transformers",
+    model="HuggingFaceTB/SmolLM3-3B",
     torch_dtype=torch.bfloat16,
     device_map=0
 )
@@ -61,12 +61,12 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 model = AutoModelForCausalLM.from_pretrained(
-    "HuggingFaceTB/SmolLM3-11T-32k-v1-transformers",
+    "HuggingFaceTB/SmolLM3-3B",
     torch_dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
-tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM3-11T-32k-v1-transformers")
+tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM3-3B")
 
 prompt = "Give me a short introduction to large language models."
 messages = [
@@ -102,7 +102,7 @@ print(response)
 
 ```bash
 # pip install -U flash-attn --no-build-isolation
-transformers chat HuggingFaceTB/SmolLM3-11T-32k-v1-transformers --torch_dtype auto --attn_implementation flash_attention_2 --device 0
+transformers chat HuggingFaceTB/SmolLM3-3B --torch_dtype auto --attn_implementation flash_attention_2 --device 0
 ```
 
 </hfoption>
@@ -124,9 +124,9 @@ quantization_config = BitsAndBytesConfig(
     bnb_4bit_use_double_quant=True,
 )
 
-tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM3-11T-32k-v1-transformers")
+tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM3-3B")
 model = AutoModelForCausalLM.from_pretrained(
-    "HuggingFaceTB/SmolLM3-11T-32k-v1-transformers",
+    "HuggingFaceTB/SmolLM3-3B",
     torch_dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config,

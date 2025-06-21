@@ -102,7 +102,7 @@ class SmolLM3ModelTest(CausalLMModelTest, unittest.TestCase):
 
 @require_torch
 class SmolLM3IntegrationTest(unittest.TestCase):
-    model_id = "HuggingFaceTB/SmolLM3-11T-32k-v1-transformers"
+    model_id = "HuggingFaceTB/SmolLM3-3B"
 
     @slow
     def test_model_3b_logits(self):
