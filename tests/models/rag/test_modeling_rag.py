@@ -49,7 +49,7 @@ T5_SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 if is_torch_available() and is_datasets_available() and is_faiss_available():
     import faiss
     import torch
-    from datasets import Dataset
+    from datasets import Dataset, load_dataset
 
     from transformers import (
         AutoConfig,
@@ -683,14 +683,12 @@ class RagModelIntegrationTests(unittest.TestCase):
     def setUpClass(cls):
         cls.temp_dir = tempfile.TemporaryDirectory()
         cls.dataset_path = cls.temp_dir.name
-        cls.index_path = os.path.join(cls.temp_dir.name, "my_index")
+        cls.index_path = os.path.join(cls.temp_dir.name, "index")
 
-        import datasets
-
-        ds = datasets.load_dataset("hf-transformers-bot/temp_wiki_dpr")["train"]
+        ds = load_dataset("hf-internal-testing/wiki_dpr_dummy")["train"]
         ds.save_to_disk(cls.dataset_path)
         os.system(
-            f"wget -O {cls.index_path} https://huggingface.co/datasets/hf-transformers-bot/temp_wiki_dpr/resolve/main/my_index"
+            f"wget -O {cls.index_path} https://huggingface.co/datasets/hf-internal-testing/wiki_dpr_dummy/resolve/main/index"
         )
 
     @classmethod
@@ -1076,14 +1074,12 @@ class RagModelSaveLoadTests(unittest.TestCase):
     def setUpClass(cls):
         cls.temp_dir = tempfile.TemporaryDirectory()
         cls.dataset_path = cls.temp_dir.name
-        cls.index_path = os.path.join(cls.temp_dir.name, "my_index")
+        cls.index_path = os.path.join(cls.temp_dir.name, "index")
 
-        import datasets
-
-        ds = datasets.load_dataset("hf-transformers-bot/temp_wiki_dpr")["train"]
+        ds = load_dataset("hf-internal-testing/wiki_dpr_dummy")["train"]
         ds.save_to_disk(cls.dataset_path)
         os.system(
-            f"wget -O {cls.index_path} https://huggingface.co/datasets/hf-transformers-bot/temp_wiki_dpr/resolve/main/my_index"
+            f"wget -O {cls.index_path} https://huggingface.co/datasets/hf-internal-testing/wiki_dpr_dummy/resolve/main/index"
         )
 
     @classmethod
