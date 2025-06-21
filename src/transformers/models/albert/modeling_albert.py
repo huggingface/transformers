@@ -22,6 +22,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from transformers.utils.generic import can_return_tuple, check_model_inputs
 
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask_for_sdpa
@@ -300,7 +301,6 @@ class AlbertAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: bool = False,
     ) -> Union[tuple[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
         mixed_query_layer = self.query(hidden_states)
         mixed_key_layer = self.key(hidden_states)
@@ -351,7 +351,7 @@ class AlbertAttention(nn.Module):
         projected_context_layer = self.dense(context_layer)
         projected_context_layer_dropout = self.output_dropout(projected_context_layer)
         layernormed_context_layer = self.LayerNorm(hidden_states + projected_context_layer_dropout)
-        return (layernormed_context_layer, attention_probs) if output_attentions else (layernormed_context_layer,)
+        return layernormed_context_layer, attention_probs
 
 
 class AlbertSdpaAttention(AlbertAttention):
@@ -365,18 +365,7 @@ class AlbertSdpaAttention(AlbertAttention):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: bool = False,
     ) -> Union[tuple[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
-        if self.position_embedding_type != "absolute" or output_attentions:
-            logger.warning(
-                "AlbertSdpaAttention is used but `torch.nn.functional.scaled_dot_product_attention` does not support "
-                "non-absolute `position_embedding_type` or `output_attentions=True` . Falling back to "
-                "the eager attention implementation, but specifying the eager implementation will be required from "
-                "Transformers version v5.0.0 onwards. This warning can be removed using the argument "
-                '`attn_implementation="eager"` when loading the model.'
-            )
-            return super().forward(hidden_states, attention_mask, output_attentions=output_attentions)
-
         batch_size, seq_len, _ = hidden_states.size()
         query_layer = self.transpose_for_scores(self.query(hidden_states))
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -433,10 +422,8 @@ class AlbertLayer(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        attention_output = self.attention(hidden_states, attention_mask, head_mask, output_attentions)
+        attention_output = self.attention(hidden_states, attention_mask, head_mask)
 
         ffn_output = apply_chunking_to_forward(
             self.ff_chunk,
@@ -446,7 +433,7 @@ class AlbertLayer(nn.Module):
         )
         hidden_states = self.full_layer_layer_norm(ffn_output + attention_output[0])
 
-        return (hidden_states,) + attention_output[1:]  # add attentions if we output them
+        return hidden_states
 
     def ff_chunk(self, attention_output: torch.Tensor) -> torch.Tensor:
         ffn_output = self.ffn(attention_output)
@@ -466,28 +453,12 @@ class AlbertLayerGroup(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
     ) -> tuple[Union[torch.Tensor, tuple[torch.Tensor]], ...]:
-        layer_hidden_states = ()
-        layer_attentions = ()
-
         for layer_index, albert_layer in enumerate(self.albert_layers):
-            layer_output = albert_layer(hidden_states, attention_mask, head_mask[layer_index], output_attentions)
+            layer_output = albert_layer(hidden_states, attention_mask, head_mask[layer_index])
             hidden_states = layer_output[0]
 
-            if output_attentions:
-                layer_attentions = layer_attentions + (layer_output[1],)
-
-            if output_hidden_states:
-                layer_hidden_states = layer_hidden_states + (hidden_states,)
-
-        outputs = (hidden_states,)
-        if output_hidden_states:
-            outputs = outputs + (layer_hidden_states,)
-        if output_attentions:
-            outputs = outputs + (layer_attentions,)
-        return outputs  # last-layer hidden state, (layer hidden states), (layer attentions)
+        return hidden_states
 
 
 class AlbertTransformer(nn.Module):
@@ -498,19 +469,16 @@ class AlbertTransformer(nn.Module):
         self.embedding_hidden_mapping_in = nn.Linear(config.embedding_size, config.hidden_size)
         self.albert_layer_groups = nn.ModuleList([AlbertLayerGroup(config) for _ in range(config.num_hidden_groups)])
 
+    @can_return_tuple
+    @check_model_inputs
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-        return_dict: bool = True,
+        **kwargs,
     ) -> Union[BaseModelOutput, tuple]:
         hidden_states = self.embedding_hidden_mapping_in(hidden_states)
-
-        all_hidden_states = (hidden_states,) if output_hidden_states else None
-        all_attentions = () if output_attentions else None
 
         head_mask = [None] * self.config.num_hidden_layers if head_mask is None else head_mask
 
@@ -525,22 +493,10 @@ class AlbertTransformer(nn.Module):
                 hidden_states,
                 attention_mask,
                 head_mask[group_idx * layers_per_group : (group_idx + 1) * layers_per_group],
-                output_attentions,
-                output_hidden_states,
             )
             hidden_states = layer_group_output[0]
 
-            if output_attentions:
-                all_attentions = all_attentions + layer_group_output[-1]
-
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
-        )
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 @auto_docstring
@@ -663,7 +619,7 @@ class AlbertModel(AlbertPreTrainedModel):
         position_ids: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[BaseModelOutputWithPooling, tuple]:
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -716,10 +672,6 @@ class AlbertModel(AlbertPreTrainedModel):
         sequence_output = encoder_outputs[0]
 
         pooled_output = self.pooler_activation(self.pooler(sequence_output[:, 0])) if self.pooler is not None else None
-
-        if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
-
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
@@ -755,6 +707,7 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
         return self.albert.embeddings.word_embeddings
 
     @auto_docstring
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -890,6 +843,7 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
         return self.albert.embeddings.word_embeddings
 
     @auto_docstring
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -981,6 +935,7 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
         self.post_init()
 
     @auto_docstring
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1062,6 +1017,7 @@ class AlbertForTokenClassification(AlbertPreTrainedModel):
         self.post_init()
 
     @auto_docstring
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1112,6 +1068,7 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
         self.post_init()
 
     @auto_docstring
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1178,6 +1135,7 @@ class AlbertForMultipleChoice(AlbertPreTrainedModel):
         self.post_init()
 
     @auto_docstring
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
