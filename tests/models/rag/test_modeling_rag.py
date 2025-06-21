@@ -679,6 +679,24 @@ class RagDPRT5Test(RagTestMixin, unittest.TestCase):
 @require_tokenizers
 @require_torch_non_multi_accelerator
 class RagModelIntegrationTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.temp_dir = tempfile.TemporaryDirectory()
+        cls.dataset_path = cls.temp_dir.name
+        cls.index_path = os.path.join(cls.temp_dir.name, "my_index")
+
+        import datasets
+
+        ds = datasets.load_dataset("hf-transformers-bot/temp_wiki_dpr")["train"]
+        ds.save_to_disk(cls.dataset_path)
+        os.system(
+            f"wget -O {cls.index_path} https://huggingface.co/datasets/hf-transformers-bot/temp_wiki_dpr/resolve/main/my_index"
+        )
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.temp_dir.cleanup()
+
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
@@ -708,12 +726,6 @@ class RagModelIntegrationTests(unittest.TestCase):
         question_encoder_config = AutoConfig.from_pretrained("facebook/dpr-question_encoder-single-nq-base")
         generator_config = AutoConfig.from_pretrained("facebook/bart-large-cnn")
 
-        import datasets
-        ds = datasets.load_dataset("hf-transformers-bot/temp_wiki_dpr")["train"]
-        ds.save_to_disk("local_dataset")
-        os.system("wget https://huggingface.co/datasets/hf-transformers-bot/temp_wiki_dpr/resolve/main/my_index")
-        os.system("mv my_index local_index")
-
         return RagConfig.from_question_encoder_generator_configs(
             question_encoder_config,
             generator_config,
@@ -730,8 +742,8 @@ class RagModelIntegrationTests(unittest.TestCase):
             dataset="wiki_dpr",
             dataset_split="train",
             index_name="custom",
-            passages_path="local_dataset",
-            index_path="local_index",
+            passages_path=self.dataset_path,
+            index_path=self.index_path,
             use_dummy_dataset=True,
             retrieval_vector_size=768,
             retrieval_batch_size=8,
@@ -911,13 +923,12 @@ class RagModelIntegrationTests(unittest.TestCase):
     def test_rag_sequence_generate_batch(self):
         tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
 
-        import datasets
-        ds = datasets.load_dataset("hf-transformers-bot/temp_wiki_dpr")["train"]
-        ds.save_to_disk("local_dataset")
-        os.system("wget https://huggingface.co/datasets/hf-transformers-bot/temp_wiki_dpr/resolve/main/my_index")
-        os.system("mv my_index local_index")
-
-        retriever = RagRetriever.from_pretrained("facebook/rag-sequence-nq", index_name="custom", passages_path="local_dataset", index_path="local_index")
+        retriever = RagRetriever.from_pretrained(
+            "facebook/rag-sequence-nq",
+            index_name="custom",
+            passages_path=self.dataset_path,
+            index_path=self.index_path,
+        )
 
         rag_sequence = RagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", retriever=retriever).to(
             torch_device
@@ -960,13 +971,12 @@ class RagModelIntegrationTests(unittest.TestCase):
     def test_rag_sequence_generate_batch_from_context_input_ids(self):
         tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
 
-        import datasets
-        ds = datasets.load_dataset("hf-transformers-bot/temp_wiki_dpr")["train"]
-        ds.save_to_disk("local_dataset")
-        os.system("wget https://huggingface.co/datasets/hf-transformers-bot/temp_wiki_dpr/resolve/main/my_index")
-        os.system("mv my_index local_index")
-
-        retriever = RagRetriever.from_pretrained("facebook/rag-sequence-nq", index_name="custom", passages_path="local_dataset", index_path="local_index")
+        retriever = RagRetriever.from_pretrained(
+            "facebook/rag-sequence-nq",
+            index_name="custom",
+            passages_path=self.dataset_path,
+            index_path=self.index_path,
+        )
 
         rag_sequence = RagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", retriever=retriever).to(
             torch_device
@@ -1017,13 +1027,9 @@ class RagModelIntegrationTests(unittest.TestCase):
     def test_rag_token_generate_batch(self):
         tokenizer = RagTokenizer.from_pretrained("facebook/rag-token-nq")
 
-        import datasets
-        ds = datasets.load_dataset("hf-transformers-bot/temp_wiki_dpr")["train"]
-        ds.save_to_disk("local_dataset")
-        os.system("wget https://huggingface.co/datasets/hf-transformers-bot/temp_wiki_dpr/resolve/main/my_index")
-        os.system("mv my_index local_index")
-
-        retriever = RagRetriever.from_pretrained("facebook/rag-token-nq", index_name="custom", passages_path="local_dataset", index_path="local_index")
+        retriever = RagRetriever.from_pretrained(
+            "facebook/rag-token-nq", index_name="custom", passages_path=self.dataset_path, index_path=self.index_path
+        )
 
         rag_token = RagTokenForGeneration.from_pretrained("facebook/rag-token-nq", retriever=retriever).to(
             torch_device
@@ -1066,6 +1072,24 @@ class RagModelIntegrationTests(unittest.TestCase):
 @require_torch
 @require_retrieval
 class RagModelSaveLoadTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.temp_dir = tempfile.TemporaryDirectory()
+        cls.dataset_path = cls.temp_dir.name
+        cls.index_path = os.path.join(cls.temp_dir.name, "my_index")
+
+        import datasets
+
+        ds = datasets.load_dataset("hf-transformers-bot/temp_wiki_dpr")["train"]
+        ds.save_to_disk(cls.dataset_path)
+        os.system(
+            f"wget -O {cls.index_path} https://huggingface.co/datasets/hf-transformers-bot/temp_wiki_dpr/resolve/main/my_index"
+        )
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.temp_dir.cleanup()
+
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
@@ -1074,12 +1098,6 @@ class RagModelSaveLoadTests(unittest.TestCase):
     def get_rag_config(self):
         question_encoder_config = AutoConfig.from_pretrained("facebook/dpr-question_encoder-single-nq-base")
         generator_config = AutoConfig.from_pretrained("facebook/bart-large-cnn")
-
-        import datasets
-        ds = datasets.load_dataset("hf-transformers-bot/temp_wiki_dpr")["train"]
-        ds.save_to_disk("local_dataset")
-        os.system("wget https://huggingface.co/datasets/hf-transformers-bot/temp_wiki_dpr/resolve/main/my_index")
-        os.system("mv my_index local_index")
 
         return RagConfig.from_question_encoder_generator_configs(
             question_encoder_config,
@@ -1097,8 +1115,8 @@ class RagModelSaveLoadTests(unittest.TestCase):
             dataset="wiki_dpr",
             dataset_split="train",
             index_name="custom",
-            passages_path="local_dataset",
-            index_path="local_index",
+            passages_path=self.dataset_path,
+            index_path=self.index_path,
             use_dummy_dataset=True,
             retrieval_vector_size=768,
             retrieval_batch_size=8,
