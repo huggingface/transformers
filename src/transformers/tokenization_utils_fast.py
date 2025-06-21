@@ -278,6 +278,12 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         """
         return {k.content: v for v, k in sorted(self.added_tokens_decoder.items(), key=lambda item: item[0])}
 
+    def __bool__(self) -> bool:
+        """
+        Returns True, to avoid expensive `assert tokenizer` gotchas.
+        """
+        return True
+
     def __len__(self) -> int:
         """
         Size of the full vocabulary with the added tokens.
