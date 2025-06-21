@@ -47,7 +47,7 @@ class VideoLlavaConfig(PretrainedConfig):
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision feature from the CLIP backbone.
             Can be either "full" to select all features or "default" to select features without `CLS`.
-        vision_feature_layer (`Union[int, List[int]]`, *optional*, defaults to -2):
+        vision_feature_layer (`Union[int, list[int]]`, *optional*, defaults to -2):
             The index of the layer to select the vision feature. If multiple indices are provided,
             the vision feature of the corresponding indices will be concatenated to form the
             vision features.

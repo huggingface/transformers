@@ -17,7 +17,7 @@ import operator
 import os
 import re
 from functools import partial, reduce
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.distributed as dist
@@ -26,8 +26,6 @@ from torch import nn
 from ..utils import is_torch_greater_or_equal, logging
 from ..utils.generic import GeneralInterface
 
-
-ALL_LAYERNORM_LAYERS = [nn.LayerNorm]
 
 logger = logging.get_logger(__name__)
 
@@ -93,7 +91,7 @@ def initialize_tensor_parallelism(tp_plan, tp_size=None):
     return tp_device, device_map, device_mesh
 
 
-def _blocks_to_block_sizes(total_size: int, blocks: Union[int, List[int]]) -> List[int]:
+def _blocks_to_block_sizes(total_size: int, blocks: Union[int, list[int]]) -> list[int]:
     """
     Convert block count or proportions to block sizes.
 
@@ -101,7 +99,7 @@ def _blocks_to_block_sizes(total_size: int, blocks: Union[int, List[int]]) -> Li
 
     - The number of blocks (int), in which case the block size is
       total_size//blocks; or
-    - A list of block sizes (List[int]).
+    - A list of block sizes (list[int]).
 
     In the second case, if sum(blocks) < total_size, the ratios between
     the block sizes will be preserved. For instance, if blocks is
@@ -608,7 +606,7 @@ class RowwiseParallel(TensorParallelLayer):
         if self.use_dtensor:
             if isinstance(module, nn.Linear):
                 # rowwise linear runtime sharding requires input tensor shard on last dim
-                self.desired_input_layouts: Tuple[Placement, ...] = (Shard(-1),)
+                self.desired_input_layouts: tuple[Placement, ...] = (Shard(-1),)
             elif isinstance(module, nn.Embedding):
                 # rowwise embedding runtime sharding requires input tensor replicated
                 self.desired_input_layouts = (Replicate(),)

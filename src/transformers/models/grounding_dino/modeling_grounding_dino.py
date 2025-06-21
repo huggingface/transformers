@@ -17,7 +17,7 @@
 import math
 import warnings
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -52,7 +52,7 @@ class MultiScaleDeformableAttention(nn.Module):
         self,
         value: Tensor,
         value_spatial_shapes: Tensor,
-        value_spatial_shapes_list: List[Tuple],
+        value_spatial_shapes_list: list[tuple],
         level_start_index: Tensor,
         sampling_locations: Tensor,
         attention_weights: Tensor,
@@ -129,8 +129,8 @@ class GroundingDinoDecoderOutput(ModelOutput):
     last_hidden_state: Optional[torch.FloatTensor] = None
     intermediate_hidden_states: Optional[torch.FloatTensor] = None
     intermediate_reference_points: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
 
 
 @dataclass
@@ -162,9 +162,9 @@ class GroundingDinoEncoderOutput(ModelOutput):
 
     last_hidden_state_vision: Optional[torch.FloatTensor] = None
     last_hidden_state_text: Optional[torch.FloatTensor] = None
-    vision_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    text_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    vision_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    text_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
 
 
 @dataclass
@@ -223,13 +223,13 @@ class GroundingDinoModelOutput(ModelOutput):
     init_reference_points: Optional[torch.FloatTensor] = None
     intermediate_hidden_states: Optional[torch.FloatTensor] = None
     intermediate_reference_points: Optional[torch.FloatTensor] = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
     encoder_last_hidden_state_vision: Optional[torch.FloatTensor] = None
     encoder_last_hidden_state_text: Optional[torch.FloatTensor] = None
-    encoder_vision_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_text_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    encoder_vision_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    encoder_text_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
     enc_outputs_class: Optional[torch.FloatTensor] = None
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
     encoder_logits: Optional[torch.FloatTensor] = None
@@ -255,7 +255,7 @@ class GroundingDinoObjectDetectionOutput(ModelOutput):
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
             possible padding). You can use [`~GroundingDinoProcessor.post_process_grounded_object_detection`] to retrieve the
             unnormalized bounding boxes.
-        auxiliary_outputs (`List[Dict]`, *optional*):
+        auxiliary_outputs (`list[Dict]`, *optional*):
             Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
             and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
             `pred_boxes`) for each decoder layer.
@@ -307,21 +307,21 @@ class GroundingDinoObjectDetectionOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    loss_dict: Optional[Dict] = None
+    loss_dict: Optional[dict] = None
     logits: Optional[torch.FloatTensor] = None
     pred_boxes: Optional[torch.FloatTensor] = None
-    auxiliary_outputs: Optional[List[Dict]] = None
+    auxiliary_outputs: Optional[list[dict]] = None
     last_hidden_state: Optional[torch.FloatTensor] = None
     init_reference_points: Optional[torch.FloatTensor] = None
     intermediate_hidden_states: Optional[torch.FloatTensor] = None
     intermediate_reference_points: Optional[torch.FloatTensor] = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
     encoder_last_hidden_state_vision: Optional[torch.FloatTensor] = None
     encoder_last_hidden_state_text: Optional[torch.FloatTensor] = None
-    encoder_vision_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_text_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    encoder_vision_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    encoder_text_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
     enc_outputs_class: Optional[torch.FloatTensor] = None
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
     encoder_logits: Optional[torch.FloatTensor] = None
@@ -683,7 +683,7 @@ class GroundingDinoTextEnhancerLayer(nn.Module):
         hidden_states: torch.FloatTensor,
         attention_masks: Optional[torch.BoolTensor] = None,
         position_embeddings: Optional[torch.FloatTensor] = None,
-    ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
+    ) -> tuple[torch.FloatTensor, torch.FloatTensor]:
         """Text self-attention to enhance projection of text features generated by
         the text encoder (AutoModel based on text_config) within GroundingDinoEncoderLayer
 
@@ -776,7 +776,7 @@ class GroundingDinoBiMultiHeadAttention(nn.Module):
         text_features: torch.FloatTensor,
         vision_attention_mask: Optional[torch.BoolTensor] = None,
         text_attention_mask: Optional[torch.BoolTensor] = None,
-    ) -> Tuple[Tuple[torch.FloatTensor, torch.FloatTensor], Tuple[torch.FloatTensor, torch.FloatTensor]]:
+    ) -> tuple[tuple[torch.FloatTensor, torch.FloatTensor], tuple[torch.FloatTensor, torch.FloatTensor]]:
         """Image-to-text and text-to-image cross-attention
 
         Args:
@@ -921,7 +921,7 @@ class GroundingDinoDropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
 class GroundingDinoFusionLayer(nn.Module):
@@ -937,8 +937,8 @@ class GroundingDinoFusionLayer(nn.Module):
         # add layer scale for training stability
         self.drop_path = GroundingDinoDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         init_values = 1e-4
-        self.vision_param = nn.Parameter(init_values * torch.ones((config.d_model)), requires_grad=True)
-        self.text_param = nn.Parameter(init_values * torch.ones((config.d_model)), requires_grad=True)
+        self.vision_param = nn.Parameter(init_values * torch.ones(config.d_model), requires_grad=True)
+        self.text_param = nn.Parameter(init_values * torch.ones(config.d_model), requires_grad=True)
 
     def forward(
         self,
@@ -946,7 +946,7 @@ class GroundingDinoFusionLayer(nn.Module):
         text_features: torch.FloatTensor,
         attention_mask_vision: Optional[torch.BoolTensor] = None,
         attention_mask_text: Optional[torch.BoolTensor] = None,
-    ) -> Tuple[Tuple[torch.FloatTensor, torch.FloatTensor], Tuple[torch.FloatTensor, torch.FloatTensor]]:
+    ) -> tuple[tuple[torch.FloatTensor, torch.FloatTensor], tuple[torch.FloatTensor, torch.FloatTensor]]:
         """Image and text features fusion
 
         Args:
@@ -1025,7 +1025,7 @@ class GroundingDinoDeformableLayer(nn.Module):
                 Reference points.
             spatial_shapes (`torch.LongTensor`, *optional*):
                 Spatial shapes of the backbone feature maps.
-            spatial_shapes_list (`List[Tuple[int, int]]`, *optional*):
+            spatial_shapes_list (`list[tuple[int, int]]`, *optional*):
                 Spatial shapes of the backbone feature maps (but as list for export compatibility).
             level_start_index (`torch.LongTensor`, *optional*):
                 Level start index.
@@ -1145,7 +1145,7 @@ class GroundingDinoEncoderLayer(nn.Module):
         vision_features: Tensor,
         vision_position_embedding: Tensor,
         spatial_shapes: Tensor,
-        spatial_shapes_list: List[Tuple[int, int]],
+        spatial_shapes_list: list[tuple[int, int]],
         level_start_index: Tensor,
         key_padding_mask: Tensor,
         reference_points: Tensor,
@@ -1223,7 +1223,7 @@ class GroundingDinoMultiheadAttention(nn.Module):
         values: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         query_layer = self.transpose_for_scores(self.query(queries))
         key_layer = self.transpose_for_scores(self.key(keys))
         value_layer = self.transpose_for_scores(self.value(values))
@@ -1528,7 +1528,7 @@ class GroundingDinoEncoder(GroundingDinoPreTrainedModel):
         vision_attention_mask: Tensor,
         vision_position_embedding: Tensor,
         spatial_shapes: Tensor,
-        spatial_shapes_list: List[Tuple[int, int]],
+        spatial_shapes_list: list[tuple[int, int]],
         level_start_index: Tensor,
         valid_ratios=None,
         text_features: Optional[Tensor] = None,
@@ -1553,7 +1553,7 @@ class GroundingDinoEncoder(GroundingDinoPreTrainedModel):
                 Position embeddings that are added to the queries and keys in each self-attention layer.
             spatial_shapes (`torch.LongTensor` of shape `(num_feature_levels, 2)`):
                 Spatial shapes of each feature map.
-            spatial_shapes_list (`List[Tuple[int, int]]`):
+            spatial_shapes_list (`list[tuple[int, int]]`):
                 Spatial shapes of each feature map (but as list for export compatibility).
             level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`):
                 Starting index of each feature map.
@@ -1714,7 +1714,7 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
                 Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
             spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
                 Spatial shapes of the feature maps.
-            spatial_shapes_list (`List[Tuple[int, int]]`):
+            spatial_shapes_list (`list[tuple[int, int]]`):
                 Spatial shapes of the feature maps (but as list for export compatibility).
             level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`, *optional*):
                 Indexes for the start of each feature level. In range `[0, sequence_length]`.
@@ -1886,7 +1886,7 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
 SPECIAL_TOKENS = [101, 102, 1012, 1029]
 
 
-def generate_masks_with_special_tokens_and_transfer_map(input_ids: torch.LongTensor) -> Tuple[Tensor, Tensor]:
+def generate_masks_with_special_tokens_and_transfer_map(input_ids: torch.LongTensor) -> tuple[Tensor, Tensor]:
     """Generate attention mask between each pair of special tokens and positional ids.
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -2369,7 +2369,7 @@ class GroundingDinoMLPPredictionHead(nn.Module):
         return x
 
 
-def build_label_maps(logits: torch.FloatTensor, input_ids: torch.LongTensor) -> Tuple[torch.FloatTensor]:
+def build_label_maps(logits: torch.FloatTensor, input_ids: torch.LongTensor) -> tuple[torch.FloatTensor]:
     """
     Computes a mapping between tokens and their corresponding labels, where `num_labels` is determined by the number of classes in the input prompt.
     The function identifies segments of tokens between specific delimiter tokens and generates label maps for those segments.
@@ -2490,11 +2490,11 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         token_type_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
         pixel_mask: Optional[torch.BoolTensor] = None,
-        encoder_outputs: Optional[Union[GroundingDinoEncoderOutput, Tuple]] = None,
+        encoder_outputs: Optional[Union[GroundingDinoEncoderOutput, tuple]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[List[Dict[str, Union[torch.LongTensor, torch.FloatTensor]]]] = None,
+        labels: Optional[list[dict[str, Union[torch.LongTensor, torch.FloatTensor]]]] = None,
     ):
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, text_sequence_length)`):
@@ -2507,7 +2507,7 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
             1]`: 0 corresponds to a `sentence A` token, 1 corresponds to a `sentence B` token
 
             [What are token type IDs?](../glossary#token-type-ids)
-        labels (`List[Dict]` of len `(batch_size,)`, *optional*):
+        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
             Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
             following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
             respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
