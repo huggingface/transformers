@@ -34,11 +34,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from ...modeling_flash_attention_utils import (
-    FlashAttentionKwargs,
-    flash_attn_supports_top_left_mask,
-    is_flash_attn_available,
-)
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -57,13 +53,6 @@ from .configuration_qwen2_5_omni import (
     Qwen2_5OmniToken2WavConfig,
     Qwen2_5OmniVisionEncoderConfig,
 )
-
-
-if is_flash_attn_available():
-    from ...modeling_flash_attention_utils import apply_rotary_emb, flash_attn_varlen_func
-else:
-    flash_attn_varlen_func = None
-    apply_rotary_emb = None
 
 
 logger = logging.get_logger(__name__)
@@ -568,6 +557,44 @@ class Qwen2_5OmniThinkerCausalLMOutputWithPast(ModelOutput):
     rope_deltas: Optional[torch.LongTensor] = None
 
 
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+        attn_weights = attn_weights + causal_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class Qwen2_5OmniAudioAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -580,6 +607,7 @@ class Qwen2_5OmniAudioAttention(nn.Module):
         self.num_heads = config.encoder_attention_heads
         self.dropout = config.attention_dropout
         self.head_dim = self.embed_dim // self.num_heads
+        self.num_key_value_groups = 1  # needed for eager attention
         self.config = config
 
         if (self.head_dim * self.num_heads) != self.embed_dim:
@@ -600,6 +628,7 @@ class Qwen2_5OmniAudioAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -609,13 +638,13 @@ class Qwen2_5OmniAudioAttention(nn.Module):
         key_states = self.k_proj(hidden_states).reshape(seq_length, self.num_heads, -1)
         value_states = self.v_proj(hidden_states).reshape(seq_length, self.num_heads, -1)
 
-        query_states = query_states.transpose(0, 1)
-        key_states = key_states.transpose(0, 1)
-        value_states = value_states.transpose(0, 1)
-        attn_weights = torch.matmul(query_states, key_states.transpose(1, 2)) / math.sqrt(self.head_dim)
+        query_states = query_states.transpose(0, 1).unsqueeze(0)
+        key_states = key_states.transpose(0, 1).unsqueeze(0)
+        value_states = value_states.transpose(0, 1).unsqueeze(0)
+        max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
 
         attention_mask = torch.full(
-            [1, seq_length, key_states.shape[1]],
+            [1, 1, seq_length, key_states.shape[-2]],
             torch.finfo(query_states.dtype).min,
             device=query_states.device,
             dtype=query_states.dtype,
@@ -623,115 +652,37 @@ class Qwen2_5OmniAudioAttention(nn.Module):
         for i in range(1, len(cu_seqlens)):
             attention_mask[..., cu_seqlens[i - 1] : cu_seqlens[i], cu_seqlens[i - 1] : cu_seqlens[i]] = 0
 
-        attn_weights = attn_weights + attention_mask
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1).to(query_states.dtype)
-
-        attn_output = torch.matmul(attn_weights, value_states).transpose(0, 1).reshape(seq_length, self.embed_dim)
-
-        # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
-        # partitioned across GPUs when using tensor-parallelism.
-
-        attn_output = self.out_proj(attn_output)
-
-        return attn_output
-
-
-class Qwen2_5OmniAudioFlashAttention2(Qwen2_5OmniAudioAttention):
-    """
-    Qwen2.5OmniThinker flash attention module. This module inherits from `Qwen2_5OmniAudioAttention` as the weights of the module stays
-    untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
-    flash attention and deal with padding tokens in case the input contains any of them.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
-        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignment, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
-        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
-        self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        cu_seqlens: Optional[torch.Tensor] = None,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
-        seq_length, all_dim = hidden_states.size()
-        query_states = self.q_proj(hidden_states)
-        query_states = query_states.reshape(seq_length, self.num_heads, -1)
-
-        key_states = self.k_proj(hidden_states)
-        key_states = key_states.reshape(seq_length, self.num_heads, -1)
-        value_states = self.v_proj(hidden_states)
-        value_states = value_states.reshape(seq_length, self.num_heads, -1)
-
-        max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
-        attn_output = flash_attn_varlen_func(
-            query_states, key_states, value_states, cu_seqlens, cu_seqlens, max_seqlen, max_seqlen, dropout_p=0.0
-        )
-        attn_output = attn_output.reshape(seq_length, all_dim)
-        attn_output = self.out_proj(attn_output)
-
-        return attn_output
-
-
-class Qwen2_5OmniAudioSdpaAttention(Qwen2_5OmniAudioAttention):
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        cu_seqlens: Optional[torch.Tensor] = None,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
-        """Input shape: Batch x Time x Channel"""
-
-        seq_length, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states).reshape(seq_length, self.num_heads, -1)
-        key_states = self.k_proj(hidden_states).reshape(seq_length, self.num_heads, -1)
-        value_states = self.v_proj(hidden_states).reshape(seq_length, self.num_heads, -1)
-
-        attention_mask = torch.zeros(
-            [1, seq_length, key_states.shape[0]], device=query_states.device, dtype=torch.bool
-        )
-        for i in range(1, len(cu_seqlens)):
-            attention_mask[..., cu_seqlens[i - 1] : cu_seqlens[i], cu_seqlens[i - 1] : cu_seqlens[i]] = True
-
-        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
-        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
-        # The tgt_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case tgt_len == 1.
-        query_states = query_states.transpose(0, 1)
-        key_states = key_states.transpose(0, 1)
-        value_states = value_states.transpose(0, 1)
-
-        # NOTE: SDPA with memory-efficient backend is currently (torch==2.1.2) bugged when using non-contiguous inputs and a custom attn_mask,
-        # but we are fine here as `_shape` do call `.contiguous()`. Reference: https://github.com/pytorch/pytorch/issues/112577
-        attn_output = torch.nn.functional.scaled_dot_product_attention(
+        attn_output, _ = attention_interface(
+            self,
             query_states,
             key_states,
             value_states,
-            attn_mask=attention_mask,
-            dropout_p=self.dropout if self.training else 0.0,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout,
+            scaling=self.scaling,
+            cu_seqlens_q=cu_seqlens,  # pass cu seq lens for FA2
+            cu_seqlens_k=cu_seqlens,
+            max_seqlen_q=max_seqlen,
+            max_seqlen_k=max_seqlen,
+            is_causal=False,
+            **kwargs,
         )
-        attn_output = attn_output.transpose(0, 1)
-        # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
-        # partitioned across GPUs when using tensor-parallelism.
-        attn_output = attn_output.reshape(seq_length, self.embed_dim)
+
+        attn_output = attn_output.reshape(seq_length, -1).contiguous()
         attn_output = self.out_proj(attn_output)
+
         return attn_output
-
-
-QWEN2_5_OMNI_AUDIO_ATTENTION_CLASSES = {
-    "eager": Qwen2_5OmniAudioAttention,
-    "flash_attention_2": Qwen2_5OmniAudioFlashAttention2,
-    "sdpa": Qwen2_5OmniAudioSdpaAttention,
-}
 
 
 class Qwen2_5OmniAudioEncoderLayer(nn.Module):
     def __init__(self, config: Qwen2_5OmniAudioEncoderConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        self.self_attn = QWEN2_5_OMNI_AUDIO_ATTENTION_CLASSES[config._attn_implementation](config)
+        self.self_attn = Qwen2_5OmniAudioAttention(config)
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -744,6 +695,7 @@ class Qwen2_5OmniAudioEncoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
+        **kwargs,
     ) -> torch.Tensor:
         """
         Args:
@@ -761,6 +713,7 @@ class Qwen2_5OmniAudioEncoderLayer(nn.Module):
         hidden_states = self.self_attn(
             hidden_states=hidden_states,
             cu_seqlens=cu_seqlens,
+            **kwargs,
         )
         hidden_states = residual + hidden_states
         residual = hidden_states
@@ -847,6 +800,7 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         input_features,
         feature_lens=None,
         aftercnn_lens=None,
+        **kwargs,
     ):
         r"""
         input_features (`torch.LongTensor` of shape `(batch_size, feature_size, sequence_length)`):
@@ -900,6 +854,7 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
                 layer_outputs = encoder_layer(
                     hidden_states,
                     cu_seqlens,
+                    **kwargs,
                 )
 
             hidden_states = layer_outputs[0]
@@ -982,7 +937,7 @@ def apply_rotary_pos_emb_vision(tensor: torch.Tensor, freqs: torch.Tensor) -> to
 
 
 class Qwen2_5OmniVisionAttention(nn.Module):
-    def __init__(self, dim: int, num_heads: int = 16) -> None:
+    def __init__(self, dim: int, num_heads: int = 16, config: Qwen2_5OmniVisionEncoderConfig = None) -> None:
         super().__init__()
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
@@ -990,98 +945,61 @@ class Qwen2_5OmniVisionAttention(nn.Module):
         self.k = nn.Linear(dim, dim, bias=True)
         self.v = nn.Linear(dim, dim, bias=True)
         self.proj = nn.Linear(dim, dim)
+        self.scaling = math.sqrt(self.head_dim)
+        self.num_key_value_groups = 1  # needed for eager attention
+        if config is None:
+            raise ValueError("`config` is a required argument for Qwen2-VL `VisionAttention`")
+        self.config = config
 
     def forward(
-        self, hidden_states: torch.Tensor, cu_seqlens: torch.Tensor, rotary_pos_emb: torch.Tensor = None
+        self,
+        hidden_states: torch.Tensor,
+        cu_seqlens: torch.Tensor,
+        rotary_pos_emb: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
-        q = self.q(hidden_states).reshape(seq_length, self.num_heads, -1)
-        k = self.k(hidden_states).reshape(seq_length, self.num_heads, -1)
-        v = self.v(hidden_states).reshape(seq_length, self.num_heads, -1)
-        q = apply_rotary_pos_emb_vision(q.unsqueeze(0), rotary_pos_emb).squeeze(0)
-        k = apply_rotary_pos_emb_vision(k.unsqueeze(0), rotary_pos_emb).squeeze(0)
+        query_states = self.q(hidden_states).reshape(seq_length, self.num_heads, -1)
+        key_states = self.k(hidden_states).reshape(seq_length, self.num_heads, -1)
+        value_states = self.v(hidden_states).reshape(seq_length, self.num_heads, -1)
+        query_states = apply_rotary_pos_emb_vision(query_states.unsqueeze(0), rotary_pos_emb).squeeze(0)
+        key_states = apply_rotary_pos_emb_vision(key_states.unsqueeze(0), rotary_pos_emb).squeeze(0)
 
         attention_mask = torch.full(
-            [1, seq_length, seq_length], torch.finfo(q.dtype).min, device=q.device, dtype=q.dtype
+            [1, 1, seq_length, seq_length],
+            torch.finfo(query_states.dtype).min,
+            device=query_states.device,
+            dtype=query_states.dtype,
         )
         for i in range(1, len(cu_seqlens)):
             attention_mask[..., cu_seqlens[i - 1] : cu_seqlens[i], cu_seqlens[i - 1] : cu_seqlens[i]] = 0
 
-        q = q.transpose(0, 1)
-        k = k.transpose(0, 1)
-        v = v.transpose(0, 1)
-        attn_weights = torch.matmul(q, k.transpose(1, 2)) / math.sqrt(self.head_dim)
-        attn_weights = attn_weights + attention_mask
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(q.dtype)
-        attn_output = torch.matmul(attn_weights, v)
-        attn_output = attn_output.transpose(0, 1)
-        attn_output = attn_output.reshape(seq_length, -1)
-        attn_output = self.proj(attn_output)
-        return attn_output
-
-
-class Qwen2_5OmniVisionFlashAttention2(nn.Module):
-    def __init__(self, dim: int, num_heads: int = 16) -> None:
-        super().__init__()
-        self.num_heads = num_heads
-        self.q = nn.Linear(dim, dim, bias=True)
-        self.k = nn.Linear(dim, dim, bias=True)
-        self.v = nn.Linear(dim, dim, bias=True)
-        self.proj = nn.Linear(dim, dim)
-
-    def _apply_rotary_pos_emb_flashatt(self, tensor: torch.Tensor, freqs: torch.Tensor) -> torch.Tensor:
-        tensor_ = tensor.float()
-        cos = freqs.cos().type_as(tensor_)
-        sin = freqs.sin().type_as(tensor_)
-        output = apply_rotary_emb(tensor_, cos, sin).type_as(tensor)
-        return output
-
-    def forward(
-        self, hidden_states: torch.Tensor, cu_seqlens: torch.Tensor, rotary_pos_emb: torch.Tensor = None
-    ) -> torch.Tensor:
-        seq_length = hidden_states.shape[0]
-        q = self.q(hidden_states).reshape(seq_length, self.num_heads, -1)
-        k = self.k(hidden_states).reshape(seq_length, self.num_heads, -1)
-        v = self.v(hidden_states).reshape(seq_length, self.num_heads, -1)
-        q = self._apply_rotary_pos_emb_flashatt(q.unsqueeze(0), rotary_pos_emb).squeeze(0)
-        k = self._apply_rotary_pos_emb_flashatt(k.unsqueeze(0), rotary_pos_emb).squeeze(0)
-
+        query_states = query_states.transpose(0, 1).unsqueeze(0)  # unsqueeze batch_dim
+        key_states = key_states.transpose(0, 1).unsqueeze(0)  # unsqueeze batch_dim
+        value_states = value_states.transpose(0, 1).unsqueeze(0)  # unsqueeze batch_dim
         max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
-        attn_output = flash_attn_varlen_func(q, k, v, cu_seqlens, cu_seqlens, max_seqlen, max_seqlen).reshape(
-            seq_length, -1
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, _ = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0,
+            scaling=self.scaling,
+            cu_seqlens_q=cu_seqlens,  # pass cu seq lens for FA2
+            cu_seqlens_k=cu_seqlens,
+            max_seqlen_q=max_seqlen,
+            max_seqlen_k=max_seqlen,
+            is_causal=False,
+            **kwargs,
         )
-        attn_output = self.proj(attn_output)
-        return attn_output
 
-
-class Qwen2_5OmniVisionSdpaAttention(nn.Module):
-    def __init__(self, dim: int, num_heads: int = 16) -> None:
-        super().__init__()
-        self.num_heads = num_heads
-        self.q = nn.Linear(dim, dim, bias=True)
-        self.k = nn.Linear(dim, dim, bias=True)
-        self.v = nn.Linear(dim, dim, bias=True)
-        self.proj = nn.Linear(dim, dim)
-
-    def forward(
-        self, hidden_states: torch.Tensor, cu_seqlens: torch.Tensor, rotary_pos_emb: torch.Tensor = None
-    ) -> torch.Tensor:
-        seq_length = hidden_states.shape[0]
-        q = self.q(hidden_states).reshape(seq_length, self.num_heads, -1)
-        k = self.k(hidden_states).reshape(seq_length, self.num_heads, -1)
-        v = self.v(hidden_states).reshape(seq_length, self.num_heads, -1)
-        q = apply_rotary_pos_emb_vision(q.unsqueeze(0), rotary_pos_emb).squeeze(0)
-        k = apply_rotary_pos_emb_vision(k.unsqueeze(0), rotary_pos_emb).squeeze(0)
-
-        attention_mask = torch.zeros([1, seq_length, seq_length], device=q.device, dtype=torch.bool)
-        for i in range(1, len(cu_seqlens)):
-            attention_mask[..., cu_seqlens[i - 1] : cu_seqlens[i], cu_seqlens[i - 1] : cu_seqlens[i]] = True
-        q = q.transpose(0, 1)
-        k = k.transpose(0, 1)
-        v = v.transpose(0, 1)
-        attn_output = F.scaled_dot_product_attention(q, k, v, attention_mask, dropout_p=0.0)
-        attn_output = attn_output.transpose(0, 1)
-        attn_output = attn_output.reshape(seq_length, -1)
+        attn_output = attn_output.reshape(seq_length, -1).contiguous()
         attn_output = self.proj(attn_output)
         return attn_output
 
@@ -1100,26 +1018,23 @@ class Qwen2_5OmniMLP(nn.Module):
         return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
 
 
-QWEN2_5_OMNI_VISION_ATTENTION_CLASSES = {
-    "eager": Qwen2_5OmniVisionAttention,
-    "flash_attention_2": Qwen2_5OmniVisionFlashAttention2,
-    "sdpa": Qwen2_5OmniVisionSdpaAttention,
-}
-
-
 class Qwen2_5OmniVisionBlock(nn.Module):
     def __init__(self, config: Qwen2_5OmniVisionEncoderConfig) -> None:
         super().__init__()
         self.norm1 = Qwen2RMSNorm(config.hidden_size, eps=1e-6)
         self.norm2 = Qwen2RMSNorm(config.hidden_size, eps=1e-6)
-        self.attn = QWEN2_5_OMNI_VISION_ATTENTION_CLASSES[config._attn_implementation](
-            config.hidden_size, num_heads=config.num_heads
-        )
+        self.attn = Qwen2_5OmniVisionAttention(config.hidden_size, num_heads=config.num_heads, config=config)
         self.mlp = Qwen2_5OmniMLP(config, bias=True)
 
-    def forward(self, hidden_states, cu_seqlens, rotary_pos_emb) -> torch.Tensor:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        cu_seqlens: torch.Tensor,
+        rotary_pos_emb: Optional[torch.Tensor] = None,
+        **kwargs,
+    ) -> torch.Tensor:
         hidden_states = hidden_states + self.attn(
-            self.norm1(hidden_states), cu_seqlens=cu_seqlens, rotary_pos_emb=rotary_pos_emb
+            self.norm1(hidden_states), cu_seqlens=cu_seqlens, rotary_pos_emb=rotary_pos_emb, **kwargs
         )
         hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
         return hidden_states
@@ -1420,44 +1335,6 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
-
-
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs,
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
 
 
 class Qwen2_5OmniAttention(nn.Module):
