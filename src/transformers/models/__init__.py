@@ -200,6 +200,7 @@ if TYPE_CHECKING:
     from .mobilevit import *
     from .mobilevitv2 import *
     from .modernbert import *
+    from .modernbert_decoder import *
     from .moonshine import *
     from .moshi import *
     from .mpnet import *
