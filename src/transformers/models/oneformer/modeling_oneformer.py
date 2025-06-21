@@ -2785,6 +2785,10 @@ class OneFormerPreTrainedModel(PreTrainedModel):
             for p in module.parameters():
                 if p.dim() > 1:
                     nn.init.xavier_uniform_(p, gain=xavier_std)
+        elif isinstance(module, OneFormerTransformerDecoderQueryTransformer):
+            for p in module.parameters():
+                if p.dim() > 1:
+                    nn.init.xavier_uniform_(p, gain=xavier_std)
         elif isinstance(module, OneFormerTextTransformer):
             proj_std = (module.width**-0.5) * ((2 * module.num_layers) ** -0.5)
             attn_std = module.width**-0.5
