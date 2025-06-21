@@ -1376,4 +1376,8 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
         )
 
 
-__all__ = ["KyutaiSpeechToTextModel", "KyutaiSpeechToTextForConditionalGeneration"]
+__all__ = [
+    "KyutaiSpeechToTextPreTrainedModel",
+    "KyutaiSpeechToTextModel",
+    "KyutaiSpeechToTextForConditionalGeneration",
+]

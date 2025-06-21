@@ -484,6 +484,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
 
 
 __all__ = [
+    "KyutaiSpeechToTextPreTrainedModel",
     "KyutaiSpeechToTextModel",
     "KyutaiSpeechToTextForConditionalGeneration",
     "KyutaiSpeechToTextFeatureExtractor",
