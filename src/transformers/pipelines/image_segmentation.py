@@ -60,6 +60,11 @@ class ImageSegmentationPipeline(Pipeline):
     [huggingface.co/models](https://huggingface.co/models?filter=image-segmentation).
     """
 
+    _load_processor = False
+    _load_image_processor = True
+    _load_feature_extractor = False
+    _load_tokenizer = None  # Oneformer uses it but no-one else does
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 

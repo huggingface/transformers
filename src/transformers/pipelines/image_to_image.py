@@ -67,6 +67,11 @@ class ImageToImagePipeline(Pipeline):
     See the list of available models on [huggingface.co/models](https://huggingface.co/models?filter=image-to-image).
     """
 
+    _load_processor = False
+    _load_image_processor = True
+    _load_feature_extractor = False
+    _load_tokenizer = False
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         requires_backends(self, "vision")

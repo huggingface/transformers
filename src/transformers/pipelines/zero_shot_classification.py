@@ -82,6 +82,11 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
     of available models on [huggingface.co/models](https://huggingface.co/models?search=nli).
     """
 
+    _load_processor = False
+    _load_image_processor = False
+    _load_feature_extractor = False
+    _load_tokenizer = True
+
     def __init__(self, args_parser=ZeroShotClassificationArgumentHandler(), *args, **kwargs):
         self._args_parser = args_parser
         super().__init__(*args, **kwargs)
