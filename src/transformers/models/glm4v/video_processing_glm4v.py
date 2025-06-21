@@ -196,23 +196,25 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
                 stacked_videos = stacked_videos.view(B, T, C, resized_height, resized_width)
             resized_videos_grouped[shape] = stacked_videos
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
+
         # Group videos by size for further processing
         # Needed in case do_resize is False, or resize returns videos with different sizes
         grouped_videos, grouped_videos_index = group_videos_by_shape(resized_videos)
         processed_videos_grouped = {}
         processed_grids = {}
-
         for shape, stacked_videos in grouped_videos.items():
             resized_height, resized_width = get_image_size(stacked_videos[0], channel_dim=ChannelDimension.FIRST)
+
+            # Fused rescale and normalize
             stacked_videos = self.rescale_and_normalize(
                 stacked_videos, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             patches = stacked_videos
 
+            # Check that videos have `num_frames` divisible by `temporal_patch_size`
             if patches.shape[1] % temporal_patch_size != 0:
                 repeats = patches[:, -1:].repeat(1, temporal_patch_size - 1, 1, 1, 1)
                 patches = torch.cat([patches, repeats], dim=1)
-
             batch_size, grid_t, channel = patches.shape[:3]
             grid_t = grid_t // temporal_patch_size
             grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
@@ -238,6 +240,7 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
 
             processed_videos_grouped[shape] = flatten_patches
             processed_grids[shape] = [[grid_t, grid_h, grid_w]] * batch_size
+
         processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
         processed_grids = reorder_videos(processed_grids, grouped_videos_index)
         pixel_values_videos = torch.cat(processed_videos, dim=0)
@@ -246,7 +249,6 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
         h = video_grid_thw[0][1].item()
         w = video_grid_thw[0][2].item()
         video_grid_thw = [[1, h, w] for _ in range(total_frames)]
-
         data = {
             "pixel_values_videos": pixel_values_videos,
             "video_grid_thw": video_grid_thw,

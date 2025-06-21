@@ -54,7 +54,7 @@ def smart_resize(
     temporal_factor: int = 2,
     factor: int = 28,
     min_pixels: int = 112 * 112,
-    max_pixels: int = 14 * 14 * 4 * 2 * 6144,
+    max_pixels: int = 14 * 14 * 2 * 2 * 2 * 6144,
 ):
     if num_frames < temporal_factor:
         raise ValueError(f"t:{num_frames} must be larger than temporal_factor:{temporal_factor}")
