@@ -40,7 +40,6 @@ from transformers.testing_utils import (
     is_torch_available,
     nested_simplify,
     require_pyctcdecode,
-    require_tf,
     require_torch,
     require_torch_accelerator,
     require_torchaudio,
@@ -327,10 +326,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             ValueError, "^CTC with LM can only predict word level timestamps, set `return_timestamps='word'`$"
         ):
             _ = speech_recognizer(filename, return_timestamps="char")
-
-    @require_tf
-    def test_small_model_tf(self):
-        self.skipTest(reason="Tensorflow not supported yet.")
 
     @require_torch
     @unittest.skip("TODO (joao, eustache): this test is failing, find the breaking PR and fix the cause or the test")

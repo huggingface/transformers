@@ -39,7 +39,6 @@ from transformers.testing_utils import (
     compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     nested_simplify,
-    require_tf,
     require_timm,
     require_torch,
     require_vision,
@@ -201,11 +200,6 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         for single_output in outputs:
             for output_element in single_output:
                 compare_pipeline_output_to_hub_spec(output_element, ImageSegmentationOutputElement)
-
-    @require_tf
-    @unittest.skip(reason="Image segmentation not implemented in TF")
-    def test_small_model_tf(self):
-        pass
 
     @require_torch
     def test_small_model_pt_no_panoptic(self):
