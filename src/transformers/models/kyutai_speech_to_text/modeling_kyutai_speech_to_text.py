@@ -56,6 +56,92 @@ if is_torch_flex_attn_available():
 logger = logging.get_logger(__name__)
 
 
+class KyutaiSpeechToTextRMSNorm(nn.Module):
+    def __init__(self, dim: int, eps: float = 1e-6):
+        super().__init__()
+        self.eps = eps
+        self.weight = nn.Parameter(torch.ones(dim))  # Ignore copy
+
+    def _norm(self, x):
+        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+
+    # Ignore copy
+    def forward(self, x):
+        output = self._norm(x.float())
+        output = output * self.weight.float()
+        return output.type_as(x)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.eps}"
+
+
+class KyutaiSpeechToTextFlexibleLinear(nn.Module):
+    def __init__(self, input_size, output_size, num_layers):
+        super().__init__()
+        # Stack the weights for N layers into a single tensor (num_layers, output_size, input_size)
+        self.weight = nn.Parameter(torch.randn(num_layers, output_size, input_size))
+
+    def forward(self, x, layer_idx=None):
+        """
+        `KyutaiSpeechToTextFlexibleLinear` creates one linear layer per codebook. There's multiple ways to use it.
+        In the default case, `sequence_length=num_layers`, so each element of the sequence will be matmul to the weights corresponding to its index on the sequence.
+
+        For more advanced cases, one can specify which codebook's layer(s) to use with `layer_idx`.
+        If `layer_idx` indicates a single integer, all of the element of the sequence will be matmul to this single codebook's layer.
+        But if `layer_idx` is a tensor of shape `(seq_length,)`, it will matmul each i-th element of the input sequence to the corresponding layer `weight[i]`.
+
+
+        Args:
+            x (`torch.FloatTensor): input to the layer of shape `(batch, num_layers, embed_dim)` or of shape `(batch, seq_length, embed_dim)`
+            layer_idx (`torch.Tensor`, *optional*):
+                Can be used to specify which codebook's layers(s) to use.
+                If it's a tensor of shape `(seq_length,)`, will matmul each element of the sequence to the corresponding weights.
+                But if `layer_idx` is a tensor of shape `(seq_length,)`, it will matmul each i-th element of the input sequence to the corresponding layer `weight[i]`.
+        """
+
+        # Use torch.gather to select the corresponding weights for each sample
+        # (codebooks, output_size, hidden_size)
+        selected_weights = torch.index_select(self.weight, 0, layer_idx) if layer_idx is not None else self.weight
+
+        # (1, codebooks, hidden_size, output_size)
+        selected_weights = selected_weights.transpose(1, 2)[None, :, :, :]
+
+        # (batch_size, codebooks, 1, hidden_size) x (1, codebooks, hidden_size, output_size)
+        # -> (batch_size, codebooks, 1, output_size)
+        x = torch.matmul(x[:, :, None, :], selected_weights)
+
+        # (batch_size, codebooks, output_size)
+        return x.squeeze(2)
+
+
+@auto_docstring
+class KyutaiSpeechToTextPreTrainedModel(PreTrainedModel):
+    config_class = KyutaiSpeechToTextConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["KyutaiSpeechToTextDecoderLayer", "MimiTransformerLayer"]
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_cache_class = True
+    main_input_name = "input_ids"
+
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, KyutaiSpeechToTextFlexibleLinear):
+            module.weight.data.normal_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, KyutaiSpeechToTextRMSNorm):
+            module.weight.data.fill_(1.0)
+
+
 class KyutaiSpeechToTextConv1dPaddingCache:
     """
     Padding cache for KyutaiSpeechToTextConv1d causal convolutions in order to support streaming via cache padding.
@@ -118,64 +204,6 @@ class KyutaiSpeechToTextEmbeddings(nn.Module):
         inputs_embeds = self.embed_tokens(input_ids)
         inputs_embeds = inputs_embeds.sum(dim=2)
         return inputs_embeds
-
-
-class KyutaiSpeechToTextRMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6):
-        super().__init__()
-        self.eps = eps
-        self.weight = nn.Parameter(torch.ones(dim))  # Ignore copy
-
-    def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
-
-    # Ignore copy
-    def forward(self, x):
-        output = self._norm(x.float())
-        output = output * self.weight.float()
-        return output.type_as(x)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.eps}"
-
-
-class KyutaiSpeechToTextFlexibleLinear(nn.Module):
-    def __init__(self, input_size, output_size, num_layers):
-        super().__init__()
-        # Stack the weights for N layers into a single tensor (num_layers, output_size, input_size)
-        self.weight = nn.Parameter(torch.randn(num_layers, output_size, input_size))
-
-    def forward(self, x, layer_idx=None):
-        """
-        `KyutaiSpeechToTextFlexibleLinear` creates one linear layer per codebook. There's multiple ways to use it.
-        In the default case, `sequence_length=num_layers`, so each element of the sequence will be matmul to the weights corresponding to its index on the sequence.
-
-        For more advanced cases, one can specify which codebook's layer(s) to use with `layer_idx`.
-        If `layer_idx` indicates a single integer, all of the element of the sequence will be matmul to this single codebook's layer.
-        But if `layer_idx` is a tensor of shape `(seq_length,)`, it will matmul each i-th element of the input sequence to the corresponding layer `weight[i]`.
-
-
-        Args:
-            x (`torch.FloatTensor): input to the layer of shape `(batch, num_layers, embed_dim)` or of shape `(batch, seq_length, embed_dim)`
-            layer_idx (`torch.Tensor`, *optional*):
-                Can be used to specify which codebook's layers(s) to use.
-                If it's a tensor of shape `(seq_length,)`, will matmul each element of the sequence to the corresponding weights.
-                But if `layer_idx` is a tensor of shape `(seq_length,)`, it will matmul each i-th element of the input sequence to the corresponding layer `weight[i]`.
-        """
-
-        # Use torch.gather to select the corresponding weights for each sample
-        # (codebooks, output_size, hidden_size)
-        selected_weights = torch.index_select(self.weight, 0, layer_idx) if layer_idx is not None else self.weight
-
-        # (1, codebooks, hidden_size, output_size)
-        selected_weights = selected_weights.transpose(1, 2)[None, :, :, :]
-
-        # (batch_size, codebooks, 1, hidden_size) x (1, codebooks, hidden_size, output_size)
-        # -> (batch_size, codebooks, 1, output_size)
-        x = torch.matmul(x[:, :, None, :], selected_weights)
-
-        # (batch_size, codebooks, output_size)
-        return x.squeeze(2)
 
 
 class KyutaiSpeechToTextLinear(nn.Module):
@@ -727,34 +755,6 @@ class KyutaiSpeechToTextDecoderLayer(nn.Module):
             outputs += (present_key_value,)
 
         return outputs
-
-
-@auto_docstring
-class KyutaiSpeechToTextPreTrainedModel(PreTrainedModel):
-    config_class = KyutaiSpeechToTextConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["KyutaiSpeechToTextDecoderLayer", "MimiTransformerLayer"]
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_cache_class = True
-    main_input_name = "input_ids"
-
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, KyutaiSpeechToTextFlexibleLinear):
-            module.weight.data.normal_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, KyutaiSpeechToTextRMSNorm):
-            module.weight.data.fill_(1.0)
 
 
 @auto_docstring

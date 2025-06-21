@@ -29,7 +29,7 @@ from ..auto import AutoModel
 from ..encodec.feature_extraction_encodec import EncodecFeatureExtractor
 from ..llama.modeling_llama import LlamaForCausalLM
 from ..mimi.modeling_mimi import MimiConv1dPaddingCache
-from ..moshi.modeling_moshi import MoshiModel
+from ..moshi.modeling_moshi import MoshiModel, MoshiPreTrainedModel
 
 
 logger = logging.get_logger(__name__)
@@ -214,6 +214,10 @@ class KyutaiSpeechToTextFeatureExtractor(EncodecFeatureExtractor):
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
         return padded_inputs
+
+
+class KyutaiSpeechToTextPreTrainedModel(MoshiPreTrainedModel):
+    pass
 
 
 class KyutaiSpeechToTextConv1dPaddingCache(MimiConv1dPaddingCache):
