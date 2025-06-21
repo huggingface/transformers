@@ -324,9 +324,14 @@ class GPTNeoFlashAttention2(GPTNeoSelfAttention):
         # This might slowdown training & inference so it is recommended to not cast the LayerNorms
         # in fp32. (LlamaRMSNorm handles it correctly)
 
+        device_type = query.device.type if query.device.type != "mps" else "cpu"
         if query.dtype == torch.float32:
             if torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_gpu_dtype()
+                target_dtype = (
+                    torch.get_autocast_dtype(device_type)
+                    if hasattr(torch, "get_autocast_dtype")
+                    else torch.get_autocast_gpu_dtype()
+                )
             # Handle the case where the model is quantized
             elif hasattr(self.config, "_pre_quantization_dtype"):
                 target_dtype = self.config._pre_quantization_dtype

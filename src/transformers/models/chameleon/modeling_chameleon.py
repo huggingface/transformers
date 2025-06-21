@@ -31,7 +31,6 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     LossKwargs,
     auto_docstring,
@@ -73,9 +72,6 @@ class ChameleonRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-ALL_LAYERNORM_LAYERS.append(ChameleonRMSNorm)
-
-
 # copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Chameleon
 # TODO(joao): add me back asap :)
 class ChameleonRotaryEmbedding(nn.Module):
@@ -101,7 +97,7 @@ class ChameleonRotaryEmbedding(nn.Module):
         # Force float32 since bfloat16 loses precision on long contexts
         # See https://github.com/huggingface/transformers/pull/29285
         device_type = x.device.type
-        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
+        device_type = device_type if device_type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)

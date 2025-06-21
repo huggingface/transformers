@@ -234,7 +234,7 @@ class JetMoeMoE(nn.Module):
     """
 
     def __init__(self, config: JetMoeConfig):
-        super(JetMoeMoE, self).__init__()
+        super().__init__()
 
         self.input_size = config.hidden_size
         self.hidden_size = config.intermediate_size
@@ -292,7 +292,7 @@ class JetMoeMoA(nn.Module):
     """
 
     def __init__(self, config: JetMoeConfig):
-        super(JetMoeMoA, self).__init__()
+        super().__init__()
 
         self.num_experts = config.num_local_experts
         self.input_size = config.hidden_size
@@ -711,9 +711,14 @@ class JetMoeFlashAttention2(JetMoeAttention):
         # in fp32. (LlamaRMSNorm handles it correctly)
 
         input_dtype = query_states.dtype
+        device_type = query_states.device.type if query_states.device.type != "mps" else "cpu"
         if input_dtype == torch.float32:
             if torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_gpu_dtype()
+                target_dtype = (
+                    torch.get_autocast_dtype(device_type)
+                    if hasattr(torch, "get_autocast_dtype")
+                    else torch.get_autocast_gpu_dtype()
+                )
             # Handle the case where the model is quantized
             elif hasattr(self.config, "_pre_quantization_dtype"):
                 target_dtype = self.config._pre_quantization_dtype

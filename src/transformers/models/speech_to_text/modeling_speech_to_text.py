@@ -78,7 +78,7 @@ class Conv1dSubsampler(nn.Module):
     """
 
     def __init__(self, config):
-        super(Conv1dSubsampler, self).__init__()
+        super().__init__()
         self.config = config
         self.num_layers = config.num_conv_layers
         self.in_channels = config.input_feat_per_channel * config.input_channels

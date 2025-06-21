@@ -35,7 +35,7 @@ from ...modeling_outputs import (
     Seq2SeqMoEOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
@@ -239,9 +239,6 @@ class SwitchTransformersLayerNorm(nn.Module):
             hidden_states = hidden_states.to(self.weight.dtype)
 
         return self.weight * hidden_states
-
-
-ALL_LAYERNORM_LAYERS.append(SwitchTransformersLayerNorm)
 
 
 # Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5->SwitchTransformers

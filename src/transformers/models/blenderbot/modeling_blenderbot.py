@@ -1158,7 +1158,7 @@ class BlenderbotModel(BlenderbotPreTrainedModel):
             )
             return BlenderbotSmallModel.from_pretrained(pretrained_model_name_or_path)
 
-        return super(BlenderbotModel, cls).from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
     def get_input_embeddings(self):
         return self.shared
@@ -1319,9 +1319,7 @@ class BlenderbotForConditionalGeneration(BlenderbotPreTrainedModel, GenerationMi
             )
             return BlenderbotSmallForConditionalGeneration.from_pretrained(pretrained_model_name_or_path)
 
-        return super(BlenderbotForConditionalGeneration, cls).from_pretrained(
-            pretrained_model_name_or_path, *model_args, **kwargs
-        )
+        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
     def get_encoder(self):
         return self.model.get_encoder()
