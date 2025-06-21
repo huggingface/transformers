@@ -34,7 +34,7 @@ You can find all the original [DeBERTa-v2] checkpoints under the [Microsoft](htt
 >
 > Click on the [DeBERTa-v2] models in the right sidebar for more examples of how to apply [DeBERTa-v2] to different language tasks.
 
-The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
+The example below demonstrates how to classify text with [`Pipeline`] or the [`AutoModel`] class.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -43,14 +43,13 @@ The example below demonstrates how to generate text based on an image with [`Pip
 import torch
 from transformers import pipeline
 
-# Example: Text classification with DeBERTa-v2
-classifier = pipeline(
+pipeline = pipeline(
     task="text-classification",
     model="microsoft/deberta-v2-xlarge-mnli",
     device=0,
     torch_dtype=torch.float16
 )
-result = classifier("DeBERTa-v2 is great at understanding context!")
+result = pipeline("DeBERTa-v2 is great at understanding context!")
 print(result)
 ```
 
@@ -82,7 +81,7 @@ print(f"Predicted label: {predicted_label}")
 
 </hfoption>
 
-<hfoption id="transformers-CLI">
+<hfoption id="transformers CLI">
 
 ```bash
 echo -e "DeBERTa-v2 is great at understanding context!" | transformers-cli run --task fill-mask --model microsoft/deberta-v2-xlarge-mnli --device 0
@@ -93,6 +92,32 @@ echo -e "DeBERTa-v2 is great at understanding context!" | transformers-cli run -
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
 The example below uses [bitsandbytes quantization](../quantization/bitsandbytes) to only quantize the weights to 4-bit.
+
+```py
+from transformers import AutoModelForSequenceClassification, AutoTokenizer, BitsAndBytesConfig
+
+model_id = "microsoft/deberta-v2-xlarge"
+quantization_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_dtype="float16",
+    bnb_4bit_use_double_quant=True,
+)
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = AutoModelForSequenceClassification.from_pretrained(
+    model_id,
+    quantization_config=quantization_config,
+    torch_dtype="float16"
+)
+
+total_params = sum(p.numel() for p in model.parameters())
+print(f"Total parameters: {total_params:,}")
+
+inputs = tokenizer("Hugging Face Transformers make NLP easy!", return_tensors="pt")
+print("Decoded text:", tokenizer.decode(inputs["input_ids"][0]))
+
+```
+
 
 ## Resources
 
