@@ -112,5 +112,3 @@ The original code can be found [here](https://github.com/kyutai-labs/moshi).
 ## KyutaiSpeechToTextModel
 
 [[autodoc]] KyutaiSpeechToTextProcessor
-
-
