@@ -750,6 +750,17 @@ class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
+        r"""
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask used to avoid performing attention on padding tokens.
+            Positions with a value of 1 indicate tokens that should be attended to,
+            while 0 indicates padding tokens which are ignored by the model.
+            Typically used to differentiate between actual tokens and padding in batched sequences.
+
+            Example:
+                >>> attention_mask = torch.tensor([[1, 1, 1, 0, 0]])
+                >>> # 1s represent actual tokens, 0s are padding.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

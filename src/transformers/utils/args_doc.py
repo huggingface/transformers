@@ -248,10 +248,10 @@ class ModelArgs:
 
     attention_mask = {
         "description": """
-    Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+    Mask used to avoid performing attention on padding token indices.
 
-    - 1 for tokens that are **not masked**,
-    - 0 for tokens that are **masked**.
+    - A value of **1** indicates a token **should be attended to**.
+    - A value of **0** means it will be **ignored** (typically padding).
 
     [What are attention masks?](../glossary#attention-mask)
     """,
