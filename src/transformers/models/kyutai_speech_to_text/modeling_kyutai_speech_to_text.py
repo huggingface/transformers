@@ -1351,6 +1351,9 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
         super().save_pretrained(*args, **kwargs)
 
     def generate(self, *args, **kwargs):
+        r"""
+        This method forwards all its arguments to GenerationMixin's [`~GenerationMixin.generate`]. Please refer to the docstring of this method for more information.
+        """
         max_new_tokens = kwargs.pop("max_new_tokens", None)
         input_values = kwargs.get("input_values")
 
