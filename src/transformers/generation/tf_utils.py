@@ -1612,7 +1612,7 @@ class TFGenerationMixin:
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
-        
+        output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_attentions = (
             output_attentions if output_attentions is not None else self.generation_config.output_attentions
         )
@@ -1896,7 +1896,7 @@ class TFGenerationMixin:
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
-        
+        output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_attentions = (
             output_attentions if output_attentions is not None else self.generation_config.output_attentions
         )
@@ -2241,7 +2241,7 @@ class TFGenerationMixin:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.generation_config.output_hidden_states
         )
-        
+        output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         return_dict_in_generate = (
             return_dict_in_generate
             if return_dict_in_generate is not None
@@ -2772,7 +2772,7 @@ class TFGenerationMixin:
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
-        
+        output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_attentions = (
             output_attentions if output_attentions is not None else self.generation_config.output_attentions
         )
