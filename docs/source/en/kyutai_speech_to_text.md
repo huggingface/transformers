@@ -99,9 +99,18 @@ The original code can be found [here](https://github.com/kyutai-labs/moshi).
 [[autodoc]] KyutaiSpeechToTextProcessor
     - __call__
 
+## KyutaiSpeechToTextFeatureExtractor
+
+[[autodoc]] KyutaiSpeechToTextFeatureExtractor
+
 ## KyutaiSpeechToTextForConditionalGeneration
 
 [[autodoc]] KyutaiSpeechToTextForConditionalGeneration
     - forward
     - generate
+
+## KyutaiSpeechToTextModel
+
+[[autodoc]] KyutaiSpeechToTextProcessor
+
 
