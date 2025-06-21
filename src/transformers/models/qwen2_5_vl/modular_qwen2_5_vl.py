@@ -19,7 +19,6 @@
 # limitations under the License.
 """PyTorch Qwen2.5-VL model."""
 
-from dataclasses import dataclass
 from typing import Optional, Union
 
 import numpy as np
@@ -409,7 +408,6 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         return hidden_states
 
 
-@dataclass
 class Qwen2_5_VLModelOutputWithPast(Qwen2VLModelOutputWithPast):
     pass
 
@@ -753,7 +751,6 @@ class Qwen2_5_VLModel(Qwen2VLModel):
         return output if return_dict else output.to_tuple()
 
 
-@dataclass
 class Qwen2_5_VLCausalLMOutputWithPast(Qwen2VLCausalLMOutputWithPast):
     pass
 

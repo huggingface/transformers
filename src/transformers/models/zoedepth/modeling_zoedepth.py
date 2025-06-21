@@ -34,30 +34,17 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class ZoeDepthDepthEstimatorOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Extension of `DepthEstimatorOutput` to include domain logits (ZoeDepth specific).
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Classification (or regression if config.num_labels==1) loss.
-        predicted_depth (`torch.FloatTensor` of shape `(batch_size, height, width)`):
-            Predicted depth for each pixel.
-
-        domain_logits (`torch.FloatTensor` of shape `(batch_size, num_domains)`):
-            Logits for each domain (e.g. NYU and KITTI) in case multiple metric heads are used.
-
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, num_channels, height, width)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, patch_size,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    """
+)
+class ZoeDepthDepthEstimatorOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Classification (or regression if config.num_labels==1) loss.
+    domain_logits (`torch.FloatTensor` of shape `(batch_size, num_domains)`):
+        Logits for each domain (e.g. NYU and KITTI) in case multiple metric heads are used.
     """
 
     loss: Optional[torch.FloatTensor] = None

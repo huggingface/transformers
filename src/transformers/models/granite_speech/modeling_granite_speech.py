@@ -33,32 +33,23 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class GraniteSpeechCausalLMOutputWithPast(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for LlavaNext causal language model (or autoregressive) outputs.
+    """
+)
+class GraniteSpeechCausalLMOutputWithPast(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
 
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss (for next-token prediction).
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-            `past_key_values` input) to speed up sequential decoding.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -382,12 +373,12 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
             The tensors corresponding to the input audios. input features can be obtained using
             [`AutoFeatureExtractor`]. See [`GraniteSpeechFeatureExtractor.__call__`] for details.
             [`GraniteSpeechProcessor`] uses [`GraniteSpeechFeatureExtractor`] for processing audio.
+        input_features_mask (`torch.Tensor`, *optional*):
+            Mask to be applied to audio features prior to scattering into the language embeddings.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        input_features_mask (`torch.Tensor`, *optional*):
-            Mask to be applied to audio features prior to scattering into the language embeddings.
         """
         # TODO (@alex-jw-brooks) add an example to this docstring once models are released
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

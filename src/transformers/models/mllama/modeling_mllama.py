@@ -1531,10 +1531,6 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
             For each text token (in seq_length):
             - 1 indicates the token **should attend** to the corresponding image tile
             - 0 indicates the token **should not attend** to the corresponding image tile
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         full_text_row_masked_out_mask (`tuple[torch.Tensor, torch.Tensor]`, *optional*):
             A tuple containing two tensors that mask out rows in the cross-attention mechanism:
             - The first tensor has shape `(batch_size, 1, seq_length, 1)` and contains values of 0 or 1.
@@ -1544,6 +1540,10 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
               the forward pass of cross-attention layers.
             This mask is derived from the cross_attention_mask and is used to handle cases where a text token
             should not attend to any image token.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 

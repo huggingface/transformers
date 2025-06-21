@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import math
-from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
@@ -182,9 +181,17 @@ class LlavaNextVideoConfig(PretrainedConfig):
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
-@dataclass
 class LlavaNextVideoModelOutputWithPast(LlavaNextModelOutputWithPast):
-    """
+    r"""
+    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    image_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     video_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor`  of size `(batch_size * num_frames, num_videos, sequence_length, hidden_size)`.
         video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
@@ -193,9 +200,21 @@ class LlavaNextVideoModelOutputWithPast(LlavaNextModelOutputWithPast):
     video_hidden_states: Optional[torch.FloatTensor] = None
 
 
-@dataclass
 class LlavaNextVideoCausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
-    """
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    image_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size (batch_size * num_patches, num_images, sequence_length, hidden_size)`.
+        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     video_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor`  of size `(batch_size * num_frames, num_videos, sequence_length, hidden_size)`.
         video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.

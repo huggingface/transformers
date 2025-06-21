@@ -26,11 +26,12 @@ from .args_doc import (
     ClassDocstring,
     ImageProcessorArgs,
     ModelArgs,
+    ModelOutputArgs,
     auto_class_docstring,
     auto_docstring,
+    get_args_doc_from_source,
     parse_docstring,
     set_min_indent,
-    source_args_doc,
 )
 from .backbone_utils import BackboneConfigMixin, BackboneMixin
 from .chat_template_utils import DocstringParsingException, TypeHintParsingException, get_json_schema

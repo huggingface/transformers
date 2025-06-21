@@ -30,27 +30,17 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class VJEPA2WithMaskedInputPredictorOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     VJEPA Predictor outputs that also contains the masked encoder outputs
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        masked_hidden_state (`torch.FloatTensor`), *optional*, returned when `context_mask` is provided which is applied on VJEPA2Encoder outputs
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        target_hidden_state (`torch.FloatTensor`), *optional*):
-            Returned when `target_mask` is provided which is applied on VJEPA2Encoder outputs.
+    """
+)
+class VJEPA2WithMaskedInputPredictorOutput(ModelOutput):
+    r"""
+    masked_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*, returned when `context_mask` is provided which is applied on VJEPA2Encoder outputs):
+        The masked hidden state of the model.
+    target_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*, returned when `target_mask` is provided which is applied on VJEPA2Encoder outputs):
+        The target hidden state of the model.
     """
 
     last_hidden_state: torch.FloatTensor
@@ -61,29 +51,18 @@ class VJEPA2WithMaskedInputPredictorOutput(ModelOutput):
 
 
 @dataclass
-class VJEPA2WithMaskedInputModelOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     VJEPA outputs that also contains the masked encoder outputs
     Optionally contains the predictor outputs
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        masked_hidden_state (`torch.FloatTensor`), *optional*):
-            Returned when `context_mask` is provided which is applied on VJEPA2Encoder outputs.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        predictor_output (`VJEPA2WithMaskedInputPredictorOutput`, *optional*):
-            Returns the output from the Predictor module
+    """
+)
+class VJEPA2WithMaskedInputModelOutput(ModelOutput):
+    r"""
+    masked_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*, returned when `context_mask` is provided which is applied on VJEPA2Encoder outputs):
+        The masked hidden state of the model.
+    predictor_output (`VJEPA2WithMaskedInputPredictorOutput`, *optional*):
+        The output from the Predictor module.
     """
 
     last_hidden_state: torch.FloatTensor
@@ -1092,12 +1071,12 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
             The input video pixels which is processed by VJEPA2VideoProcessor.
         context_head_mask (`torch.Tensor` with shape `[num_heads]` or `[num_hidden_layers x num_heads]`, *optional*):
             The mask indicating if we should keep the heads or not (1.0 for keep, 0.0 for discard) for the context.
-        target_head_mask (`torch.Tensor` with shape `[num_heads]` or `[num_hidden_layers x num_heads]`, *optional*):
-            The mask indicating if we should keep the heads or not (1.0 for keep, 0.0 for discard) for the target.
         context_mask (`torch.Tensor` with shape `[batch_size, patch_size, 1]`, *optional*):
             The mask position ids indicating which encoder output patches are going to be exposed to the predictor.
             By default, this mask is created as torch.arange(N).unsqueeze(0).repeat(B,1), indicating full context
             available to the predictor.
+        target_head_mask (`torch.Tensor` with shape `[num_heads]` or `[num_hidden_layers x num_heads]`, *optional*):
+            The mask indicating if we should keep the heads or not (1.0 for keep, 0.0 for discard) for the target.
         target_mask (`torch.Tensor` with shape `[batch_size, patch_size, 1]`, *optional*):
             The mask position ids indicating which encoder output patches are going to be used as a prediction target
             for the predictor. By default, this mask is created as torch.arange(N).unsqueeze(0).repeat(B,1), indicating

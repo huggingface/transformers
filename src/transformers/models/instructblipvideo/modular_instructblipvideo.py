@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
@@ -189,7 +188,6 @@ class InstructBlipVideoQFormerModel(InstructBlipQFormerModel):
     pass
 
 
-@dataclass
 class InstructBlipVideoForConditionalGenerationModelOutput(InstructBlipForConditionalGenerationModelOutput):
     pass
 

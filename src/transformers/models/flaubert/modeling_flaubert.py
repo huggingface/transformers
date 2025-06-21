@@ -246,27 +246,28 @@ class FlaubertPredLayer(nn.Module):
 
 
 @dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for outputs of question answering models using a [`~modeling_utils.FlaubertSQuADHead`].
+    """
+)
 # Copied from transformers.models.xlm.modeling_xlm.XLMSquadHeadOutput with XLM->Flaubert
 class FlaubertSquadHeadOutput(ModelOutput):
-    """
-    Base class for outputs of question answering models using a [`~modeling_utils.FlaubertSQuADHead`].
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned if both `start_positions` and `end_positions` are provided):
-            Classification loss as the sum of start token, end token (and is_impossible if provided) classification
-            losses.
-        start_top_log_probs (`torch.FloatTensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
-            Log probabilities for the top config.start_n_top start token possibilities (beam-search).
-        start_top_index (`torch.LongTensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
-            Indices for the top config.start_n_top start token possibilities (beam-search).
-        end_top_log_probs (`torch.FloatTensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
-            Log probabilities for the top `config.start_n_top * config.end_n_top` end token possibilities
-            (beam-search).
-        end_top_index (`torch.LongTensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
-            Indices for the top `config.start_n_top * config.end_n_top` end token possibilities (beam-search).
-        cls_logits (`torch.FloatTensor` of shape `(batch_size,)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
-            Log probabilities for the `is_impossible` label of the answers.
-
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned if both `start_positions` and `end_positions` are provided):
+        Classification loss as the sum of start token, end token (and is_impossible if provided) classification
+        losses.
+    start_top_log_probs (`torch.FloatTensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+        Log probabilities for the top config.start_n_top start token possibilities (beam-search).
+    start_top_index (`torch.LongTensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+        Indices for the top config.start_n_top start token possibilities (beam-search).
+    end_top_log_probs (`torch.FloatTensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+        Log probabilities for the top `config.start_n_top * config.end_n_top` end token possibilities
+        (beam-search).
+    end_top_index (`torch.LongTensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+        Indices for the top `config.start_n_top * config.end_n_top` end token possibilities (beam-search).
+    cls_logits (`torch.FloatTensor` of shape `(batch_size,)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+        Log probabilities for the `is_impossible` label of the answers.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -815,6 +816,14 @@ class FlaubertModel(FlaubertPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutput]:
         r"""
+        langs (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            A parallel sequence of tokens to be used to indicate the language of each token in the input. Indices are
+            languages ids which can be obtained from the language names by using two conversion mappings provided in
+            the configuration of the model (only provided for multilingual models). More precisely, the *language name
+            to language id* mapping is in `model.config.lang2id` (which is a dictionary string to int) and the
+            *language id to language name* mapping is in `model.config.id2lang` (dictionary int to string).
+
+            See usage examples detailed in the [multilingual documentation](../multilingual).
         lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
             also use `attention_mask` for the same result (see above), kept here for compatibility. Indices selected in
@@ -824,14 +833,6 @@ class FlaubertModel(FlaubertPreTrainedModel):
             attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
             decoding. The dictionary object will be modified in-place during the forward pass to add newly computed
             hidden-states.
-        langs (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            A parallel sequence of tokens to be used to indicate the language of each token in the input. Indices are
-            languages ids which can be obtained from the language names by using two conversion mappings provided in
-            the configuration of the model (only provided for multilingual models). More precisely, the *language name
-            to language id* mapping is in `model.config.lang2id` (which is a dictionary string to int) and the
-            *language id to language name* mapping is in `model.config.id2lang` (dictionary int to string).
-
-            See usage examples detailed in the [multilingual documentation](../multilingual).
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1040,6 +1041,14 @@ class FlaubertWithLMHeadModel(FlaubertPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, MaskedLMOutput]:
         r"""
+        langs (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            A parallel sequence of tokens to be used to indicate the language of each token in the input. Indices are
+            languages ids which can be obtained from the language names by using two conversion mappings provided in
+            the configuration of the model (only provided for multilingual models). More precisely, the *language name
+            to language id* mapping is in `model.config.lang2id` (which is a dictionary string to int) and the
+            *language id to language name* mapping is in `model.config.id2lang` (dictionary int to string).
+
+            See usage examples detailed in the [multilingual documentation](../multilingual).
         lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
             also use `attention_mask` for the same result (see above), kept here for compatibility. Indices selected in
@@ -1053,14 +1062,6 @@ class FlaubertWithLMHeadModel(FlaubertPreTrainedModel, GenerationMixin):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
-        langs (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            A parallel sequence of tokens to be used to indicate the language of each token in the input. Indices are
-            languages ids which can be obtained from the language names by using two conversion mappings provided in
-            the configuration of the model (only provided for multilingual models). More precisely, the *language name
-            to language id* mapping is in `model.config.lang2id` (which is a dictionary string to int) and the
-            *language id to language name* mapping is in `model.config.id2lang` (dictionary int to string).
-
-            See usage examples detailed in the [multilingual documentation](../multilingual).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1413,37 +1414,28 @@ class FlaubertForQuestionAnsweringSimple(FlaubertPreTrainedModel):
 
 
 @dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for outputs of question answering models using a `SquadHead`.
+    """
+)
 # Copied from transformer.models.xlm.modeling_xlm.XLMForQuestionAnsweringOutput with XLM->Flaubert
 class FlaubertForQuestionAnsweringOutput(ModelOutput):
-    """
-    Base class for outputs of question answering models using a `SquadHead`.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned if both `start_positions` and `end_positions` are provided):
-            Classification loss as the sum of start token, end token (and is_impossible if provided) classification
-            losses.
-        start_top_log_probs (`torch.FloatTensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
-            Log probabilities for the top config.start_n_top start token possibilities (beam-search).
-        start_top_index (`torch.LongTensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
-            Indices for the top config.start_n_top start token possibilities (beam-search).
-        end_top_log_probs (`torch.FloatTensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
-            Log probabilities for the top `config.start_n_top * config.end_n_top` end token possibilities
-            (beam-search).
-        end_top_index (`torch.LongTensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
-            Indices for the top `config.start_n_top * config.end_n_top` end token possibilities (beam-search).
-        cls_logits (`torch.FloatTensor` of shape `(batch_size,)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
-            Log probabilities for the `is_impossible` label of the answers.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned if both `start_positions` and `end_positions` are provided):
+        Classification loss as the sum of start token, end token (and is_impossible if provided) classification
+        losses.
+    start_top_log_probs (`torch.FloatTensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+        Log probabilities for the top config.start_n_top start token possibilities (beam-search).
+    start_top_index (`torch.LongTensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+        Indices for the top config.start_n_top start token possibilities (beam-search).
+    end_top_log_probs (`torch.FloatTensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+        Log probabilities for the top `config.start_n_top * config.end_n_top` end token possibilities
+        (beam-search).
+    end_top_index (`torch.LongTensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+        Indices for the top `config.start_n_top * config.end_n_top` end token possibilities (beam-search).
+    cls_logits (`torch.FloatTensor` of shape `(batch_size,)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+        Log probabilities for the `is_impossible` label of the answers.
     """
 
     loss: Optional[torch.FloatTensor] = None
