@@ -29,6 +29,7 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
@@ -364,7 +365,7 @@ SAM_HQ_VISION_ATTENTION_CLASSES = {
 }
 
 
-class SamHQVisionLayer(nn.Module):
+class SamHQVisionLayer(GradientCheckpointingLayer):
     def __init__(self, config, window_size):
         super().__init__()
         self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -539,18 +540,10 @@ class SamHQVisionEncoder(nn.Module):
         all_self_attentions = () if output_attentions else None
         intermediate_embeddings = []
 
-        for i, layer_module in enumerate(self.layers):
+        for layer_module in self.layers:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
-
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, output_attentions=output_attentions)
-
+            layer_outputs = layer_module(hidden_states, output_attentions=output_attentions)
             hidden_states = layer_outputs[0]
 
             # Collect embeddings from non-windowed blocks

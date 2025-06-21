@@ -50,6 +50,7 @@ from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...modeling_flash_attention_utils import is_flash_attn_available
+from ...modeling_layers import GradientCheckpointingLayer
 from ...processing_utils import MultiModalData, ProcessingKwargs, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_torchdynamo_compiling, logging
@@ -205,7 +206,7 @@ QWEN2_5_VL_VISION_ATTENTION_CLASSES = {
 }
 
 
-class Qwen2_5_VLVisionBlock(nn.Module):
+class Qwen2_5_VLVisionBlock(GradientCheckpointingLayer):
     def __init__(self, config, attn_implementation: str = "sdpa") -> None:
         super().__init__()
         self.norm1 = Qwen2RMSNorm(config.hidden_size, eps=1e-6)
@@ -395,12 +396,7 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
                 cu_seqlens_now = cu_seqlens
             else:
                 cu_seqlens_now = cu_window_seqlens
-            if self.gradient_checkpointing and self.training:
-                hidden_states = self._gradient_checkpointing_func(
-                    blk.__call__, hidden_states, cu_seqlens_now, None, position_embeddings
-                )
-            else:
-                hidden_states = blk(hidden_states, cu_seqlens=cu_seqlens_now, position_embeddings=position_embeddings)
+            hidden_states = blk(hidden_states, cu_seqlens=cu_seqlens_now, position_embeddings=position_embeddings)
 
         hidden_states = self.merger(hidden_states)
         reverse_indices = torch.argsort(window_index)

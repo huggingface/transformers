@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN, gelu
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
@@ -695,7 +696,7 @@ class LukeOutput(nn.Module):
         return hidden_states
 
 
-class LukeLayer(nn.Module):
+class LukeLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -774,23 +775,13 @@ class LukeEncoder(nn.Module):
                 all_entity_hidden_states = all_entity_hidden_states + (entity_hidden_states,)
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    word_hidden_states,
-                    entity_hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(
-                    word_hidden_states,
-                    entity_hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    output_attentions,
-                )
+            layer_outputs = layer_module(
+                word_hidden_states,
+                entity_hidden_states,
+                attention_mask,
+                layer_head_mask,
+                output_attentions,
+            )
 
             word_hidden_states = layer_outputs[0]
 

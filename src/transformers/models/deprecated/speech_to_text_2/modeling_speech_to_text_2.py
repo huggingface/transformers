@@ -24,6 +24,7 @@ from torch.nn import CrossEntropyLoss
 
 from ....activations import ACT2FN
 from ....modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
+from ....modeling_layers import GradientCheckpointingLayer
 from ....modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ....modeling_utils import PreTrainedModel
 from ....utils import add_start_docstrings, logging, replace_return_docstrings
@@ -263,7 +264,7 @@ class Speech2Text2Attention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-class Speech2Text2DecoderLayer(nn.Module):
+class Speech2Text2DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Speech2Text2Config):
         super().__init__()
         self.embed_dim = config.d_model
@@ -612,31 +613,17 @@ class Speech2Text2Decoder(Speech2Text2PreTrainedModel):
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    head_mask[idx] if head_mask is not None else None,
-                    cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
-                    None,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=attention_mask,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                    cross_attn_layer_head_mask=(
-                        cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
-                    ),
-                    past_key_value=past_key_value,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                cross_attn_layer_head_mask=(cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+            )
             hidden_states = layer_outputs[0]
 
             if use_cache:

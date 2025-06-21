@@ -25,6 +25,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
@@ -455,7 +456,7 @@ class FocalNetLayer(nn.Module):
         return hidden_state
 
 
-class FocalNetStage(nn.Module):
+class FocalNetStage(GradientCheckpointingLayer):
     def __init__(self, config, index, input_resolution):
         super().__init__()
 
@@ -560,14 +561,7 @@ class FocalNetEncoder(nn.Module):
             all_reshaped_hidden_states += (reshaped_hidden_state,)
 
         for i, stage_module in enumerate(self.stages):
-            if self.gradient_checkpointing and self.training:
-                stage_outputs = self._gradient_checkpointing_func(
-                    stage_module.__call__,
-                    hidden_states,
-                    input_dimensions,
-                )
-            else:
-                stage_outputs = stage_module(hidden_states, input_dimensions)
+            stage_outputs = stage_module(hidden_states, input_dimensions)
 
             hidden_states = stage_outputs[0]
             hidden_states_before_downsampling = stage_outputs[1]

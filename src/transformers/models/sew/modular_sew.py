@@ -230,17 +230,9 @@ class SEWEncoder(nn.Module):
             skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        layer.__call__,
-                        hidden_states,
-                        attention_mask,
-                        output_attentions,
-                    )
-                else:
-                    layer_outputs = layer(
-                        hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
-                    )
+                layer_outputs = layer(
+                    hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+                )
                 hidden_states = layer_outputs[0]
 
             if skip_the_layer:

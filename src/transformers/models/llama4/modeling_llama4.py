@@ -29,6 +29,7 @@ from ...generation import GenerationMixin
 from ...integrations.hub_kernels import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_chunked_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -360,7 +361,7 @@ class Llama4TextAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Llama4TextDecoderLayer(nn.Module):
+class Llama4TextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -571,31 +572,17 @@ class Llama4TextModel(Llama4PreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    causal_mask_mapping[decoder_layer.attention_type],
-                    position_ids,
-                    past_key_values,
-                    output_attentions,
-                    False,  # output_router_logits is False
-                    use_cache,
-                    cache_position,
-                    freq_cis,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=causal_mask_mapping[decoder_layer.attention_type],
-                    position_ids=position_ids,
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                    position_embeddings=freq_cis,
-                    **flash_attn_kwargs,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                position_ids=position_ids,
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                position_embeddings=freq_cis,
+                **flash_attn_kwargs,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -930,7 +917,7 @@ class Llama4VisionMLP(nn.Module):
         return hidden_states
 
 
-class Llama4VisionEncoderLayer(nn.Module):
+class Llama4VisionEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Llama4VisionConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -1033,21 +1020,13 @@ class Llama4VisionEncoder(nn.Module):
         for encoder_layer in self.layers:
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    encoder_layer.__call__,
-                    hidden_states,
-                    freqs_ci,
-                    attention_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_state=hidden_states,
-                    attention_mask=attention_mask,
-                    output_attentions=output_attentions,
-                    freqs_ci=freqs_ci,
-                )
+
+            layer_outputs = encoder_layer(
+                hidden_state=hidden_states,
+                attention_mask=attention_mask,
+                output_attentions=output_attentions,
+                freqs_ci=freqs_ci,
+            )
 
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)

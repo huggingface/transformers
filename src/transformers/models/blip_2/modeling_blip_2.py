@@ -531,7 +531,7 @@ class Blip2Encoder(nn.Module):
 
             layer_outputs = encoder_layer(
                 hidden_states,
-                attention_mask,
+                attention_mask=attention_mask,
                 output_attentions=output_attentions,
             )
 
@@ -992,11 +992,11 @@ class Blip2QFormerEncoder(nn.Module):
                 hidden_states,
                 attention_mask,
                 layer_head_mask,
-                encoder_hidden_states,
-                encoder_attention_mask,
-                past_key_value,
-                output_attentions,
-                query_length,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                encoder_attention_mask=encoder_attention_mask,
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
+                query_length=query_length,
             )
 
             hidden_states = layer_outputs[0]

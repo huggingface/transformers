@@ -25,6 +25,7 @@ import torch.utils.checkpoint
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -969,7 +970,7 @@ SAM_VISION_ATTENTION_CLASSES = {
 }
 
 
-class SamVisionLayer(nn.Module):
+class SamVisionLayer(GradientCheckpointingLayer):
     def __init__(self, config, window_size):
         super().__init__()
         self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -1145,13 +1146,7 @@ class SamVisionEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, output_attentions=output_attentions)
+            layer_outputs = layer_module(hidden_states, output_attentions=output_attentions)
 
             hidden_states = layer_outputs[0]
 

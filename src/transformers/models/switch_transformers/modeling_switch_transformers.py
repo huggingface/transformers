@@ -27,6 +27,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     MoEModelOutput,
     MoEModelOutputWithPastAndCrossAttentions,
@@ -661,7 +662,7 @@ class SwitchTransformersLayerCrossAttention(nn.Module):
         return outputs
 
 
-class SwitchTransformersBlock(nn.Module):
+class SwitchTransformersBlock(GradientCheckpointingLayer):
     def __init__(self, config, has_relative_attention_bias=False, is_sparse=False, layer_idx: Optional[int] = None):
         super().__init__()
         self.is_decoder = config.is_decoder
@@ -1024,41 +1025,22 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.forward,
-                    hidden_states,
-                    causal_mask,
-                    position_bias,
-                    encoder_hidden_states,
-                    encoder_extended_attention_mask,
-                    encoder_decoder_position_bias,
-                    layer_head_mask,
-                    cross_attn_layer_head_mask,
-                    None,  # past_key_value is always None with gradient checkpointing
-                    use_cache,
-                    output_attentions,
-                    output_router_logits,
-                    return_dict,
-                    cache_position,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask=causal_mask,
-                    position_bias=position_bias,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_extended_attention_mask,
-                    encoder_decoder_position_bias=encoder_decoder_position_bias,
-                    layer_head_mask=layer_head_mask,
-                    cross_attn_layer_head_mask=cross_attn_layer_head_mask,
-                    past_key_value=past_key_values,
-                    use_cache=use_cache,
-                    output_attentions=output_attentions,
-                    output_router_logits=output_router_logits,
-                    return_dict=return_dict,
-                    cache_position=cache_position,
-                )
+            layer_outputs = layer_module(
+                hidden_states,
+                causal_mask,
+                position_bias,
+                encoder_hidden_states,
+                encoder_extended_attention_mask,
+                encoder_decoder_position_bias,
+                layer_head_mask=layer_head_mask,
+                cross_attn_layer_head_mask=cross_attn_layer_head_mask,
+                past_key_value=past_key_values,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                output_router_logits=output_router_logits,
+                return_dict=return_dict,
+                cache_position=cache_position,
+            )
 
             router_probs = layer_outputs[-1]
             layer_outputs = layer_outputs[:-1]

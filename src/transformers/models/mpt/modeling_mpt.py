@@ -25,6 +25,7 @@ from torch.nn import functional as F
 
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -160,7 +161,7 @@ class MptMLP(nn.Module):
         return output
 
 
-class MptBlock(nn.Module):
+class MptBlock(GradientCheckpointingLayer):
     def __init__(self, config: MptConfig):
         super().__init__()
         hidden_size = config.hidden_size
@@ -388,25 +389,14 @@ class MptModel(MptPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                outputs = self._gradient_checkpointing_func(
-                    block.__call__,
-                    hidden_states,
-                    alibi,
-                    causal_mask,
-                    layer_past,
-                    use_cache,
-                    output_attentions,
-                )
-            else:
-                outputs = block(
-                    hidden_states,
-                    layer_past=layer_past,
-                    attention_mask=causal_mask,
-                    use_cache=use_cache,
-                    output_attentions=output_attentions,
-                    position_bias=alibi,
-                )
+            outputs = block(
+                hidden_states,
+                layer_past=layer_past,
+                attention_mask=causal_mask,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                position_bias=alibi,
+            )
 
             hidden_states = outputs[0]
             if use_cache is True:

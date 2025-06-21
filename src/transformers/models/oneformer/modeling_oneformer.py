@@ -26,6 +26,7 @@ from torch import Tensor, nn
 from torch.cuda.amp import autocast
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -2563,7 +2564,7 @@ class OneFormerTextMLP(nn.Module):
         return hidden_states
 
 
-class OneFormerTextTransformerLayer(nn.Module):
+class OneFormerTextTransformerLayer(GradientCheckpointingLayer):
     def __init__(self, width: int, heads: int, attn_mask: torch.Tensor, layer_norm_eps=1e-05):
         super().__init__()
         self.self_attn = nn.MultiheadAttention(width, heads)
@@ -2617,10 +2618,7 @@ class OneFormerTextTransformer(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor):
         for layer in self.layers:
-            if self.use_checkpoint:
-                hidden_states = self._gradient_checkpointing_func(layer, hidden_states)
-            else:
-                hidden_states = layer(hidden_states)
+            hidden_states = layer(hidden_states)
         return hidden_states
 
 

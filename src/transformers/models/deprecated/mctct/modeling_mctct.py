@@ -26,6 +26,7 @@ from ....file_utils import add_code_sample_docstrings, add_start_docstrings, add
 from ....integrations.deepspeed import is_deepspeed_zero3_enabled
 from ....integrations.fsdp import is_fsdp_managed_module
 from ....modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ....modeling_layers import GradientCheckpointingLayer
 from ....modeling_outputs import BaseModelOutput, CausalLMOutput
 from ....modeling_utils import (
     PreTrainedModel,
@@ -377,7 +378,7 @@ class MCTCTOutput(nn.Module):
         return hidden_states
 
 
-class MCTCTLayer(nn.Module):
+class MCTCTLayer(GradientCheckpointingLayer):
     def __init__(self, config: MCTCTConfig):
         super().__init__()
 
@@ -591,20 +592,11 @@ class MCTCTEncoder(MCTCTPreTrainedModel):
             skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        encoder_layer.__call__,
-                        hidden_states,
-                        attention_mask,
-                        (head_mask[idx] if head_mask is not None else None),
-                        output_attentions,
-                    )
-                else:
-                    layer_outputs = encoder_layer(
-                        hidden_states=hidden_states,
-                        attention_mask=attention_mask,
-                        output_attentions=output_attentions,
-                    )
+                layer_outputs = encoder_layer(
+                    hidden_states=hidden_states,
+                    attention_mask=attention_mask,
+                    output_attentions=output_attentions,
+                )
 
                 hidden_states = layer_outputs[0]
 

@@ -25,6 +25,7 @@ import torch.utils.checkpoint
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     QuestionAnsweringModelOutput,
@@ -358,7 +359,7 @@ class LayoutLMv3Attention(nn.Module):
 
 
 # Copied from transformers.models.layoutlmv2.modeling_layoutlmv2.LayoutLMv2Layer with LayoutLMv2->LayoutLMv3
-class LayoutLMv3Layer(nn.Module):
+class LayoutLMv3Layer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -514,25 +515,14 @@ class LayoutLMv3Encoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    output_attentions,
-                    rel_pos,
-                    rel_2d_pos,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    output_attentions,
-                    rel_pos=rel_pos,
-                    rel_2d_pos=rel_2d_pos,
-                )
+            layer_outputs = layer_module(
+                hidden_states,
+                attention_mask,
+                layer_head_mask,
+                output_attentions,
+                rel_pos=rel_pos,
+                rel_2d_pos=rel_2d_pos,
+            )
 
             hidden_states = layer_outputs[0]
             if output_attentions:

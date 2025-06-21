@@ -27,6 +27,7 @@ from torch.nn import LayerNorm
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
@@ -956,7 +957,7 @@ class ProphetNetNgramSelfAttention(nn.Module):
         return predict_relative_pos_embeddings
 
 
-class ProphetNetEncoderLayer(nn.Module):
+class ProphetNetEncoderLayer(GradientCheckpointingLayer):
     """
     Encoder block for Prophetnet
     """
@@ -999,7 +1000,7 @@ class ProphetNetEncoderLayer(nn.Module):
         return outputs
 
 
-class ProphetNetDecoderLayer(nn.Module):
+class ProphetNetDecoderLayer(GradientCheckpointingLayer):
     """
     Decoder block for Prophetnet
     """
@@ -1183,21 +1184,12 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
             if output_hidden_states:
                 encoder_hidden_states = encoder_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    encoder_layer.__call__,
-                    hidden_states,
-                    extended_attention_mask,
-                    (head_mask[idx] if head_mask is not None else None),
-                    output_attentions,
-                )
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask=extended_attention_mask,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                    output_attentions=output_attentions,
-                )
+            layer_outputs = encoder_layer(
+                hidden_states,
+                attention_mask=extended_attention_mask,
+                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                output_attentions=output_attentions,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -1395,41 +1387,21 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    extended_attention_mask,
-                    encoder_hidden_states,
-                    extended_encoder_attention_mask,
-                    (head_mask[idx] if head_mask is not None else None),
-                    (cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
-                    extended_predict_attention_mask,
-                    main_relative_position_buckets,
-                    predict_relative_position_buckets,
-                    position_ids,
-                    None,
-                    use_cache,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=extended_attention_mask,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attn_mask=extended_encoder_attention_mask,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                    cross_attn_layer_head_mask=(
-                        cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
-                    ),
-                    extended_predict_attention_mask=extended_predict_attention_mask,
-                    main_relative_position_buckets=main_relative_position_buckets,
-                    predict_relative_position_buckets=predict_relative_position_buckets,
-                    position_ids=position_ids,
-                    past_key_value=past_key_value,
-                    use_cache=use_cache,
-                    output_attentions=output_attentions,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                extended_attention_mask,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                encoder_attn_mask=extended_encoder_attention_mask,
+                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                cross_attn_layer_head_mask=(cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
+                extended_predict_attention_mask=extended_predict_attention_mask,
+                main_relative_position_buckets=main_relative_position_buckets,
+                predict_relative_position_buckets=predict_relative_position_buckets,
+                position_ids=position_ids,
+                past_key_value=past_key_value,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+            )
 
             hidden_states = layer_outputs[0]
 

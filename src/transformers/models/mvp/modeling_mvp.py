@@ -29,6 +29,7 @@ from ...modeling_attn_mask_utils import (
     _prepare_4d_attention_mask,
     _prepare_4d_causal_attention_mask,
 )
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -244,7 +245,7 @@ class MvpAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-class MvpEncoderLayer(nn.Module):
+class MvpEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: MvpConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -316,7 +317,7 @@ class MvpEncoderLayer(nn.Module):
         return outputs
 
 
-class MvpDecoderLayer(nn.Module):
+class MvpDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: MvpConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -682,23 +683,13 @@ class MvpEncoder(MvpPreTrainedModel):
             if to_drop:
                 layer_outputs = (None, None)
             else:
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        encoder_layer.__call__,
-                        hidden_states,
-                        attention_mask,
-                        (head_mask[idx] if head_mask is not None else None),
-                        (self_attn_prompt[idx] if self.use_prompt else None),
-                        output_attentions,
-                    )
-                else:
-                    layer_outputs = encoder_layer(
-                        hidden_states,
-                        attention_mask,
-                        layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                        self_attn_prompt=(self_attn_prompt[idx] if self.use_prompt else None),
-                        output_attentions=output_attentions,
-                    )
+                layer_outputs = encoder_layer(
+                    hidden_states,
+                    attention_mask,
+                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                    self_attn_prompt=(self_attn_prompt[idx] if self.use_prompt else None),
+                    output_attentions=output_attentions,
+                )
 
                 hidden_states = layer_outputs[0]
 
@@ -935,37 +926,19 @@ class MvpDecoder(MvpPreTrainedModel):
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    head_mask[idx] if head_mask is not None else None,
-                    cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
-                    self_attn_prompt[idx] if self.use_prompt else None,
-                    cross_attn_prompt[idx] if self.use_prompt else None,
-                    None,
-                    output_attentions,
-                    use_cache,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=attention_mask,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                    cross_attn_layer_head_mask=(
-                        cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
-                    ),
-                    self_attn_prompt=(self_attn_prompt[idx] if self.use_prompt else None),
-                    cross_attn_prompt=(cross_attn_prompt[idx] if self.use_prompt else None),
-                    past_key_value=past_key_value,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask,
+                encoder_hidden_states,  # as positional argument for gradient checkpointing
+                encoder_attention_mask=encoder_attention_mask,
+                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                cross_attn_layer_head_mask=(cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
+                self_attn_prompt=(self_attn_prompt[idx] if self.use_prompt else None),
+                cross_attn_prompt=(cross_attn_prompt[idx] if self.use_prompt else None),
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+            )
             hidden_states = layer_outputs[0]
 
             if use_cache:

@@ -27,6 +27,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
@@ -900,7 +901,7 @@ class LEDDecoderAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-class LEDEncoderLayer(nn.Module):
+class LEDEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: LEDConfig, layer_id: int):
         super().__init__()
         self.embed_dim = config.d_model
@@ -962,7 +963,7 @@ class LEDEncoderLayer(nn.Module):
         return (hidden_states,) + attn_outputs[1:]
 
 
-class LEDDecoderLayer(nn.Module):
+class LEDDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: LEDConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -1680,27 +1681,15 @@ class LEDEncoder(LEDPreTrainedModel):
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
                 layer_outputs = (None, None, None)
             else:
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        encoder_layer.__call__,
-                        hidden_states,
-                        attention_mask,
-                        head_mask[idx] if head_mask is not None else None,
-                        is_index_masked,
-                        is_index_global_attn,
-                        is_global_attn,
-                        output_attentions,
-                    )
-                else:
-                    layer_outputs = encoder_layer(
-                        hidden_states,
-                        attention_mask=attention_mask,
-                        layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                        is_index_masked=is_index_masked,
-                        is_index_global_attn=is_index_global_attn,
-                        is_global_attn=is_global_attn,
-                        output_attentions=output_attentions,
-                    )
+                layer_outputs = encoder_layer(
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                    is_index_masked=is_index_masked,
+                    is_index_global_attn=is_index_global_attn,
+                    is_global_attn=is_global_attn,
+                    output_attentions=output_attentions,
+                )
                 hidden_states = layer_outputs[0]
 
             if output_attentions:
@@ -1943,33 +1932,17 @@ class LEDDecoder(LEDPreTrainedModel):
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    combined_attention_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    head_mask[idx] if head_mask is not None else None,
-                    cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
-                    None,
-                    output_attentions,
-                    use_cache,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=combined_attention_mask,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                    cross_attn_layer_head_mask=(
-                        cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
-                    ),
-                    past_key_value=past_key_value,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                combined_attention_mask,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                encoder_attention_mask=encoder_attention_mask,
+                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                cross_attn_layer_head_mask=(cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+            )
 
             hidden_states = layer_outputs[0]
 

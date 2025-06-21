@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithNoAttention,
     BaseModelOutputWithPoolingAndNoAttention,
@@ -351,7 +352,7 @@ class MobileViTV2Transformer(nn.Module):
         return hidden_states
 
 
-class MobileViTV2Layer(nn.Module):
+class MobileViTV2Layer(GradientCheckpointingLayer):
     """
     MobileViTV2 layer: https://huggingface.co/papers/2206.02680
     """
@@ -556,13 +557,7 @@ class MobileViTV2Encoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
 
         for i, layer_module in enumerate(self.layer):
-            if self.gradient_checkpointing and self.training:
-                hidden_states = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                )
-            else:
-                hidden_states = layer_module(hidden_states)
+            hidden_states = layer_module(hidden_states)
 
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)

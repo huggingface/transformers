@@ -9,6 +9,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -177,7 +178,7 @@ class GPTNeoXAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class GPTNeoXLayer(nn.Module):
+class GPTNeoXLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.use_parallel_residual = config.use_parallel_residual
@@ -362,32 +363,18 @@ class GPTNeoXModel(LlamaModel, nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                outputs = self._gradient_checkpointing_func(
-                    layer.__call__,
-                    hidden_states,
-                    causal_mask,
-                    position_ids,
-                    head_mask[i],
-                    use_cache,
-                    past_key_values,
-                    output_attentions,
-                    cache_position,
-                    position_embeddings,
-                )
-            else:
-                outputs = layer(
-                    hidden_states,
-                    attention_mask=causal_mask,
-                    position_ids=position_ids,
-                    head_mask=head_mask[i],
-                    layer_past=past_key_values,
-                    use_cache=use_cache,
-                    output_attentions=output_attentions,
-                    cache_position=cache_position,
-                    position_embeddings=position_embeddings,
-                    **flash_attn_kwargs,
-                )
+            outputs = layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                position_ids=position_ids,
+                head_mask=head_mask[i],
+                layer_past=past_key_values,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                cache_position=cache_position,
+                position_embeddings=position_embeddings,
+                **flash_attn_kwargs,
+            )
             hidden_states = outputs[0]
 
             if output_attentions:

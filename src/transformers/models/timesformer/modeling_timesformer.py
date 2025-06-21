@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -288,7 +289,7 @@ class TimesformerOutput(nn.Module):
 
 
 # Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit.py#L89
-class TimesformerLayer(nn.Module):
+class TimesformerLayer(GradientCheckpointingLayer):
     def __init__(self, config: TimesformerConfig, layer_index: int) -> None:
         super().__init__()
 
@@ -432,14 +433,7 @@ class TimesformerEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, output_attentions)
+            layer_outputs = layer_module(hidden_states, output_attentions)
 
             hidden_states = layer_outputs[0]
 

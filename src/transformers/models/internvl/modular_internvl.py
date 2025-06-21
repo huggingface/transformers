@@ -24,6 +24,7 @@ import torch.utils.checkpoint
 
 from ...activations import ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -334,7 +335,7 @@ class InternVLVisionMLP(CLIPMLP):
 NORM2FN = {"layer_norm": nn.LayerNorm, "rms_norm": InternVLVisionRMSNorm}
 
 
-class InternVLVisionLayer(nn.Module):
+class InternVLVisionLayer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the timm implementation."""
 
     def __init__(self, config: InternVLVisionConfig) -> None:
@@ -403,12 +404,7 @@ class InternVLVisionEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__, hidden_states, output_attentions
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, output_attentions)
+            layer_outputs = layer_module(hidden_states, output_attentions)
 
             hidden_states = layer_outputs[0]
 

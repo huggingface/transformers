@@ -151,18 +151,10 @@ class SamHQVisionEncoder(SamVisionEncoder):
         all_self_attentions = () if output_attentions else None
         intermediate_embeddings = []
 
-        for i, layer_module in enumerate(self.layers):
+        for layer_module in self.layers:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
-
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, output_attentions=output_attentions)
-
+            layer_outputs = layer_module(hidden_states, output_attentions=output_attentions)
             hidden_states = layer_outputs[0]
 
             # Collect embeddings from non-windowed blocks

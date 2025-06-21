@@ -20,7 +20,6 @@
 # limitations under the License.
 
 import math
-from functools import partial
 from typing import Callable, Optional, Union
 
 import torch
@@ -32,6 +31,7 @@ from ...cache_utils import Cache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -248,7 +248,7 @@ class BioGptAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-class BioGptDecoderLayer(nn.Module):
+class BioGptDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: BioGptConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -646,30 +646,17 @@ class BioGptModel(BioGptPreTrainedModel):
                 if dropout_probability < self.layerdrop:
                     continue
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    partial(decoder_layer.__call__, **flash_attn_kwargs),
-                    hidden_states,
-                    causal_mask,
-                    head_mask[idx] if head_mask is not None else None,
-                    None,
-                    output_attentions,
-                    use_cache,
-                    position_ids,
-                    cache_position,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=causal_mask,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    position_ids=position_ids,
-                    cache_position=cache_position,
-                    **flash_attn_kwargs,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                position_ids=position_ids,
+                cache_position=cache_position,
+                **flash_attn_kwargs,
+            )
 
             hidden_states = layer_outputs[0]
 

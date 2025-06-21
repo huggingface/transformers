@@ -25,6 +25,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...generation import GenerationMixin
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
@@ -344,7 +345,7 @@ class RwkvFeedForward(nn.Module):
         return receptance * value, state
 
 
-class RwkvBlock(nn.Module):
+class RwkvBlock(GradientCheckpointingLayer):
     def __init__(self, config, layer_id):
         super().__init__()
         self.config = config
@@ -604,14 +605,9 @@ class RwkvModel(RwkvPreTrainedModel):
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
         for idx, block in enumerate(self.blocks):
-            if self.gradient_checkpointing and self.training:
-                hidden_states, state, attentions = self._gradient_checkpointing_func(
-                    block.__call__, hidden_states, state, use_cache, output_attentions
-                )
-            else:
-                hidden_states, state, attentions = block(
-                    hidden_states, state=state, use_cache=use_cache, output_attentions=output_attentions
-                )
+            hidden_states, state, attentions = block(
+                hidden_states, state=state, use_cache=use_cache, output_attentions=output_attentions
+            )
 
             if (
                 self.layers_are_rescaled

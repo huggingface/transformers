@@ -25,6 +25,7 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import functional as F
 
+from ....modeling_layers import GradientCheckpointingLayer
 from ....modeling_utils import PreTrainedModel
 from ....utils import (
     ModelOutput,
@@ -346,7 +347,7 @@ class CausalSelfAttention(nn.Module):
         return outputs
 
 
-class Block(nn.Module):
+class Block(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.ln1 = nn.LayerNorm(config.n_embd)
@@ -540,16 +541,7 @@ class TrajectoryTransformerModel(TrajectoryTransformerPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                outputs = self._gradient_checkpointing_func(
-                    block.__call__,
-                    hidden_states,
-                    layer_past,
-                    use_cache,
-                    output_attentions,
-                )
-            else:
-                outputs = block(hidden_states, layer_past, use_cache, output_attentions)
+            outputs = block(hidden_states, layer_past, use_cache, output_attentions)
 
             hidden_states = outputs[0]
             if use_cache is True:

@@ -32,6 +32,7 @@ from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -42,7 +43,7 @@ from .configuration_sew import SEWConfig
 logger = logging.get_logger(__name__)
 
 
-class SEWNoLayerNormConvLayer(nn.Module):
+class SEWNoLayerNormConvLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -63,7 +64,7 @@ class SEWNoLayerNormConvLayer(nn.Module):
         return hidden_states
 
 
-class SEWLayerNormConvLayer(nn.Module):
+class SEWLayerNormConvLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -90,7 +91,7 @@ class SEWLayerNormConvLayer(nn.Module):
         return hidden_states
 
 
-class SEWGroupNormConvLayer(nn.Module):
+class SEWGroupNormConvLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -223,13 +224,7 @@ class SEWFeatureEncoder(nn.Module):
             hidden_states.requires_grad = True
 
         for conv_layer in self.conv_layers:
-            if self._requires_grad and self.gradient_checkpointing and self.training:
-                hidden_states = self._gradient_checkpointing_func(
-                    conv_layer.__call__,
-                    hidden_states,
-                )
-            else:
-                hidden_states = conv_layer(hidden_states)
+            hidden_states = conv_layer(hidden_states)
 
         return hidden_states
 
@@ -410,7 +405,7 @@ class SEWFeedForward(nn.Module):
         return hidden_states
 
 
-class SEWEncoderLayer(nn.Module):
+class SEWEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.attention = SEWAttention(
@@ -521,17 +516,9 @@ class SEWEncoder(nn.Module):
             skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        layer.__call__,
-                        hidden_states,
-                        attention_mask,
-                        output_attentions,
-                    )
-                else:
-                    layer_outputs = layer(
-                        hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
-                    )
+                layer_outputs = layer(
+                    hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+                )
                 hidden_states = layer_outputs[0]
 
             if skip_the_layer:

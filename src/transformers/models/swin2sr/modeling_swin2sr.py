@@ -24,6 +24,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ImageSuperResolutionOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
@@ -592,7 +593,7 @@ class Swin2SRLayer(nn.Module):
         return layer_outputs
 
 
-class Swin2SRStage(nn.Module):
+class Swin2SRStage(GradientCheckpointingLayer):
     """
     This corresponds to the Residual Swin Transformer Block (RSTB) in the original implementation.
     """
@@ -705,12 +706,7 @@ class Swin2SREncoder(nn.Module):
         for i, stage_module in enumerate(self.stages):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    stage_module.__call__, hidden_states, input_dimensions, layer_head_mask, output_attentions
-                )
-            else:
-                layer_outputs = stage_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
+            layer_outputs = stage_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
             output_dimensions = layer_outputs[1]

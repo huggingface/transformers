@@ -24,6 +24,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPooling,
@@ -691,7 +692,7 @@ class ClapAudioLayer(nn.Module):
 
 
 # Copied from transformers.models.swin.modeling_swin.SwinStage with Swin->ClapAudio
-class ClapAudioStage(nn.Module):
+class ClapAudioStage(GradientCheckpointingLayer):
     def __init__(self, config, dim, input_resolution, depth, num_heads, drop_path, downsample):
         super().__init__()
         self.config = config
@@ -928,14 +929,9 @@ class ClapAudioEncoder(nn.Module):
 
             input_dimensions = self.input_resolutions[i]
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__, hidden_states, input_dimensions, layer_head_mask, output_attentions
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states, input_dimensions, layer_head_mask, output_attentions, always_partition
-                )
+            layer_outputs = layer_module(
+                hidden_states, input_dimensions, layer_head_mask, output_attentions, always_partition
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -1355,7 +1351,7 @@ class ClapTextOutput(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->ClapText
-class ClapTextLayer(nn.Module):
+class ClapTextLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -1481,27 +1477,15 @@ class ClapTextEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    past_key_value,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    past_key_value,
-                    output_attentions,
-                )
+            layer_outputs = layer_module(
+                hidden_states,
+                attention_mask,
+                layer_head_mask,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                encoder_attention_mask=encoder_attention_mask,
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
+            )
 
             hidden_states = layer_outputs[0]
             if use_cache:

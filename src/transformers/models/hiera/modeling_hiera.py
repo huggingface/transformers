@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BackboneOutput,
     BaseModelOutput,
@@ -540,7 +541,7 @@ class HieraLayer(nn.Module):
         return (hidden_states, attn_weights)
 
 
-class HieraStage(nn.Module):
+class HieraStage(GradientCheckpointingLayer):
     def __init__(
         self,
         config,
@@ -734,12 +735,7 @@ class HieraEncoder(nn.Module):
         for i, stage_module in enumerate(self.stages):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    stage_module.__call__, hidden_states, layer_head_mask, output_attentions
-                )
-            else:
-                layer_outputs = stage_module(hidden_states, layer_head_mask, output_attentions)
+            layer_outputs = stage_module(hidden_states, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
 
