@@ -16,6 +16,7 @@
 import json
 import os
 import shutil
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -1078,8 +1079,13 @@ class RagModelSaveLoadTests(unittest.TestCase):
 
         ds = load_dataset("hf-internal-testing/wiki_dpr_dummy")["train"]
         ds.save_to_disk(cls.dataset_path)
-        os.system(
-            f"wget -O {cls.index_path} https://huggingface.co/datasets/hf-internal-testing/wiki_dpr_dummy/resolve/main/index"
+        subprocess.run(
+            [
+                "wget",
+                "-O",
+                f"{cls.index_path}",
+                "https://huggingface.co/datasets/hf-internal-testing/wiki_dpr_dummy/resolve/main/index",
+            ]
         )
 
     @classmethod
