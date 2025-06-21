@@ -96,7 +96,7 @@ The example below uses [bitsandbytes quantization](../quantization/bitsandbytes)
 ```py
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, BitsAndBytesConfig
 
-model_id = "microsoft/deberta-v2-xlarge"
+model_id = "microsoft/deberta-v2-xlarge-mnli"
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_quant_type="nf4",
@@ -110,11 +110,14 @@ model = AutoModelForSequenceClassification.from_pretrained(
     torch_dtype="float16"
 )
 
-total_params = sum(p.numel() for p in model.parameters())
-print(f"Total parameters: {total_params:,}")
+text = "Hugging Face Transformers make NLP easy!"
+inputs = tokenizer(text, return_tensors="pt")
+inputs = {k: v.to(model.device) for k, v in inputs.items()}
 
-inputs = tokenizer("Hugging Face Transformers make NLP easy!", return_tensors="pt")
-print("Decoded text:", tokenizer.decode(inputs["input_ids"][0]))
+outputs = model(**inputs)
+logits = outputs.logits
+
+print("Logits:", logits)
 
 ```
 
