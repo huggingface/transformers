@@ -771,7 +771,7 @@ class ModernBertDecoderForSequenceClassification(ModernBertDecoderPreTrainedMode
     def get_decoder(self):
         return self.model
 
-    @auto_docstring
+    @auto_docstring(checkpoint="blab-jhu/test-32m-dec")
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

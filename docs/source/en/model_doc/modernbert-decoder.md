@@ -42,7 +42,7 @@ from transformers import pipeline
 
 generator = pipeline(
     task="text-generation",
-    model="your-username/modernbert-decoder-base",
+    model="blab-jhu/test-32m-dec",
     torch_dtype=torch.float16,
     device=0
 )
@@ -51,7 +51,7 @@ generator("The future of artificial intelligence is", max_length=50, num_return_
 # For sequence classification
 classifier = pipeline(
     task="text-classification",
-    model="your-username/modernbert-decoder-base-classifier",
+    model="blab-jhu/test-32m-dec",
     torch_dtype=torch.float16,
     device=0
 )
@@ -65,9 +65,9 @@ classifier("This movie is really great!")
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained("your-username/modernbert-decoder-base")
+tokenizer = AutoTokenizer.from_pretrained("blab-jhu/test-32m-dec")
 model = AutoModelForCausalLM.from_pretrained(
-    "your-username/modernbert-decoder-base",
+    "blab-jhu/test-32m-dec",
     torch_dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
@@ -93,7 +93,7 @@ print(f"Generated text: {generated_text}")
 from transformers import AutoModelForSequenceClassification
 
 classifier_model = AutoModelForSequenceClassification.from_pretrained(
-    "your-username/modernbert-decoder-base-classifier",
+    "blab-jhu/test-32m-dec",
     torch_dtype=torch.float16,
     device_map="auto",
     num_labels=2

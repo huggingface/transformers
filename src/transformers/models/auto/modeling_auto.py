@@ -1211,7 +1211,6 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("mixtral", "MixtralForQuestionAnswering"),
         ("mobilebert", "MobileBertForQuestionAnswering"),
         ("modernbert", "ModernBertForQuestionAnswering"),
-        ("modernbert-decoder", "ModernBertDecoderForQuestionAnswering"),
         ("mpnet", "MPNetForQuestionAnswering"),
         ("mpt", "MptForQuestionAnswering"),
         ("mra", "MraForQuestionAnswering"),

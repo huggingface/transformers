@@ -271,6 +271,15 @@ SPECIAL_CASES_TO_ALLOW = {
         "attention_chunk_size",
     ],
     "Llama4VisionConfig": ["multi_modal_projector_bias", "norm_eps"],
+    "ModernBertDecoderConfig": [
+        "embedding_dropout",
+        "hidden_activation",
+        "initializer_cutoff_factor",
+        "intermediate_size",
+        "max_position_embeddings",
+        "mlp_bias",
+        "mlp_dropout",
+    ],
 }
 
 

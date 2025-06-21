@@ -27,6 +27,7 @@ class ModernBertDecoderConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`ModernBertDecoderModel`]. It is used to instantiate a ModernBert
     decoder model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the ModernBERT-base decoder.
+    e.g. [blab-jhu/test-32m-dec](https://huggingface.co/blab-jhu/test-32m-dec)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -110,7 +111,7 @@ class ModernBertDecoderConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "modernbert_decoder"
+    model_type = "modernbert-decoder"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
