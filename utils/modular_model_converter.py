@@ -619,7 +619,7 @@ ALL_FILE_TYPES = (
     "processing",
     "image_processing",
     "video_processing",
-    "feature_extractor",
+    "feature_extraction",
 )
 
 
@@ -1137,7 +1137,7 @@ TYPE_TO_FILE_TYPE = {
     "VideoProcessor": "video_processing",
     "VideoProcessorInitKwargs": "video_processing",
     "FastImageProcessorKwargs": "image_processing*_fast",
-    "FeatureExtractor": "feature_extractor",
+    "FeatureExtractor": "feature_extraction",
     "ProcessorKwargs": "processing",
     "VideosKwargs": "processing",
     "ImagesKwargs": "processing",

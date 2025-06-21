@@ -156,6 +156,7 @@ if TYPE_CHECKING:
     from .janus import *
     from .jetmoe import *
     from .kosmos2 import *
+    from .kyutai_speech_to_text import *
     from .layoutlm import *
     from .layoutlmv2 import *
     from .layoutlmv3 import *
