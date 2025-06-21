@@ -315,13 +315,6 @@ class IdeficsModelTester:
     def prepare_pixel_values(self):
         return floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
-    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @unittest.skip(reason="Idefics has a hard requirement on SDPA, skipping this test")
-    def test_eager_matches_sdpa_inference(
-        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
-    ):
-        pass
-
 
 @require_torch
 class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -611,6 +604,12 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMi
     def test_sdpa_can_dispatch_non_composite_models(self):
         pass
 
+    @unittest.skip(reason="Idefics can't do text-only inference")
+    def test_generate_from_random_inputs_embeds(
+        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
+        pass
+
 
 @require_torch
 class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, unittest.TestCase):
@@ -897,6 +896,12 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
         "Idefics has a separate test runner for generation tests with complex inheritance, causing this check to fail"
     )
     def test_generation_tester_mixin_inheritance(self):
+        pass
+
+    @unittest.skip(reason="Idefics can't do text-only inference")
+    def test_generate_from_random_inputs_embeds(
+        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
         pass
 
 

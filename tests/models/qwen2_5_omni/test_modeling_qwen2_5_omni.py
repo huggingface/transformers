@@ -22,7 +22,6 @@ from urllib.request import urlopen
 
 import librosa
 import requests
-from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -289,10 +288,6 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    @unittest.skip(reason="QwenOmniThinker does not use inputs_embeds")
-    def test_inputs_embeds(self):
-        pass
-
     @unittest.skip(reason="QwenOmniThinker does not support output_hidden_states test")
     def test_model_outputs_equivalence(self):
         pass
@@ -336,11 +331,6 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
                     class_name = submodule.__class__.__name__
                     if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                         raise ValueError("The eager model should not have SDPA attention layers")
-
-    @parameterized.expand([("greedy", 1), ("beam search", 2)])
-    @unittest.skip("Cannot generate from inputs embeds")
-    def test_generate_from_inputs_embeds(self):
-        pass
 
     @unittest.skip("Cannot do contrastive generation, has custom `generate()`")
     def test_contrastive_generate(self):
