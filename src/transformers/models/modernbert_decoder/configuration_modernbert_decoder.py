@@ -19,6 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from ...configuration_utils import PretrainedConfig
 
 
@@ -63,6 +64,10 @@ class ModernBertDecoderConfig(PretrainedConfig):
             End of stream token id.
         bos_token_id (`int`, *optional*, defaults to 50281):
             Beginning of stream token id.
+        cls_token_id (`int`, *optional*, defaults to 50281):
+            Classification token id.
+        sep_token_id (`int`, *optional*, defaults to 50282):
+            Separation token id.
         global_rope_theta (`float`, *optional*, defaults to 160000.0):
             The base period of the global RoPE embeddings.
         attention_bias (`bool`, *optional*, defaults to `False`):
@@ -77,6 +82,12 @@ class ModernBertDecoderConfig(PretrainedConfig):
             The dropout ratio for the MLP layers.
         decoder_bias (`bool`, *optional*, defaults to `True`):
             Whether to use bias in the decoder layers.
+        classifier_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the classifier.
+        classifier_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use bias in the classifier.
+        classifier_activation (`str`, *optional*, defaults to `"gelu"`):
+            The activation function for the classifier.
         deterministic_flash_attn (`bool`, *optional*, defaults to `False`):
             Whether to use deterministic flash attention. If `False`, inference will be faster but not deterministic.
         reference_compile (`bool`, *optional*):
@@ -130,6 +141,8 @@ class ModernBertDecoderConfig(PretrainedConfig):
         pad_token_id=50283,
         eos_token_id=50282,
         bos_token_id=50281,
+        cls_token_id=50281,
+        sep_token_id=50282,
         global_rope_theta=160000.0,
         attention_bias=False,
         attention_dropout=0.0,
@@ -137,6 +150,9 @@ class ModernBertDecoderConfig(PretrainedConfig):
         mlp_bias=False,
         mlp_dropout=0.0,
         decoder_bias=True,
+        classifier_dropout=0.0,
+        classifier_bias=False,
+        classifier_activation="gelu",
         deterministic_flash_attn=False,
         reference_compile=None,
         use_cache=True,
@@ -154,6 +170,8 @@ class ModernBertDecoderConfig(PretrainedConfig):
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
+            cls_token_id=cls_token_id,
+            sep_token_id=sep_token_id,
             **kwargs,
         )
         self.vocab_size = vocab_size
@@ -174,6 +192,9 @@ class ModernBertDecoderConfig(PretrainedConfig):
         self.mlp_bias = mlp_bias
         self.mlp_dropout = mlp_dropout
         self.decoder_bias = decoder_bias
+        self.classifier_dropout = classifier_dropout
+        self.classifier_bias = classifier_bias
+        self.classifier_activation = classifier_activation
         self.deterministic_flash_attn = deterministic_flash_attn
         self.reference_compile = reference_compile
         self.use_cache = use_cache

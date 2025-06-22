@@ -19,6 +19,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+import math
 from typing import Optional, Union
 
 import torch
@@ -39,6 +41,7 @@ from ...models.modernbert.modeling_modernbert import (
     apply_rotary_pos_emb,
 )
 from ...utils import auto_docstring, logging
+from ...utils.import_utils import is_triton_available
 from .configuration_modernbert_decoder import ModernBertDecoderConfig
 
 
@@ -357,6 +360,122 @@ class ModernBertDecoderLayer(nn.Module):
 class ModernBertDecoderPreTrainedModel(ModernBertPreTrainedModel):
     config_class = ModernBertDecoderConfig
     base_model_prefix = "model"
+    _supports_flash_attn_2 = True
+    _supports_sdpa = False
+
+    def _init_weights(self, module: nn.Module):
+        cutoff_factor = self.config.initializer_cutoff_factor
+        if cutoff_factor is None:
+            cutoff_factor = 3
+
+        def init_weight(module: nn.Module, std: float):
+            nn.init.trunc_normal_(
+                module.weight,
+                mean=0.0,
+                std=std,
+                a=-cutoff_factor * std,
+                b=cutoff_factor * std,
+            )
+
+            if isinstance(module, nn.Linear):
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+
+        stds = {
+            "in": self.config.initializer_range,
+            "out": self.config.initializer_range / math.sqrt(2.0 * self.config.num_hidden_layers),
+            "embedding": self.config.initializer_range,
+            "final_out": self.config.hidden_size**-0.5,
+        }
+
+        if isinstance(module, ModernBertEmbeddings):
+            init_weight(module.tok_embeddings, stds["embedding"])
+        elif isinstance(module, ModernBertMLP):
+            init_weight(module.Wi, stds["in"])
+            init_weight(module.Wo, stds["out"])
+        elif isinstance(module, ModernBertDecoderAttention):
+            init_weight(module.Wqkv, stds["in"])
+            init_weight(module.Wo, stds["out"])
+        elif isinstance(module, ModernBertPredictionHead):
+            init_weight(module.dense, stds["out"])
+        elif isinstance(module, ModernBertDecoderForSequenceClassification):
+            init_weight(module.classifier, stds["final_out"])
+        elif isinstance(module, ModernBertDecoderForCausalLM):
+            init_weight(module.decoder, stds["out"])
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            if module.bias is not None:
+                module.bias.data.zero_()
+
+    @classmethod
+    def _autoset_attn_implementation(
+        cls,
+        config,
+        torch_dtype: Optional[torch.dtype] = None,
+        device_map: Optional[Union[str, dict[str, int]]] = None,
+        check_device_map: bool = True,
+    ):
+        # If the user didn't specify anything, try to use flash_attention_2 if available.
+        # Otherwise we fall back to the default Eager
+        # ModernBert's FA2 implementation correctly handles non-fp16/bf16 dtypes, we don't
+        # need the FA2 warning for non-fp16/bf16 dtypes so we set fp16 for the FA2 check.
+        if config._attn_implementation_internal is None:
+            config._attn_implementation_internal = "flash_attention_2"
+            try:
+                return cls._check_and_enable_flash_attn_2(
+                    config,
+                    torch_dtype=torch.float16,
+                    device_map=device_map,
+                    hard_check_only=False,
+                    check_device_map=check_device_map,
+                )
+            except (ValueError, ImportError):
+                config._attn_implementation_internal = None
+        config._attn_implementation_internal = "eager"
+        return config
+
+    def _maybe_set_compile(self):
+        if self.config.reference_compile is False:
+            return
+
+        if hasattr(self, "hf_device_map") and len(self.hf_device_map) > 1:
+            if self.config.reference_compile:
+                logger.warning_once(
+                    "If `accelerate` split the model across devices, `torch.compile` will not work. "
+                    "Falling back to non-compiled mode."
+                )
+            self.config.reference_compile = False
+
+        if self.device.type == "mps":
+            if self.config.reference_compile:
+                logger.warning_once(
+                    "Compiling the model with `torch.compile` and using a `torch.mps` device is not supported. "
+                    "Falling back to non-compiled mode."
+                )
+            self.config.reference_compile = False
+
+        if self.device.type == "cpu":
+            if self.config.reference_compile:
+                logger.warning_once(
+                    "Compiling the model with `torch.compile` and using a `torch.cpu` device is not supported. "
+                    "Falling back to non-compiled mode."
+                )
+            self.config.reference_compile = False
+
+        if self.config.reference_compile is None:
+            self.config.reference_compile = is_triton_available()
+
+    def resize_token_embeddings(self, *args, **kwargs):
+        model_embeds = super().resize_token_embeddings(*args, **kwargs)
+
+        if self.config.reference_compile in {True, None}:
+            if self.config.reference_compile:
+                logger.warning_once(
+                    "Resizing token embeddings with `torch.compile` is not supported. Falling back to non-compiled mode."
+                )
+            self.config.reference_compile = False
+
+        return model_embeds
 
 
 def create_decoder_attention_masks(
