@@ -104,8 +104,6 @@ class ModernBertDecoderConfig(PretrainedConfig):
             Every `global_attn_every_n_layers` layers will use global attention instead of local attention.
         local_rope_theta (`float`, *optional*):
             The base period of the local RoPE embeddings. If not specified, uses the same value as `global_rope_theta`.
-        num_labels (`int`, *optional*, defaults to 2):
-            Number of labels for sequence classification.
 
     Examples:
 
@@ -159,7 +157,6 @@ class ModernBertDecoderConfig(PretrainedConfig):
         local_attention=128,
         global_attn_every_n_layers=3,
         local_rope_theta=None,
-        num_labels=2,
         **kwargs,
     ):
         super().__init__(
@@ -197,7 +194,6 @@ class ModernBertDecoderConfig(PretrainedConfig):
         self.local_attention = local_attention
         self.global_attn_every_n_layers = global_attn_every_n_layers
         self.local_rope_theta = local_rope_theta
-        self.num_labels = num_labels
 
     def to_dict(self):
         output = super().to_dict()

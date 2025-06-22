@@ -213,7 +213,8 @@ class ModernBertDecoderAttention(nn.Module):
             else:
                 # For initial forward pass, start from 0
                 position_ids = torch.arange(seq_len, dtype=torch.long, device=device)
-            position_ids = position_ids.unsqueeze(0).expand(batch_size, -1)
+            if position_ids.dim() == 1:
+                position_ids = position_ids.unsqueeze(0).expand(batch_size, -1)
 
         # Apply rotary embeddings
         if past_key_value is not None:
@@ -977,7 +978,10 @@ class ModernBertDecoderForSequenceClassification(ModernBertDecoderPreTrainedMode
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = ModernBertDecoderModel(config)
-        self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
+
+        self.head = ModernBertPredictionHead(config)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels, bias=config.classifier_bias)
+        self.drop = torch.nn.Dropout(config.classifier_dropout)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1035,7 +1039,8 @@ class ModernBertDecoderForSequenceClassification(ModernBertDecoderPreTrainedMode
             return_dict=return_dict,
         )
         hidden_states = transformer_outputs[0]
-        logits = self.score(hidden_states)
+        hidden_states = self.drop(self.head(hidden_states))
+        logits = self.classifier(hidden_states)
 
         if input_ids is not None:
             batch_size, sequence_length = input_ids.shape[:2]

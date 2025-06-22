@@ -279,6 +279,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "max_position_embeddings",
         "mlp_bias",
         "mlp_dropout",
+        "classifier_activation",
     ],
 }
 

@@ -123,8 +123,6 @@ class ModernBertDecoderConfig(PretrainedConfig):
             Every `global_attn_every_n_layers` layers will use global attention instead of local attention.
         local_rope_theta (`float`, *optional*):
             The base period of the local RoPE embeddings. If not specified, uses the same value as `global_rope_theta`.
-        num_labels (`int`, *optional*, defaults to 2):
-            Number of labels for sequence classification.
 
     Examples:
 
@@ -178,7 +176,6 @@ class ModernBertDecoderConfig(PretrainedConfig):
         local_attention=128,
         global_attn_every_n_layers=3,
         local_rope_theta=None,
-        num_labels=2,
         **kwargs,
     ):
         super().__init__(
@@ -216,7 +213,6 @@ class ModernBertDecoderConfig(PretrainedConfig):
         self.local_attention = local_attention
         self.global_attn_every_n_layers = global_attn_every_n_layers
         self.local_rope_theta = local_rope_theta
-        self.num_labels = num_labels
 
     def to_dict(self):
         output = super().to_dict()
@@ -443,7 +439,7 @@ class ModernBertDecoderAttention(nn.Module):
         qkv = self.Wqkv(hidden_states)
         qkv = qkv.view(batch_size, seq_len, 3, self.num_heads, self.head_dim)
 
-        # Create position_ids if None
+        # Create position_ids that respect padding tokens if not provided
         if position_ids is None:
             device = hidden_states.device
             if past_key_value is not None:
@@ -451,9 +447,18 @@ class ModernBertDecoderAttention(nn.Module):
                 cache_length = past_key_value[0].shape[-2]
                 position_ids = torch.arange(cache_length, cache_length + seq_len, dtype=torch.long, device=device)
             else:
-                # For initial forward pass, start from 0
-                position_ids = torch.arange(seq_len, dtype=torch.long, device=device)
-            position_ids = position_ids.unsqueeze(0).expand(batch_size, -1)
+                # For initial forward pass, create position_ids that respect padding
+                if attention_mask is not None:
+                    # Create cumulative sum of attention_mask to get proper positions
+                    # This ensures padding tokens don't increment position
+                    position_ids = attention_mask.long().cumsum(-1) - 1
+                    position_ids.masked_fill_(attention_mask == 0, 0)
+                else:
+                    # Fallback: sequential positions
+                    position_ids = torch.arange(seq_len, dtype=torch.long, device=device)
+                    position_ids = position_ids.unsqueeze(0).expand(batch_size, -1)
+            if position_ids.dim() == 1:
+                position_ids = position_ids.unsqueeze(0).expand(batch_size, -1)
 
         # Apply rotary embeddings
         if past_key_value is not None:
@@ -1153,7 +1158,10 @@ class ModernBertDecoderForSequenceClassification(ModernBertDecoderPreTrainedMode
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = ModernBertDecoderModel(config)
-        self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
+
+        self.head = ModernBertPredictionHead(config)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels, bias=config.classifier_bias)
+        self.drop = torch.nn.Dropout(config.classifier_dropout)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1211,7 +1219,8 @@ class ModernBertDecoderForSequenceClassification(ModernBertDecoderPreTrainedMode
             return_dict=return_dict,
         )
         hidden_states = transformer_outputs[0]
-        logits = self.score(hidden_states)
+        hidden_states = self.drop(self.head(hidden_states))
+        logits = self.classifier(hidden_states)
 
         if input_ids is not None:
             batch_size, sequence_length = input_ids.shape[:2]
