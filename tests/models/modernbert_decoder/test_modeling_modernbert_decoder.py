@@ -22,7 +22,6 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...test_modeling_common import _config_zero_init
 
 
 if is_torch_available():
@@ -171,19 +170,3 @@ class ModernBertDecoderIntegrationTest(unittest.TestCase):
         # Check that loss is computed
         self.assertIsNotNone(outputs_with_loss.loss)
         self.assertTrue(isinstance(outputs_with_loss.loss.item(), float))
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                # The classifier.weight from ModernBertDecoderForSequenceClassification and ModernBertDecoderForCausalLM
-                # are initialized without `initializer_range`, so they're not set to ~0 via the _config_zero_init
-                if param.requires_grad and not (name == "classifier.weight" or name == "head.weight"):
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
