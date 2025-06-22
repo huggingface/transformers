@@ -391,7 +391,7 @@ class TrainingArguments:
             installation](https://github.com/intel/intel-extension-for-pytorch).
         bf16 (`bool`, *optional*, defaults to `False`):
             Whether to use bf16 16-bit (mixed) precision training instead of 32-bit training. Requires Ampere or higher
-            NVIDIA architecture or using CPU (use_cpu) or Ascend NPU. This is an experimental API and it may change.
+            NVIDIA architecture or Intel XPU or using CPU (use_cpu) or Ascend NPU. This is an experimental API and it may change.
         fp16 (`bool`, *optional*, defaults to `False`):
             Whether to use fp16 16-bit (mixed) precision training instead of 32-bit training.
         fp16_opt_level (`str`, *optional*, defaults to 'O1'):
@@ -445,7 +445,7 @@ class TrainingArguments:
             set to warn or lower (default), `False` otherwise.
         remove_unused_columns (`bool`, *optional*, defaults to `True`):
             Whether or not to automatically remove the columns unused by the model forward method.
-        label_names (`List[str]`, *optional*):
+        label_names (`list[str]`, *optional*):
             The list of keys in your dictionary of inputs that correspond to the labels.
 
             Will eventually default to the list of argument names accepted by the model that contain the word "label",
@@ -503,7 +503,7 @@ class TrainingArguments:
                 - min_num_params (`int`, *optional*, defaults to `0`):
                     FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `fsdp` field is
                     passed).
-                - transformer_layer_cls_to_wrap (`List[str]`, *optional*):
+                - transformer_layer_cls_to_wrap (`list[str]`, *optional*):
                     List of transformer layer class names (case-sensitive) to wrap, e.g, `BertLayer`, `GPTJBlock`,
                     `T5Block` .... (useful only when `fsdp` flag is passed).
                 - backward_prefetch (`str`, *optional*)
@@ -621,7 +621,7 @@ class TrainingArguments:
             Column name for precomputed lengths. If the column exists, grouping by length will use these values rather
             than computing them on train startup. Ignored unless `group_by_length` is `True` and the dataset is an
             instance of `Dataset`.
-        report_to (`str` or `List[str]`, *optional*, defaults to `"all"`):
+        report_to (`str` or `list[str]`, *optional*, defaults to `"all"`):
             The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
             `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`, `"neptune"`,
             `"swanlab"`, `"tensorboard"`, and `"wandb"`. Use `"all"` to report to all integrations installed, `"none"`
@@ -693,13 +693,15 @@ class TrainingArguments:
             Whether to make the repo private. If `None` (default), the repo will be public unless the organization's default is private. This value is ignored if the repo already exists.
         hub_always_push (`bool`, *optional*, defaults to `False`):
             Unless this is `True`, the `Trainer` will skip pushing a checkpoint when the previous push is not finished.
+        hub_revision (`str`, *optional*):
+            The revision to use when pushing to the Hub. Can be a branch name, a tag, or a commit hash.
         gradient_checkpointing (`bool`, *optional*, defaults to `False`):
             If True, use gradient checkpointing to save memory at the expense of slower backward pass.
         gradient_checkpointing_kwargs (`dict`, *optional*, defaults to `None`):
             Key word arguments to be passed to the `gradient_checkpointing_enable` method.
         include_inputs_for_metrics (`bool`, *optional*, defaults to `False`):
             This argument is deprecated. Use `include_for_metrics` instead, e.g, `include_for_metrics = ["inputs"]`.
-        include_for_metrics (`List[str]`, *optional*, defaults to `[]`):
+        include_for_metrics (`list[str]`, *optional*, defaults to `[]`):
             Include additional data in the `compute_metrics` function if needed for metrics computation.
             Possible options to add to `include_for_metrics` list:
             - `"inputs"`: Input data passed to the model, intended for calculating input dependent metrics.
@@ -768,7 +770,7 @@ class TrainingArguments:
             for instruction fine-tuning. Check out the [original paper](https://huggingface.co/papers/2310.05914) and the
             [original code](https://github.com/neelsjain/NEFTune). Support transformers `PreTrainedModel` and also
             `PeftModel` from peft. The original paper used values in the range [5.0, 15.0].
-        optim_target_modules (`Union[str, List[str]]`, *optional*):
+        optim_target_modules (`Union[str, list[str]]`, *optional*):
             The target modules to optimize, i.e. the module names that you would like to train.
             Currently used for the GaLore algorithm (https://huggingface.co/papers/2403.03507) and APOLLO algorithm (https://huggingface.co/papers/2412.05270).
             See GaLore implementation (https://github.com/jiaweizzhao/GaLore) and APOLLO implementation (https://github.com/zhuhanqing/APOLLO) for more details.
@@ -790,6 +792,11 @@ class TrainingArguments:
             Whether enable [Liger](https://github.com/linkedin/Liger-Kernel) Kernel for LLM model training.
             It can effectively increase multi-GPU training throughput by ~20% and reduces memory usage by ~60%, works out of the box with
             flash attention, PyTorch FSDP, and Microsoft DeepSpeed. Currently, it supports llama, mistral, mixtral and gemma models.
+
+        liger_kernel_config (`Optional[dict]`, *optional*):
+            Configuration to be used for Liger Kernel. When use_liger_kernel=True, this dict is passed as keyword arguments to the
+            `_apply_liger_kernel_to_instance` function, which specifies which kernels to apply. Available options vary by model but typically
+            include: 'rope', 'swiglu', 'cross_entropy', 'fused_linear_cross_entropy', 'rms_norm', etc. If `None`, use the default kernel configurations.
 
         average_tokens_across_devices (`bool`, *optional*, defaults to `False`):
             Whether or not to average tokens across devices. If enabled, will use all_reduce to synchronize
@@ -1371,6 +1378,12 @@ class TrainingArguments:
         default=False,
         metadata={"help": "Unless `True`, the Trainer will skip pushes if the previous one wasn't finished yet."},
     )
+    hub_revision: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "The revision to use when pushing to the Hub. Can be a branch name, a tag, or a commit hash."
+        },
+    )
     gradient_checkpointing: bool = field(
         default=False,
         metadata={
@@ -1525,6 +1538,19 @@ class TrainingArguments:
     use_liger_kernel: Optional[bool] = field(
         default=False,
         metadata={"help": "Whether or not to enable the Liger Kernel for model training."},
+    )
+
+    liger_kernel_config: Optional[dict[str, bool]] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Configuration to be used for Liger Kernel. When use_liger_kernel=True, "
+                "this dict is passed as keyword arguments to the `_apply_liger_kernel_to_instance` function, "
+                "which specifies which kernels to apply. Available options vary by model "
+                "but typically include: 'rope', 'swiglu', 'cross_entropy', 'fused_linear_cross_entropy', "
+                "'rms_norm', etc. If None, use the default kernel configurations."
+            )
+        },
     )
 
     eval_use_gather_object: Optional[bool] = field(
@@ -1785,6 +1811,11 @@ class TrainingArguments:
                     )
                 else:
                     self.accelerator_config = AcceleratorConfig.from_json_file(self.accelerator_config)
+            if self.accelerator_config.split_batches:
+                logger.info(
+                    "Using `split_batches=True` in `accelerator_config` will override the `per_device_train_batch_size` "
+                    "Batches will be split across all processes equally when using `split_batches=True`."
+                )
 
         # Initialize device before we proceed
         if self.framework == "pt" and is_torch_available():
@@ -2834,7 +2865,7 @@ class TrainingArguments:
                 Logger log level to use on the main process. Possible choices are the log levels as strings: `"debug"`,
                 `"info"`, `"warning"`, `"error"` and `"critical"`, plus a `"passive"` level which doesn't set anything
                 and lets the application set the level.
-            report_to (`str` or `List[str]`, *optional*, defaults to `"all"`):
+            report_to (`str` or `list[str]`, *optional*, defaults to `"all"`):
                 The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
                 `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`,
                 `"neptune"`, `"swanlab"`, `"tensorboard"`, and `"wandb"`. Use `"all"` to report to all integrations
@@ -2888,6 +2919,7 @@ class TrainingArguments:
         token: Optional[str] = None,
         private_repo: Optional[bool] = None,
         always_push: bool = False,
+        revision: Optional[str] = None,
     ):
         """
         A method that regroups all arguments linked to synchronizing checkpoints with the Hub.
@@ -2931,6 +2963,8 @@ class TrainingArguments:
             always_push (`bool`, *optional*, defaults to `False`):
                 Unless this is `True`, the `Trainer` will skip pushing a checkpoint when the previous push is not
                 finished.
+            revision (`str`, *optional*):
+                The revision to use when pushing to the Hub. Can be a branch name, a tag, or a commit hash.
 
         Example:
 
@@ -2949,6 +2983,7 @@ class TrainingArguments:
         self.hub_token = token
         self.hub_private_repo = private_repo
         self.hub_always_push = always_push
+        self.hub_revision = revision
         return self
 
     def set_optimizer(

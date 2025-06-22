@@ -16,7 +16,6 @@
 import argparse
 import os
 from pathlib import Path
-from typing import Dict
 
 import tensorflow as tf
 import torch
@@ -85,7 +84,7 @@ def convert_pegasus(tf_weights: dict, cfg_updates: dict) -> PegasusForConditiona
     return torch_model
 
 
-def get_tf_weights_as_numpy(path="./ckpt/aeslc/model.ckpt-32000") -> Dict:
+def get_tf_weights_as_numpy(path="./ckpt/aeslc/model.ckpt-32000") -> dict:
     init_vars = tf.train.list_variables(path)
     tf_weights = {}
     ignore_name = ["Adafactor", "global_step"]
