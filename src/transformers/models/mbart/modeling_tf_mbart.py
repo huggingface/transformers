@@ -1183,7 +1183,9 @@ class TFMBartMainLayer(keras.layers.Layer):
         if decoder_input_ids is None and decoder_inputs_embeds is None:
             use_cache = False
 
-      
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         if decoder_input_ids is None and input_ids is not None:
             decoder_input_ids = shift_tokens_right(input_ids, self.config.pad_token_id)

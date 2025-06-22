@@ -1140,7 +1140,9 @@ class TFBlenderbotSmallMainLayer(keras.layers.Layer):
         training=False,
         **kwargs,
     ):
-      
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(

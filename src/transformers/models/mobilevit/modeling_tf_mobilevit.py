@@ -834,7 +834,9 @@ class TFMobileViTMainLayer(keras.layers.Layer):
         return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[tuple[tf.Tensor], TFBaseModelOutputWithPooling]:
-      
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # When running on CPU, `keras.layers.Conv2D` doesn't support `NCHW` format.
@@ -1316,7 +1318,9 @@ class TFMobileViTForSemanticSegmentation(TFMobileViTPreTrainedModel):
         >>> # logits are of shape (batch_size, num_labels, height, width)
         >>> logits = outputs.logits
         ```"""
-      
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None and not self.config.num_labels > 1:
