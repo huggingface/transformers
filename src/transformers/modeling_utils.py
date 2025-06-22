@@ -33,7 +33,7 @@ from dataclasses import dataclass
 from enum import Enum
 from functools import partial, wraps
 from threading import Thread
-from typing import Any, Callable, Optional, TypeVar, Union
+from typing import Any, Callable, Dict, Optional, Tuple, TypeVar, Union
 from zipfile import is_zipfile
 
 import torch
@@ -75,13 +75,7 @@ from .integrations.tensor_parallel import (
 from .loss.loss_utils import LOSS_MAPPING
 from .modeling_layers import GradientCheckpointingLayer
 from .pytorch_utils import (  # noqa: F401
-    Conv1D,
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
     id_tensor_storage,
-    prune_conv1d_layer,
-    prune_layer,
-    prune_linear_layer,
 )
 from .quantizers import AutoHfQuantizer, HfQuantizer
 from .quantizers.quantizers_utils import get_module_from_name
@@ -2052,7 +2046,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         self._keep_in_fp32_modules = copy.copy(self.__class__._keep_in_fp32_modules)
 
         self._no_split_modules = self._no_split_modules or []
-        self._can_record_outputs = {
+        self._can_record_outputs: Dict[str, Tuple[nn.Module, int]] = {
             "hidden_states": (GradientCheckpointingLayer, 0),
             "attentions": (GradientCheckpointingLayer, 1),
         }

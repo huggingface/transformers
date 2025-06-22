@@ -966,8 +966,6 @@ def check_model_inputs(func):
         return_dict = kwargs.pop("return_dict", self.config.use_return_dict)
 
         # Safely extract common config-backed flags
-        kwargs.setdefault("output_attentions", output_attentions)
-        kwargs.setdefault("output_hidden_states", output_hidden_states)
         kwargs.setdefault("use_cache", use_cache)
         kwargs["return_dict"] = kwargs.pop("return_dict", return_dict)
 
@@ -980,26 +978,22 @@ def check_model_inputs(func):
         # Extract input_ids and inputs_embeds more robustly
         input_ids = all_args.get("input_ids", None)
         inputs_embeds = all_args.get("inputs_embeds", None)
+        # TODO check the inputs ids vs input embeds.
+        # probably a key string saying which input are not compatible with each other
 
         use_cache = kwargs["use_cache"]
         past_key_values = kwargs.get("past_key_values", None)
         hooks = []
-        collected_attentions = []
-        collected_hidden_states = []
-        if output_attentions or output_hidden_states:
-
-            def output_hidden_and_attention(module, inp, out):
-                if output_hidden_states:
-                    collected_hidden_states.append(out[0])
-                if output_attentions:
-                    collected_attentions.append(out[1])
+        collected_outputs = {}
 
         def make_capture_fn(key, index):
             def capture_fn(module, input, output):
-                collected[key].append(output[index])
+                collected_outputs[key].append(output[index])
 
             return capture_fn
 
+        capture_flags = self._can_record_outputs.keys()
+        recordable_keys = {k.replace("output_"): v for k, v in capture_flags.items()}
         if any(capture_flags.values()):
             for _, layer in self.named_modules():
                 for key, (cls, idx) in self._can_record_outputs.items():
@@ -1013,10 +1007,10 @@ def check_model_inputs(func):
                 h.remove()
 
         # Insert collected outputs
-        for key in collected:
+        for key in collected_outputs:
             # Optional: append a final model-level output like `last_hidden_state` for hidden_states
             # if needed. You can customize this as per key semantics.
-            outputs[key] = tuple(collected[key]) if collected[key] else None
+            outputs[key] = tuple(collected_outputs[key]) if collected_outputs[key] else None
 
         # Fill missing keys with None if not using return_dict
         if return_dict is False:
