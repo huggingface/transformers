@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 # ModernBERT Decoder
 
-ModernBERT Decoder is a variant of [ModernBERT](https://huggingface.co/papers/2412.13663) trained from scratch with a causal language modeling (CLM) objective but using the same architecture for comparing encoder and decoder architectures. This is the decoder architecture implementation of ModernBERT, designed for autoregressive text generation tasks.
+ModernBERT Decoder is the same architecture as [ModernBERT](https://huggingface.co/papers/2412.13663) but trained from scratch with a causal language modeling (CLM) objective. This allows for using the same architecture for comparing encoders and decoders. This is the decoder architecture implementation of ModernBERT, designed for autoregressive text generation tasks.
 
 Like the encoder version, ModernBERT Decoder incorporates modern architectural improvements such as rotary positional embeddings to support sequences of up to 8192 tokens, unpadding to avoid wasting compute on padding tokens, GeGLU layers, and alternating attention patterns. However, it uses causal (unidirectional) attention to enable autoregressive generation.
 
@@ -70,7 +70,6 @@ model = AutoModelForCausalLM.from_pretrained(
     "blab-jhu/test-32m-dec",
     torch_dtype=torch.float16,
     device_map="auto",
-    attn_implementation="sdpa"
 )
 
 prompt = "The future of artificial intelligence is"
@@ -149,15 +148,8 @@ The ModernBertDecoder model can be fine-tuned for various text generation tasks 
 
 - **Causal attention**: Ensures autoregressive generation by masking future tokens
 - **Sliding window attention**: Alternates between local and global attention patterns for efficiency
-- **Rotary positional embeddings**: Enables handling of longer sequences up to 8192 tokens
+- **Rotary positional embeddings**: Enables handling of longer sequences up to 8000 tokens
 - **FlashAttention support**: Optimized attention computation for faster training and inference
-
-The model is particularly well-suited for:
-- Text completion and generation
-- Conversational AI applications
-- Code generation tasks
-- Creative writing assistance
-- **Sequence classification**: Text classification, sentiment analysis, and similar tasks
 
 </pt>
 </frameworkcontent>

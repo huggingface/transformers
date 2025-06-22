@@ -19,7 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -65,59 +65,75 @@ def eager_attention_forward(
         query: Query tensor of shape [batch_size, num_heads, seq_len, head_dim]
         key: Key tensor of shape [batch_size, num_heads, seq_len, head_dim]
         value: Value tensor of shape [batch_size, num_heads, seq_len, head_dim]
-        attention_mask: Attention mask tensor
+        attention_mask: Attention mask tensor (should already incorporate causal and sliding window constraints)
         dropout: Dropout probability
         scaling: Attention scaling factor (will use module.scaling if None)
-        sliding_window: Sliding window size (for local attention)
+        sliding_window: Sliding window size (for local attention) - not used in eager, mask should already be prepared
         is_causal: Whether to use causal attention
 
     Returns:
         Tuple of (attention_output, attention_weights)
     """
     batch_size, num_heads, seq_len, head_dim = query.shape
+    kv_seq_len = key.shape[-2]
 
-    # Use module's scaling if not provided
-    if scaling is None:
-        scaling = module.scaling
+    # Use consistent scaling like the encoder version
+    scale = module.head_dim**-0.5
 
     # Compute attention scores
-    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    attn_weights = torch.matmul(query, key.transpose(-2, -1)) * scale
 
-    # Apply attention mask if provided
-    if attention_mask is not None:
-        # For causal attention, mask should already be properly shaped
-        if attention_mask.dim() == 4:
-            # Already 4D mask: [batch_size, num_heads, seq_len, seq_len]
-            attn_weights = attn_weights + attention_mask
-        elif attention_mask.dim() == 3:
-            # 3D mask: [batch_size, seq_len, seq_len] - add head dimension
-            attn_weights = attn_weights + attention_mask.unsqueeze(1)
-        elif attention_mask.dim() == 2:
-            # 2D mask: [batch_size, seq_len] - expand to causal mask
-            # This case shouldn't happen with proper causal masking, but handle it
+    if is_causal:
+        past_length = kv_seq_len - seq_len
+
+        causal_mask = torch.full(
+            (seq_len, kv_seq_len),
+            torch.finfo(attn_weights.dtype).min,
+            device=attn_weights.device,
+            dtype=attn_weights.dtype,
+        )
+
+        # Create indices for the causal pattern
+        row_indices = torch.arange(seq_len, device=attn_weights.device).unsqueeze(1)
+        col_indices = torch.arange(kv_seq_len, device=attn_weights.device).unsqueeze(0)
+
+        # Allow attention to past positions + current and previous positions in the current sequence
+        causal_pattern = col_indices <= (past_length + row_indices)
+        causal_mask = causal_mask.masked_fill(causal_pattern, 0)
+
+        # Apply sliding window constraint if specified
+        if sliding_window is not None and sliding_window > 0:
+            # Create sliding window mask - limit attention to within sliding window distance
+            # Calculate absolute distance between query positions and key positions
+            query_positions = past_length + row_indices  # Actual positions in the full sequence
+            key_positions = col_indices  # Key positions in the full sequence
+            distance = torch.abs(query_positions - key_positions)
+
+            # Create sliding window pattern (allow attention within window)
+            window_pattern = distance <= sliding_window
+
+            # Combine causal and sliding window constraints - both must be satisfied
+            combined_pattern = causal_pattern & window_pattern
+
+            # Reset mask and apply combined constraints
             causal_mask = torch.full(
-                (seq_len, seq_len),
+                (seq_len, kv_seq_len),
                 torch.finfo(attn_weights.dtype).min,
                 device=attn_weights.device,
                 dtype=attn_weights.dtype,
             )
-            causal_mask = torch.triu(causal_mask, diagonal=1)
-            attn_weights = attn_weights + causal_mask
+            causal_mask = causal_mask.masked_fill(combined_pattern, 0)
 
-    # Apply sliding window mask if specified
-    if sliding_window is not None and sliding_window > 0:
-        # Create sliding window mask
-        mask = torch.full((seq_len, seq_len), torch.finfo(attn_weights.dtype).min, device=attn_weights.device)
-        for i in range(seq_len):
-            start = max(0, i - sliding_window + 1)
-            end = i + 1  # Causal: can only attend to current and previous tokens
-            mask[i, start:end] = 0
-        attn_weights = attn_weights + mask.unsqueeze(0).unsqueeze(0)
+        attn_weights = attn_weights + causal_mask
 
+    # upcast attention to fp32
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value)
+
+    # Return in 4D format: [batch_size, seq_len, num_heads, head_dim] so existing reshape logic works
     attn_output = attn_output.transpose(1, 2).contiguous()
+
     return attn_output, attn_weights
 
 
@@ -132,6 +148,12 @@ class ModernBertDecoderAttention(nn.Module):
         super().__init__()
         self.config = config
         self.layer_id = layer_id
+
+        if config._attn_implementation not in ["eager", "flash_attention_2"]:
+            raise ValueError(
+                f"ModernBertDecoder only supports 'eager' and 'flash_attention_2' attention implementations. "
+                f"Got: {config._attn_implementation}"
+            )
 
         if config.hidden_size % config.num_attention_heads != 0:
             raise ValueError(
@@ -188,7 +210,7 @@ class ModernBertDecoderAttention(nn.Module):
             else:
                 # For initial forward pass, start from 0
                 position_ids = torch.arange(seq_len, dtype=torch.long, device=device)
-            position_ids = position_ids.unsqueeze(0)
+            position_ids = position_ids.unsqueeze(0).expand(batch_size, -1)
 
         # Apply rotary embeddings
         if past_key_value is not None:
@@ -217,15 +239,12 @@ class ModernBertDecoderAttention(nn.Module):
         # Set up cache BEFORE calling attention (attention might modify tensors)
         past_key_value_out = (key, value) if use_cache else None
 
-        # Use the appropriate attention interface
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
+        if self.config._attn_implementation == "eager":
+            attention_interface = eager_attention_forward
+        elif self.config._attn_implementation == "flash_attention_2":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        is_causal = True
-        if self.config._attn_implementation == "sdpa":  # it can always be True for eager or FA2, but not SDPA
-            # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
-            is_causal = True if attention_mask is None and seq_len > 1 else False
+        else:
+            raise ValueError(f"Unsupported attention implementation: {self.config._attn_implementation}")
 
         # FlashAttention only supports fp16 and bf16 data types
         if self.config._attn_implementation == "flash_attention_2":
@@ -249,7 +268,7 @@ class ModernBertDecoderAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             sliding_window=self.local_attention[0] if self.local_attention[0] != -1 else None,
-            is_causal=is_causal,
+            is_causal=True,
             **kwargs,
         )
 
@@ -338,6 +357,70 @@ class ModernBertDecoderLayer(nn.Module):
 class ModernBertDecoderPreTrainedModel(ModernBertPreTrainedModel):
     config_class = ModernBertDecoderConfig
     base_model_prefix = "model"
+
+
+def create_decoder_attention_masks(
+    config,
+    input_embeds: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    cache_position: torch.Tensor,
+    past_key_values: Optional[HybridCache],
+) -> dict[str, Optional[torch.Tensor]]:
+    """
+    Create base attention masks for ModernBERT decoder layers.
+
+    Creates a base causal mask and optionally a sliding window mask, then combines
+    them efficiently when needed. These pre-computed masks are used by all
+    attention implementations (eager, SDPA, etc.) for consistency and efficiency.
+
+    Args:
+        config: Model configuration
+        input_embeds: Input embeddings tensor
+        attention_mask: Optional 2D attention mask
+        cache_position: Cache position tensor
+        past_key_values: Past key values cache
+
+    Returns:
+        Dictionary containing combined masks for different layer types:
+        - global_attention: Mask for layers using global attention
+        - sliding_attention: Mask for layers using sliding window attention
+    """
+    if config._attn_implementation == "flash_attention_2":
+        # FA2 generates its own masks
+        return {"global_attention": None, "sliding_attention": None}
+
+    # Create base causal mask
+    base_mask_kwargs = {
+        "config": config,
+        "input_embeds": input_embeds,
+        "attention_mask": attention_mask,
+        "cache_position": cache_position,
+        "past_key_values": past_key_values,
+    }
+
+    causal_mask = create_causal_mask(**base_mask_kwargs)
+
+    # If we have sliding window layers, create the combined mask
+    if config.global_attn_every_n_layers != 1:
+        # Create sliding window mask by temporarily setting sliding_window on config
+        sliding_config = type(config)(**config.__dict__)
+        sliding_config.sliding_window = config.local_attention
+
+        sliding_mask_kwargs = base_mask_kwargs.copy()
+        sliding_mask_kwargs["config"] = sliding_config
+
+        sliding_mask = create_sliding_window_causal_mask(**sliding_mask_kwargs)
+
+        return {
+            "global_attention": causal_mask,
+            "sliding_attention": sliding_mask,
+        }
+    else:
+        # All layers use global attention
+        return {
+            "global_attention": causal_mask,
+            "sliding_attention": causal_mask,
+        }
 
 
 @auto_docstring
@@ -466,23 +549,9 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
         # Convert tuple-based cache to HybridCache for masking functions
         cache_for_masking = None
         if past_key_values is not None and past_key_values[0] is not None:
-            # Set up config attributes needed for HybridCache
-            if not hasattr(self.config, "sliding_window"):
-                self.config.sliding_window = self.config.local_attention
-
-            if not hasattr(self.config, "layer_types"):
-                # Create layer_types based on the alternating pattern
-                self.config.layer_types = []
-                for layer_id in range(self.config.num_hidden_layers):
-                    if layer_id % self.config.global_attn_every_n_layers != 0:
-                        self.config.layer_types.append("sliding_window")
-                    else:
-                        self.config.layer_types.append("full_attention")
-
-            # Create HybridCache with appropriate parameters
-            cache_for_masking = HybridCache(
-                config=self.config,
-                max_batch_size=batch_size,
+            # Create HybridCache with existing cache data
+            cache_for_masking = self._setup_cache_config_and_create_hybrid_cache(
+                batch_size=batch_size,
                 max_cache_len=past_key_values[0][0].shape[-2] + seq_length,
                 device=hidden_states.device,
                 dtype=hidden_states.dtype,
@@ -496,23 +565,8 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
                     cache_for_masking.update(key, value, layer_idx, {"cache_position": cache_position_past})
         else:
             # Even without past_key_values, we may need HybridCache for mask creation
-            # Set up config attributes for consistent masking
-            if not hasattr(self.config, "sliding_window"):
-                self.config.sliding_window = self.config.local_attention
-
-            if not hasattr(self.config, "layer_types"):
-                # Create layer_types based on the alternating pattern
-                self.config.layer_types = []
-                for layer_id in range(self.config.num_hidden_layers):
-                    if layer_id % self.config.global_attn_every_n_layers != 0:
-                        self.config.layer_types.append("sliding_window")
-                    else:
-                        self.config.layer_types.append("full_attention")
-
-            # Create empty HybridCache for masking consistency
-            cache_for_masking = HybridCache(
-                config=self.config,
-                max_batch_size=batch_size,
+            cache_for_masking = self._setup_cache_config_and_create_hybrid_cache(
+                batch_size=batch_size,
                 max_cache_len=seq_length,  # Just the current sequence length
                 device=hidden_states.device,
                 dtype=hidden_states.dtype,
@@ -524,27 +578,15 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
                 # attention_mask is already a mask mapping, use it directly
                 causal_mask_mapping = attention_mask
             else:
-                # Prepare mask arguments
-                mask_kwargs = {
-                    "config": self.config,
-                    "input_embeds": hidden_states,
-                    "attention_mask": attention_mask,
-                    "cache_position": cache_position,
-                    "past_key_values": cache_for_masking,
-                }
-
-                # Create the masks - always need causal mask for global attention layers
-                causal_mask_mapping = {
-                    "global_attention": create_causal_mask(**mask_kwargs),
-                }
-
-                # Only create sliding window mask if we have layers that need it
-                if self.config.global_attn_every_n_layers != 1:
-                    # Temporarily add sliding_window attribute to config for mask creation
-                    sliding_mask_kwargs = mask_kwargs.copy()
-                    self.config.sliding_window = self.config.local_attention
-                    causal_mask_mapping["sliding_attention"] = create_sliding_window_causal_mask(**sliding_mask_kwargs)
-                    del self.config.sliding_window  # Clean up
+                # Create attention masks once and reuse them across layers
+                # This creates both causal and sliding window masks as needed
+                causal_mask_mapping = create_decoder_attention_masks(
+                    config=self.config,
+                    input_embeds=hidden_states,
+                    attention_mask=attention_mask,
+                    cache_position=cache_position,
+                    past_key_values=cache_for_masking,
+                )
         else:
             causal_mask_mapping = None
 
@@ -613,6 +655,43 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
             past_key_values=next_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
+        )
+
+    def _setup_cache_config_and_create_hybrid_cache(
+        self, batch_size: int, max_cache_len: int, device: torch.device, dtype: torch.dtype
+    ) -> HybridCache:
+        """
+        Setup config attributes needed for HybridCache and create the cache instance.
+
+        Args:
+            batch_size: Batch size for the cache
+            max_cache_len: Maximum cache length
+            device: Device for the cache
+            dtype: Data type for the cache
+
+        Returns:
+            HybridCache instance
+        """
+        # Set up config attributes needed for HybridCache
+        if not hasattr(self.config, "sliding_window"):
+            self.config.sliding_window = self.config.local_attention
+
+        if not hasattr(self.config, "layer_types"):
+            # Create layer_types based on the alternating pattern
+            self.config.layer_types = []
+            for layer_id in range(self.config.num_hidden_layers):
+                if layer_id % self.config.global_attn_every_n_layers != 0:
+                    self.config.layer_types.append("sliding_window")
+                else:
+                    self.config.layer_types.append("full_attention")
+
+        # Create HybridCache with appropriate parameters
+        return HybridCache(
+            config=self.config,
+            max_batch_size=batch_size,
+            max_cache_len=max_cache_len,
+            device=device,
+            dtype=dtype,
         )
 
 
@@ -685,8 +764,8 @@ class ModernBertDecoderForCausalLM(ModernBertDecoderPreTrainedModel, GenerationM
         ```python
         >>> from transformers import AutoTokenizer, ModernBertDecoderForCausalLM
 
-        >>> model = ModernBertDecoderForCausalLM.from_pretrained("your-username/your-model-name")
-        >>> tokenizer = AutoTokenizer.from_pretrained("your-username/your-model-name")
+        >>> model = ModernBertDecoderForCausalLM.from_pretrained("blab-jhu/test-32m-dec")
+        >>> tokenizer = AutoTokenizer.from_pretrained("blab-jhu/test-32m-dec")
 
         >>> prompt = "Hello, I'm a language model,"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
