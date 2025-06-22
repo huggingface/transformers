@@ -180,10 +180,6 @@ class ModernBertDecoderConfig(PretrainedConfig):
         num_labels=2,
         **kwargs,
     ):
-        # Set default attention implementation
-        if "_attn_implementation" not in kwargs:
-            kwargs["_attn_implementation"] = "flash_attention_2"
-
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
