@@ -34,7 +34,7 @@ from ...modeling_outputs import (
     Seq2SeqMoEOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
@@ -240,9 +240,6 @@ class SwitchTransformersLayerNorm(nn.Module):
         return self.weight * hidden_states
 
 
-ALL_LAYERNORM_LAYERS.append(SwitchTransformersLayerNorm)
-
-
 # Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5->SwitchTransformers
 class SwitchTransformersDenseActDense(nn.Module):
     def __init__(self, config: SwitchTransformersConfig):
@@ -307,7 +304,7 @@ class SwitchTransformersSparseMLP(nn.Module):
             0
         ].tolist()  # length: number of "activated" expert / value: index
         for idx in idx_mask:
-            next_states[router_mask[:, :, idx]] = getattr(self.experts, "expert_{}".format(idx))(
+            next_states[router_mask[:, :, idx]] = getattr(self.experts, f"expert_{idx}")(
                 hidden_states[router_mask[:, :, idx]]
             )
 

@@ -476,7 +476,7 @@ class TFSwinDropPath(keras.layers.Layer):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob: Optional[float] = None, scale_by_keep: bool = True, **kwargs) -> None:
-        super(TFSwinDropPath, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.drop_prob = drop_prob
         self.scale_by_keep = scale_by_keep
 
@@ -795,8 +795,8 @@ class TFSwinLayer(keras.layers.Layer):
         mask_windows = window_partition(img_mask, window_size)
         mask_windows = tf.reshape(mask_windows, (-1, window_size * window_size))
         attn_mask = tf.expand_dims(mask_windows, 1) - tf.expand_dims(mask_windows, 2)
-        attn_mask = tf.where(attn_mask != 0, float(-100.0), attn_mask)
-        attn_mask = tf.where(attn_mask == 0, float(0.0), attn_mask)
+        attn_mask = tf.where(attn_mask != 0, -100.0, attn_mask)
+        attn_mask = tf.where(attn_mask == 0, 0.0, attn_mask)
         return attn_mask
 
     def maybe_pad(
