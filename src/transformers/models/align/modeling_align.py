@@ -32,6 +32,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import ModelOutput, auto_docstring, logging
+from transformers.utils.generic import can_return_tuple, check_model_inputs
 from .configuration_align import AlignConfig, AlignTextConfig, AlignVisionConfig
 
 
@@ -507,10 +508,8 @@ class AlignVisionEncoder(nn.Module):
     ) -> BaseModelOutputWithPoolingAndNoAttention:
         for block in self.blocks:
             hidden_states = block(hidden_states)
-
         return BaseModelOutputWithNoAttention(
             last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
         )
 
 
@@ -764,7 +763,6 @@ class AlignTextAttention(nn.Module):
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
-        output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
         self_outputs = self.self(
             hidden_states,
@@ -773,7 +771,6 @@ class AlignTextAttention(nn.Module):
             encoder_hidden_states,
             encoder_attention_mask,
             past_key_value,
-            output_attentions,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -844,11 +841,6 @@ class AlignTextLayer(nn.Module):
             head_mask,
             past_key_value=self_attn_past_key_value,
         )
-        attention_output = self_attention_outputs[0]
-        if self.is_decoder:
-            outputs = self_attention_outputs[1:-1]
-        else:
-            outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         if self.is_decoder and encoder_hidden_states is not None:
             if not hasattr(self, "crossattention"):
@@ -859,18 +851,18 @@ class AlignTextLayer(nn.Module):
 
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
             cross_attention_outputs = self.crossattention(
-                attention_output,
                 attention_mask,
                 head_mask,
                 encoder_hidden_states,
                 encoder_attention_mask,
                 cross_attn_past_key_value,
             )
-            attention_output = cross_attention_outputs[0]
-            outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
 
         layer_output = apply_chunking_to_forward(
-            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
+            self.feed_forward_chunk,
+            self.chunk_size_feed_forward,
+            self.seq_len_dim,
+            (self_attention_outputs, cross_attention_outputs),
         )
         return layer_output
 
@@ -897,7 +889,7 @@ class AlignTextEncoder(nn.Module):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         **kwargs,
-    ) -> Union[BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> BaseModelOutputWithPastAndCrossAttentions:
         for i, layer_module in enumerate(self.layer):
             layer_head_mask = head_mask[i] if head_mask is not None else None
             past_key_value = past_key_values[i] if past_key_values is not None else None
@@ -991,6 +983,7 @@ class AlignTextModel(AlignPreTrainedModel):
         self.embeddings.word_embeddings = value
 
     @auto_docstring
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1000,7 +993,7 @@ class AlignTextModel(AlignPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         **kwargs,
-    ) -> Union[tuple, BaseModelOutputWithPoolingAndCrossAttentions]:
+    ) -> BaseModelOutputWithPoolingAndCrossAttentions:
         r"""
         Examples:
 
@@ -1016,19 +1009,10 @@ class AlignTextModel(AlignPreTrainedModel):
         >>> last_hidden_state = outputs.last_hidden_state
         >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
         ```"""
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
-            input_shape = input_ids.size()
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        batch_size, seq_length = input_shape
+        input_shape = input_ids.shape if input_ids is not None else inputs_embeds.shape[:-1]
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
+        batch_size, seq_length = input_shape
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length)), device=device)
 
@@ -1098,12 +1082,10 @@ class AlignVisionModel(AlignPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.convolution
 
+    @can_return_tuple
     @auto_docstring
     def forward(
-        self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        self, pixel_values: Optional[torch.FloatTensor] = None, **kwargs
     ) -> Union[tuple, BaseModelOutputWithPoolingAndNoAttention]:
         r"""
         Examples:
@@ -1125,8 +1107,6 @@ class AlignVisionModel(AlignPreTrainedModel):
         >>> last_hidden_state = outputs.last_hidden_state
         >>> pooled_output = outputs.pooler_output  # pooled CLS states
         ```"""
-      
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -1134,8 +1114,6 @@ class AlignVisionModel(AlignPreTrainedModel):
         embedding_output = self.embeddings(pixel_values)
         encoder_outputs = self.encoder(
             embedding_output,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
         # Apply pooling
         last_hidden_state = encoder_outputs[0]
@@ -1143,13 +1121,9 @@ class AlignVisionModel(AlignPreTrainedModel):
         # Reshape (batch_size, projection_dim, 1 , 1) -> (batch_size, projection_dim)
         pooled_output = pooled_output.reshape(pooled_output.shape[:2])
 
-        if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
-
         return BaseModelOutputWithPoolingAndNoAttention(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
         )
 
 
@@ -1188,6 +1162,7 @@ class AlignModel(AlignPreTrainedModel):
         self.post_init()
 
     @auto_docstring
+    @can_return_tuple
     def get_text_features(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1196,7 +1171,7 @@ class AlignModel(AlignPreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
-        return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> torch.FloatTensor:
         r"""
         Returns:
@@ -1214,11 +1189,6 @@ class AlignModel(AlignPreTrainedModel):
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
         ```"""
-        # Use ALIGN model's config for some fields (if specified) instead of those of vision & text components.
-        
-      
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         text_outputs = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1226,9 +1196,7 @@ class AlignModel(AlignPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         last_hidden_state = text_outputs[0][:, 0, :]
@@ -1240,8 +1208,6 @@ class AlignModel(AlignPreTrainedModel):
     def get_image_features(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
         Returns:
@@ -1266,13 +1232,9 @@ class AlignModel(AlignPreTrainedModel):
         >>> image_features = model.get_image_features(**inputs)
         ```"""
         # Use ALIGN model's config for some fields (if specified) instead of those of vision & text components.
-      
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
         image_features = vision_outputs[1]  # pooled_output
@@ -1290,7 +1252,7 @@ class AlignModel(AlignPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         return_loss: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, AlignOutput]:
         r"""
         return_loss (`bool`, *optional*):
@@ -1318,14 +1280,8 @@ class AlignModel(AlignPreTrainedModel):
         >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
         ```"""
         # Use ALIGN model's config for some fields (if specified) instead of those of vision & text components.
-        
-      
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
         text_outputs = self.text_model(
@@ -1335,9 +1291,6 @@ class AlignModel(AlignPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
         image_embeds = vision_outputs[1]
@@ -1355,11 +1308,6 @@ class AlignModel(AlignPreTrainedModel):
         loss = None
         if return_loss:
             loss = align_loss(logits_per_text)
-
-        if not return_dict:
-            output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
-            return ((loss,) + output) if loss is not None else output
-
         return AlignOutput(
             loss=loss,
             logits_per_image=logits_per_image,
