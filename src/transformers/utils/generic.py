@@ -959,13 +959,9 @@ def check_model_inputs(func):
 
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        print(kwargs)
-        output_attentions = kwargs.get("output_attentions", self.config.output_attentions)
-        output_hidden_states = kwargs.get("output_hidden_states", self.config.output_hidden_states)
         use_cache = kwargs.get("use_cache", self.config.use_cache)
         return_dict = kwargs.pop("return_dict", self.config.use_return_dict)
 
-        # Safely extract common config-backed flags
         kwargs.setdefault("use_cache", use_cache)
         kwargs["return_dict"] = kwargs.pop("return_dict", return_dict)
 

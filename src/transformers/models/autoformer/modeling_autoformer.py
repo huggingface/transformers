@@ -16,6 +16,8 @@
 # limitations under the License.
 """PyTorch Autoformer model."""
 
+# TODO to refactor the attention is absolutely shit in this modeling code.
+
 import math
 from dataclasses import dataclass
 from typing import Optional, Union
@@ -969,7 +971,6 @@ class AutoformerEncoder(AutoformerPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutput]:
         r"""
@@ -1000,8 +1001,7 @@ class AutoformerEncoder(AutoformerPreTrainedModel):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-        
-      
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         hidden_states = self.value_embedding(inputs_embeds)
@@ -1110,7 +1110,6 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
         past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
-
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, AutoFormerDecoderOutput]:
         r"""
@@ -1175,8 +1174,7 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-        
-      
+
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1583,8 +1581,7 @@ class AutoformerModel(AutoformerPreTrainedModel):
 
         >>> last_hidden_state = outputs.last_hidden_state
         ```"""
-        
-      
+
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1985,7 +1982,6 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         past_observed_mask: Optional[torch.Tensor] = None,
         static_categorical_features: Optional[torch.Tensor] = None,
         static_real_features: Optional[torch.Tensor] = None,
-
     ) -> SampleTSPredictionOutput:
         r"""
         Greedily generate sequences of sample predictions from a model with a probability distribution head.
