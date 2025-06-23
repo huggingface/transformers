@@ -27,6 +27,7 @@ from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
@@ -1067,7 +1068,7 @@ class VitsFeedForward(nn.Module):
         return hidden_states
 
 
-class VitsEncoderLayer(nn.Module):
+class VitsEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: VitsConfig):
         super().__init__()
         self.attention = VitsAttention(config)
@@ -1145,21 +1146,12 @@ class VitsEncoder(nn.Module):
             skip_the_layer = self.training and (dropout_probability < self.layerdrop)
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        encoder_layer.__call__,
-                        hidden_states,
-                        padding_mask,
-                        attention_mask,
-                        output_attentions,
-                    )
-                else:
-                    layer_outputs = encoder_layer(
-                        hidden_states,
-                        attention_mask=attention_mask,
-                        padding_mask=padding_mask,
-                        output_attentions=output_attentions,
-                    )
+                layer_outputs = encoder_layer(
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    padding_mask=padding_mask,
+                    output_attentions=output_attentions,
+                )
                 hidden_states = layer_outputs[0]
 
             if skip_the_layer:

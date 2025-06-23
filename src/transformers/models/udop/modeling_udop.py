@@ -38,6 +38,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
@@ -743,7 +744,7 @@ class UdopLayerCrossAttention(nn.Module):
 
 
 # Copied from transformers.models.t5.modeling_t5.T5Block with T5->Udop
-class UdopBlock(nn.Module):
+class UdopBlock(GradientCheckpointingLayer):
     def __init__(self, config, has_relative_attention_bias=False, layer_idx: Optional[int] = None):
         super().__init__()
         self.is_decoder = config.is_decoder
@@ -1295,11 +1296,11 @@ class UdopStack(UdopPreTrainedModel):
 
             layer_outputs = layer_module(
                 hidden_states,
-                attention_mask=causal_mask,
-                position_bias=position_bias,
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_extended_attention_mask,
-                encoder_decoder_position_bias=encoder_decoder_position_bias,
+                causal_mask,
+                position_bias,
+                encoder_hidden_states,
+                encoder_extended_attention_mask,
+                encoder_decoder_position_bias,  # as a positional argument for gradient checkpointing
                 layer_head_mask=head_mask[i],
                 past_key_value=past_key_values,
                 use_cache=use_cache,

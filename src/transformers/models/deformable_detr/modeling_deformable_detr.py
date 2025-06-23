@@ -27,6 +27,7 @@ from torch import Tensor, nn
 from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
@@ -759,7 +760,7 @@ class DeformableDetrMultiheadAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-class DeformableDetrEncoderLayer(nn.Module):
+class DeformableDetrEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: DeformableDetrConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -848,7 +849,7 @@ class DeformableDetrEncoderLayer(nn.Module):
         return outputs
 
 
-class DeformableDetrDecoderLayer(nn.Module):
+class DeformableDetrDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: DeformableDetrConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -1126,29 +1127,16 @@ class DeformableDetrEncoder(DeformableDetrPreTrainedModel):
         for i, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    encoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    position_embeddings,
-                    reference_points,
-                    spatial_shapes,
-                    spatial_shapes_list,
-                    level_start_index,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask,
-                    position_embeddings=position_embeddings,
-                    reference_points=reference_points,
-                    spatial_shapes=spatial_shapes,
-                    spatial_shapes_list=spatial_shapes_list,
-                    level_start_index=level_start_index,
-                    output_attentions=output_attentions,
-                )
+            layer_outputs = encoder_layer(
+                hidden_states,
+                attention_mask,
+                position_embeddings=position_embeddings,
+                reference_points=reference_points,
+                spatial_shapes=spatial_shapes,
+                spatial_shapes_list=spatial_shapes_list,
+                level_start_index=level_start_index,
+                output_attentions=output_attentions,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -1273,31 +1261,17 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    position_embeddings,
-                    reference_points_input,
-                    spatial_shapes,
-                    spatial_shapes_list,
-                    level_start_index,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    position_embeddings=position_embeddings,
-                    encoder_hidden_states=encoder_hidden_states,
-                    reference_points=reference_points_input,
-                    spatial_shapes=spatial_shapes,
-                    spatial_shapes_list=spatial_shapes_list,
-                    level_start_index=level_start_index,
-                    encoder_attention_mask=encoder_attention_mask,
-                    output_attentions=output_attentions,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                position_embeddings,
+                reference_points_input,
+                spatial_shapes,
+                spatial_shapes_list,
+                level_start_index,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                encoder_attention_mask,
+                output_attentions,
+            )
 
             hidden_states = layer_outputs[0]
 

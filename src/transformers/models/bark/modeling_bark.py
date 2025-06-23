@@ -31,6 +31,7 @@ from ...generation.logits_process import (
 )
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel, get_parameter_device
 from ...utils import (
@@ -309,7 +310,7 @@ class BarkMLP(nn.Module):
         return hidden_states
 
 
-class BarkBlock(nn.Module):
+class BarkBlock(GradientCheckpointingLayer):
     def __init__(self, config, is_causal=False):
         super().__init__()
 
@@ -606,25 +607,14 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                outputs = self._gradient_checkpointing_func(
-                    block.__call__,
-                    hidden_states,
-                    None,
-                    attention_mask,
-                    head_mask[i],
-                    use_cache,
-                    output_attentions,
-                )
-            else:
-                outputs = block(
-                    hidden_states,
-                    past_key_values=past_layer_key_values,
-                    attention_mask=attention_mask,
-                    head_mask=head_mask[i],
-                    use_cache=use_cache,
-                    output_attentions=output_attentions,
-                )
+            outputs = block(
+                hidden_states,
+                past_key_values=past_layer_key_values,
+                attention_mask=attention_mask,
+                head_mask=head_mask[i],
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+            )
 
             hidden_states = outputs[0]
 
