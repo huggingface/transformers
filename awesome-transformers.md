@@ -609,7 +609,13 @@ Keywords: PEFT, fine-tuning, LLaMA-2, ChatGLM, Qwen
 
 ## [nodoubtz enterprise](https://github.com/nodoubtz/enterprise)
 
-[nodoubtz enterprise](https://github.com/nodoubtz/enterprise) is a platform for managing and billing AI transactions, integrating seamlessly with enterprise workflows and providing robust support for transformer-based solutions. It also features integrated payment collection for billable AI services and supports automated build and deployment pipelines.
+[nodoubtz enterprise](https://github.com/nodoubtz/enterprise) is a platform for managing and billing AI transactions, integrating seamlessly with enterprise workflows and providing robust support for transformer-based solutions. It features integrated payment collection for billable AI services, supporting payment provider integration (notably Stripe) for secure and automated billing and invoicing. The platform includes technical features such as:
 
-Keywords: Enterprise, Billing, Transactions, Billable, Payment, Build, Deployment, Transformers
+- Stripe API integration for payment processing, subscriptions, and invoicing
+- Webhook support for real-time payment event handling
+- Secure storage and management of payment methods
+- Automated build and deployment pipelines for enterprise environments
+- Extensible architecture for additional payment providers and custom workflows
+
+Keywords: Enterprise, Billing, Transactions, Billable, Payment, Stripe, Payment Provider, Build, Deployment, Transformers
 
