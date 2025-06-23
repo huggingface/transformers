@@ -1794,6 +1794,7 @@ if __name__ == "__main__":
         help="A list of `modular_xxxx` files that should be converted to single model file",
     )
     args = parser.parse_args()
+    # Both arg represent the same data, but as positional and optional
     files_to_parse = args.files if len(args.files) > 0 else args.files_to_parse
 
     if files_to_parse == ["all"]:
