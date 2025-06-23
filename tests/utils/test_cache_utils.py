@@ -634,7 +634,7 @@ class CacheExportIntegrationTest(unittest.TestCase):
             self.skipTest(reason="This test requires torch >= 2.3 to run.")
 
         set_seed(0)
-        device = "cpu"
+        device = torch_device
         dtype = "bfloat16"
         cache_implementation = "static"
         attn_implementation = "sdpa"  # Export and ExecuTorch only works for SdpaAttention
@@ -682,8 +682,8 @@ class CacheExportIntegrationTest(unittest.TestCase):
         self.assertEqual(n_static_value_caches, model.config.num_hidden_layers)
 
         # Export with dynamic shapes
-        input_ids = torch.zeros((1, 3), dtype=torch.long)
-        cache_position = torch.tensor([0, 1, 2], dtype=torch.long)
+        input_ids = torch.zeros((1, 3), dtype=torch.long, device=device)
+        cache_position = torch.tensor([0, 1, 2], dtype=torch.long, device=device)
         dynamic_shapes = {"input_ids": {1: torch.export.Dim.DYNAMIC}, "cache_position": {0: torch.export.Dim.DYNAMIC}}
         strict = version.parse(torch.__version__) != version.parse("2.7.0")
         exported_program = convert_and_export_with_cache(
