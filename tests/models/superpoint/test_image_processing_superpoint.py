@@ -140,11 +140,12 @@ class SuperPointImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             pre_processed_images = image_processor.preprocess(image_inputs)
             for image in pre_processed_images["pixel_values"]:
                 if isinstance(image, torch.Tensor):
-                    self.assertTrue(torch.all(image[0, ...] == image[1, ...]).item() and 
-                                   torch.all(image[1, ...] == image[2, ...]).item())
+                    self.assertTrue(
+                        torch.all(image[0, ...] == image[1, ...]).item()
+                        and torch.all(image[1, ...] == image[2, ...]).item()
+                    )
                 else:
-                    self.assertTrue(np.all(image[0, ...] == image[1, ...]) and 
-                                   np.all(image[1, ...] == image[2, ...]))
+                    self.assertTrue(np.all(image[0, ...] == image[1, ...]) and np.all(image[1, ...] == image[2, ...]))
 
     @require_torch
     def test_post_processing_keypoint_detection(self):
