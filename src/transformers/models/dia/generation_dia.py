@@ -219,7 +219,7 @@ class DiaGenerationMixin(GenerationMixin):
         )
 
         # Depending on cache usage we need to pass all or just one
-        if model_inputs.get("use_cache", False):
+        if model_inputs.get("use_cache", False) and model_inputs["cache_position"][0] > 0:
             model_inputs["decoder_input_ids"] = model_inputs["decoder_input_ids"][:, -1, :][:, None, :]
 
         # Be compile friendly

@@ -188,7 +188,7 @@ if __name__ == "__main__":
             print(e)
         else:
             processor = DiaProcessor(
-                DiaFeatureExtractor(sampling_rate=44100, hop_length=1),
+                DiaFeatureExtractor(sampling_rate=44100, hop_length=512),
                 DiaTokenizer(),
                 DacModel.from_pretrained("descript/dac_44khz"),
             )

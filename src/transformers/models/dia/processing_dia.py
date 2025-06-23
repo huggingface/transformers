@@ -188,9 +188,8 @@ class DiaProcessor(ProcessorMixin):
 
                 # compute non-padded forward pass; one extra bos (and eos if training) is added
                 with torch.no_grad():
-                    input_ids = self.audio_tokenizer.encode(
-                        audio[None, ..., :current_audio_len]
-                    ).audio_codes.transpose(1, 2)
+                    audio = audio[None, ..., :current_audio_len].to(self.audio_tokenizer.device)
+                    input_ids = self.audio_tokenizer.encode(audio).audio_codes.transpose(1, 2)
 
                 if not generation:
                     input_ids = torch.nn.functional.pad(
@@ -323,7 +322,8 @@ class DiaProcessor(ProcessorMixin):
         with torch.no_grad():
             for i in range(start_of_generation_idx.shape[0]):
                 output_i = output_sequences[i, :, start_of_generation_idx[i] : end_of_generation_idx[i]][None, ...]
-                audio_i = self.audio_tokenizer.decode(audio_codes=output_i).audio_values
+                output_i = output_i.to(self.audio_tokenizer.device)
+                audio_i = self.audio_tokenizer.decode(audio_codes=output_i).audio_values.cpu()
                 audios.append(audio_i)
 
         return audios
