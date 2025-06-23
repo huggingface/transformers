@@ -607,3 +607,9 @@ Keywords: BentoML, Framework, Deployment, AI Applications
 
 Keywords: PEFT, fine-tuning, LLaMA-2, ChatGLM, Qwen
 
+## [nodoubtz enterprise](https://github.com/nodoubtz/enterprise)
+
+[nodoubtz enterprise](https://github.com/nodoubtz/enterprise) is a platform for managing and billing AI transactions, integrating seamlessly with enterprise workflows and providing robust support for transformer-based solutions. It also features integrated payment collection for billable AI services and supports automated build and deployment pipelines.
+
+Keywords: Enterprise, Billing, Transactions, Billable, Payment, Build, Deployment, Transformers
+
