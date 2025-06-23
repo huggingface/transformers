@@ -1105,10 +1105,8 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
         skip_predictor (bool):
             flag to skip the predictor forward, useful if you just need the encoder outputs
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        
+      
 
         if pixel_values_videos is None:
             raise ValueError("You have to specify pixel_values_videos")

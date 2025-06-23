@@ -920,8 +920,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
         max_seqlen: Optional[int] = None,
         batch_size: Optional[int] = None,
         seq_len: Optional[int] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor, ...], BaseModelOutput]:
         r"""
@@ -940,7 +939,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
         seq_len (`int`, *optional*):
             Sequence length of the input sequences including padding tokens. Used to pad the output tensors.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -1131,8 +1130,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         max_seqlen: Optional[int] = None,
         batch_size: Optional[int] = None,
         seq_len: Optional[int] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[tuple[torch.Tensor], MaskedLMOutput]:
@@ -1263,8 +1261,7 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         max_seqlen: Optional[int] = None,
         batch_size: Optional[int] = None,
         seq_len: Optional[int] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
@@ -1386,8 +1383,7 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         max_seqlen: Optional[int] = None,
         batch_size: Optional[int] = None,
         seq_len: Optional[int] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor], TokenClassifierOutput]:
         r"""
@@ -1476,8 +1472,7 @@ class ModernBertForQuestionAnswering(ModernBertPreTrainedModel):
         max_seqlen: Optional[int] = None,
         batch_size: Optional[int] = None,
         seq_len: Optional[int] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[tuple[torch.Tensor], QuestionAnsweringModelOutput]:

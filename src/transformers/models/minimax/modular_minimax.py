@@ -492,7 +492,7 @@ class MiniMaxModel(MixtralModel):
         cache_position: Optional[torch.LongTensor] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> MoeModelOutputWithPast:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.output_router_logits
         )

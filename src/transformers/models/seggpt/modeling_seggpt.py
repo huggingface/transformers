@@ -681,8 +681,7 @@ class SegGptModel(SegGptPreTrainedModel):
         feature_ensemble: Optional[bool] = None,
         embedding_type: Optional[str] = None,
         labels: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, SegGptEncoderOutput]:
         r"""
@@ -730,10 +729,8 @@ class SegGptModel(SegGptPreTrainedModel):
         [1, 56, 28, 1024]
         ```
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        
+      
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         feature_ensemble = feature_ensemble if feature_ensemble is not None else False
 
@@ -877,8 +874,7 @@ class SegGptForImageSegmentation(SegGptPreTrainedModel):
         feature_ensemble: Optional[bool] = None,
         embedding_type: Optional[str] = None,
         labels: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, SegGptImageSegmentationOutput]:
         r"""
@@ -926,10 +922,8 @@ class SegGptForImageSegmentation(SegGptPreTrainedModel):
         [170, 297]
         ```
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        
+      
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if bool_masked_pos is None:

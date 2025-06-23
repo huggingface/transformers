@@ -377,9 +377,7 @@ class HGNetV2Backbone(HGNetV2PreTrainedModel, BackboneMixin):
         [1, 2048, 7, 7]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+      
 
         embedding_output = self.embedder(pixel_values)
 
@@ -461,9 +459,7 @@ class HGNetV2ForImageClassification(HGNetV2PreTrainedModel):
         torch.Size([1, 2])
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+      
         embedding_output = self.embedder(pixel_values)
         outputs = self.encoder(embedding_output, output_hidden_states=output_hidden_states, return_dict=return_dict)
         last_hidden_state = outputs[0]

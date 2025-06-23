@@ -281,9 +281,7 @@ class ResNetModel(ResNetPreTrainedModel):
     def forward(
         self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
     ) -> BaseModelOutputWithPoolingAndNoAttention:
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+      
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         embedding_output = self.embedder(pixel_values)
@@ -422,9 +420,7 @@ class ResNetBackbone(ResNetPreTrainedModel, BackboneMixin):
         [1, 2048, 7, 7]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+      
 
         embedding_output = self.embedder(pixel_values)
 

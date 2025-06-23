@@ -193,8 +193,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         position_ids: Optional[torch.LongTensor] = None,
         return_loss: Optional[bool] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor], CLIPOutput]:
         r"""
