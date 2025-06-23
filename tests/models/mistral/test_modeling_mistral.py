@@ -343,22 +343,26 @@ class MistralIntegrationTest(unittest.TestCase):
 class Mask4DTestHard(unittest.TestCase):
     model_name = "mistralai/Mistral-7B-v0.1"
     _model = None
+    _model_dtype = None
 
     @classmethod
     def tearDownClass(cls):
+        del cls._model_dtype
         del cls._model
         cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    @property
-    def model(self):
-        if self.__class__._model is None:
-            self.__class__._model = MistralForCausalLM.from_pretrained(
-                self.model_name, torch_dtype=self.model_dtype
-            ).to(torch_device)
-        return self.__class__._model
+    @classmethod
+    def model(cls):
+        if cls._model_dtype is None:
+            cls._model_dtype = torch.float16
+        if cls._model is None:
+            cls._model = MistralForCausalLM.from_pretrained(cls.model_name, torch_dtype=cls._model_dtype).to(
+                torch_device
+            )
+        return cls._model
 
     def setUp(self):
         self.model_dtype = torch.float16
