@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch BLIP-2 model."""
 
+import copy
 import inspect
 import tempfile
 import unittest
@@ -185,10 +186,9 @@ class Blip2VisionModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
     def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
         for model_class in self.all_model_classes:
-            model = model_class(config)
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(copy.deepcopy)
             signature = inspect.signature(model.forward)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
@@ -1075,7 +1075,7 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
         for key in ["vision_config", "qformer_config", "text_config"]:
             setattr(configs_no_init, key, _config_zero_init(getattr(configs_no_init, key)))
         for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
+            model = model_class(config=copy.deepcopy(configs_no_init))
             for name, param in model.named_parameters():
                 if param.requires_grad:
                     self.assertIn(
