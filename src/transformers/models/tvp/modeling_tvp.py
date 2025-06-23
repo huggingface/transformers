@@ -23,6 +23,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import prune_linear_layer
@@ -455,7 +456,7 @@ class TvpOutputLayer(nn.Module):
         return hidden_states
 
 
-class TvpEncodeLayer(nn.Module):
+class TvpEncodeLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.attention = TvpAttention(config)
@@ -511,16 +512,7 @@ class TvpEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                    (head_mask[i] if head_mask is not None else None),
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, attention_mask, head_mask[i], output_attentions)
+            layer_outputs = layer_module(hidden_states, attention_mask, head_mask[i], output_attentions)
 
             hidden_states = layer_outputs[0]
             if output_attentions:

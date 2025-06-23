@@ -23,6 +23,7 @@ from torch import Tensor, nn
 
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -702,7 +703,7 @@ class DabDetrDecoderLayerFFN(nn.Module):
 
 
 # Modified from transformers.models.detr.modeling_detr.DetrEncoderLayer with DetrEncoderLayer->DabDetrEncoderLayer,DetrConfig->DabDetrConfig
-class DabDetrEncoderLayer(nn.Module):
+class DabDetrEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: DabDetrConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -764,7 +765,7 @@ class DabDetrEncoderLayer(nn.Module):
 
 
 # Modified from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrDecoderLayer with ConditionalDetr->DabDetr
-class DabDetrDecoderLayer(nn.Module):
+class DabDetrDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: DabDetrConfig, is_first: bool = False):
         super().__init__()
         self.self_attn = DabDetrDecoderLayerSelfAttention(config)
@@ -976,21 +977,12 @@ class DabDetrEncoder(DabDetrPreTrainedModel):
             # we add object_queries * pos_scaler as extra input to the encoder_layer
             scaled_object_queries = object_queries * pos_scales
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    encoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    scaled_object_queries,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask=attention_mask,
-                    object_queries=scaled_object_queries,
-                    output_attentions=output_attentions,
-                )
+            layer_outputs = encoder_layer(
+                hidden_states,
+                attention_mask=attention_mask,
+                object_queries=scaled_object_queries,
+                output_attentions=output_attentions,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -1138,29 +1130,16 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
                 reference_anchor_size[..., 1] / obj_center[..., 3]
             ).unsqueeze(-1)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    None,
-                    object_queries,
-                    query_pos,
-                    query_sine_embed,
-                    encoder_hidden_states,
-                    memory_key_padding_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=None,
-                    object_queries=object_queries,
-                    query_position_embeddings=query_pos,
-                    query_sine_embed=query_sine_embed,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=memory_key_padding_mask,
-                    output_attentions=output_attentions,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                None,  # attention_mask
+                object_queries,
+                query_pos,
+                query_sine_embed,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                encoder_attention_mask=memory_key_padding_mask,
+                output_attentions=output_attentions,
+            )
 
             # iter update
             hidden_states = layer_outputs[0]

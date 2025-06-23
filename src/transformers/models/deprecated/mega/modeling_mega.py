@@ -34,7 +34,6 @@ from ....modeling_outputs import (
     TokenClassifierOutput,
 )
 from ....modeling_utils import PreTrainedModel
-from ....pytorch_utils import ALL_LAYERNORM_LAYERS
 from ....utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -309,10 +308,6 @@ class MegaSequenceNorm(nn.Module):
             return input.permute(2, 0, 1)
         else:
             return self.norm(input)
-
-
-# add this layernorm class to ALL_LAYERNORM_LAYERS
-ALL_LAYERNORM_LAYERS.append(MegaSequenceNorm)
 
 
 class MegaMultiDimensionDampedEma(nn.Module):
