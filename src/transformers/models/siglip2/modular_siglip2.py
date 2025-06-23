@@ -209,7 +209,7 @@ class Siglip2VisionEmbeddings(nn.Module):
         Args:
             pixel_values (`torch.FloatTensor`):
                 Pixel values of shape (batch_size, max_num_patches, num_channels * patch_size * patch_size)
-            spatial_shapes (`List[Tuple[int, int]]`):
+            spatial_shapes (`list[tuple[int, int]]`):
                 Spatial shapes of shape (batch_size, 2) to resize the positional embeddings to
         """
 

@@ -164,6 +164,7 @@ if TYPE_CHECKING:
     from .layoutxlm import *
     from .led import *
     from .levit import *
+    from .lightglue import *
     from .lilt import *
     from .llama import *
     from .llama4 import *
