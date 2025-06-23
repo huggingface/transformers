@@ -21,8 +21,8 @@ import requests
 from transformers import (
     AutoProcessor,
     Ovis2Config,
-    Ovis2Model,
     Ovis2ForConditionalGeneration,
+    Ovis2Model,
     is_torch_available,
     is_vision_available,
 )
@@ -205,14 +205,20 @@ class Ovis2VisionText2TextModelTester:
         self.parent.assertFalse(torch.isnan(logits).any().item())
 
 
-
 @require_torch
 class Ovis2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
     Model tester for `Ovis2ForConditionalGeneration`.
     """
 
-    all_model_classes = (Ovis2Model, Ovis2ForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            Ovis2Model,
+            Ovis2ForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = {"image-text-to-text": Ovis2ForConditionalGeneration} if is_torch_available() else {}
     test_pruning = False
     test_head_masking = False
