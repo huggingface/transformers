@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch Dia model."""
 
 import copy
+import pathlib
 import tempfile
 import unittest
 
@@ -21,12 +22,15 @@ import pytest
 
 from transformers.models.dia import DiaConfig, DiaDecoderConfig, DiaEncoderConfig
 from transformers.testing_utils import (
+    cleanup,
     is_flaky,
     require_torch,
+    require_torch_accelerator,
     require_torch_sdpa,
+    slow,
     torch_device,
 )
-from transformers.utils import is_torch_available, is_torchaudio_available
+from transformers.utils import is_soundfile_available, is_torch_available, is_torchaudio_available
 from transformers.utils.import_utils import is_datasets_available
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -36,7 +40,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_datasets_available():
-    pass
+    from datasets import Audio, load_dataset
 
 if is_torch_available():
     import torch
@@ -44,6 +48,7 @@ if is_torch_available():
     from transformers import (
         DiaForConditionalGeneration,
         DiaModel,
+        DiaProcessor,
         PretrainedConfig,
         PreTrainedModel,
     )
@@ -53,9 +58,11 @@ if is_torch_available():
     )
     from transformers.models.dia.modeling_dia import DiaDecoder, DiaEncoder
 
-
 if is_torchaudio_available():
-    pass
+    import torchaudio
+
+if is_soundfile_available():
+    import soundfile as sf
 
 
 @require_torch
@@ -537,4 +544,205 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         pass
 
 
-# TODO: integration tests
+# TODO: Check against A10 GPU
+class DiaForConditionalGenerationIntegrationTest(unittest.TestCase):
+    """
+    See https://gist.github.com/vasqu/0e3b06360373a4e612aa3b9a7c09185e for generating the integration tests
+
+    NOTE: We add a single `eos` line for the last channel which is skipped in the original Dia
+    (It doesn't change the behaviour as we cut by the eos token position)
+    """
+
+    def setUp(self):
+        # it's a dummy ckpt but should suffice for testing purposes
+        self.model_checkpoint = "AntonV/Dia-1.6B"
+        self.sampling_rate = 44100
+
+        # prepare audio
+        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=self.sampling_rate))
+        audio_sample_1 = librispeech_dummy[-1]["audio"]["array"]
+        audio_sample_2 = librispeech_dummy[-2]["audio"]["array"]
+        # 10 and 5 codebooks as prefix - saved as files as we need wav files for the original Dia
+        dac_chunk_len = 512
+        self.audio_prompt_1_path = "/tmp/dia_test_sample_1.mp3"
+        self.audio_prompt_2_path = "/tmp/dia_test_sample_2.mp3"
+        sf.write(self.audio_prompt_1_path, audio_sample_1[:(dac_chunk_len*10)], self.sampling_rate)
+        sf.write(self.audio_prompt_2_path, audio_sample_2[:(dac_chunk_len*5)], self.sampling_rate)
+
+    def tearDown(self):
+        pathlib.Path(self.audio_prompt_1_path).unlink()
+        pathlib.Path(self.audio_prompt_2_path).unlink()
+        cleanup(torch_device, gc_collect=True)
+
+    @slow
+    @require_torch_accelerator
+    def test_dia_model_integration_generate_tts(self):
+        text = ["[S1] Dia is an open weights text to dialogue model.", "This is a test"]
+        processor = DiaProcessor.from_pretrained(self.model_checkpoint)
+        inputs = processor(text=text, padding=True, return_tensors="pt").to(torch_device)
+
+        model = DiaForConditionalGeneration.from_pretrained(self.model_checkpoint).to(torch_device)
+        outputs = model.generate(**inputs, max_new_tokens=32, do_sample=False)
+
+        # fmt: off
+        EXPECTED_OUTPUT_TOKENS = torch.tensor([[[1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 568, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 568, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 568, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 568, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 568, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 568, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 568, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 568, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 568,  778, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 568,  778,  338, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 568,  804,   10,  524, 1026, 1026, 1026, 1026, 1026],
+         [ 568,  804,   10,  674,  967, 1026, 1026, 1026, 1026],
+         [ 568,  804,   10,  674,  364,  360, 1026, 1026, 1026],
+         [ 568,  804,   10,  674,  364,  981,  728, 1026, 1026],
+         [ 568,  804,   10,  674,  364,  981,  741,  550, 1026],
+         [ 568,  804,   10,  674,  364,  981,  568,  378,   90],
+         [1024,  804,   10,  674,  364,  981,  568,  378,  731],
+         [1025,  804,   10,  674,  364,  981,  568,  378,  731],
+         [1025,  804,   10,  674,  364,  981,  568,  378,  731],
+         [1025,  804,   10,  674,  364,  981,  568,  378,  731],
+         [1025,  804,   10,  674,  364,  981,  568,  378,  731],
+         [1025,  804,   10,  674,  364,  981,  568,  378,  731],
+         [1025,  804,   10,  674,  364,  981,  568,  378,  731],
+         [1025,  804,   10,  674,  364,  981,  568,  378,  731],
+         [1025, 1024,   10,  674,  364,  981,  568,  378,  731],
+         [1025, 1025, 1024,  674,  364,  981,  568,  378,  731],
+         [1025, 1025, 1025, 1024,  364,  981,  568,  378,  731],
+         [1025, 1025, 1025, 1025, 1024,  981,  568,  378,  731],
+         [1025, 1025, 1025, 1025, 1025, 1024,  568,  378,  731],
+         [1025, 1025, 1025, 1025, 1025, 1025, 1024,  378,  731],
+         [1025, 1025, 1025, 1025, 1025, 1025, 1025, 1024,  731],
+         [1025, 1025, 1025, 1025, 1025, 1025, 1025, 1025, 1024]],
+
+        [[1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 568, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 568, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 698, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 592, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 592, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 592, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 592, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 592, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 592,  778, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 592,  778,  338, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 592,  697,   10,  524, 1026, 1026, 1026, 1026, 1026],
+         [ 592,  288,  476,  649,  967, 1026, 1026, 1026, 1026],
+         [ 592,  740,  386,  674,  364,  360, 1026, 1026, 1026],
+         [ 592,  402,  386,  347,  362,  981,  728, 1026, 1026],
+         [ 592,  402,  721,  728,  327,  981,  741,  550, 1026],
+         [ 592,  402,  721,  728,  460,   62,  676,  378,   90],
+         [1024,  402,  721,  728,  837,  595,  195,  982,  784],
+         [1025,  402,  721,  677,  497,  102,  692,   24,  330],
+         [1025,  402,  721,  677,  511,  102,  503,  871,  609],
+         [1025,  402,  721,  677,  511,   96,  801,  871,  894],
+         [1025,  402,  721,  677,  511,  745,  314,  498,  775],
+         [1025,  402,  721,  677,  511,  745,  314,  498,  105],
+         [1025,  402,  721,  677,  511,  745,  314,  861,  889],
+         [1025,  893,  721,  677,  511,  744,  314,  871,  353],
+         [1025, 1024,  888,  677,  511,  744,  314,  871,  332],
+         [1025, 1025, 1024,  518,  511,  744,  314,  871,  366],
+         [1025, 1025, 1025, 1024,  611,  744,  314,  871,  366],
+         [1025, 1025, 1025, 1025, 1024,  980,  314,  871,  366],
+         [1025, 1025, 1025, 1025, 1025, 1024,   45,  124,  366],
+         [1025, 1025, 1025, 1025, 1025, 1025, 1024,  871,  366],
+         [1025, 1025, 1025, 1025, 1025, 1025, 1025, 1024,  719],
+         [1025, 1025, 1025, 1025, 1025, 1025, 1025, 1025, 1024]]])
+        # fmt: on
+
+        torch.testing.assert_close(outputs.cpu(), EXPECTED_OUTPUT_TOKENS)
+
+    @slow
+    @require_torch_accelerator
+    def test_dia_model_integration_generate_audio_context(self):
+        text = ["[S1] Dia is an open weights text to dialogue model.", "This is a test"]
+        audio_sample_1 = torchaudio.load(self.audio_prompt_1_path, channels_first=True)[0].squeeze().numpy()
+        audio_sample_2 = torchaudio.load(self.audio_prompt_2_path, channels_first=True)[0].squeeze().numpy()
+        audio = [audio_sample_1, audio_sample_2]
+
+        processor = DiaProcessor.from_pretrained(self.model_checkpoint)
+        inputs = processor(text=text, audio=audio, padding=True, return_tensors="pt").to(torch_device)
+
+        model = DiaForConditionalGeneration.from_pretrained(self.model_checkpoint).to(torch_device)
+        # dia has right padding while we have left padding (for faster prefill)
+        # additionally we have new tokens vs dia's max tokens (hence we compare each in the respective settings)
+        outputs_1 = model.generate(**inputs, max_new_tokens=22, do_sample=False)
+        outputs_2 = model.generate(**inputs, max_new_tokens=27, do_sample=False)
+
+        # fmt: off
+        EXPECTED_OUTPUT_TOKENS_1 = torch.tensor([[1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 578, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 592, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 494, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 330, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 330, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 330, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 330, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 330, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 330,  501, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 330,  204,   34, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 330,  254,  915,  863, 1026, 1026, 1026, 1026, 1026],
+         [ 330,  215,  458,  313,   50, 1026, 1026, 1026, 1026],
+         [ 330,  615,  529,  216,  801,  237, 1026, 1026, 1026],
+         [ 330,  580,  563,  233,  337,   37, 1018, 1026, 1026],
+         [ 330,  567,  530,  753,  607,  179,  954,  242, 1026],
+         [ 330,  627,    6, 1010,  500,  189,  598,  858,  247],
+         [1024,  432,  480,  530,  122,    3,  788,  149,  814],
+         [1025,  875,  826,  458,   98,  540,  181,  122,  608],
+         [1025,  495,  840,  413,  337,  784,  591,  150, 1017],
+         [1025,  808,  189,  137,  445,    0,  227,  658,  345],
+         [1025,  397,   89,  753, 1016,  173,  984,    0,  910],
+         [1025,  875,  460,  934,   50,  335,  670,  818,  722],
+         [1025,  875,  460,  762,  119,  372,  503,  858,  584],
+         [1025,  348,  555,  475,  469,  458,  963,   41,  664],
+         [1025, 1024,  852,  683,  761,  193,  595,  895,  885],
+         [1025, 1025, 1024,  135,  761,  902,  163,  623,  385],
+         [1025, 1025, 1025, 1024,  852,  282,  581,  623,   70],
+         [1025, 1025, 1025, 1025, 1024,   41,  661,  790,  977],
+         [1025, 1025, 1025, 1025, 1025, 1024,  580,  401,  464],
+         [1025, 1025, 1025, 1025, 1025, 1025, 1024,  756,   61],
+         [1025, 1025, 1025, 1025, 1025, 1025, 1025, 1024,  752],
+         [1025, 1025, 1025, 1025, 1025, 1025, 1025, 1025, 1024]])
+
+        EXPECTED_OUTPUT_TOKENS_2 = torch.tensor([[1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 619, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 315, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 315, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 315, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 315, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 315, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 315, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 315, 1026, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 315,  968, 1026, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 315, 1007,  458, 1026, 1026, 1026, 1026, 1026, 1026],
+         [ 315,   35,  266,   68, 1026, 1026, 1026, 1026, 1026],
+         [ 315,  359,  285,  811,  154, 1026, 1026, 1026, 1026],
+         [ 315,  906,  407,  297,  785,  649, 1026, 1026, 1026],
+         [ 315,  249,  678,  868,  899,  257,  950, 1026, 1026],
+         [ 315,  249,  217,  471,  292,  908,  196,  469, 1026],
+         [ 315,  249,  825,  771,  839,  802,  633,  590,  531],
+         [1024,  249,  150,   53,  126,   76,  794,  626,  442],
+         [1025,  249,  825,  218,  359,  864,  526,  626,  770],
+         [1025,  249,  150,  137,  530,  845,  877,  600,  111],
+         [1025,  249,  150,  287,  730,  991,  135,  259,   39],
+         [1025,  249,  825,  104,  198, 1020,  719,  625,  208],
+         [1025,  249,  825,  997,  602,  256,  859,  322,  518],
+         [1025,  668,  825,  979,  584,  256,   98,  665,  589],
+         [1025,  954,  458,   54,  206,   52,  244,  822,  599],
+         [1025, 1024,  104,  914,  435,  579,  860,   92,  661],
+         [1025, 1025, 1024,  848,  126,   74,  304,   92,  753],
+         [1025, 1025, 1025, 1024,  362,  376,  304,  586,  753],
+         [1025, 1025, 1025, 1025, 1024,  633,  996,  586,   83],
+         [1025, 1025, 1025, 1025, 1025, 1024,  179,  898,  928],
+         [1025, 1025, 1025, 1025, 1025, 1025, 1024,  506,  102],
+         [1025, 1025, 1025, 1025, 1025, 1025, 1025, 1024,   79],
+         [1025, 1025, 1025, 1025, 1025, 1025, 1025, 1025, 1024]])
+        # fmt: on
+
+        torch.testing.assert_close(outputs_1[0].cpu(), EXPECTED_OUTPUT_TOKENS_1)
+        torch.testing.assert_close(outputs_2[1, 5:].cpu(), EXPECTED_OUTPUT_TOKENS_2)  # left padding

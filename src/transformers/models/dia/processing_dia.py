@@ -166,8 +166,6 @@ class DiaProcessor(ProcessorMixin):
 
         # Voice cloning generation / general training
         if audio is not None:
-            # TODO: check for proper correctness on the audio path via generate comp
-
             audio = make_list_of_audio(audio)
             input_audios = self.feature_extractor(audio, **audio_kwargs)
 
@@ -269,7 +267,8 @@ class DiaProcessor(ProcessorMixin):
 
     def batch_decode(
         self,
-        decoder_input_ids,
+        decoder_input_ids: "torch.Tensor",
+        audio_prompt_len: Optional[int] = None,
         **kwargs: Unpack[DiaProcessorKwargs],
     ) -> list["torch.Tensor"]:
         """
@@ -291,8 +290,13 @@ class DiaProcessor(ProcessorMixin):
                 "and `delay_pattern`. You may have accidentally overwritten one of those."
             )
 
+        # either decode the whole audio sequence or only the generated parts
+        if audio_prompt_len is not None:
+            audio_prompt_len = torch.tensor(audio_prompt_len, device=decoder_input_ids.device, dtype=torch.long)
+            start_of_generation_idx = audio_prompt_len[None].expand(decoder_input_ids.shape[0])
+        else:
+            start_of_generation_idx = (decoder_input_ids[:, :, 0] == audio_bos_token_id).sum(dim=-1)
         # -1 for the eos token
-        start_of_generation_idx = (decoder_input_ids[:, :, 0] == audio_bos_token_id).sum(dim=-1)
         end_of_generation_idx = (
             decoder_input_ids.shape[1] - (decoder_input_ids[:, :, 0] == audio_pad_token_id).sum(dim=-1) - 1
         )
@@ -331,6 +335,7 @@ class DiaProcessor(ProcessorMixin):
     def decode(
         self,
         decoder_input_ids: "torch.Tensor",
+        audio_prompt_len: Optional[int] = None,
         **kwargs: Unpack[DiaProcessorKwargs],
     ) -> "torch.Tensor":
         """
@@ -342,7 +347,27 @@ class DiaProcessor(ProcessorMixin):
                 f"Expecting a single output to be decoded but received {decoder_input_ids.shape[0]} samples instead."
             )
 
-        return self.batch_decode(decoder_input_ids, **kwargs)[0]
+        return self.batch_decode(decoder_input_ids, audio_prompt_len, **kwargs)[0]
+
+    def get_audio_prompt_len(
+        self,
+        decoder_attention_mask: "torch.Tensor",
+        **kwargs: Unpack[DiaProcessorKwargs]
+    ) -> int:
+        """Utility function to get the audio prompt length."""
+        output_kwargs = self._merge_kwargs(
+            DiaProcessorKwargs,
+            **kwargs,
+        )
+        audio_kwargs = output_kwargs["audio_kwargs"]
+
+        delay_pattern = audio_kwargs.pop("delay_pattern", None)
+        if delay_pattern is None:
+            raise ValueError(
+                "To enable the utility of retrieving the prompt length for Dia, we need the "
+                "`delay_pattern`. You may have accidentally overwritten this."
+            )
+        return decoder_attention_mask.shape[1] - max(delay_pattern)
 
     # Copied from transformers.models.csm.processing_csm.CsmProcessor.save_audio with Csm->Dia
     def save_audio(
