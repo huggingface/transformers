@@ -59,7 +59,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 # model_id = "meta-llama/Llama-4-Scout-17B-16E-Instruct" # better to visualize all the possible strategies
-model_id = "meta-llama/Meta-Llama-3-8B-Instruct" better for smaller number of GPUs
+model_id = "meta-llama/Meta-Llama-3-8B-Instruct"  # better for smaller number of GPUs
 
 model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, tp_plan="auto")
 print(model._tp_plan)
