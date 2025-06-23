@@ -1444,8 +1444,8 @@ class GroundingDinoPreTrainedModel(PreTrainedModel):
             module.out_text_proj.bias.data.fill_(0)
         elif isinstance(module, GroundingDinoFusionLayer):
             init_values = 1e-4
-            module.vision_param = nn.Parameter(init_values * torch.ones(self.config.d_model))
-            module.text_param = nn.Parameter(init_values * torch.ones(self.config.d_model))
+            module.vision_param.data.fill_(init_values * 1.0)
+            module.text_param.data.fill_(init_values * 1.0)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617

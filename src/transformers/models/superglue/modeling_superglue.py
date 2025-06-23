@@ -558,7 +558,7 @@ class SuperGluePreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.BatchNorm1d):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        
+
         if hasattr(module, "bin_score"):
             module.bin_score.data.fill_(1.0)
 
