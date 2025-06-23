@@ -829,7 +829,7 @@ class ModernBertPreTrainedModel(PreTrainedModel):
                 if requested_attn_implementation is None and self._flash_attn_2_can_dispatch()
                 else attn_implementation
             )
-        except ValueError:
+        except (ValueError, ImportError):
             pass
         return super().set_attention_implementation(attn_implementation=attn_implementation)
 

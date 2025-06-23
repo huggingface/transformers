@@ -2023,7 +2023,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         # The `hasattr` here is used as some Transformers tests for some reason do not call
         # PretrainedConfig __init__ (e.g. test_no_super_init_config_and_model)
-        if hasattr(config, "_attn_implementation_internal"):
+        if hasattr(config, "_attn_implementation_internal") and not getattr(
+            config, "_attn_implementation_autoset", False
+        ):
             self.set_attention_implementation(self.config._attn_implementation_internal)
 
         # for initialization of the loss
@@ -2272,6 +2274,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             self.config._attn_implementation = requested_attn_implementation.get("", None)
         else:
             self.config._attn_implementation = "eager"
+
+        self.config._attn_implementation_autoset = True
 
     @classmethod
     def _set_default_torch_dtype(cls, dtype: torch.dtype) -> torch.dtype:
