@@ -488,10 +488,14 @@ def convert_and_export_with_cache(
     with torch.no_grad():
         # TODO: The default inputs only work for text models. We need to add support for vision/audio models.
         example_input_ids = (
-            example_input_ids if example_input_ids is not None else torch.tensor([[1]], dtype=torch.long)
+            example_input_ids
+            if example_input_ids is not None
+            else torch.tensor([[1]], dtype=torch.long, device=model.device)
         )
         example_cache_position = (
-            example_cache_position if example_cache_position is not None else torch.tensor([0], dtype=torch.long)
+            example_cache_position
+            if example_cache_position is not None
+            else torch.tensor([0], dtype=torch.long, device=model.device)
         )
 
         if is_torch_greater_or_equal("2.6.0"):
