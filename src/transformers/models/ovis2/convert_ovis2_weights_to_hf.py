@@ -37,26 +37,31 @@ from transformers.models.qwen2.configuration_qwen2 import Qwen2Config
 # Constants
 CONTEXT_LENGTH = 32768  # multimodal_max_length
 
+
+# fmt: off
+
 # Mapping from original model key patterns to HF key patterns
 ORIGINAL_TO_HF_MAPPING = {
-    r"trunk.blocks\.(\d+)\.norm_1": r"encoder.layers.\1.layer_norm1",
-    r"trunk.blocks\.(\d+)\.norm_2": r"encoder.layers.\1.layer_norm2",
-    r"trunk.blocks\.(\d+)\.attn.proj": r"encoder.layers.\1.self_attn.out_proj",
-    r"visual_tokenizer": r"vision_tower",
-    r"backbone": r"transformer",
-    r"preprocessor": r"embeddings",
-    r"patchifier.proj": r"patch_embed",
-    r"patchifier.norm": r"rms_norm",
-    r"trunk.post_trunk_norm": r"rms_norm",
-    r"trunk.blocks": r"encoder.layers",
-    r"mlp.fc1": r"mlp.gate_proj",
-    r"mlp.fc2": r"mlp.down_proj",
-    r"mlp.fc3": r"mlp.up_proj",
-    r"head.0": r"head_linear",
-    r"head.1": r"head_norm",
-    r"vte.weight": r"visual_table.weight",
-    r"llm": r"language_model",
+    r"trunk.blocks\.(\d+)\.norm_1":                 r"encoder.layers.\1.layer_norm1",
+    r"trunk.blocks\.(\d+)\.norm_2":                 r"encoder.layers.\1.layer_norm2",
+    r"trunk.blocks\.(\d+)\.attn.proj":              r"encoder.layers.\1.self_attn.out_proj",
+    r"visual_tokenizer":                            r"model.vision_tower",
+    r"backbone":                                    r"transformer",
+    r"preprocessor":                                r"embeddings",
+    r"patchifier.proj":                             r"patch_embed",
+    r"patchifier.norm":                             r"rms_norm",
+    r"trunk.post_trunk_norm":                       r"rms_norm",
+    r"trunk.blocks":                                r"encoder.layers",
+    r"mlp.fc1":                                     r"mlp.gate_proj",
+    r"mlp.fc2":                                     r"mlp.down_proj",
+    r"mlp.fc3":                                     r"mlp.up_proj",
+    r"head.0":                                      r"head_linear",
+    r"head.1":                                      r"head_norm",
+    r"vte.weight":                                  r"model.visual_table.weight",
+    r"llm.model":                                   r"model.language_model",
+    r"llm.lm_head":                                 r"lm_head",
 }
+# fmt: on
 
 # Special tokens for the tokenizer
 SPECIAL_TOKENS = [
