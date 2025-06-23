@@ -14,7 +14,7 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 from torch import Tensor, nn
@@ -52,8 +52,8 @@ class TimmWrapperModelOutput(ModelOutput):
 
     last_hidden_state: torch.FloatTensor
     pooler_output: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @auto_docstring
@@ -71,7 +71,7 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
         super().__init__(*args, **kwargs)
 
     @staticmethod
-    def _fix_state_dict_key_on_load(key) -> Tuple[str, bool]:
+    def _fix_state_dict_key_on_load(key) -> tuple[str, bool]:
         """
         Overrides original method that renames `gamma` and `beta` to `weight` and `bias`.
         We don't want this behavior for timm wrapped models. Instead, this method adds a
@@ -116,7 +116,8 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
     def __init__(self, config: TimmWrapperConfig):
         super().__init__(config)
         # using num_classes=0 to avoid creating classification head
-        self.timm_model = timm.create_model(config.architecture, pretrained=False, num_classes=0)
+        extra_init_kwargs = config.model_args or {}
+        self.timm_model = timm.create_model(config.architecture, pretrained=False, num_classes=0, **extra_init_kwargs)
         self.post_init()
 
     @auto_docstring
@@ -124,11 +125,11 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[Union[bool, List[int]]] = None,
+        output_hidden_states: Optional[Union[bool, list[int]]] = None,
         return_dict: Optional[bool] = None,
         do_pooling: Optional[bool] = None,
         **kwargs,
-    ) -> Union[TimmWrapperModelOutput, Tuple[Tensor, ...]]:
+    ) -> Union[TimmWrapperModelOutput, tuple[Tensor, ...]]:
         r"""
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. Not compatible with timm wrapped models.
@@ -233,7 +234,10 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
                 "or use `TimmWrapperModel` for feature extraction."
             )
 
-        self.timm_model = timm.create_model(config.architecture, pretrained=False, num_classes=config.num_labels)
+        extra_init_kwargs = config.model_args or {}
+        self.timm_model = timm.create_model(
+            config.architecture, pretrained=False, num_classes=config.num_labels, **extra_init_kwargs
+        )
         self.num_labels = config.num_labels
         self.post_init()
 
@@ -243,10 +247,10 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
         pixel_values: torch.FloatTensor,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[Union[bool, List[int]]] = None,
+        output_hidden_states: Optional[Union[bool, list[int]]] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[ImageClassifierOutput, Tuple[Tensor, ...]]:
+    ) -> Union[ImageClassifierOutput, tuple[Tensor, ...]]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
