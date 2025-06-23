@@ -31,6 +31,7 @@ from ...file_utils import (
 )
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
 from ...utils.backbone_utils import load_backbone
@@ -879,7 +880,7 @@ class OmDetTurboTaskEncoder(nn.Module):
         return x
 
 
-class OmDetTurboDeformableTransformerDecoderLayer(nn.Module):
+class OmDetTurboDeformableTransformerDecoderLayer(GradientCheckpointingLayer):
     """
     A single layer of the Deformable Transformer Decoder.
     """
@@ -1376,37 +1377,19 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
         last_refined_bbox = None
         reference_points = reference_points.sigmoid()
         for i, layer in enumerate(self.layers):
-            if self.gradient_checkpointing and self.training:
-                predicted_class_features, task_features, self_attention, cross_attention = (
-                    self._gradient_checkpointing_func(
-                        layer.__call__,
-                        predicted_class_features,
-                        task_features,
-                        reference_points,
-                        vision_features,
-                        vision_shapes,
-                        vision_shapes_list,
-                        level_start_index=level_start_index,
-                        attention_mask=attention_mask,
-                        query_position=self.query_position_head(reference_points),
-                        output_attentions=output_attentions,
-                        output_hidden_states=output_hidden_states,
-                    )
-                )
-            else:
-                predicted_class_features, task_features, self_attention, cross_attention = layer(
-                    predicted_class_features,
-                    task_features,
-                    reference_points,
-                    vision_features,
-                    vision_shapes,
-                    vision_shapes_list,
-                    level_start_index=level_start_index,
-                    attention_mask=attention_mask,
-                    query_position=self.query_position_head(reference_points),
-                    output_attentions=output_attentions,
-                    output_hidden_states=output_hidden_states,
-                )
+            predicted_class_features, task_features, self_attention, cross_attention = layer(
+                predicted_class_features,
+                task_features,
+                reference_points,
+                vision_features,
+                vision_shapes,
+                vision_shapes_list,
+                level_start_index=level_start_index,
+                attention_mask=attention_mask,
+                query_position=self.query_position_head(reference_points),
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
             if output_attentions:
                 all_self_attns = all_self_attns + (self_attention,)
                 all_cross_attns = all_cross_attns + (cross_attention,)

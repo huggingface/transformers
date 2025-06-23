@@ -22,6 +22,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -499,7 +500,7 @@ class ChineseCLIPVisionMLP(nn.Module):
 
 
 # Copied from transformers.models.align.modeling_align.AlignTextLayer with Align->ChineseCLIP
-class ChineseCLIPTextLayer(nn.Module):
+class ChineseCLIPTextLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -545,7 +546,7 @@ class ChineseCLIPTextLayer(nn.Module):
         return layer_output
 
 
-class ChineseCLIPVisionLayer(nn.Module):
+class ChineseCLIPVisionLayer(GradientCheckpointingLayer):
     def __init__(self, config: ChineseCLIPConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -694,22 +695,13 @@ class ChineseCLIPTextEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states=hidden_states,
-                    attention_mask=attention_mask,
-                    head_mask=layer_head_mask,
-                    output_attentions=output_attentions,
-                    **kwargs,
-                )
+            layer_outputs = layer_module(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                head_mask=layer_head_mask,
+                output_attentions=output_attentions,
+                **kwargs,
+            )
 
             hidden_states = layer_outputs[0]
             if output_attentions:
@@ -776,17 +768,10 @@ class ChineseCLIPVisionEncoder(nn.Module):
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    encoder_layer.__call__,
-                    hidden_states,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    output_attentions=output_attentions,
-                )
+            layer_outputs = encoder_layer(
+                hidden_states,
+                output_attentions=output_attentions,
+            )
 
             hidden_states = layer_outputs[0]
 

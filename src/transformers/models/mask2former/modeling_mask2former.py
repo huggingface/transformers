@@ -25,6 +25,7 @@ from torch import Tensor, nn
 
 from ...activations import ACT2FN
 from ...file_utils import ModelOutput, is_scipy_available, requires_backends
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, is_accelerate_available, logging
@@ -1535,7 +1536,7 @@ class Mask2FormerAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-class Mask2FormerMaskedAttentionDecoderLayer(nn.Module):
+class Mask2FormerMaskedAttentionDecoderLayer(GradientCheckpointingLayer):
     """
     The Mask2FormerMaskedAttentionDecoderLayer is made up of self-attention, cross (masked) attention as well as FFN
     blocks. The cross attention block used as part of `Mask2FormerMaskedAttentionDecoderLayer` is actually a `masked
@@ -1858,46 +1859,35 @@ class Mask2FormerMaskedAttentionDecoder(nn.Module):
             if self.training and (dropout_probability < self.layerdrop):
                 continue
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    encoder_hidden_states,
-                    None,
-                    None,
-                    output_attentions,
-                )
+            level_index = idx % self.num_feature_levels
 
-            else:
-                level_index = idx % self.num_feature_levels
+            where = (attention_mask.sum(-1) != attention_mask.shape[-1]).to(attention_mask.dtype)
+            # Multiply the attention mask instead of indexing to avoid issue in torch.export.
+            attention_mask = attention_mask * where.unsqueeze(-1)
 
-                where = (attention_mask.sum(-1) != attention_mask.shape[-1]).to(attention_mask.dtype)
-                # Multiply the attention mask instead of indexing to avoid issue in torch.export.
-                attention_mask = attention_mask * where.unsqueeze(-1)
+            layer_outputs = decoder_layer(
+                hidden_states,
+                level_index,
+                None,  # attention_mask
+                multi_stage_positional_embeddings,
+                query_position_embeddings,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                encoder_attention_mask=attention_mask,
+                output_attentions=output_attentions,
+            )
 
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    level_index=level_index,
-                    position_embeddings=multi_stage_positional_embeddings,
-                    query_position_embeddings=query_position_embeddings,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=attention_mask,
-                    output_attentions=output_attentions,
-                )
+            intermediate_hidden_states = self.layernorm(layer_outputs[0])
 
-                intermediate_hidden_states = self.layernorm(layer_outputs[0])
+            predicted_mask, attention_mask = self.mask_predictor(
+                intermediate_hidden_states,
+                pixel_embeddings,
+                feature_size_list[(idx + 1) % self.num_feature_levels],
+            )
 
-                predicted_mask, attention_mask = self.mask_predictor(
-                    intermediate_hidden_states,
-                    pixel_embeddings,
-                    feature_size_list[(idx + 1) % self.num_feature_levels],
-                )
+            intermediate_mask_predictions += (predicted_mask,)
 
-                intermediate_mask_predictions += (predicted_mask,)
-
-                # add intermediate hidden states with layer norm applied which will be used for predicting class logits
-                intermediate += (intermediate_hidden_states,)
+            # add intermediate hidden states with layer norm applied which will be used for predicting class logits
+            intermediate += (intermediate_hidden_states,)
 
             hidden_states = layer_outputs[0]
 

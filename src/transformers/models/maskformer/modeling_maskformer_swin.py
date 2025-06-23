@@ -26,6 +26,7 @@ from torch import Tensor, nn
 
 from ...activations import ACT2FN
 from ...file_utils import ModelOutput
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
@@ -629,7 +630,7 @@ class MaskFormerSwinLayer(nn.Module):
         return outputs
 
 
-class MaskFormerSwinStage(nn.Module):
+class MaskFormerSwinStage(GradientCheckpointingLayer):
     # Copied from transformers.models.swin.modeling_swin.SwinStage.__init__ with Swin->MaskFormerSwin
     def __init__(self, config, dim, input_resolution, depth, num_heads, drop_path, downsample):
         super().__init__()
@@ -729,21 +730,13 @@ class MaskFormerSwinEncoder(nn.Module):
         for i, layer_module in enumerate(self.layers):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_hidden_states, output_dimensions, layer_all_hidden_states = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    layer_head_mask,
-                    output_attentions,
-                )
-            else:
-                layer_hidden_states, output_dimensions, layer_all_hidden_states = layer_module(
-                    hidden_states,
-                    input_dimensions,
-                    layer_head_mask,
-                    output_attentions,
-                    output_hidden_states,
-                )
+            layer_hidden_states, output_dimensions, layer_all_hidden_states = layer_module(
+                hidden_states,
+                input_dimensions,
+                layer_head_mask,
+                output_attentions,
+                output_hidden_states,
+            )
 
             input_dimensions = (output_dimensions[-2], output_dimensions[-1])
             all_input_dimensions += (input_dimensions,)
