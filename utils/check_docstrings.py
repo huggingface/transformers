@@ -37,6 +37,7 @@ import argparse
 import ast
 import enum
 import glob
+import importlib
 import inspect
 import operator as op
 import os
@@ -1513,18 +1514,37 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
     failures = []
     hard_failures = []
     to_clean = []
-    for name in dir(transformers):
-        # Skip objects that are private or not documented.
-        if name.startswith("_") or ignore_undocumented(name) or name in OBJECTS_TO_IGNORE:
-            continue
 
-        obj = getattr(transformers, name)
+    modular_glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**/modular_**")
+    modular_files = glob.glob(modular_glob_pattern)
+    modular_modules = [
+        os.path.relpath(path, start=Path("src").resolve()).replace("/", ".").replace(".py", "")
+        for path in modular_files
+    ]
+    all_modular_public_classes = []
+    for module_path in modular_modules:
+        module = importlib.import_module(module_path)
+        for name in module.__dict__["__all__"]:
+            # They may be in all, but not in the modular itself (if they are implicitly inherited), so we need to try/catch
+            try:
+                class_ = getattr(module, name)
+                if not class_.__name__ in OBJECTS_TO_IGNORE:
+                    all_modular_public_classes.append(class_)
+            except AttributeError:
+                pass
+
+    # Skip objects that are private or not documented.
+    all_main_objects = [getattr(transformers, name) for name in dir(transformers) if not (name.startswith("_") or ignore_undocumented(name) or name in OBJECTS_TO_IGNORE)]
+
+    all_objects = all_main_objects + all_modular_public_classes
+    for obj in all_objects:
+
         if not callable(obj) or not isinstance(obj, type) or getattr(obj, "__doc__", None) is None:
             continue
 
         # If we are checking against the diff, we skip objects that are not part of the diff.
         if module_diff_files is not None:
-            object_file = find_source_file(getattr(transformers, name))
+            object_file = find_source_file(obj)
             object_file_relative_path = "src/" + str(object_file).split("/src/")[1]
             if object_file_relative_path not in module_diff_files:
                 continue
