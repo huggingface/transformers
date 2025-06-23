@@ -19,9 +19,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from transformers.modeling_rope_utils import rope_config_validation
-
 from ...configuration_utils import PretrainedConfig
+from ...modeling_rope_utils import rope_config_validation
 
 
 class ArceeConfig(PretrainedConfig):
@@ -74,11 +73,6 @@ class ArceeConfig(PretrainedConfig):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*, defaults to 128001):
             End of stream token id.
-        pretraining_tp (`int`, *optional*, defaults to 1):
-            Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
-            document](https://huggingface.co/docs/transformers/main/perf_train_gpu_many#tensor-parallelism) to
-            understand more about it. This value is necessary to ensure exact reproducibility of the pretraining
-            results. Please refer to [this issue](https://github.com/pytorch/pytorch/issues/76232).
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
         rope_theta (`float`, *optional*, defaults to 10000.0):
@@ -129,7 +123,6 @@ class ArceeConfig(PretrainedConfig):
 
     model_type = "arcee"
     keys_to_ignore_at_inference = ["past_key_values"]
-    # Default tensor parallel plan for base model `ArceeModel`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -161,7 +154,6 @@ class ArceeConfig(PretrainedConfig):
         pad_token_id=None,
         bos_token_id=128000,
         eos_token_id=128001,
-        pretraining_tp=1,
         tie_word_embeddings=False,
         rope_theta=10000.0,
         rope_scaling=None,
@@ -193,7 +185,6 @@ class ArceeConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
-        self.pretraining_tp = pretraining_tp
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling

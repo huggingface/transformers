@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch Arcee model."""
 
-from transformers.modeling_rope_utils import rope_config_validation
 from transformers.utils import auto_docstring, logging
 
 from ..llama.configuration_llama import LlamaConfig
@@ -82,11 +81,6 @@ class ArceeConfig(LlamaConfig):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*, defaults to 128001):
             End of stream token id.
-        pretraining_tp (`int`, *optional*, defaults to 1):
-            Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
-            document](https://huggingface.co/docs/transformers/main/perf_train_gpu_many#tensor-parallelism) to
-            understand more about it. This value is necessary to ensure exact reproducibility of the pretraining
-            results. Please refer to [this issue](https://github.com/pytorch/pytorch/issues/76232).
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
         rope_theta (`float`, *optional*, defaults to 10000.0):
@@ -136,6 +130,15 @@ class ArceeConfig(LlamaConfig):
     ```"""
 
     model_type = "arcee"
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
 
     def __init__(
         self,
@@ -153,7 +156,6 @@ class ArceeConfig(LlamaConfig):
         pad_token_id=None,
         bos_token_id=128000,
         eos_token_id=128001,
-        pretraining_tp=1,
         tie_word_embeddings=False,
         rope_theta=10000.0,
         rope_scaling=None,
@@ -178,7 +180,6 @@ class ArceeConfig(LlamaConfig):
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
-            pretraining_tp=pretraining_tp,
             tie_word_embeddings=tie_word_embeddings,
             rope_theta=rope_theta,
             rope_scaling=rope_scaling,
@@ -189,11 +190,7 @@ class ArceeConfig(LlamaConfig):
             **kwargs,
         )
 
-        # Validate the correctness of rotary position embeddings parameters using Arcee's custom validation
-        # BC: if there is a 'type' field, copy it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
-        rope_config_validation(self)
+        del self.pretraining_tp
 
 
 class ArceeMLP(NemotronMLP):
