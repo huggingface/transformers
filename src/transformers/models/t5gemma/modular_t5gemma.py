@@ -957,8 +957,6 @@ class T5GemmaModel(T5GemmaPreTrainedModel):
                 config.decoder.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
 
             **flash_attn_kwargs: flash attention related parameters.
-
-        Returns:
         """
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
@@ -1043,8 +1041,6 @@ class T5GemmaEncoderModel(T5GemmaPreTrainedModel):
     ) -> BaseModelOutput:
         r"""
             **flash_attn_kwargs: flash attention related parameters.
-
-        Returns:
         """
 
         encoder_outputs = self.encoder(
@@ -1133,8 +1129,6 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
                 token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
                 If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
                 This is useful when using packed tensor format (single dimension for batch and sequence length).
-
-        Returns:
         """
         if self.training and self.config._attn_implementation != "eager":
             logger.warning_once(
@@ -1251,8 +1245,6 @@ class T5GemmaForSequenceClassification(T5GemmaPreTrainedModel):
                 Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
                 config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
                 `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
-        Returns:
         """
         if self.config.is_encoder_decoder and (input_ids is None and inputs_embeds is not None):
             raise NotImplementedError(

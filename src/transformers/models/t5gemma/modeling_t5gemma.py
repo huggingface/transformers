@@ -1005,13 +1005,11 @@ class T5GemmaModel(T5GemmaPreTrainedModel):
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> Seq2SeqModelOutput:
         r"""
-            decoder_position_ids (`torch.LongTensor` of shape `(batch_size, decoder_sequence_length)`, *optional*):
-                Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the range `[0,
-                config.decoder.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
+        decoder_position_ids (`torch.LongTensor` of shape `(batch_size, decoder_sequence_length)`, *optional*):
+            Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.decoder.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
 
-            **flash_attn_kwargs: flash attention related parameters.
-
-        Returns:
+        **flash_attn_kwargs: flash attention related parameters.
         """
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
@@ -1095,9 +1093,7 @@ class T5GemmaEncoderModel(T5GemmaPreTrainedModel):
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> BaseModelOutput:
         r"""
-            **flash_attn_kwargs: flash attention related parameters.
-
-        Returns:
+        **flash_attn_kwargs: flash attention related parameters.
         """
 
         encoder_outputs = self.encoder(
@@ -1171,23 +1167,21 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
         **loss_kwargs,
     ) -> Union[tuple[torch.FloatTensor], Seq2SeqLMOutput]:
         r"""
-            decoder_position_ids (`torch.LongTensor` of shape `(batch_size, decoder_sequence_length)`, *optional*):
-                Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the range `[0,
-                config.decoder.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
+        decoder_position_ids (`torch.LongTensor` of shape `(batch_size, decoder_sequence_length)`, *optional*):
+            Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.decoder.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
 
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
-            logits_to_keep (`int` or `torch.Tensor`, *optional*):
-                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
-                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
-                This is useful when using packed tensor format (single dimension for batch and sequence length).
-
-        Returns:
+        logits_to_keep (`int` or `torch.Tensor`, *optional*):
+            If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
+            `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
+            token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
+            If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
+            This is useful when using packed tensor format (single dimension for batch and sequence length).
         """
         if self.training and self.config._attn_implementation != "eager":
             logger.warning_once(
@@ -1296,16 +1290,14 @@ class T5GemmaForSequenceClassification(T5GemmaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
     ) -> Seq2SeqSequenceClassifierOutput:
         r"""
-            decoder_position_ids (`torch.LongTensor` of shape `(batch_size, decoder_sequence_length)`, *optional*):
-                Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the range `[0,
-                config.decoder.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
+        decoder_position_ids (`torch.LongTensor` of shape `(batch_size, decoder_sequence_length)`, *optional*):
+            Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.decoder.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
 
-            labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-                Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-                config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-                `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
-        Returns:
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         if self.config.is_encoder_decoder and (input_ids is None and inputs_embeds is not None):
             raise NotImplementedError(
