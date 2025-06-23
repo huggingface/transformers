@@ -310,29 +310,26 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
     valid_kwargs = ConditionalDetrFastImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[ConditionalDetrFastImageProcessorKwargs]) -> None:
+        # Legacy pad mask support
         if "pad_and_return_pixel_mask" in kwargs:
             kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
 
+        # Process size argument (no support for max_size)
         size = kwargs.pop("size", None)
-        if "max_size" in kwargs:
-            logger.warning_once(
-                "The `max_size` parameter is deprecated and will be removed in v4.26. "
-                "Please specify in `size['longest_edge'] instead`.",
-            )
-            max_size = kwargs.pop("max_size")
-        else:
-            max_size = None if size is None else 1333
+        size = size or {"shortest_edge": 800, "longest_edge": 1333}
+        self.size = get_size_dict(size, default_to_square=False)
 
-        size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
-        self.size = get_size_dict(size, max_size=max_size, default_to_square=False)
-
-        # Backwards compatibility
-        do_convert_annotations = kwargs.get("do_convert_annotations", None)
+        # Preserve backwards compatibility for annotation conversion flags
+        do_convert = kwargs.get("do_convert_annotations", None)
         do_normalize = kwargs.get("do_normalize", None)
-        if do_convert_annotations is None and getattr(self, "do_convert_annotations", None) is None:
-            self.do_convert_annotations = do_normalize if do_normalize is not None else self.do_normalize
+        if do_convert is None and getattr(self, "do_convert_annotations", None) is None:
+            self.do_convert_annotations = (
+                do_normalize if do_normalize is not None else self.do_normalize
+            )
 
         super().__init__(**kwargs)
+
+
 
     @classmethod
     def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
