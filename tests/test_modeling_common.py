@@ -3630,9 +3630,7 @@ class ModelTesterMixin:
 
                 if is_encoder_decoder:
                     # musicgen encoder-decoder models; TODO: find better abstraction
-                    if model.__class__.__name__.startswith("Musicgen") and hasattr(
-                        self.model_tester, "num_codebooks"
-                    ):
+                    if model.__class__.__name__.startswith("Musicgen") and hasattr(self.model_tester, "num_codebooks"):
                         input_data_batch_size = batch_size * self.model_tester.num_codebooks
                     else:
                         input_data_batch_size = batch_size
