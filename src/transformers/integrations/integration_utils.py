@@ -33,6 +33,10 @@ from typing import TYPE_CHECKING, Any, Literal, Optional, Union
 
 import numpy as np
 import packaging.version
+import os
+
+if os.getenv("WANDB_MODE") == "offline":
+    print("⚙️  Running in WANDB offline mode")
 
 from .. import PreTrainedModel, TFPreTrainedModel, TrainingArguments
 from .. import __version__ as version
@@ -860,7 +864,7 @@ class WandbCallback(TrainerCallback):
                     **init_args,
                 )
             # add config parameters (run may have been created manually)
-            self._wandb.config.update(combined_dict, allow_val_change=True)
+            self._wandb.config.update(combined_dict or {}, allow_val_change=True)
 
             # define default x-axis (for latest wandb versions)
             if getattr(self._wandb, "define_metric", None):
