@@ -3788,12 +3788,12 @@ class Trainer:
                 loss_bs = loss.shape[0] if isinstance(loss, torch.Tensor) else len(loss)
                 if actual_bs >= self.args.n_gpu:
                     assert loss_bs == self.args.n_gpu, (
-                        f"Expected loss to have {self.args.n_gpu} elements, but got {loss.shape[0]} elements. "
+                        f"Expected loss to have {self.args.n_gpu} elements, but got {loss_bs} elements. "
                         "This usually happens when the model does not return a loss for each device."
                     )
                 else:
                     assert loss_bs == actual_bs, (
-                        f"Expected loss to have {actual_bs} elements, but got {loss.shape[0]} elements. "
+                        f"Expected loss to have {actual_bs} elements, but got {loss_bs} elements. "
                         "This usually happens when the model does not return a loss for each device."
                     )
             loss = loss.mean()  # mean() to average on multi-gpu parallel training
