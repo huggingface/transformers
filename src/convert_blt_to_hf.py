@@ -9,7 +9,7 @@ from huggingface_hub import hf_hub_download, upload_folder
 from safetensors.torch import load_file, save_file
 
 from transformers.models.blt_wip.configuration_blt import BLTConfig
-from transformers.models.blt_wip.modeling_blt_modellike import BLTModel
+from transformers.models.blt_wip.modeling_blt import BLTModel
 from transformers.utils import logging as transformers_logging
 
 
@@ -195,7 +195,6 @@ def convert_hf_blt_to_unified(
     output_dir: str,
     config_name: str = "config.json",
     weights_name: str = "model.bin",
-    safe_serialization: bool = True,
     cache_dir: Optional[str] = None,
     push_to_hub_repo: Optional[str] = None,
     hub_private: bool = False,
@@ -218,16 +217,11 @@ def convert_hf_blt_to_unified(
     with open(config_path, "w") as f:
         json.dump(unified_config, f, indent=2)
 
-    if safe_serialization and weights_name.endswith(".bin"):
+    if weights_name.endswith(".bin"):
         weights_name = weights_name.replace(".bin", ".safetensors")
-    elif not safe_serialization and weights_name.endswith(".safetensors"):
-        weights_name = weights_name.replace(".safetensors", ".bin")
 
     weights_path = os.path.join(output_dir, weights_name)
-    if safe_serialization:
-        save_file(unified_weights, weights_path)
-    else:
-        torch.save(unified_weights, weights_path)
+    save_file(unified_weights, weights_path)
 
     create_tokenizer_config(output_dir, unified_config)
 
@@ -270,16 +264,6 @@ def main():
         default="model.bin",
     )
     parser.add_argument(
-        "--safe_serialization",
-        action="store_true",
-        default=True,
-    )
-    parser.add_argument(
-        "--no_safe_serialization",
-        dest="safe_serialization",
-        action="store_false",
-    )
-    parser.add_argument(
         "--cache_dir",
         type=str,
         default=None,
@@ -316,7 +300,6 @@ def main():
             output_dir=args.output_dir,
             config_name=args.config_name,
             weights_name=args.weights_name,
-            safe_serialization=args.safe_serialization,
             cache_dir=args.cache_dir,
             push_to_hub_repo=args.push_to_hub,
             hub_private=args.hub_private,
