@@ -80,8 +80,8 @@ class Glm4vVideoProcessorInitKwargs(VideosKwargs):
 @requires(backends=("torchvision",))
 class Glm4vVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
-    size = {"shortest_edge": 112 * 112, "longest_edge": 28 * 28 * 15000}
-    max_image_size = {"longest_edge": 28 * 28 * 15000}
+    size = {"shortest_edge": 112 * 112, "longest_edge": 28 * 28 * 30000}
+    max_image_size = {"longest_edge": 28 * 28 * 2 * 30000}
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD
     do_resize = True
@@ -188,6 +188,7 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
                     width=width,
                     temporal_factor=temporal_patch_size,
                     factor=patch_size * merge_size,
+                    max_pixels=self.max_image_size["longest_edge"],
                 )
                 stacked_videos = stacked_videos.view(B * T, C, H, W)
                 stacked_videos = F.interpolate(
