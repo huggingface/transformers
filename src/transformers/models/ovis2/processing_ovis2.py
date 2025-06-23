@@ -1,4 +1,4 @@
-from typing import Iterable, List, Union
+from typing import Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
@@ -64,7 +64,7 @@ class Ovis2Processor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         **kwargs: Unpack[Ovis2ProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -117,8 +117,8 @@ class Ovis2Processor(ProcessorMixin):
 
     def _expand_image_tokens(
         self,
-        text: List[TextInput],
-        grids: Iterable[Union[List[int], int]],
+        text: list[TextInput],
+        grids: list[list[int]],
     ):
         processed_text = []
         for sample in text:
