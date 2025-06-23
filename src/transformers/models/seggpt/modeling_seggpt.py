@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from .configuration_seggpt import SegGptConfig
@@ -395,7 +396,7 @@ class SegGptDropPath(nn.Module):
         return f"p={self.drop_prob}"
 
 
-class SegGptLayer(nn.Module):
+class SegGptLayer(GradientCheckpointingLayer):
     def __init__(self, config: SegGptConfig, drop_path_rate: float) -> None:
         super().__init__()
         self.attention = SegGptAttention(config)
@@ -470,16 +471,7 @@ class SegGptEncoder(nn.Module):
             # Condition to check if we have the appropriate number of prompts to ensemble
             ensemble_cond = 2 if self.config.merge_index > i else 1
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    ensemble_cond,
-                    feature_ensemble,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, ensemble_cond, feature_ensemble, output_attentions)
+            layer_outputs = layer_module(hidden_states, ensemble_cond, feature_ensemble, output_attentions)
 
             hidden_states = layer_outputs[0]
 
