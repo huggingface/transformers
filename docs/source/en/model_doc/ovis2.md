@@ -62,6 +62,10 @@ with torch.inference_mode():
 
 [[autodoc]] Ovis2VisionConfig
 
+## Ovis2Model
+
+[[autodoc]] Ovis2Model
+
 ## Ovis2ForConditionalGeneration
 
 [[autodoc]] Ovis2ForConditionalGeneration
