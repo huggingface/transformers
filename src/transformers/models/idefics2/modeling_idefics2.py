@@ -22,7 +22,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...cache_utils import DynamicCache
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -665,7 +665,7 @@ class Idefics2PerceiverAttention(nn.Module):
         context: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[tuple[torch.Tensor]] = None,
+        past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
@@ -754,7 +754,7 @@ class Idefics2PerceiverLayer(nn.Module):
         context: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[tuple[torch.Tensor]] = None,
+        past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         **kwargs,
@@ -1068,6 +1068,10 @@ class Idefics2Model(Idefics2PreTrainedModel):
             batch_size, seq_length, _ = inputs_embeds.shape
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        # TODO (joao): remove this exception in v4.56 -- it exists for users that try to pass a legacy cache
+        if not isinstance(past_key_values, (type(None), Cache)):
+            raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache()

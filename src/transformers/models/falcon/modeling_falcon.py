@@ -228,7 +228,7 @@ class FalconAttention(nn.Module):
         self.attention_dropout = nn.Dropout(config.attention_dropout)
         self.num_kv_heads = config.num_kv_heads if (self.new_decoder_architecture or not self.multi_query) else 1
 
-    def _split_heads(self, fused_qkv: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def _split_heads(self, fused_qkv: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Split the last dimension into (num_heads, head_dim), results share same memory storage as `fused_qkv`
 
@@ -773,6 +773,10 @@ class FalconModel(FalconPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
+
+        # TODO (joao): remove this exception in v4.56 -- it exists for users that try to pass a legacy cache
+        if not isinstance(past_key_values, (type(None), Cache)):
+            raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache()

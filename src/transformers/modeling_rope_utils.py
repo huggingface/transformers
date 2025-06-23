@@ -292,6 +292,7 @@ def _compute_longrope_parameters(
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin.
     """
+    # TODO (joao): use the new `original_max_position_embeddings` from rope_scaling
     base = config.rope_theta
     partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
     head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
