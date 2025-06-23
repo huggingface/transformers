@@ -35,7 +35,7 @@ from ...modeling_flash_attention_utils import is_flash_attn_available
 from ...modeling_layers import GradientCheckpointingLayer
 from ...processing_utils import MultiModalData, ProcessingKwargs, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_torchdynamo_compiling, logging
+from ...utils import TransformersKwargs, is_torchdynamo_compiling, logging
 from ...video_utils import VideoInput
 from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig, Qwen2VLTextConfig
 from ..qwen2_vl.modeling_qwen2_vl import (
@@ -47,7 +47,6 @@ from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLModel,
     Qwen2VLModelOutputWithPast,
     Qwen2VLPreTrainedModel,
-    TransformersKwargs,
     VisionAttention,
     VisionRotaryEmbedding,
 )

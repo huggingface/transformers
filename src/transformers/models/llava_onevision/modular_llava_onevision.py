@@ -34,6 +34,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
+    TransformersKwargs,
     auto_docstring,
     can_return_tuple,
     is_torchdynamo_compiling,
@@ -48,7 +49,6 @@ from ..llava_next_video.modeling_llava_next_video import (
     LlavaNextVideoModel,
     LlavaNextVideoModelOutputWithPast,
     LlavaNextVideoPreTrainedModel,
-    TransformersKwargs,
     get_anyres_image_grid_shape,
     image_size_to_num_patches,
     unpad_image,
