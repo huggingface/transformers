@@ -20,7 +20,7 @@
 # limitations under the License.
 
 import warnings
-from typing import Callable, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 import numpy as np
 import torch
@@ -32,6 +32,7 @@ from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_attention_mask_for_sdpa
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -107,7 +108,7 @@ class HubertSamePadLayer(nn.Module):
         return hidden_states
 
 
-class HubertNoLayerNormConvLayer(nn.Module):
+class HubertNoLayerNormConvLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -128,7 +129,7 @@ class HubertNoLayerNormConvLayer(nn.Module):
         return hidden_states
 
 
-class HubertLayerNormConvLayer(nn.Module):
+class HubertLayerNormConvLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -155,7 +156,7 @@ class HubertLayerNormConvLayer(nn.Module):
         return hidden_states
 
 
-class HubertGroupNormConvLayer(nn.Module):
+class HubertGroupNormConvLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -212,13 +213,7 @@ class HubertFeatureEncoder(nn.Module):
             hidden_states.requires_grad = True
 
         for conv_layer in self.conv_layers:
-            if self._requires_grad and self.gradient_checkpointing and self.training:
-                hidden_states = self._gradient_checkpointing_func(
-                    conv_layer.__call__,
-                    hidden_states,
-                )
-            else:
-                hidden_states = conv_layer(hidden_states)
+            hidden_states = conv_layer(hidden_states)
 
         return hidden_states
 
@@ -309,14 +304,14 @@ class HubertAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -417,7 +412,7 @@ class HubertFeedForward(nn.Module):
         return hidden_states
 
 
-class HubertEncoderLayer(nn.Module):
+class HubertEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.attention = HubertAttention(
@@ -495,23 +490,15 @@ class HubertEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
             skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        layer.__call__,
-                        hidden_states,
-                        attention_mask,
-                        output_attentions,
-                    )
-                else:
-                    layer_outputs = layer(
-                        hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
-                    )
+                layer_outputs = layer(
+                    hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+                )
                 hidden_states = layer_outputs[0]
 
             if skip_the_layer:
@@ -579,7 +566,7 @@ class HubertAttnAdapterLayer(nn.Module):
         return hidden_states
 
 
-class HubertEncoderLayerStableLayerNorm(nn.Module):
+class HubertEncoderLayerStableLayerNorm(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.attention = HubertAttention(
@@ -668,24 +655,16 @@ class HubertEncoderStableLayerNorm(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
             skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
                 # XXX: could optimize this like synced_gpus in generate_utils but not sure if it's worth the code complication
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        layer.__call__,
-                        hidden_states,
-                        attention_mask,
-                        output_attentions,
-                    )
-                else:
-                    layer_outputs = layer(
-                        hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
-                    )
+                layer_outputs = layer(
+                    hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+                )
                 hidden_states = layer_outputs[0]
 
             if skip_the_layer:
@@ -802,7 +781,7 @@ class HubertPreTrainedModel(PreTrainedModel):
 
 
 def _compute_mask_indices(
-    shape: Tuple[int, int],
+    shape: tuple[int, int],
     mask_prob: float,
     mask_length: int,
     attention_mask: Optional[torch.LongTensor] = None,
@@ -810,7 +789,7 @@ def _compute_mask_indices(
 ) -> np.ndarray:
     """
     Computes random mask spans for a given shape. Used to implement [SpecAugment: A Simple Data Augmentation Method for
-    ASR](https://arxiv.org/abs/1904.08779). Note that this method is not optimized to run on TPU and should be run on
+    ASR](https://huggingface.co/papers/1904.08779). Note that this method is not optimized to run on TPU and should be run on
     CPU as part of the preprocessing during training.
 
     Args:
@@ -948,7 +927,7 @@ class HubertModel(HubertPreTrainedModel):
     ):
         """
         Masks extracted features along time axis and/or along feature axis according to
-        [SpecAugment](https://arxiv.org/abs/1904.08779).
+        [SpecAugment](https://huggingface.co/papers/1904.08779).
         """
 
         # `config.apply_spec_augment` can set masking to False
@@ -995,7 +974,7 @@ class HubertModel(HubertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         r"""
         mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
@@ -1155,7 +1134,7 @@ class HubertForCTC(HubertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, CausalLMOutput]:
+    ) -> Union[tuple, CausalLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
             Labels for connectionist temporal classification. Note that `target_length` has to be smaller or equal to
@@ -1278,11 +1257,11 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, SequenceClassifierOutput]:
+    ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
             soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
             conversion into a tensor of type `torch.FloatTensor`. See [`HubertProcessor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):

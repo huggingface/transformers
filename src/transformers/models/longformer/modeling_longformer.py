@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN, gelu
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import ModelOutput, auto_docstring, logging
@@ -71,9 +72,9 @@ class LongformerBaseModelOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    global_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -119,9 +120,9 @@ class LongformerBaseModelOutputWithPooling(ModelOutput):
 
     last_hidden_state: torch.FloatTensor
     pooler_output: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    global_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -165,9 +166,9 @@ class LongformerMaskedLMOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    global_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -214,9 +215,9 @@ class LongformerQuestionAnsweringModelOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     start_logits: Optional[torch.FloatTensor] = None
     end_logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    global_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -260,9 +261,9 @@ class LongformerSequenceClassifierOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    global_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -308,9 +309,9 @@ class LongformerMultipleChoiceModelOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    global_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -354,9 +355,9 @@ class LongformerTokenClassifierOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    global_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 def _get_question_end_index(input_ids, sep_token_id):
@@ -1205,7 +1206,7 @@ class LongformerOutput(nn.Module):
         return hidden_states
 
 
-class LongformerLayer(nn.Module):
+class LongformerLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.attention = LongformerAttention(config, layer_id)
@@ -1284,27 +1285,15 @@ class LongformerEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                    head_mask[idx] if head_mask is not None else None,
-                    is_index_masked,
-                    is_index_global_attn,
-                    is_global_attn,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask=attention_mask,
-                    layer_head_mask=head_mask[idx] if head_mask is not None else None,
-                    is_index_masked=is_index_masked,
-                    is_index_global_attn=is_index_global_attn,
-                    is_global_attn=is_global_attn,
-                    output_attentions=output_attentions,
-                )
+            layer_outputs = layer_module(
+                hidden_states,
+                attention_mask=attention_mask,
+                layer_head_mask=head_mask[idx] if head_mask is not None else None,
+                is_index_masked=is_index_masked,
+                is_index_global_attn=is_index_global_attn,
+                is_global_attn=is_global_attn,
+                output_attentions=output_attentions,
+            )
             hidden_states = layer_outputs[0]
 
             if output_attentions:
@@ -1417,7 +1406,7 @@ class LongformerModel(LongformerPreTrainedModel):
     """
     This class copied code from [`RobertaModel`] and overwrote standard self-attention with longformer self-attention
     to provide the ability to process long sequences following the self-attention approach described in [Longformer:
-    the Long-Document Transformer](https://arxiv.org/abs/2004.05150) by Iz Beltagy, Matthew E. Peters, and Arman Cohan.
+    the Long-Document Transformer](https://huggingface.co/papers/2004.05150) by Iz Beltagy, Matthew E. Peters, and Arman Cohan.
     Longformer self-attention combines a local (sliding window) and global attention to extend to long documents
     without the O(n^2) increase in memory and compute.
 
@@ -1542,14 +1531,14 @@ class LongformerModel(LongformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, LongformerBaseModelOutputWithPooling]:
+    ) -> Union[tuple, LongformerBaseModelOutputWithPooling]:
         r"""
         global_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to decide the attention given on each token, local attention or global attention. Tokens with global
             attention attends to all other tokens, and all other tokens attend to them. This is important for
             task-specific finetuning because it makes the model more flexible at representing the task. For example,
             for classification, the <s> token should be given global attention. For QA, all question tokens should also
-            have global attention. Please refer to the [Longformer paper](https://arxiv.org/abs/2004.05150) for more
+            have global attention. Please refer to the [Longformer paper](https://huggingface.co/papers/2004.05150) for more
             details. Mask values selected in `[0, 1]`:
 
             - 0 for local attention (a sliding window attention),
@@ -1694,14 +1683,14 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, LongformerMaskedLMOutput]:
+    ) -> Union[tuple, LongformerMaskedLMOutput]:
         r"""
         global_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to decide the attention given on each token, local attention or global attention. Tokens with global
             attention attends to all other tokens, and all other tokens attend to them. This is important for
             task-specific finetuning because it makes the model more flexible at representing the task. For example,
             for classification, the <s> token should be given global attention. For QA, all question tokens should also
-            have global attention. Please refer to the [Longformer paper](https://arxiv.org/abs/2004.05150) for more
+            have global attention. Please refer to the [Longformer paper](https://huggingface.co/papers/2004.05150) for more
             details. Mask values selected in `[0, 1]`:
 
             - 0 for local attention (a sliding window attention),
@@ -1807,14 +1796,14 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, LongformerSequenceClassifierOutput]:
+    ) -> Union[tuple, LongformerSequenceClassifierOutput]:
         r"""
         global_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to decide the attention given on each token, local attention or global attention. Tokens with global
             attention attends to all other tokens, and all other tokens attend to them. This is important for
             task-specific finetuning because it makes the model more flexible at representing the task. For example,
             for classification, the <s> token should be given global attention. For QA, all question tokens should also
-            have global attention. Please refer to the [Longformer paper](https://arxiv.org/abs/2004.05150) for more
+            have global attention. Please refer to the [Longformer paper](https://huggingface.co/papers/2004.05150) for more
             details. Mask values selected in `[0, 1]`:
 
             - 0 for local attention (a sliding window attention),
@@ -1931,14 +1920,14 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, LongformerQuestionAnsweringModelOutput]:
+    ) -> Union[tuple, LongformerQuestionAnsweringModelOutput]:
         r"""
         global_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to decide the attention given on each token, local attention or global attention. Tokens with global
             attention attends to all other tokens, and all other tokens attend to them. This is important for
             task-specific finetuning because it makes the model more flexible at representing the task. For example,
             for classification, the <s> token should be given global attention. For QA, all question tokens should also
-            have global attention. Please refer to the [Longformer paper](https://arxiv.org/abs/2004.05150) for more
+            have global attention. Please refer to the [Longformer paper](https://huggingface.co/papers/2004.05150) for more
             details. Mask values selected in `[0, 1]`:
 
             - 0 for local attention (a sliding window attention),
@@ -2061,14 +2050,14 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, LongformerTokenClassifierOutput]:
+    ) -> Union[tuple, LongformerTokenClassifierOutput]:
         r"""
         global_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to decide the attention given on each token, local attention or global attention. Tokens with global
             attention attends to all other tokens, and all other tokens attend to them. This is important for
             task-specific finetuning because it makes the model more flexible at representing the task. For example,
             for classification, the <s> token should be given global attention. For QA, all question tokens should also
-            have global attention. Please refer to the [Longformer paper](https://arxiv.org/abs/2004.05150) for more
+            have global attention. Please refer to the [Longformer paper](https://huggingface.co/papers/2004.05150) for more
             details. Mask values selected in `[0, 1]`:
 
             - 0 for local attention (a sliding window attention),
@@ -2142,7 +2131,7 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, LongformerMultipleChoiceModelOutput]:
+    ) -> Union[tuple, LongformerMultipleChoiceModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -2164,7 +2153,7 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
             attention attends to all other tokens, and all other tokens attend to them. This is important for
             task-specific finetuning because it makes the model more flexible at representing the task. For example,
             for classification, the <s> token should be given global attention. For QA, all question tokens should also
-            have global attention. Please refer to the [Longformer paper](https://arxiv.org/abs/2004.05150) for more
+            have global attention. Please refer to the [Longformer paper](https://huggingface.co/papers/2004.05150) for more
             details. Mask values selected in `[0, 1]`:
 
             - 0 for local attention (a sliding window attention),

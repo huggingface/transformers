@@ -27,7 +27,7 @@ import re
 import warnings
 from collections.abc import Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 import h5py
 import numpy as np
@@ -106,10 +106,10 @@ except (ModuleNotFoundError, ImportError):
 tf_logger = tf.get_logger()
 
 TFModelInputType = Union[
-    List[tf.Tensor],
-    List[np.ndarray],
-    Dict[str, tf.Tensor],
-    Dict[str, np.ndarray],
+    list[tf.Tensor],
+    list[np.ndarray],
+    dict[str, tf.Tensor],
+    dict[str, np.ndarray],
     tf.Tensor,
     np.ndarray,
 ]
@@ -645,7 +645,7 @@ def tf_shard_checkpoint(weights, max_shard_size="10GB", weights_name: str = TF2_
     </Tip>
 
     Args:
-        weights (`Dict[str, tf.RessourceVariable]`): The list of tf.RessourceVariable of a model to save.
+        weights (`dict[str, tf.RessourceVariable]`): The list of tf.RessourceVariable of a model to save.
         max_shard_size (`int` or `str`, *optional*, defaults to `"10GB"`):
             The maximum size of each sub-checkpoint. If expressed as a string, needs to be digits followed by a unit
             (like `"5MB"`).
@@ -1142,12 +1142,12 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
     _requires_load_weight_prefix = False
 
     @property
-    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
+    def dummy_inputs(self) -> dict[str, tf.Tensor]:
         """
         Dummy inputs to build the network.
 
         Returns:
-            `Dict[str, tf.Tensor]`: The dummy inputs.
+            `dict[str, tf.Tensor]`: The dummy inputs.
         """
         dummies = {}
         for key, spec in self.input_signature.items():
@@ -1199,6 +1199,10 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         self.name_or_path = config.name_or_path
         self.generation_config = GenerationConfig.from_model_config(config) if self.can_generate() else None
         self._set_save_spec(self.input_signature)
+        logger.warning_once(
+            "TensorFlow and JAX classes are deprecated and will be removed in Transformers v5. We "
+            "recommend migrating to PyTorch classes or pinning your version of Transformers."
+        )
 
     def get_config(self):
         return self.config.to_dict()
@@ -1284,7 +1288,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         Args:
         Method used for serving the model. Does not have a specific signature, but will be specialized as concrete
         functions when saving with `save_pretrained`.
-            inputs (`Dict[str, tf.Tensor]`):
+            inputs (`dict[str, tf.Tensor]`):
                 The input of the saved model as a dictionary of tensors.
         """
         output = self.call(inputs)
@@ -1292,7 +1296,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         return self.serving_output(output)
 
     @property
-    def input_signature(self) -> Dict[str, tf.TensorSpec]:
+    def input_signature(self) -> dict[str, tf.TensorSpec]:
         """
         This property should return a dict mapping input names to tf.TensorSpec objects, representing the expected
         shape and dtype for model inputs. It is used for both serving and for generating dummy inputs.
@@ -1405,12 +1409,12 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
 
     def prepare_tf_dataset(
         self,
-        dataset: "datasets.Dataset",  # noqa:F821
+        dataset: datasets.Dataset,  # noqa:F821
         batch_size: int = 8,
         shuffle: bool = True,
-        tokenizer: Optional["PreTrainedTokenizerBase"] = None,
+        tokenizer: Optional[PreTrainedTokenizerBase] = None,
         collate_fn: Optional[Callable] = None,
-        collate_fn_args: Optional[Dict[str, Any]] = None,
+        collate_fn_args: Optional[dict[str, Any]] = None,
         drop_remainder: Optional[bool] = None,
         prefetch: bool = True,
     ):
@@ -1436,7 +1440,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
                 A function that collates samples from the dataset into a single batch. Defaults to
                 `DefaultDataCollator` if no `tokenizer` is supplied or `DataCollatorWithPadding` if a `tokenizer` is
                 passed.
-            collate_fn_args (`Dict[str, Any]`, *optional*):
+            collate_fn_args (`dict[str, Any]`, *optional*):
                 A dict of arguments to pass to the `collate_fn` alongside the list of samples.
             drop_remainder (`bool`, *optional*):
                 Whether to drop the final batch, if the batch_size does not evenly divide the dataset length. Defaults
@@ -1812,9 +1816,9 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         tags: Optional[str] = None,
         finetuned_from: Optional[str] = None,
         tasks: Optional[str] = None,
-        dataset_tags: Optional[Union[str, List[str]]] = None,
-        dataset: Optional[Union[str, List[str]]] = None,
-        dataset_args: Optional[Union[str, List[str]]] = None,
+        dataset_tags: Optional[Union[str, list[str]]] = None,
+        dataset: Optional[Union[str, list[str]]] = None,
+        dataset_args: Optional[Union[str, list[str]]] = None,
     ):
         """
         Creates a draft of a model card using the information available to the `Trainer`.
@@ -1829,18 +1833,18 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
             license (`str`, *optional*):
                 The license of the model. Will default to the license of the pretrained model used, if the original
                 model given to the `Trainer` comes from a repo on the Hub.
-            tags (`str` or `List[str]`, *optional*):
+            tags (`str` or `list[str]`, *optional*):
                 Some tags to be included in the metadata of the model card.
             finetuned_from (`str`, *optional*):
                 The name of the model used to fine-tune this one (if applicable). Will default to the name of the repo
                 of the original model given to the `Trainer` (if it comes from the Hub).
-            tasks (`str` or `List[str]`, *optional*):
+            tasks (`str` or `list[str]`, *optional*):
                 One or several task identifiers, to be included in the metadata of the model card.
-            dataset_tags (`str` or `List[str]`, *optional*):
+            dataset_tags (`str` or `list[str]`, *optional*):
                 One or several dataset tags, to be included in the metadata of the model card.
-            dataset (`str` or `List[str]`, *optional*):
+            dataset (`str` or `list[str]`, *optional*):
                 One or several dataset identifiers, to be included in the metadata of the model card.
-            dataset_args (`str` or `List[str]`, *optional*):
+            dataset_args (`str` or `list[str]`, *optional*):
                One or several dataset arguments, to be included in the metadata of the model card.
         """
         # Avoids a circular import by doing this when necessary.
@@ -1943,7 +1947,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
         return None
 
-    def get_bias(self) -> Union[None, Dict[str, tf.Variable]]:
+    def get_bias(self) -> Union[None, dict[str, tf.Variable]]:
         """
         Dict of bias attached to an LM head. The key represents the name of the bias attribute.
 
@@ -1965,7 +1969,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         Set all the bias in the LM head.
 
         Args:
-            value (`Dict[tf.Variable]`):
+            value (`dict[tf.Variable]`):
                 All the new bias attached to an LM head.
         """
         if self.get_lm_head() is not None:
@@ -2170,14 +2174,14 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         return new_lm_head_bias
 
     def _v2_get_resized_lm_head_bias(
-        self, old_lm_head_bias: Dict[str, tf.Variable], new_num_tokens: int
-    ) -> Dict[str, tf.Tensor]:
+        self, old_lm_head_bias: dict[str, tf.Variable], new_num_tokens: int
+    ) -> dict[str, tf.Tensor]:
         """
         Build a resized bias from the old ones. Increasing the size will add newly initialized vectors at the end.
         Reducing the size will remove vectors from the end
 
         Args:
-            old_lm_head_bias (`Dict[str, tf.Variable]`):
+            old_lm_head_bias (`dict[str, tf.Variable]`):
                 Old lm head bias to be resized.
             new_num_tokens (`int`):
                 New number of tokens in the linear matrix. Increasing the size will add newly initialized vectors at
@@ -2328,7 +2332,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         Prunes heads of the base model.
 
         Arguments:
-            heads_to_prune (`Dict[int, List[int]]`):
+            heads_to_prune (`dict[int, list[int]]`):
                 Dictionary with keys being selected layer indices (`int`) and associated values being the list of heads
                 to prune in said layer (list of `int`). For instance {1: [0, 2], 2: [2, 3]} will prune heads 0 and 2 on
                 layer 1 and heads 2 and 3 on layer 2.
@@ -2385,7 +2389,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
             token (`str` or `bool`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
                 the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
         use_auth_token = kwargs.pop("use_auth_token", None)
@@ -2590,7 +2594,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
                 Deprecated and ignored. All downloads are now resumed by default when possible.
                 Will be removed in v5 of Transformers.
             proxies:
-                (`Dict[str, str], `optional`): A dictionary of proxy servers to use by protocol or endpoint, e.g.,
+                (`dict[str, str], `optional`): A dictionary of proxy servers to use by protocol or endpoint, e.g.,
                 `{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
                 output_loading_info(`bool`, *optional*, defaults to `False`): Whether ot not to also return a
                 dictionary containing missing keys, unexpected keys and error messages.
@@ -2760,7 +2764,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
 
                 # At this stage we don't have a weight file so we will raise an error.
                 elif use_safetensors:
-                    raise EnvironmentError(
+                    raise OSError(
                         f"Error no file named {SAFE_WEIGHTS_NAME} or {SAFE_WEIGHTS_INDEX_NAME} found in directory {pretrained_model_name_or_path}. "
                         f"Please make sure that the model has been saved with `safe_serialization=True` or do not "
                         f"set `use_safetensors=True`."
@@ -2768,13 +2772,13 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
                 elif os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)) or os.path.isfile(
                     os.path.join(pretrained_model_name_or_path, WEIGHTS_INDEX_NAME)
                 ):
-                    raise EnvironmentError(
+                    raise OSError(
                         f"Error no file named {TF2_WEIGHTS_NAME} or {SAFE_WEIGHTS_NAME} found in directory {pretrained_model_name_or_path} "
                         "but there is a file for PyTorch weights. Use `from_pt=True` to load this model from those "
                         "weights."
                     )
                 else:
-                    raise EnvironmentError(
+                    raise OSError(
                         f"Error no file named {TF2_WEIGHTS_NAME}, {SAFE_WEIGHTS_NAME} or {WEIGHTS_NAME} found in directory "
                         f"{pretrained_model_name_or_path}."
                     )
@@ -2850,25 +2854,25 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
                         if has_file(pretrained_model_name_or_path, SAFE_WEIGHTS_INDEX_NAME, **has_file_kwargs):
                             is_sharded = True
                         elif has_file(pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs):
-                            raise EnvironmentError(
+                            raise OSError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named"
                                 f" {TF2_WEIGHTS_NAME} but there is a file for PyTorch weights. Use `from_pt=True` to"
                                 " load this model from those weights."
                             )
                         else:
-                            raise EnvironmentError(
+                            raise OSError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named {WEIGHTS_NAME},"
                                 f" {TF2_WEIGHTS_NAME} or {TF_WEIGHTS_NAME}"
                             )
 
-                except EnvironmentError:
+                except OSError:
                     # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted
                     # to the original exception.
                     raise
                 except Exception:
                     # For any other exception, we throw a generic error.
 
-                    raise EnvironmentError(
+                    raise OSError(
                         f"Can't load the model for '{pretrained_model_name_or_path}'. If you were trying to load it"
                         " from 'https://huggingface.co/models', make sure you don't have a local directory with the"
                         f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
@@ -3229,11 +3233,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         Register this class with a given auto class. This should only be used for custom models as the ones in the
         library are already mapped with an auto class.
 
-        <Tip warning={true}>
 
-        This API is experimental and may have some slight breaking changes in the next releases.
-
-        </Tip>
 
         Args:
             auto_class (`str` or `type`, *optional*, defaults to `"TFAutoModel"`):
@@ -3263,7 +3263,7 @@ class TFConv1D(keras.layers.Layer):
             The number of input features.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation to use to initialize the weights.
-        kwargs (`Dict[str, Any]`, *optional*):
+        kwargs (`dict[str, Any]`, *optional*):
             Additional keyword arguments passed along to the `__init__` of `keras.layers.Layer`.
     """
 
@@ -3308,7 +3308,7 @@ class TFSharedEmbeddings(keras.layers.Layer):
         initializer_range (`float`, *optional*):
             The standard deviation to use when initializing the weights. If no value is provided, it will default to
             \\(1/\sqrt{hidden\_size}\\).
-        kwargs (`Dict[str, Any]`, *optional*):
+        kwargs (`dict[str, Any]`, *optional*):
             Additional keyword arguments passed along to the `__init__` of `keras.layers.Layer`.
     """
 
@@ -3423,7 +3423,7 @@ class TFSequenceSummary(keras.layers.Layer):
             - **summary_last_dropout** (`float`)-- Optional dropout probability after the projection and activation.
 
         initializer_range (`float`, *optional*, defaults to 0.02): The standard deviation to use to initialize the weights.
-        kwargs (`Dict[str, Any]`, *optional*):
+        kwargs (`dict[str, Any]`, *optional*):
             Additional keyword arguments passed along to the `__init__` of `keras.layers.Layer`.
     """
 

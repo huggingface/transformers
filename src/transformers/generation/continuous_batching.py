@@ -23,7 +23,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import partial
-from typing import Deque, Dict, List, Optional, Set, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -59,16 +59,16 @@ class GenerationOutput:
 
     Attributes:
         request_id (str): The ID of the generation request.
-        prompt_ids (List[int]): The IDs of the prompt tokens.
-        generated_tokens (List[int]): The generated tokens.
-        logprobs (List[float]): The log probabilities of the generated tokens.
+        prompt_ids (list[int]): The IDs of the prompt tokens.
+        generated_tokens (list[int]): The generated tokens.
+        logprobs (list[float]): The log probabilities of the generated tokens.
         error (Optional[str]): Any error message associated with the request. When None, the request was successful.
     """
 
     request_id: str
-    prompt_ids: List[int] = field(default_factory=list)
-    generated_tokens: List[int] = field(default_factory=list)
-    logprobs: List[float] = field(default_factory=list)
+    prompt_ids: list[int] = field(default_factory=list)
+    generated_tokens: list[int] = field(default_factory=list)
+    logprobs: list[float] = field(default_factory=list)
     error: Optional[str] = None
     status: RequestStatus = RequestStatus.PENDING
     created_time: float = field(default_factory=time.time)
@@ -85,11 +85,11 @@ class RequestState:
 
     # Required fields
     request_id: str
-    prompt_ids: Optional[List[int]] = None  # the one being processed
-    full_prompt_ids: Optional[List[int]] = None  # the full prompt
-    remaining_prompt_ids: List[int] = field(default_factory=list)  # For split requests
-    static_outputs: List[int] = field(default_factory=list)
-    allocated_blocks: List[int] = field(default_factory=list)
+    prompt_ids: Optional[list[int]] = None  # the one being processed
+    full_prompt_ids: Optional[list[int]] = None  # the full prompt
+    remaining_prompt_ids: list[int] = field(default_factory=list)  # For split requests
+    static_outputs: list[int] = field(default_factory=list)
+    allocated_blocks: list[int] = field(default_factory=list)
     position_offset: int = 0  # Current position in the sequence for position_ids
     status: RequestStatus = RequestStatus.PENDING
     max_new_tokens: int = 20
@@ -150,8 +150,8 @@ class PagedAttentionCache(Cache):
         generation_config: GenerationConfig,
         device: torch.device,
         dtype: torch.dtype = torch.float16,
-        layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
-        initial_prompt_shapes: Optional[List[List[int]]] = None,
+        layer_device_map: Optional[dict[int, Union[str, torch.device, int]]] = None,
+        initial_prompt_shapes: Optional[list[list[int]]] = None,
     ) -> None:
         """Initialize a paged attention cache for efficient memory usage.
 
@@ -191,8 +191,8 @@ class PagedAttentionCache(Cache):
         self.dtype = dtype
         self.device = device
 
-        self.key_cache: List[torch.Tensor] = []
-        self.value_cache: List[torch.Tensor] = []
+        self.key_cache: list[torch.Tensor] = []
+        self.value_cache: list[torch.Tensor] = []
         for idx in range(config.num_hidden_layers):
             layer_device = layer_device_map[idx] if layer_device_map is not None else device
             new_layer_key_cache = torch.zeros(self.cache_shape, dtype=self.dtype, device=layer_device)
@@ -206,10 +206,10 @@ class PagedAttentionCache(Cache):
 
         # Block management data structures
         self._free_blocks = deque(range(num_blocks))
-        self._block_tables: Dict[str, List[int]] = {}
+        self._block_tables: dict[str, list[int]] = {}
 
     @traced
-    def allocate_blocks(self, n_blocks: int, request_id: str) -> List[int]:
+    def allocate_blocks(self, n_blocks: int, request_id: str) -> list[int]:
         """Allocates n_blocks for a given request_id."""
         if len(self._free_blocks) < n_blocks:
             return False
@@ -236,12 +236,12 @@ class PagedAttentionCache(Cache):
         """Returns the number of free blocks available."""
         return len(self._free_blocks)
 
-    def get_block_table(self, request_id: str) -> List[int]:
+    def get_block_table(self, request_id: str) -> list[int]:
         """Returns the block table for a request."""
         return self._block_tables.get(request_id, [])
 
     @traced
-    def _get_physical_indices(self, state: RequestState, logical_indices: List[int]) -> List[int]:
+    def _get_physical_indices(self, state: RequestState, logical_indices: list[int]) -> list[int]:
         """
         Maps logical sequence indices to physical cache indices using the block table, using PyTorch.
 
@@ -289,7 +289,7 @@ class PagedAttentionCache(Cache):
         read_index,
         write_index,
         **kwargs,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         # Reshape cache for easier indexing
         total_slots = self.num_blocks * self.block_size
         k_cache_flat = self.key_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
@@ -305,11 +305,12 @@ class Scheduler(ABC):
     It is expected that cache allocation and scheduling logic will be implemented in subclasses.
     """
 
-    def __init__(self, cache: PagedAttentionCache):
-        self.active_requests: Dict[str, RequestState] = {}
-        self.waiting_requests: Dict[str, RequestState] = {}
-        self.waiting_requests_order: Deque[str] = deque()
+    def __init__(self, cache: PagedAttentionCache, retain_cache_on_finish: bool = False):
+        self.active_requests: dict[str, RequestState] = {}
+        self.waiting_requests: dict[str, RequestState] = {}
+        self.waiting_requests_order: deque[str] = deque()
         self.cache = cache
+        self.retain_cache_on_finish = retain_cache_on_finish
 
     @abstractmethod
     def add_waiting_request(self, state: RequestState):
@@ -317,7 +318,7 @@ class Scheduler(ABC):
         pass
 
     @abstractmethod
-    def schedule_batch(self, token_budget: int) -> List[RequestState]:
+    def schedule_batch(self, token_budget: int) -> list[RequestState]:
         pass
 
     @traced
@@ -326,12 +327,12 @@ class Scheduler(ABC):
         return self.active_requests or self.waiting_requests
 
     @abstractmethod
-    def finish_request(self, state: RequestState):
+    def finish_request(self, request_id: str, evict_from_cache: bool = True):
         """Finish processing a request and free its allocated blocks."""
         pass
 
     @traced
-    def get_active_request_static_outputs(self, request_id: str) -> List[int]:
+    def get_active_request_static_outputs(self, request_id: str) -> list[int]:
         if request_id in self.active_requests:
             return self.active_requests[request_id].static_outputs
         return []
@@ -355,7 +356,7 @@ class FIFOScheduler(Scheduler):
 
     @traced(span_name="prepare_request")
     def _prepare_request_for_processing(
-        self, state: RequestState, token_budget: int, request_ids_to_remove_from_waiting: Set[str]
+        self, state: RequestState, token_budget: int, request_ids_to_remove_from_waiting: set[str]
     ):
         """Prepare a request for processing in the current batch."""
         request_tokens = (
@@ -385,13 +386,18 @@ class FIFOScheduler(Scheduler):
     @traced
     def add_waiting_request(self, state: RequestState):
         """Add a request to the waiting list."""
+        if self.retain_cache_on_finish and state.request_id in self.active_requests:
+            old_state = self.active_requests.pop(state.request_id)
+            state.prompt_ids = state.prompt_ids[len(old_state.full_prompt_ids) :]
+            state.allocated_blocks = old_state.allocated_blocks
+            state.position_offset = old_state.position_offset
         self.waiting_requests[state.request_id] = state
         self.waiting_requests_order.append(state.request_id)
 
     @traced
-    def schedule_batch(self, token_budget: int) -> List[RequestState]:
-        priority_states: List[RequestState] = []
-        second_priority_states: List[RequestState] = []
+    def schedule_batch(self, token_budget: int) -> list[RequestState]:
+        priority_states: list[RequestState] = []
+        second_priority_states: list[RequestState] = []
         scheduled_requests = []
 
         for state in self.active_requests.values():
@@ -444,11 +450,11 @@ class FIFOScheduler(Scheduler):
         return scheduled_requests
 
     @traced
-    def finish_request(self, state: RequestState):
-        request_id = state.request_id
-        self.cache.free_blocks(request_id)
-        if request_id in self.active_requests:
-            del self.active_requests[request_id]
+    def finish_request(self, request_id: str, evict_from_cache: bool = True):
+        if evict_from_cache:
+            self.cache.free_blocks(request_id)
+            if request_id in self.active_requests:
+                del self.active_requests[request_id]
 
 
 @attach_tracer()
@@ -469,7 +475,7 @@ class PrefillFirstScheduler(Scheduler):
 
     @traced(span_name="prepare_request")
     def _prepare_request_for_processing(
-        self, state: RequestState, token_budget: int, request_ids_to_remove_from_waiting: Set[str]
+        self, state: RequestState, token_budget: int, request_ids_to_remove_from_waiting: set[str]
     ):
         """Prepare a request for processing in the current batch."""
         request_tokens = (
@@ -499,13 +505,18 @@ class PrefillFirstScheduler(Scheduler):
     @traced
     def add_waiting_request(self, state: RequestState):
         """Add a request to the waiting list."""
+        if self.retain_cache_on_finish and state.request_id in self.active_requests:
+            old_state = self.active_requests.pop(state.request_id)
+            state.prompt_ids = state.prompt_ids[len(old_state.full_prompt_ids) :]  # XXX: check for indexing error?
+            state.allocated_blocks = old_state.allocated_blocks
+            state.position_offset = old_state.position_offset
         self.waiting_requests[state.request_id] = state
         self.waiting_requests_order.append(state.request_id)
 
     @traced
-    def schedule_batch(self, token_budget: int) -> List[RequestState]:
-        priority_states: List[RequestState] = []
-        second_priority_states: List[RequestState] = []
+    def schedule_batch(self, token_budget: int) -> list[RequestState]:
+        priority_states: list[RequestState] = []
+        second_priority_states: list[RequestState] = []
         scheduled_requests = []
 
         for state in self.active_requests.values():
@@ -558,11 +569,11 @@ class PrefillFirstScheduler(Scheduler):
         return scheduled_requests
 
     @traced
-    def finish_request(self, state: RequestState):
-        request_id = state.request_id
-        self.cache.free_blocks(request_id)
-        if request_id in self.active_requests:
-            del self.active_requests[request_id]
+    def finish_request(self, request_id: str, evict_from_cache: bool = True):
+        if evict_from_cache:
+            self.cache.free_blocks(request_id)
+            if request_id in self.active_requests:
+                del self.active_requests[request_id]
 
 
 @traced(standalone=True)
@@ -570,7 +581,7 @@ def compute_optimal_blocks(
     device: torch.device,
     config: PretrainedConfig,
     generation_config: GenerationConfig,
-    inputs: List[List[int]],
+    inputs: list[list[int]],
     dtype: torch.dtype = torch.bfloat16,
     safety_margin: float = 0.9,
     median_prefill_length: Optional[int] = None,
@@ -667,7 +678,7 @@ class PagedAttentionArgs:
     write_index: torch.Tensor
     read_index: torch.Tensor
     logits_indices: torch.Tensor
-    block_tables: Dict[str, List[int]]
+    block_tables: dict[str, list[int]]
     cache: PagedAttentionCache
     use_cache: bool = False
 
@@ -717,6 +728,7 @@ class ContinuousBatchProcessor:
         model_dtype: torch.dtype,
         scheduler: Scheduler,
         streaming: bool = False,
+        manual_eviction: bool = False,
     ):
         """Initialize the continuous batch processor.
 
@@ -740,8 +752,9 @@ class ContinuousBatchProcessor:
         self.model_dtype = model_dtype
         self.scheduler = scheduler
         self.streaming = streaming
+        self.manual_eviction = manual_eviction
 
-        self.requests_in_batch: List[RequestState] = []
+        self.requests_in_batch: list[RequestState] = []
 
         # Get batch size parameters from generation config
         self._configure_batch_parameters()
@@ -773,7 +786,6 @@ class ContinuousBatchProcessor:
 
     @traced
     @torch.no_grad()
-    @torch.compile()
     def reset_static_tensors(self):
         """Reset static tensors for the next batch."""
         self.input_ids.zero_()
@@ -1003,7 +1015,7 @@ class ContinuousBatchProcessor:
                 state.prompt_ids = [token]
                 if state.update_with_token(token):
                     self.metrics.record_request_completion(state.created_time, state.request_id)
-                    self.scheduler.finish_request(state)
+                    self.scheduler.finish_request(state.request_id, evict_from_cache=(not self.manual_eviction))
                     finished_request_ids.append(req_id)
                 self._maybe_send_output(state, token)
             elif state.status == RequestStatus.PREFILLING_SPLIT:
@@ -1020,7 +1032,7 @@ class ContinuousBatchProcessor:
         failed_reqs = self.requests_in_batch
         for req in failed_reqs:
             self._handle_request_error(error, req)
-            self.scheduler.finish_request(req)
+            self.scheduler.finish_request(req.request_id)
 
     @traced
     def fail_all_requests(self, error):
@@ -1031,7 +1043,7 @@ class ContinuousBatchProcessor:
         """
         for state in self.scheduler.active_requests.values():
             self._handle_request_error(error, state)
-            self.scheduler.finish_request(state)
+            self.scheduler.finish_request(state.request_id)
 
         # Also fail any requests in the waiting queue
         for req_id in list(self.scheduler.waiting_requests.keys()):
@@ -1057,7 +1069,14 @@ class ContinuousBatchingManager:
     retrieving results, and managing the background generation thread.
     """
 
-    def __init__(self, model, generation_config: GenerationConfig, max_queue_size=0, streaming: bool = True):
+    def __init__(
+        self,
+        model,
+        generation_config: GenerationConfig,
+        manual_eviction: bool = False,
+        max_queue_size=0,
+        streaming: bool = True,
+    ):
         """Initialize the continuous batching manager.
 
         Args:
@@ -1081,6 +1100,8 @@ class ContinuousBatchingManager:
         self.logit_processor = self.model._get_logits_processor(self.model.generation_config)
         self.use_cuda_graph = getattr(generation_config, "use_cuda_graph", True)
         self.profile = getattr(generation_config, "profile", False)
+        self.manual_eviction = manual_eviction
+        self.batch_processor: Optional[ContinuousBatchProcessor] = None
 
     @traced
     def start(self):
@@ -1131,7 +1152,7 @@ class ContinuousBatchingManager:
                 self._generation_thread = None
 
     def add_request(
-        self, input_ids: List[int], request_id: Optional[str] = None, max_new_tokens: Optional[int] = None
+        self, input_ids: list[int], request_id: Optional[str] = None, max_new_tokens: Optional[int] = None
     ) -> str:
         """Add a new generation request to the queue.
 
@@ -1163,7 +1184,7 @@ class ContinuousBatchingManager:
         logger.debug(f"Added request {request_id} to queue.")
         return request_id
 
-    def add_requests(self, inputs: List[List[int]], **kwargs):
+    def add_requests(self, inputs: list[list[int]], **kwargs):
         for i, input_ids in enumerate(inputs):
             # Assign a predictable request ID for ordering results later
             req_id = f"batch_req_{i}"
@@ -1226,7 +1247,6 @@ class ContinuousBatchingManager:
         return self.model(**batch_data).logits
 
     @traced(span_name="logit_processing")
-    @torch.compile()
     def _process_logit(self, batch_data, logits):
         return self.logit_processor(batch_data["input_ids"], logits)
 
@@ -1250,9 +1270,14 @@ class ContinuousBatchingManager:
                 self.model.dtype,
             )
 
-            scheduler = SCHEDULER_MAPPING.get(self.generation_config.scheduler)
-            if scheduler is None:
-                logger.warning(f"Scheduler '{scheduler}' not found. Defaulting to FIFO.")
+            scheduler = None
+            if hasattr(self.generation_config, "scheduler"):
+                scheduler = SCHEDULER_MAPPING.get(self.generation_config.scheduler)
+                if scheduler is None:
+                    logger.warning(f"Scheduler '{scheduler}' not found. Defaulting to FIFO.")
+                    scheduler = FIFOScheduler
+            else:
+                # Default to fifo
                 scheduler = FIFOScheduler
 
             batch_processor = ContinuousBatchProcessor(
@@ -1264,9 +1289,11 @@ class ContinuousBatchingManager:
                 self.stop_event,
                 self.model.device,
                 self.model.dtype,
-                scheduler(paged_attention_cache),
+                scheduler(paged_attention_cache, self.manual_eviction),
                 self.streaming,
+                self.manual_eviction,
             )
+            self.batch_processor = batch_processor
             is_first = True
 
             if self.profile:
@@ -1348,6 +1375,14 @@ class ContinuousBatchingManager:
         if batch_processor is not None:
             batch_processor.fail_all_requests(error)
 
+    @traced
+    def evict_request_from_cache(self, request_id: str):
+        """Evict a request from the cache. It is assumed that the request is already finished."""
+        if not self.manual_eviction:
+            raise RuntimeError("Manual eviction is not enabled for this manager.")
+        if self.batch_processor is not None:
+            self.batch_processor.scheduler.finish_request(request_id)
+
 
 class ContinuousMixin:
     """Mixin class for models to add continuous batching capabilities."""
@@ -1355,8 +1390,8 @@ class ContinuousMixin:
     def init_continuous_batching(
         self,
         generation_config: Optional[GenerationConfig] = None,
+        manual_eviction: bool = False,
         max_queue_size: int = 0,
-        scheduler: str = "fifo",
         streaming: bool = False,
     ) -> ContinuousBatchingManager:
         """Initialize a manager for continuous batching inference.
@@ -1382,18 +1417,22 @@ class ContinuousMixin:
 
         # Create and return the manager
         return ContinuousBatchingManager(
-            model=self, generation_config=gen_config, max_queue_size=max_queue_size, streaming=streaming
+            model=self,
+            generation_config=gen_config,
+            manual_eviction=manual_eviction,
+            max_queue_size=max_queue_size,
+            streaming=streaming,
         )
 
     @traced
     @torch.inference_mode()
     def generate_batch(
         self,
-        inputs: List[List[int]],
+        inputs: list[list[int]],
         generation_config: Optional[GenerationConfig] = None,
         progress_bar: bool = True,
         **kwargs,
-    ) -> List[List[int]]:
+    ) -> list[list[int]]:
         """Generate sequences for a batch of prompts using continuous batching.
 
         Args:
@@ -1402,7 +1441,7 @@ class ContinuousMixin:
             **kwargs: Additional generation parameters
 
         Returns:
-            `List[List[int]]`: A list containing the generated sequences (including prompt tokens
+            `list[list[int]]`: A list containing the generated sequences (including prompt tokens
                                 if not handled otherwise) for each input prompt, in the same order.
                                 Returns an empty list `[]` for requests that failed.
         """

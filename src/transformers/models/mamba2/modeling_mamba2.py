@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -24,6 +24,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
@@ -606,7 +607,7 @@ class Mamba2Mixer(nn.Module):
 
             # 2. Compute the state for each intra-chunk
             # (right term of low-rank factorization of off-diagonal blocks; B terms)
-            decay_states = torch.exp((A_cumsum[:, :, :, -1:] - A_cumsum))
+            decay_states = torch.exp(A_cumsum[:, :, :, -1:] - A_cumsum)
             B_decay = B * decay_states.permute(0, -2, -1, 1)[..., None]
             states = (B_decay[..., None, :] * hidden_states[..., None]).sum(dim=2)
 
@@ -682,7 +683,7 @@ class Mamba2RMSNorm(nn.Module):
         return self.weight * hidden_states.to(input_dtype)
 
 
-class Mamba2Block(nn.Module):
+class Mamba2Block(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.config = config
@@ -784,7 +785,7 @@ class Mamba2Output(ModelOutput):
 
     last_hidden_state: Optional[torch.FloatTensor] = None
     cache_params: Optional[Mamba2Cache] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -813,7 +814,7 @@ class Mamba2CausalLMOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
     cache_params: Optional[Mamba2Cache] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 @auto_docstring
@@ -854,7 +855,7 @@ class Mamba2Model(Mamba2PreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
-    ) -> Union[Tuple, Mamba2Output]:
+    ) -> Union[tuple, Mamba2Output]:
         r"""
         cache_params (`Mamba2Cache`, *optional*):
             If passed along, the model uses the previous state in all the blocks (which will give the output for the
@@ -901,17 +902,12 @@ class Mamba2Model(Mamba2PreTrainedModel):
         hidden_states = inputs_embeds
         all_hidden_states = () if output_hidden_states else None
         for mixer_block in self.layers:
-            if self.gradient_checkpointing and self.training:
-                hidden_states = self._gradient_checkpointing_func(
-                    mixer_block.__call__, hidden_states, cache_params, cache_position, attention_mask
-                )
-            else:
-                hidden_states = mixer_block(
-                    hidden_states,
-                    cache_params=cache_params,
-                    cache_position=cache_position,
-                    attention_mask=attention_mask,
-                )
+            hidden_states = mixer_block(
+                hidden_states,
+                cache_params=cache_params,
+                cache_position=cache_position,
+                attention_mask=attention_mask,
+            )
 
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -1019,7 +1015,7 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
         cache_position: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs,  # for now we need this for generation and loss_function
-    ) -> Union[Tuple, Mamba2CausalLMOutput]:
+    ) -> Union[tuple, Mamba2CausalLMOutput]:
         r"""
         cache_params (`Mamba2Cache`, *optional*):
             If passed along, the model uses the previous state in all the blocks (which will give the output for the

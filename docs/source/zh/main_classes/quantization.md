@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## AWQ集成
 
-AWQ方法已经在[*AWQ: Activation-aware Weight Quantization for LLM Compression and Acceleration*论文](https://arxiv.org/abs/2306.00978)中引入。通过AWQ，您可以以4位精度运行模型，同时保留其原始性能（即没有性能降级），并具有比下面介绍的其他量化方法更出色的吞吐量 - 达到与纯`float16`推理相似的吞吐量。
+AWQ方法已经在[*AWQ: Activation-aware Weight Quantization for LLM Compression and Acceleration*论文](https://huggingface.co/papers/2306.00978)中引入。通过AWQ，您可以以4位精度运行模型，同时保留其原始性能（即没有性能降级），并具有比下面介绍的其他量化方法更出色的吞吐量 - 达到与纯`float16`推理相似的吞吐量。
 
 我们现在支持使用任何AWQ模型进行推理，这意味着任何人都可以加载和使用在Hub上推送或本地保存的AWQ权重。请注意，使用AWQ需要访问NVIDIA GPU。目前不支持CPU推理。
 
@@ -118,7 +118,7 @@ model = AutoModelForCausalLM.from_pretrained("TheBloke/zephyr-7B-alpha-AWQ", att
 🤗 Transformers已经整合了`optimum` API，用于对语言模型执行GPTQ量化。您可以以8、4、3甚至2位加载和量化您的模型，而性能无明显下降，并且推理速度更快！这受到大多数GPU硬件的支持。
 
 要了解更多关于量化模型的信息，请查看：
-- [GPTQ](https://arxiv.org/pdf/2210.17323.pdf)论文
+- [GPTQ](https://huggingface.co/papers/2210.17323)论文
 - `optimum`关于GPTQ量化的[指南](https://huggingface.co/docs/optimum/llm_quantization/usage_guides/quantization)
 - 用作后端的[`AutoGPTQ`](https://github.com/PanQiWei/AutoGPTQ)库
 
@@ -276,7 +276,7 @@ model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq", de
 🤗 Transformers 与 `bitsandbytes` 上最常用的模块紧密集成。您可以使用几行代码以 8 位精度加载您的模型。
 自bitsandbytes的0.37.0版本发布以来，大多数GPU硬件都支持这一点。
 
-在[LLM.int8()](https://arxiv.org/abs/2208.07339)论文中了解更多关于量化方法的信息，或者在[博客文章](https://huggingface.co/blog/hf-bitsandbytes-integration)中了解关于合作的更多信息。
+在[LLM.int8()](https://huggingface.co/papers/2208.07339)论文中了解更多关于量化方法的信息，或者在[博客文章](https://huggingface.co/blog/hf-bitsandbytes-integration)中了解关于合作的更多信息。
 
 自其“0.39.0”版本发布以来，您可以使用FP4数据类型，通过4位量化加载任何支持“device_map”的模型。
 
@@ -329,7 +329,7 @@ torch.float32
 
 - **使用 `batch_size=1` 实现更快的推理：** 自 `bitsandbytes` 的 `0.40.0` 版本以来，设置 `batch_size=1`，您可以从快速推理中受益。请查看 [这些发布说明](https://github.com/TimDettmers/bitsandbytes/releases/tag/0.40.0) ，并确保使用大于 `0.40.0` 的版本以直接利用此功能。
 
-- **训练：** 根据 [QLoRA 论文](https://arxiv.org/abs/2305.14314)，对于4位基模型训练（使用 LoRA 适配器），应使用 `bnb_4bit_quant_type='nf4'`。
+- **训练：** 根据 [QLoRA 论文](https://huggingface.co/papers/2305.14314)，对于4位基模型训练（使用 LoRA 适配器），应使用 `bnb_4bit_quant_type='nf4'`。
 
 - **推理：** 对于推理，`bnb_4bit_quant_type` 对性能影响不大。但是为了与模型的权重保持一致，请确保使用相同的 `bnb_4bit_compute_dtype` 和 `torch_dtype` 参数。
 

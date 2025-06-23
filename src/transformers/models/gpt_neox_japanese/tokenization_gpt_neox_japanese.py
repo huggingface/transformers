@@ -19,7 +19,7 @@ import json
 import os
 import re
 import sys
-from typing import Optional, Tuple
+from typing import Optional
 
 import numpy as np
 
@@ -162,7 +162,7 @@ class GPTNeoXJapaneseTokenizer(PreTrainedTokenizer):
         out_string = "".join(tokens).strip()
         return out_string
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         index = 0
         if os.path.isdir(save_directory):
             vocab_file = os.path.join(

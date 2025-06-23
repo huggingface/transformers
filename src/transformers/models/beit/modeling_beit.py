@@ -18,7 +18,7 @@ import collections.abc
 import math
 import warnings
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -26,6 +26,7 @@ from torch import Tensor, nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BackboneOutput,
     BaseModelOutput,
@@ -110,7 +111,7 @@ class BeitDropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
 # Based on timm implementation, which can be found here:
@@ -291,8 +292,8 @@ class BeitSelfAttention(nn.Module):
         output_attentions: bool = False,
         relative_position_bias: Optional[torch.Tensor] = None,
         interpolate_pos_encoding: bool = False,
-        resolution: Optional[Tuple[int]] = None,
-    ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
+        resolution: Optional[tuple[int]] = None,
+    ) -> Union[tuple[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
         mixed_query_layer = self.query(hidden_states)
 
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -346,8 +347,8 @@ class BeitSdpaSelfAttention(BeitSelfAttention):
         output_attentions: bool = False,
         relative_position_bias: Optional[torch.Tensor] = None,
         interpolate_pos_encoding: bool = False,
-        resolution: Optional[Tuple[int]] = None,
-    ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
+        resolution: Optional[tuple[int]] = None,
+    ) -> Union[tuple[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
         if output_attentions or head_mask is not None:
             logger.warning_once(
                 "`BeitSdpaSelfAttention` is used but `torch.nn.functional.scaled_dot_product_attention` does not "
@@ -456,8 +457,8 @@ class BeitAttention(nn.Module):
         output_attentions: bool = False,
         relative_position_bias: Optional[torch.Tensor] = None,
         interpolate_pos_encoding: bool = False,
-        resolution: Optional[Tuple[int]] = None,
-    ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
+        resolution: Optional[tuple[int]] = None,
+    ) -> Union[tuple[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
         self_outputs = self.attention(
             hidden_states, head_mask, output_attentions, relative_position_bias, interpolate_pos_encoding, resolution
         )
@@ -497,7 +498,7 @@ class BeitOutput(nn.Module):
         return hidden_states
 
 
-class BeitLayer(nn.Module):
+class BeitLayer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the timm implementation."""
 
     def __init__(self, config: BeitConfig, window_size: Optional[tuple] = None, drop_path_rate: float = 0.0) -> None:
@@ -513,8 +514,8 @@ class BeitLayer(nn.Module):
 
         init_values = config.layer_scale_init_value
         if init_values > 0:
-            self.lambda_1 = nn.Parameter(init_values * torch.ones((config.hidden_size)), requires_grad=True)
-            self.lambda_2 = nn.Parameter(init_values * torch.ones((config.hidden_size)), requires_grad=True)
+            self.lambda_1 = nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True)
+            self.lambda_2 = nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True)
         else:
             self.lambda_1, self.lambda_2 = None, None
 
@@ -525,8 +526,8 @@ class BeitLayer(nn.Module):
         output_attentions: bool = False,
         relative_position_bias: Optional[torch.Tensor] = None,
         interpolate_pos_encoding: bool = False,
-        resolution: Optional[Tuple[int]] = None,
-    ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
+        resolution: Optional[tuple[int, int]] = None,
+    ) -> Union[tuple[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in BEiT, layernorm is applied before self-attention
             head_mask,
@@ -573,10 +574,10 @@ class BeitRelativePositionBias(nn.Module):
         # cls to token & token 2 cls & cls to cls
 
     @compile_compatible_method_lru_cache(maxsize=10)
-    def generate_relative_position_index(self, window_size: Tuple[int, int]) -> torch.Tensor:
+    def generate_relative_position_index(self, window_size: tuple[int, int]) -> torch.Tensor:
         """
         This method creates the relative position index, modified to support arbitrary window sizes,
-        as introduced in [MiDaS v3.1](https://arxiv.org/abs/2307.14460).
+        as introduced in [MiDaS v3.1](https://huggingface.co/papers/2307.14460).
         """
         num_relative_distance = (2 * window_size[0] - 1) * (2 * window_size[1] - 1) + 3
         # cls to token & token 2 cls & cls to cls
@@ -674,7 +675,7 @@ class BeitEncoder(nn.Module):
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         interpolate_pos_encoding: bool = False,
-        resolution: Optional[Tuple[int, int]] = None,
+        resolution: Optional[tuple[int, int]] = None,
         return_dict: bool = True,
     ) -> Union[tuple, BaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
@@ -695,25 +696,14 @@ class BeitEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    layer_head_mask,
-                    output_attentions,
-                    relative_position_bias,
-                    interpolate_pos_encoding,
-                    resolution,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    layer_head_mask,
-                    output_attentions,
-                    relative_position_bias,
-                    interpolate_pos_encoding,
-                    resolution,
-                )
+            layer_outputs = layer_module(
+                hidden_states,
+                head_mask=layer_head_mask,
+                output_attentions=output_attentions,
+                relative_position_bias=relative_position_bias,
+                interpolate_pos_encoding=interpolate_pos_encoding,
+                resolution=resolution,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -1073,10 +1063,10 @@ class BeitConvModule(nn.Module):
         self,
         in_channels: int,
         out_channels: int,
-        kernel_size: Union[int, Tuple[int, int]],
-        padding: Union[int, Tuple[int, int], str] = 0,
+        kernel_size: Union[int, tuple[int, int]],
+        padding: Union[int, tuple[int, int], str] = 0,
         bias: bool = False,
-        dilation: Union[int, Tuple[int, int]] = 1,
+        dilation: Union[int, tuple[int, int]] = 1,
     ) -> None:
         super().__init__()
         self.conv = nn.Conv2d(
@@ -1129,7 +1119,7 @@ class BeitPyramidPoolingModule(nn.Module):
     Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
     """
 
-    def __init__(self, pool_scales: Tuple[int, ...], in_channels: int, channels: int, align_corners: bool) -> None:
+    def __init__(self, pool_scales: tuple[int, ...], in_channels: int, channels: int, align_corners: bool) -> None:
         super().__init__()
         self.pool_scales = pool_scales
         self.align_corners = align_corners
@@ -1141,7 +1131,7 @@ class BeitPyramidPoolingModule(nn.Module):
             self.blocks.append(block)
             self.add_module(str(i), block)
 
-    def forward(self, x: torch.Tensor) -> List[torch.Tensor]:
+    def forward(self, x: torch.Tensor) -> list[torch.Tensor]:
         ppm_outs = []
         for ppm in self.blocks:
             ppm_out = ppm(x)
@@ -1155,7 +1145,7 @@ class BeitPyramidPoolingModule(nn.Module):
 class BeitUperHead(nn.Module):
     """
     Unified Perceptual Parsing for Scene Understanding. This head is the implementation of
-    [UPerNet](https://arxiv.org/abs/1807.10221).
+    [UPerNet](https://huggingface.co/papers/1807.10221).
 
     Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
     """
@@ -1240,7 +1230,7 @@ class BeitUperHead(nn.Module):
 class BeitFCNHead(nn.Module):
     """
     Fully Convolution Networks for Semantic Segmentation. This head is implemented of
-    [FCNNet](https://arxiv.org/abs/1411.4038>).
+    [FCNNet](https://huggingface.co/papers/1411.4038>).
 
     Args:
         config (BeitConfig): Configuration.
@@ -1253,7 +1243,7 @@ class BeitFCNHead(nn.Module):
     """
 
     def __init__(
-        self, config: BeitConfig, in_index: int = 2, kernel_size: int = 3, dilation: Union[int, Tuple[int, int]] = 1
+        self, config: BeitConfig, in_index: int = 2, kernel_size: int = 3, dilation: Union[int, tuple[int, int]] = 1
     ) -> None:
         super().__init__()
         self.in_channels = config.hidden_size

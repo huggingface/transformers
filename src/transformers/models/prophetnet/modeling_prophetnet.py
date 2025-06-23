@@ -18,7 +18,7 @@ import copy
 import math
 import warnings
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -27,6 +27,7 @@ from torch.nn import LayerNorm
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
@@ -124,7 +125,7 @@ class ProphetNetSeq2SeqLMOutput(ModelOutput):
         logits_ngram (`torch.FloatTensor` of shape `(batch_size, ngram * decoder_sequence_length, config.vocab_size)`):
             Prediction scores of the predict stream language modeling head (scores for each vocabulary token before
             SoftMax).
-        past_key_values (`List[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`list[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
             num_attn_heads, decoder_sequence_length, embed_size_per_head)`).
 
@@ -175,15 +176,15 @@ class ProphetNetSeq2SeqLMOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
     logits_ngram: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_ngram_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_ngram_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    past_key_values: Optional[tuple[torch.FloatTensor]] = None
+    decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    decoder_ngram_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[tuple[torch.FloatTensor]] = None
+    decoder_ngram_attentions: Optional[tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[tuple[torch.FloatTensor]] = None
 
     @property
     def decoder_cross_attentions(self):
@@ -209,7 +210,7 @@ class ProphetNetSeq2SeqModelOutput(ModelOutput):
             hidden_size)` is output.
         last_hidden_state_ngram (`torch.FloatTensor` of shape `(batch_size,ngram * decoder_sequence_length, config.vocab_size)`, *optional*):
             Sequence of predict stream hidden-states at the output of the last layer of the decoder of the model.
-        past_key_values (`List[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`list[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
             num_attn_heads, decoder_sequence_length, embed_size_per_head)`).
 
@@ -261,15 +262,15 @@ class ProphetNetSeq2SeqModelOutput(ModelOutput):
 
     last_hidden_state: torch.FloatTensor
     last_hidden_state_ngram: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_ngram_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_ngram_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    past_key_values: Optional[tuple[torch.FloatTensor]] = None
+    decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    decoder_ngram_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[tuple[torch.FloatTensor]] = None
+    decoder_ngram_attentions: Optional[tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[tuple[torch.FloatTensor]] = None
 
     @property
     def decoder_cross_attentions(self):
@@ -294,7 +295,7 @@ class ProphetNetDecoderModelOutput(ModelOutput):
             hidden_size)` is output.
         last_hidden_state_ngram (`torch.FloatTensor` of shape `(batch_size, ngram * decoder_sequence_length, config.vocab_size)`):
             Sequence of predict stream hidden-states at the output of the last layer of the decoder of the model.
-        past_key_values (`List[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`list[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
             num_attn_heads, decoder_sequence_length, embed_size_per_head)`).
 
@@ -333,12 +334,12 @@ class ProphetNetDecoderModelOutput(ModelOutput):
 
     last_hidden_state: torch.FloatTensor
     last_hidden_state_ngram: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Tuple[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    hidden_states_ngram: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    ngram_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    past_key_values: Optional[tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    hidden_states_ngram: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
+    ngram_attentions: Optional[tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -355,7 +356,7 @@ class ProphetNetDecoderLMOutput(ModelOutput):
         logits_ngram (`torch.FloatTensor` of shape `(batch_size, ngram * decoder_sequence_length, config.vocab_size)`):
             Prediction scores of the predict stream language modeling head (scores for each vocabulary token before
             SoftMax).
-        past_key_values (`List[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`list[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
             num_attn_heads, decoder_sequence_length, embed_size_per_head)`).
 
@@ -395,12 +396,12 @@ class ProphetNetDecoderLMOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
     logits_ngram: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Tuple[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    hidden_states_ngram: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    ngram_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    past_key_values: Optional[tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    hidden_states_ngram: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
+    ngram_attentions: Optional[tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @auto_docstring
@@ -521,9 +522,9 @@ class ProphetNetAttention(nn.Module):
         key_value_states: Optional[Tensor] = None,
         attention_mask: Optional[Tensor] = None,
         layer_head_mask: Optional[Tensor] = None,
-        past_key_value: Optional[Tuple[Tensor]] = None,
+        past_key_value: Optional[tuple[Tensor]] = None,
         output_attentions: bool = False,
-    ) -> Tuple[Tensor, Optional[Tensor]]:
+    ) -> tuple[Tensor, Optional[Tensor]]:
         batch_size, tgt_len, hidden_size = hidden_states.size()
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -676,7 +677,7 @@ class ProphetNetNgramSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states,
-        past_key_value: Optional[Tuple[Tensor]] = None,
+        past_key_value: Optional[tuple[Tensor]] = None,
         attention_mask=None,
         layer_head_mask=None,
         extended_predict_attention_mask=None,
@@ -956,7 +957,7 @@ class ProphetNetNgramSelfAttention(nn.Module):
         return predict_relative_pos_embeddings
 
 
-class ProphetNetEncoderLayer(nn.Module):
+class ProphetNetEncoderLayer(GradientCheckpointingLayer):
     """
     Encoder block for Prophetnet
     """
@@ -999,7 +1000,7 @@ class ProphetNetEncoderLayer(nn.Module):
         return outputs
 
 
-class ProphetNetDecoderLayer(nn.Module):
+class ProphetNetDecoderLayer(GradientCheckpointingLayer):
     """
     Decoder block for Prophetnet
     """
@@ -1127,7 +1128,7 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         r"""
         Example:
 
@@ -1183,21 +1184,12 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
             if output_hidden_states:
                 encoder_hidden_states = encoder_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    encoder_layer.__call__,
-                    hidden_states,
-                    extended_attention_mask,
-                    (head_mask[idx] if head_mask is not None else None),
-                    output_attentions,
-                )
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask=extended_attention_mask,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                    output_attentions=output_attentions,
-                )
+            layer_outputs = encoder_layer(
+                hidden_states,
+                attention_mask=extended_attention_mask,
+                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                output_attentions=output_attentions,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -1264,13 +1256,13 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, ProphetNetDecoderModelOutput]:
+    ) -> Union[tuple, ProphetNetDecoderModelOutput]:
         r"""
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
@@ -1395,41 +1387,21 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    extended_attention_mask,
-                    encoder_hidden_states,
-                    extended_encoder_attention_mask,
-                    (head_mask[idx] if head_mask is not None else None),
-                    (cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
-                    extended_predict_attention_mask,
-                    main_relative_position_buckets,
-                    predict_relative_position_buckets,
-                    position_ids,
-                    None,
-                    use_cache,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=extended_attention_mask,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attn_mask=extended_encoder_attention_mask,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                    cross_attn_layer_head_mask=(
-                        cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
-                    ),
-                    extended_predict_attention_mask=extended_predict_attention_mask,
-                    main_relative_position_buckets=main_relative_position_buckets,
-                    predict_relative_position_buckets=predict_relative_position_buckets,
-                    position_ids=position_ids,
-                    past_key_value=past_key_value,
-                    use_cache=use_cache,
-                    output_attentions=output_attentions,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                extended_attention_mask,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                encoder_attn_mask=extended_encoder_attention_mask,
+                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                cross_attn_layer_head_mask=(cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
+                extended_predict_attention_mask=extended_predict_attention_mask,
+                main_relative_position_buckets=main_relative_position_buckets,
+                predict_relative_position_buckets=predict_relative_position_buckets,
+                position_ids=position_ids,
+                past_key_value=past_key_value,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -1610,15 +1582,15 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        encoder_outputs: Optional[tuple] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, ProphetNetSeq2SeqModelOutput]:
+    ) -> Union[tuple, ProphetNetSeq2SeqModelOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -1751,7 +1723,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMi
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
@@ -1759,7 +1731,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMi
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, ProphetNetSeq2SeqLMOutput]:
+    ) -> Union[tuple, ProphetNetSeq2SeqLMOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -1971,14 +1943,14 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, ProphetNetDecoderLMOutput]:
+    ) -> Union[tuple, ProphetNetDecoderLMOutput]:
         r"""
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:

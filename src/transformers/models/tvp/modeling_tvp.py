@@ -16,13 +16,14 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import prune_linear_layer
@@ -54,8 +55,8 @@ class TvpVideoGroundingOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 class TvpLoss(nn.Module):
@@ -65,7 +66,7 @@ class TvpLoss(nn.Module):
     ground-truth / prediction (supervise class and box).
 
     Args:
-        losses (`List[str]`):
+        losses (`list[str]`):
             List of all the losses to be applied.
     """
 
@@ -122,7 +123,7 @@ class TvpLoss(nn.Module):
         Args:
             logits (`torch.FloatTensor`):
                 The output logits of head module.
-            labels (`List[torch.FloatTensor]`):
+            labels (`list[torch.FloatTensor]`):
                 List of tensors ([start, end, duration]), which contains start time, end time of the video corresponding to the text, and also the duration.
         """
         duration, start_time, end_time = labels
@@ -455,7 +456,7 @@ class TvpOutputLayer(nn.Module):
         return hidden_states
 
 
-class TvpEncodeLayer(nn.Module):
+class TvpEncodeLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.attention = TvpAttention(config)
@@ -511,16 +512,7 @@ class TvpEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                    (head_mask[i] if head_mask is not None else None),
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, attention_mask, head_mask[i], output_attentions)
+            layer_outputs = layer_module(hidden_states, attention_mask, head_mask[i], output_attentions)
 
             hidden_states = layer_outputs[0]
             if output_attentions:
@@ -862,7 +854,7 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
-        labels: Optional[Tuple[torch.Tensor]] = None,
+        labels: Optional[tuple[torch.Tensor]] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,

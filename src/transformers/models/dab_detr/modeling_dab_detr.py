@@ -16,13 +16,14 @@
 
 import math
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -69,7 +70,7 @@ class DabDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     """
 
     intermediate_hidden_states: Optional[torch.FloatTensor] = None
-    reference_points: Optional[Tuple[torch.FloatTensor]] = None
+    reference_points: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -114,7 +115,7 @@ class DabDetrModelOutput(Seq2SeqModelOutput):
     """
 
     intermediate_hidden_states: Optional[torch.FloatTensor] = None
-    reference_points: Optional[Tuple[torch.FloatTensor]] = None
+    reference_points: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -168,17 +169,17 @@ class DabDetrObjectDetectionOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    loss_dict: Optional[Dict] = None
+    loss_dict: Optional[dict] = None
     logits: Optional[torch.FloatTensor] = None
     pred_boxes: Optional[torch.FloatTensor] = None
-    auxiliary_outputs: Optional[List[Dict]] = None
+    auxiliary_outputs: Optional[list[dict]] = None
     last_hidden_state: Optional[torch.FloatTensor] = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 # Copied from transformers.models.detr.modeling_detr.DetrFrozenBatchNorm2d with Detr->DabDetr
@@ -384,7 +385,7 @@ def gen_sine_position_embeddings(pos_tensor, hidden_size=256):
 
         pos = torch.cat((pos_y, pos_x, pos_w, pos_h), dim=2)
     else:
-        raise ValueError("Unknown pos_tensor shape(-1):{}".format(pos_tensor.size(-1)))
+        raise ValueError(f"Unknown pos_tensor shape(-1):{pos_tensor.size(-1)}")
     return pos
 
 
@@ -432,7 +433,7 @@ class DetrAttention(nn.Module):
         object_queries: Optional[torch.Tensor] = None,
         key_value_states: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
         batch_size, q_len, embed_dim = hidden_states.size()
         # add position embeddings to the hidden states before projecting to queries and keys
@@ -511,7 +512,7 @@ class DabDetrAttention(nn.Module):
         key_states: Optional[torch.Tensor] = None,
         value_states: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         batch_size, q_len, _ = hidden_states.size()
@@ -702,7 +703,7 @@ class DabDetrDecoderLayerFFN(nn.Module):
 
 
 # Modified from transformers.models.detr.modeling_detr.DetrEncoderLayer with DetrEncoderLayer->DabDetrEncoderLayer,DetrConfig->DabDetrConfig
-class DabDetrEncoderLayer(nn.Module):
+class DabDetrEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: DabDetrConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -764,7 +765,7 @@ class DabDetrEncoderLayer(nn.Module):
 
 
 # Modified from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrDecoderLayer with ConditionalDetr->DabDetr
-class DabDetrDecoderLayer(nn.Module):
+class DabDetrDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: DabDetrConfig, is_first: bool = False):
         super().__init__()
         self.self_attn = DabDetrDecoderLayerSelfAttention(config)
@@ -976,21 +977,12 @@ class DabDetrEncoder(DabDetrPreTrainedModel):
             # we add object_queries * pos_scaler as extra input to the encoder_layer
             scaled_object_queries = object_queries * pos_scales
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    encoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    scaled_object_queries,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask=attention_mask,
-                    object_queries=scaled_object_queries,
-                    output_attentions=output_attentions,
-                )
+            layer_outputs = encoder_layer(
+                hidden_states,
+                attention_mask=attention_mask,
+                object_queries=scaled_object_queries,
+                output_attentions=output_attentions,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -1138,29 +1130,16 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
                 reference_anchor_size[..., 1] / obj_center[..., 3]
             ).unsqueeze(-1)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    None,
-                    object_queries,
-                    query_pos,
-                    query_sine_embed,
-                    encoder_hidden_states,
-                    memory_key_padding_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=None,
-                    object_queries=object_queries,
-                    query_position_embeddings=query_pos,
-                    query_sine_embed=query_sine_embed,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=memory_key_padding_mask,
-                    output_attentions=output_attentions,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                None,  # attention_mask
+                object_queries,
+                query_pos,
+                query_sine_embed,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                encoder_attention_mask=memory_key_padding_mask,
+                output_attentions=output_attentions,
+            )
 
             # iter update
             hidden_states = layer_outputs[0]
@@ -1254,7 +1233,7 @@ class DabDetrModel(DabDetrPreTrainedModel):
 
         self.num_patterns = config.num_patterns
         if not isinstance(self.num_patterns, int):
-            logger.warning("num_patterns should be int but {}".format(type(self.num_patterns)))
+            logger.warning(f"num_patterns should be int but {type(self.num_patterns)}")
             self.num_patterns = 0
         if self.num_patterns > 0:
             self.patterns = nn.Embedding(self.num_patterns, self.hidden_size)
@@ -1290,7 +1269,7 @@ class DabDetrModel(DabDetrPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], DabDetrModelOutput]:
+    ) -> Union[tuple[torch.FloatTensor], DabDetrModelOutput]:
         r"""
         decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
             Not used by default. Can be used to mask object queries.
@@ -1541,11 +1520,11 @@ class DabDetrForObjectDetection(DabDetrPreTrainedModel):
         encoder_outputs: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[List[dict]] = None,
+        labels: Optional[list[dict]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], DabDetrObjectDetectionOutput]:
+    ) -> Union[tuple[torch.FloatTensor], DabDetrObjectDetectionOutput]:
         r"""
         decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
             Not used by default. Can be used to mask object queries.
@@ -1555,7 +1534,7 @@ class DabDetrForObjectDetection(DabDetrPreTrainedModel):
         decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
             Optionally, instead of initializing the queries with a tensor of zeros, you can choose to directly pass an
             embedded representation.
-        labels (`List[Dict]` of len `(batch_size,)`, *optional*):
+        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
             Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
             following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
             respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes

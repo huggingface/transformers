@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -26,6 +26,7 @@ from torch.nn import CrossEntropyLoss
 from ...activations import ACT2FN
 from ...cache_utils import MambaCache
 from ...generation import GenerationMixin
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
@@ -343,7 +344,7 @@ class MambaRMSNorm(nn.Module):
         return f"{self.weight.shape[0]}, eps={self.variance_epsilon}"
 
 
-class MambaBlock(nn.Module):
+class MambaBlock(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.config = config
@@ -449,7 +450,7 @@ class MambaOutput(ModelOutput):
 
     last_hidden_state: Optional[torch.FloatTensor] = None
     cache_params: Optional[MambaCache] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -477,7 +478,7 @@ class MambaCausalLMOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
     cache_params: Optional[MambaCache] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 @auto_docstring
@@ -517,7 +518,7 @@ class MambaModel(MambaPreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, MambaOutput]:
+    ) -> Union[tuple, MambaOutput]:
         r"""
         cache_params (`MambaCache`, *optional*):
             If passed along, the model uses the previous state in all the blocks (which will give the output for the
@@ -561,17 +562,12 @@ class MambaModel(MambaPreTrainedModel):
         hidden_states = inputs_embeds
         all_hidden_states = () if output_hidden_states else None
         for mixer_block in self.layers:
-            if self.gradient_checkpointing and self.training:
-                hidden_states = self._gradient_checkpointing_func(
-                    mixer_block.__call__, hidden_states, cache_params, cache_position, attention_mask
-                )
-            else:
-                hidden_states = mixer_block(
-                    hidden_states,
-                    cache_params=cache_params,
-                    cache_position=cache_position,
-                    attention_mask=attention_mask,
-                )
+            hidden_states = mixer_block(
+                hidden_states,
+                cache_params=cache_params,
+                cache_position=cache_position,
+                attention_mask=attention_mask,
+            )
 
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -620,8 +616,8 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
         return self.backbone.set_input_embeddings(new_embeddings)
 
     def _update_model_kwargs_for_generation(
-        self, outputs: ModelOutput, model_kwargs: Dict[str, Any], num_new_tokens: int = 1, **kwargs
-    ) -> Dict[str, Any]:
+        self, outputs: ModelOutput, model_kwargs: dict[str, Any], num_new_tokens: int = 1, **kwargs
+    ) -> dict[str, Any]:
         model_kwargs["cache_params"] = outputs.get("cache_params", None)
         if (
             model_kwargs.get("use_cache", True)
@@ -699,7 +695,7 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs,  # for now we need this for generation
-    ) -> Union[Tuple, MambaCausalLMOutput]:
+    ) -> Union[tuple, MambaCausalLMOutput]:
         r"""
         cache_params (`MambaCache`, *optional*):
             If passed along, the model uses the previous state in all the blocks (which will give the output for the
