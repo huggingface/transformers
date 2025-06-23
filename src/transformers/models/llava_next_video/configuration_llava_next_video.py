@@ -55,7 +55,7 @@ class LlavaNextVideoConfig(PretrainedConfig):
         image_grid_pinpoints (`List`, *optional*, defaults to `[[336, 672], [672, 336], [672, 672], [1008, 336], [336, 1008]]`):
             A list of possible resolutions to use for processing high resolution images. Each item in the list should be a tuple or list
             of the form `(height, width)`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+        tie_word_embeddings (`bool`, *optional*, defaults to True):
             Whether the model's input and output word embeddings should be tied.
         video_token_index (`int`, *optional*, defaults to 32000):
             The video token index to encode the image prompt.

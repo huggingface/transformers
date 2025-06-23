@@ -637,11 +637,11 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to True):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+        tie_word_embeddings (`bool`, *optional*, defaults to True):
             Whether the model's input and output word embeddings should be tied.
         rope_theta (`float`, *optional*, defaults to 1000000.0):
             The base period of the RoPE embeddings.
-        use_sliding_window (`bool`, *optional*, defaults to `False`):
+        use_sliding_window (`bool`, *optional*, defaults to True):
             Whether to use sliding window attention.
         sliding_window (`int`, *optional*, defaults to 32768):
             Sliding window attention (SWA) window size. If not specified, will default to `4096`.
