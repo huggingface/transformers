@@ -684,7 +684,7 @@ class RagModelIntegrationTests(unittest.TestCase):
     def setUpClass(cls):
         cls.temp_dir = tempfile.TemporaryDirectory()
         cls.dataset_path = cls.temp_dir.name
-        cls.index_path = os.path.join(cls.temp_dir.name, "index")
+        cls.index_path = os.path.join(cls.temp_dir.name, "index.faiss")
 
         ds = load_dataset("hf-internal-testing/wiki_dpr_dummy")["train"]
         ds.save_to_disk(cls.dataset_path)
@@ -693,7 +693,7 @@ class RagModelIntegrationTests(unittest.TestCase):
                 "wget",
                 "-O",
                 f"{cls.index_path}",
-                "https://huggingface.co/datasets/hf-internal-testing/wiki_dpr_dummy/resolve/main/index",
+                "https://huggingface.co/datasets/hf-internal-testing/wiki_dpr_dummy/resolve/main/index.faiss",
             ]
         )
 
@@ -1068,7 +1068,7 @@ class RagModelSaveLoadTests(unittest.TestCase):
     def setUpClass(cls):
         cls.temp_dir = tempfile.TemporaryDirectory()
         cls.dataset_path = cls.temp_dir.name
-        cls.index_path = os.path.join(cls.temp_dir.name, "index")
+        cls.index_path = os.path.join(cls.temp_dir.name, "index.faiss")
 
         ds = load_dataset("hf-internal-testing/wiki_dpr_dummy")["train"]
         ds.save_to_disk(cls.dataset_path)
@@ -1077,7 +1077,7 @@ class RagModelSaveLoadTests(unittest.TestCase):
                 "wget",
                 "-O",
                 f"{cls.index_path}",
-                "https://huggingface.co/datasets/hf-internal-testing/wiki_dpr_dummy/resolve/main/index",
+                "https://huggingface.co/datasets/hf-internal-testing/wiki_dpr_dummy/resolve/main/index.faiss",
             ]
         )
 
