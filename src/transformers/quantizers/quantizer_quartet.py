@@ -97,7 +97,8 @@ class QuartetHfQuantizer(HfQuantizer):
 
         if param_name.endswith(".weight_q"):
             module.weight_q = torch.nn.Parameter(
-                param_value.to(target_device), requires_grad=False,
+                param_value.to(target_device),
+                requires_grad=False,
             )
             if not self.quantization_config.store_master_weights:
                 module.weight = None
@@ -127,9 +128,7 @@ class QuartetHfQuantizer(HfQuantizer):
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         from quartet_qat import QuartetLinear
 
-        quartet_modules = {
-            name: module for name, module in model.named_modules() if isinstance(module, QuartetLinear)
-        }
+        quartet_modules = {name: module for name, module in model.named_modules() if isinstance(module, QuartetLinear)}
         for name, module in tqdm(quartet_modules.items(), desc="Pre-processing Quartet modules", leave=False):
             if not self.quantization_config.store_master_weights and module.weight is not None:
                 module.weight = None

@@ -24,7 +24,8 @@ if is_torch_available():
 
 
 if is_quartet_qat_available():
-    from quartet_qat import QuartetConfig as QuartetLinearConfig, QuartetDtype
+    from quartet_qat import QuartetConfig as QuartetLinearConfig
+    from quartet_qat import QuartetDtype
 
 from transformers.utils.quantization_config import QuartetConfig
 
