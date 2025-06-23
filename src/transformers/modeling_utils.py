@@ -4658,7 +4658,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # step for e.g. bitsandbytes). See https://github.com/huggingface/transformers/issues/20287 for details.
         # Update: to extend _keep_in_fp32_modules flag feature, it can also be used to force modules that should stay in fp32
         if model._keep_in_fp32_modules is not None and (
-            torch_dtype == torch.float16 or torch_dtype == torch.bfloat16 or getattr(hf_quantizer, "use_keep_in_fp32_modules", False)
+            torch_dtype == torch.float16
+            or torch_dtype == torch.bfloat16
+            or getattr(hf_quantizer, "use_keep_in_fp32_modules", False)
         ):
             # We need to match exact layers, so we add either `.` on each side, or start/end of string
             keep_in_fp32_regex = re.compile(

@@ -14,13 +14,12 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Csm
-
+# Kyutai Speech-To-Text 
 ## Overview
 
-Kyutai STT is a speech-to-text model architecture, based on the Mimi codec to encode audio in discrete tokens inferred in a streaming fashion and Moshi-like autoregressive decoder. Kyutai's lab released two checkpoints:
-- [kyutai/stt-1b-en_fr](https://huggingface.co/kyutai/stt-1b-en_fr): 1B model that understands English and French
-- [kyutai/stt-2.6b-en](https://huggingface.co/kyutai/stt-2.6b-en): 2.6B English-only model optimized to be as accurate as possible
+Kyutai STT is a speech-to-text model architecture based on the [Mimi codec](https://huggingface.co/docs/transformers/en/model_doc/mimi), which encodes audio into discrete tokens in a streaming fashion, and a [Moshi-like](https://huggingface.co/docs/transformers/en/model_doc/moshi) autoregressive decoder. Kyutai’s lab has released two model checkpoints:
+- [kyutai/stt-1b-en_fr](https://huggingface.co/kyutai/stt-1b-en_fr): a 1B-parameter model capable of transcribing both English and French
+- [kyutai/stt-2.6b-en](https://huggingface.co/kyutai/stt-2.6b-en): a 2.6B-parameter model focused solely on English, optimized for maximum transcription accuracy
 
 <div class="flex justify-center">
     <img src="https://huggingface.co/datasets/eustlb/documentation-images/resolve/main/kyutai_stt.png"/>
@@ -30,30 +29,34 @@ Kyutai STT is a speech-to-text model architecture, based on the Mimi codec to en
 
 ### Inference
 
-CSM can be used to simply generate speech from a text prompt:
-
 ```python
 import torch
 from datasets import load_dataset, Audio
 from transformers import KyutaiSpeechToTextProcessor, KyutaiSpeechToTextForConditionalGeneration
 
+# 1. load the model and the processor
 torch_device = "cuda" if torch.cuda.is_available() else "cpu"
 model_id = "/home/eustache_lebihan/add-moshi-asr/stt-2.6b-en"
 
 processor = KyutaiSpeechToTextProcessor.from_pretrained(model_id)
 model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
 
+# 2. load audio samples
 ds = load_dataset(
     "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
 )
 ds = ds.cast_column("audio", Audio(sampling_rate=24000))
 
+# 3. prepare the model inputs
 inputs = processor(
     ds[0]["audio"]["array"],
 )
 inputs.to(torch_device)
 
+# 4. infer the model
 output_tokens = model.generate(**inputs)
+
+# 5. decode the generated tokens
 print(processor.batch_decode(output_tokens, skip_special_tokens=True))
 ```
 
@@ -64,23 +67,28 @@ import torch
 from datasets import load_dataset, Audio
 from transformers import KyutaiSpeechToTextProcessor, KyutaiSpeechToTextForConditionalGeneration
 
+# 1. load the model and the processor
 torch_device = "cuda" if torch.cuda.is_available() else "cpu"
 model_id = "/home/eustache_lebihan/add-moshi-asr/stt-2.6b-en"
 
 processor = KyutaiSpeechToTextProcessor.from_pretrained(model_id)
 model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
 
+# 2. load audio samples
 ds = load_dataset(
     "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
 )
 ds = ds.cast_column("audio", Audio(sampling_rate=24000))
 
-# Prepare inputs for batch inference for 4 samples
+# 3. prepare the model inputs
 audio_arrays = [ds[i]["audio"]["array"] for i in range(4)]
 inputs = processor(audio_arrays, return_tensors="pt", padding=True)
 inputs = inputs.to(torch_device)
 
+# 4. infer the model
 output_tokens = model.generate(**inputs)
+
+# 5. decode the generated tokens
 decoded_outputs = processor.batch_decode(output_tokens, skip_special_tokens=True)
 for output in decoded_outputs:
     print(output)
