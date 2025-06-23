@@ -42,9 +42,6 @@ class KyutaiSpeechToTextFeatureExtractor(EncodecFeatureExtractor):
     This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
     most of the main methods. Users should refer to this superclass for more information regarding those methods.
 
-    Instantiating a feature extractor with the defaults will yield a similar configuration to that of the
-    [facebook/kyutai_speech_to_text_24khz](https://huggingface.co/facebook/kyutai_speech_to_text_24khz) architecture.
-
     Args:
         feature_size (`int`, *optional*, defaults to 1):
             The feature dimension of the extracted features. Use 1 for mono, 2 for stereo.
@@ -255,6 +252,8 @@ class KyutaiSpeechToTextModel(MoshiModel):
 
 
 class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMixin, PreTrainedModel):
+    _keep_in_fp32_modules = ["codec_model"]
+
     def __init__(self, config):
         super().__init__(config)
         self.codec_model = AutoModel.from_config(config.codec_config)
@@ -321,7 +320,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
 
         audio_window_size = model_kwargs.get("audio_window_size", None)
         if audio_window_size is None:
-            audio_window_size = int(model_kwargs["input_values"].shape[-1] / self.config.frame_size)
+            audio_window_size = self.codec_model.get_encoded_length(model_kwargs["input_values"].shape[-1]).item()
             model_kwargs["audio_window_size"] = audio_window_size
 
         batch_size = inputs.shape[0]
@@ -470,7 +469,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
 
         # TODO: @eustlb, we should have per-batch-idx values
         # here we do not use padding_mask to be aligned to what's done in the original codebase
-        max_audio_frames = int(input_values.shape[-1] / self.codec_model.config.frame_size)
+        max_audio_frames = self.codec_model.get_encoded_length(input_values.shape[-1])
 
         if max_new_tokens is None or max_new_tokens > max_audio_frames:
             if max_new_tokens is not None:
