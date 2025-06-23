@@ -31,7 +31,7 @@ Refer to the table below to quickly help you identify the features relevant to y
 | data preloading | yes | no |
 | torch_empty_cache_steps | no | yes |
 | torch.compile | yes | no |
-| SDPA | yes | yes |
+| scaled dot production attention (SDPA) | yes | yes |
 
 ## Trainer
 
