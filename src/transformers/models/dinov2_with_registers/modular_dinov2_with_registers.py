@@ -21,7 +21,11 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ....transformers.models.dinov2.modeling_dinov2 import (
+from ...configuration_utils import PretrainedConfig
+from ...modeling_outputs import BackboneOutput, ImageClassifierOutput
+from ...utils import logging, torch_int
+from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
+from ..dinov2.modeling_dinov2 import (
     Dinov2Backbone,
     Dinov2Encoder,
     Dinov2ForImageClassification,
@@ -29,10 +33,6 @@ from ....transformers.models.dinov2.modeling_dinov2 import (
     Dinov2PatchEmbeddings,
     Dinov2PreTrainedModel,
 )
-from ...configuration_utils import PretrainedConfig
-from ...modeling_outputs import BackboneOutput, ImageClassifierOutput
-from ...utils import logging, torch_int
-from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
 logger = logging.get_logger(__name__)

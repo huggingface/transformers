@@ -26,24 +26,7 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 
-from transformers.activations import ACT2FN
-from transformers.models.jamba.modeling_jamba import HybridMambaAttentionDynamicCache
-from transformers.models.llama.modeling_llama import (
-    LlamaAttention,
-    LlamaForCausalLM,
-    LlamaMLP,
-    LlamaRMSNorm,
-    LlamaRotaryEmbedding,
-    apply_rotary_pos_emb,
-    eager_attention_forward,
-)
-from transformers.models.mamba2.modeling_mamba2 import (
-    MambaRMSNormGated,
-    pad_tensor_by_size,
-    reshape_into_chunks,
-    segment_sum,
-)
-
+from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -53,6 +36,22 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_2_ssm_available
+from ..jamba.modeling_jamba import HybridMambaAttentionDynamicCache
+from ..llama.modeling_llama import (
+    LlamaAttention,
+    LlamaForCausalLM,
+    LlamaMLP,
+    LlamaRMSNorm,
+    LlamaRotaryEmbedding,
+    apply_rotary_pos_emb,
+    eager_attention_forward,
+)
+from ..mamba2.modeling_mamba2 import (
+    MambaRMSNormGated,
+    pad_tensor_by_size,
+    reshape_into_chunks,
+    segment_sum,
+)
 from .configuration_falcon_h1 import FalconH1Config
 
 
@@ -302,7 +301,7 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     return hidden_states
 
 
-# Adapted from transformers.models.mamba2.modeling_mamba2.Mamba2Mixer
+# Adapted from ..mamba2.modeling_mamba2.Mamba2Mixer
 class FalconH1Mixer(nn.Module):
     """
     FalconH1Mixer is identical to classic Mamba2 mixer classes but differs on two different things
@@ -995,7 +994,7 @@ def compute_mup_vector(config):
 
 
 @auto_docstring
-# Adapted from transformers.models.jamba.modeling_jamba.JambaModel
+# Adapted from ..jamba.modeling_jamba.JambaModel
 class FalconH1Model(FalconH1PreTrainedModel):
     def __init__(self, config: FalconH1Config):
         super().__init__(config)

@@ -18,11 +18,17 @@ from typing import Optional, Union
 import torch
 import torch.utils.checkpoint
 
-from transformers.models.instructblip.configuration_instructblip import (
+from ...configuration_utils import PretrainedConfig
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...processing_utils import Unpack
+from ...utils import logging
+from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
+from ..instructblip.configuration_instructblip import (
     InstructBlipQFormerConfig,
     InstructBlipVisionConfig,
 )
-from transformers.models.instructblip.modeling_instructblip import (
+from ..instructblip.modeling_instructblip import (
     InstructBlipForConditionalGeneration,
     InstructBlipForConditionalGenerationModelOutput,
     InstructBlipModel,
@@ -31,13 +37,6 @@ from transformers.models.instructblip.modeling_instructblip import (
     InstructBlipVisionModel,
     TransformersKwargs,
 )
-
-from ...configuration_utils import PretrainedConfig
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
-from ...processing_utils import Unpack
-from ...utils import logging
-from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)

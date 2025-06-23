@@ -22,7 +22,6 @@ from torch import nn
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import Wav2Vec2BaseModelOutput
-from ...modeling_utils import PreTrainedModel
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Adapter,
     Wav2Vec2Encoder,
@@ -134,7 +133,7 @@ class Data2VecAudioAdapter(Wav2Vec2Adapter):
     pass
 
 
-class Data2VecAudioPreTrainedModel(PreTrainedModel, Wav2Vec2PreTrainedModel):
+class Data2VecAudioPreTrainedModel(Wav2Vec2PreTrainedModel):
     config_class = Data2VecAudioConfig
     base_model_prefix = "data2vec_audio"
     main_input_name = "input_values"
