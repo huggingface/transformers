@@ -18,7 +18,7 @@ import unittest
 
 from datasets import load_dataset
 
-from transformers import UdopConfig, is_torch_available, is_vision_available
+from transformers import UdopConfig, is_torch_available
 from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,

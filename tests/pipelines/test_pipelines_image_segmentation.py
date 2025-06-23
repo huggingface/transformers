@@ -679,7 +679,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         )
 
         # Different task
-        outputs = image_segmenter(file, threshold=0.99, subtask="instance")
+        outputs = image_segmenter(image, threshold=0.99, subtask="instance")
         # Shortening by hashing
         for o in outputs:
             o["mask"] = mask_to_test_readable(o["mask"])
@@ -701,7 +701,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         )
 
         # Different task
-        outputs = image_segmenter(file, subtask="semantic")
+        outputs = image_segmenter(image, subtask="semantic")
         # Shortening by hashing
         for o in outputs:
             o["mask"] = mask_to_test_readable(o["mask"])

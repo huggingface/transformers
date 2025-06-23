@@ -1727,7 +1727,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         EXPECTED_TRANSCRIPTS = [
             "夏の時期の時期でした",
-            " It was the time of day and all of the pens left during the summer."
+            " It was the time of day and all of the pens left during the summer.",
         ]
 
         generated_ids = model.generate(
