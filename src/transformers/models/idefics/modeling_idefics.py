@@ -32,6 +32,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PretrainedConfig, PreTrainedModel
 from ...processing_utils import Unpack
@@ -668,7 +669,7 @@ class IdeficsAttention(nn.Module):
 
 
 # this was adapted from LlamaDecoderLayer
-class IdeficsDecoderLayer(nn.Module):
+class IdeficsDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: IdeficsConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -749,7 +750,7 @@ class IdeficsDecoderLayer(nn.Module):
         return outputs
 
 
-class IdeficsGatedCrossAttentionLayer(nn.Module):
+class IdeficsGatedCrossAttentionLayer(GradientCheckpointingLayer):
     def __init__(self, config: IdeficsConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -1185,95 +1186,32 @@ class IdeficsModel(IdeficsPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            def vblock(
-                main_block,
-                hidden_states,
-                attention_mask,
-                position_ids,
-                past_key_value,
-                image_hidden_states,
-                image_attention_mask,
-                cross_attention_gate,
-                output_attentions,
-                use_cache,
-                layer_idx,
-                cross_layer_interval,
-                gated_cross_attn_layers,
-                cache_position,
-            ):
-                # TODO(ls): Add cross attention values to respective lists
-                if layer_idx % cross_layer_interval == 0:
-                    xblock = gated_cross_attn_layers[layer_idx // cross_layer_interval]
-                    outputs = xblock(
-                        hidden_states,
-                        attention_mask=attention_mask,
-                        image_hidden_states=image_hidden_states,
-                        image_attention_mask=image_attention_mask,
-                        cross_attention_gate=cross_attention_gate,
-                        output_attentions=output_attentions,
-                        use_cache=use_cache,
-                        past_key_value=None,  # not implemented
-                        **kwargs,
-                    )
-                    hidden_states = outputs[0]
-
-                layer_outputs = main_block(
-                    hidden_states,
-                    attention_mask=attention_mask,
-                    position_ids=position_ids,
-                    past_key_value=past_key_value,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                    **kwargs,
-                )
-
-                return layer_outputs
-
-            if self.gradient_checkpointing and self.training:
-                past_key_values = None
-                if use_cache:
-                    logger.warning_once(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
-
-                layer_outputs = self._gradient_checkpointing_func(
-                    vblock,
-                    decoder_layer,
+            # TODO(ls): Add cross attention values to respective lists
+            if idx % self.cross_layer_interval == 0:
+                cross_attn_block = self.gated_cross_attn_layers[idx // self.cross_layer_interval]
+                outputs = cross_attn_block(
                     hidden_states,
                     attention_mask,
-                    position_ids,
-                    past_key_values,
                     image_hidden_states,
-                    image_attention_mask,
-                    cross_attention_gate,
-                    output_attentions,
-                    use_cache,
-                    idx,
-                    self.cross_layer_interval,
-                    self.gated_cross_attn_layers,
-                    cache_position,
-                )
-            else:
-                layer_outputs = vblock(
-                    decoder_layer,
-                    hidden_states,
-                    attention_mask=attention_mask,
-                    position_ids=position_ids,
-                    past_key_value=past_key_values,
-                    image_hidden_states=image_hidden_states,
                     image_attention_mask=image_attention_mask,
                     cross_attention_gate=cross_attention_gate,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
-                    layer_idx=idx,
-                    cross_layer_interval=self.cross_layer_interval,
-                    gated_cross_attn_layers=self.gated_cross_attn_layers,
-                    cache_position=cache_position,
+                    past_key_value=None,  # not implemented
                     **kwargs,
                 )
+                hidden_states = outputs[0]
 
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                **kwargs,
+            )
             hidden_states = layer_outputs[0]
 
             if use_cache:
