@@ -3751,6 +3751,13 @@ class Trainer:
         with self.compute_loss_context_manager():
             loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
 
+        actual_bs = None
+        if num_items_in_batch is not None:
+            actual_bs = num_items_in_batch[0].item()
+        else:
+            if "labels" in inputs:
+                actual_bs = inputs["labels"].shape[0]
+
         del inputs
         if (
             self.args.torch_empty_cache_steps is not None
@@ -3780,6 +3787,17 @@ class Trainer:
             kwargs["learning_rate"] = self._get_learning_rate()
 
         if self.args.n_gpu > 1:
+            if actual_bs:
+                if actual_bs >= self.args.n_gpu:
+                    assert loss.shape[0] == self.args.n_gpu, (
+                        f"Expected loss to have {self.args.n_gpu} elements, but got {loss.shape[0]} elements. "
+                        "This usually happens when the model does not return a loss for each device."
+                    )
+                else:
+                    assert loss.shape[0] == actual_bs, (
+                        f"Expected loss to have {actual_bs} elements, but got {loss.shape[0]} elements. "
+                        "This usually happens when the model does not return a loss for each device."
+                    )
             loss = loss.mean()  # mean() to average on multi-gpu parallel training
 
         if self.use_apex:
