@@ -79,7 +79,7 @@ class Glm4vVisionText2TextModelTester:
             "output_channels": 64,
             "hidden_act": "silu",
             "max_position_embeddings": 512,
-            "rope_scaling": {"type": "mrope", "mrope_section": [2, 1, 1]},
+            "rope_scaling": {"type": "default", "mrope_section": [2, 1, 1]},
             "max_window_layers": 3,
             "rope_theta": 10000,
             "tie_word_embeddings": True,
