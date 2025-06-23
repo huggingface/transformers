@@ -61,7 +61,7 @@ class JanusImageProcessor(BaseImageProcessor):
     Constructs a JANUS image processor.
 
     Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
+        do_resize (`bool`, *optional*, defaults to True):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
             `do_resize` parameter in the `preprocess` method.
         size (`dict`, *optional*, defaults to `{"height": 384, "width": 384}`):
@@ -73,13 +73,13 @@ class JanusImageProcessor(BaseImageProcessor):
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
             overridden by the `resample` parameter in the `preprocess` method.
-        do_rescale (`bool`, *optional*, defaults to `True`):
+        do_rescale (`bool`, *optional*, defaults to True):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
             `do_rescale` parameter in the `preprocess` method.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Only has an effect if `do_rescale` is set to `True`. Can be
             overridden by the `rescale_factor` parameter in the `preprocess` method.
-        do_normalize (`bool`, *optional*, defaults to `True`):
+        do_normalize (`bool`, *optional*, defaults to True):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method. Can be overridden by the `do_normalize` parameter in the `preprocess` method.
         image_mean (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):

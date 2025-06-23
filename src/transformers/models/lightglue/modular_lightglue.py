@@ -77,7 +77,7 @@ class LightGlueConfig(PretrainedConfig):
             The activation function to be used in the hidden layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        attention_bias (`bool`, *optional*, defaults to `True`):
+        attention_bias (`bool`, *optional*, defaults to True):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         trust_remote_code (`bool`, *optional*, defaults to `False`):
             Whether to trust remote code when using other models than SuperPoint as keypoint detector.

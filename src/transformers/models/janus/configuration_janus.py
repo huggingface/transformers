@@ -56,7 +56,7 @@ class JanusVisionConfig(PretrainedConfig):
             `"relu"`, `"selu"`, and `"gelu_new"` are supported.
         mlp_ratio (`float`, *optional*, defaults to 4.0):
             Ratio of MLP hidden dimensionality to embedding dimensionality.
-        attention_bias (`bool`, *optional*, defaults to `True`):
+        attention_bias (`bool`, *optional*, defaults to True):
             Whether to add a bias to the queries, keys, and values in the attention layers.
         hidden_dropout_rate (`float`, *optional*, defaults to 0.0):
             The dropout probability for fully connected layers in the encoder.

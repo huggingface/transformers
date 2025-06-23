@@ -70,7 +70,7 @@ class Gemma3TextConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
+        use_cache (`bool`, *optional*, defaults to True):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
         pad_token_id (`int`, *optional*, defaults to 0):
@@ -79,11 +79,11 @@ class Gemma3TextConfig(PretrainedConfig):
             End of stream token id.
         bos_token_id (`int`, *optional*, defaults to 2):
             Beginning of stream token id.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+        tie_word_embeddings (`bool`, *optional*, defaults to True):
             Whether to tie weight embeddings
         rope_theta (`float`, *optional*, defaults to 1000000.0):
             The base period of the RoPE embeddings.
-        attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
+        attention_bias (`bool`, defaults to `False`, *optional*, defaults to True):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.

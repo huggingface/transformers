@@ -700,10 +700,10 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[tuple, SmolVLMBaseModelOutputWithPast]:
         r"""
-        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
-            Mask to avoid performing attention on padding pixel indices.
-        image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The hidden states of the image encoder after modality projection.
+        pixel_attention_mask (<fill_type>):
+            <fill_docstring>
+        image_hidden_states (<fill_type>):
+            <fill_docstring>
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
