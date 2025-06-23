@@ -16,12 +16,12 @@
 import json
 import os
 import shutil
-import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
 
 import numpy as np
+import requests
 
 from transformers import BartTokenizer, T5Tokenizer
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
@@ -688,14 +688,11 @@ class RagModelIntegrationTests(unittest.TestCase):
 
         ds = load_dataset("hf-internal-testing/wiki_dpr_dummy")["train"]
         ds.save_to_disk(cls.dataset_path)
-        subprocess.run(
-            [
-                "wget",
-                "-O",
-                f"{cls.index_path}",
-                "https://huggingface.co/datasets/hf-internal-testing/wiki_dpr_dummy/resolve/main/index.faiss",
-            ]
-        )
+
+        url = "https://huggingface.co/datasets/hf-internal-testing/wiki_dpr_dummy/resolve/main/index.faiss"
+        response = requests.get(url, stream=True)
+        with open(cls.index_path, "wb") as fp:
+            fp.write(response.content)
 
     @classmethod
     def tearDownClass(cls):
@@ -1072,14 +1069,11 @@ class RagModelSaveLoadTests(unittest.TestCase):
 
         ds = load_dataset("hf-internal-testing/wiki_dpr_dummy")["train"]
         ds.save_to_disk(cls.dataset_path)
-        subprocess.run(
-            [
-                "wget",
-                "-O",
-                f"{cls.index_path}",
-                "https://huggingface.co/datasets/hf-internal-testing/wiki_dpr_dummy/resolve/main/index.faiss",
-            ]
-        )
+
+        url = "https://huggingface.co/datasets/hf-internal-testing/wiki_dpr_dummy/resolve/main/index.faiss"
+        response = requests.get(url, stream=True)
+        with open(cls.index_path, "wb") as fp:
+            fp.write(response.content)
 
     @classmethod
     def tearDownClass(cls):
