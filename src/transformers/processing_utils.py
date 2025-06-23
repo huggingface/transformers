@@ -36,7 +36,7 @@ from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
 from .image_utils import ChannelDimension, is_vision_available, load_image
 from .utils.chat_template_utils import render_jinja_template
-from .video_utils import VideoMetadata, load_video, VideoInput
+from .video_utils import VideoMetadata, load_video, process_video_object
 
 
 if is_vision_available():
@@ -1560,10 +1560,6 @@ class ProcessorMixin(PushToHubMixin):
                             batch_audios.append(load_audio(fname, sampling_rate=mm_load_kwargs["sampling_rate"]))
 
                     for fname in video_fnames:
-                        # temporary solution to handle different video inputs
-                        video = None
-                        metadata = None
-
                         # Case 1: List of image file paths
                         if isinstance(fname, (list, tuple)) and isinstance(fname[0], str):
                             video = [np.array(load_image(image_fname)) for image_fname in fname]
@@ -1583,10 +1579,18 @@ class ProcessorMixin(PushToHubMixin):
                         else:
                             # video is an object, not a file path or URL, it is a VideoInput type
                             # incase of video object, we expect user to pass fps in
-                            video, metadata = video_utils.process_video_object(
+                            metadata = mm_load_kwargs.get("video_metadata", None)
+                            if metadata is None:
+                                raise ValueError(
+                                    "When passing a video object, you must provide `video_metadata` with at least `fps`."
+                                )
+                            video, metadata = process_video_object(
                                 video_obj=fname,
-                                fps=mm_load_kwargs["fps"],
-                                sample_indices_fn=mm_load_kwargs["sample_indices_fn"]
+                                video_fps=mm_load_kwargs["video_fps"],
+                                sampling_fps=mm_load_kwargs["sampling_fps"],
+                                video_load_backend=mm_load_kwargs["video_load_backend"],
+                                sample_indices_fn=mm_load_kwargs["sample_indices_fn"],
+                                kwargs=mm_load_kwargs.get("video_load_kwargs", {}),
                             )
                         
                         videos.append(video)
