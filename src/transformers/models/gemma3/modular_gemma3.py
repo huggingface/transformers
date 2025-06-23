@@ -15,7 +15,6 @@
 # limitations under the License.
 import copy
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Any, Optional, Union
 
 import torch
@@ -346,12 +345,10 @@ class Gemma3Config(PretrainedConfig):
         super().__init__(**kwargs)
 
 
-@dataclass
 class Gemma3ModelOutputWithPast(PaligemmaModelOutputWithPast):
     pass
 
 
-@dataclass
 class Gemma3CausalLMOutputWithPast(PaligemmaCausalLMOutputWithPast):
     pass
 

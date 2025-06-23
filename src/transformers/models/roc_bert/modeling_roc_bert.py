@@ -1023,6 +1023,12 @@ class RoCBertForPreTraining(RoCBertPreTrainedModel):
             attack sample pronunciation ids for computing the contrastive loss. Indices should be in `[-100, 0,
             ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+        attack_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices for the attack sample. Mask values selected in
+            `[0, 1]`: `1` for tokens that are NOT MASKED, `0` for MASKED tokens.
+        attack_token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Segment token indices to indicate different portions of the attack inputs. Indices are selected in `[0, 1]`:
+            `0` corresponds to a sentence A token, `1` corresponds to a sentence B token.
         labels_input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             target ids for computing the contrastive loss and masked_lm_loss . Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked),
@@ -1036,12 +1042,6 @@ class RoCBertForPreTraining(RoCBertPreTrainedModel):
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
             ignored (masked), the loss is only computed for the tokens with labels in `[0, ...,
             config.vocab_size]`
-        attack_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices for the attack sample. Mask values selected in
-            `[0, 1]`: `1` for tokens that are NOT MASKED, `0` for MASKED tokens.
-        attack_token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Segment token indices to indicate different portions of the attack inputs. Indices are selected in `[0, 1]`:
-            `0` corresponds to a sentence A token, `1` corresponds to a sentence B token.
         labels_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices for the label sample. Mask values selected in
             `[0, 1]`: `1` for tokens that are NOT MASKED, `0` for MASKED tokens.
