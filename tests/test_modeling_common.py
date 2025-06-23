@@ -3526,7 +3526,7 @@ class ModelTesterMixin:
             set_config_for_less_flaky_test(config)
             model = model_class(config)
             # TODO: standardize the interfaces for musicgen models, see other todo in this test
-            if model.__class__.__name__.startswith("Musicgen"):
+            if model.__class__.__name__ == "MusicgenMelodyForConditionalGeneration":
                 is_encoder_decoder = True
             else:
                 is_encoder_decoder = model.config.is_encoder_decoder
