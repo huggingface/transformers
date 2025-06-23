@@ -569,6 +569,8 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     all_generative_model_classes = ()
     greedy_sample_model_classes = (MusicgenForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"text-to-audio": MusicgenForConditionalGeneration} if is_torch_available() else {}
+    # Addition keys that are required for forward. MusicGen isn't encoder-decoder in config so we have to pass decoder ids as additional
+    additional_model_inputs = ["decoder_input_ids"]
     test_pruning = False  # training is not supported yet for MusicGen
     test_headmasking = False
     test_resize_embeddings = False
@@ -728,6 +730,9 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+
         for model_class in self.all_model_classes:
             self.check_musicgen_model_output_attentions(model_class, config, **inputs_dict)
             self.check_musicgen_model_output_attentions_from_config(model_class, config, **inputs_dict)
@@ -783,18 +788,6 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_tied_weights_keys(self):
         pass
 
-    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
-    def test_save_load_low_cpu_mem_usage(self):
-        pass
-
-    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
-    def test_save_load_low_cpu_mem_usage_checkpoints(self):
-        pass
-
-    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
-    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
-        pass
-
     # override since changing `output_hidden_states` / `output_attentions` from the top-level model config won't work
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -804,6 +797,9 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
         config.text_encoder.output_attentions = True
         config.decoder.output_attentions = True
+
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
 
         # no need to test all models as different heads yield the same functionality
         model_class = self.all_model_classes[0]
@@ -1036,45 +1032,22 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     @mark.flash_attn_test
     @slow
     def test_flash_attn_2_conversion(self):
-        if not self.has_attentions:
-            self.skipTest(reason="Model architecture does not support attentions")
-
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn_2:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
-
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    attn_implementation={"decoder": "flash_attention_2", "audio_encoder": None, "text_encoder": None},
-                ).to(torch_device)
-
-                for _, module in model.named_modules():
-                    if "FlashAttention" in module.__class__.__name__:
-                        return
-
-                self.assertTrue(False, "FlashAttention2 modules not found in model")
+        self.skipTest(reason="Musicgen doesn't use the MusicgenFlashAttention2 class method.")
 
     @require_torch_sdpa
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_sdpa_can_dispatch_on_flash(self):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
-        (device_type, major) = get_device_properties()
+        device_type, major, _ = get_device_properties()
         if device_type == "cuda" and major < 8:
             self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
         elif device_type == "rocm" and major < 9:
             self.skipTest(reason="This test requires an AMD GPU with compute capability >= 9.0")
-        else:
-            self.skipTest(reason="This test requires a Nvidia or AMD GPU")
+        elif device_type not in ["cuda", "rocm", "xpu"]:
+            self.skipTest(reason="This test requires a Nvidia or AMD GPU or an Intel XPU")
 
         torch.compiler.reset()
 
@@ -1234,18 +1207,6 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 self.assertTrue(model_eager.decoder.config._attn_implementation == "eager")
                 self.assertTrue(model_eager.config._attn_implementation == "eager")
 
-                for name, submodule in model_eager.named_modules():
-                    if "SdpaAttention" in submodule.__class__.__name__:
-                        raise ValueError("The eager model should not have SDPA attention layers")
-
-                has_sdpa = False
-                for name, submodule in model_sdpa.named_modules():
-                    if "SdpaAttention" in submodule.__class__.__name__:
-                        has_sdpa = True
-                        break
-                if not has_sdpa and model_sdpa.config.model_type != "falcon":
-                    raise ValueError("The SDPA model should have SDPA attention layers")
-
     def test_requires_grad_with_frozen_encoders(self):
         config = self.model_tester.get_config()
         for model_class in self.all_model_classes:
@@ -1274,6 +1235,10 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         )
     )
     def test_generation_tester_mixin_inheritance(self):
+        pass
+
+    @unittest.skip(reason=("MusicGen has a set of composite models which might not have SDPA themselves, e.g. T5."))
+    def test_sdpa_can_compile_dynamic(self):
         pass
 
 

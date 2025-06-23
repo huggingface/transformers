@@ -97,7 +97,7 @@ def translate_gt(gt: torch.Tensor, max_num_bins: int, reg_scale: int, up: torch.
         up (Tensor): Controls the upper bounds of the Weighting Function.
 
     Returns:
-        Tuple[Tensor, Tensor, Tensor]:
+        tuple[Tensor, Tensor, Tensor]:
             - indices (Tensor): Index of the left bin closest to each GT value, shape (N, ).
             - weight_right (Tensor): Weight assigned to the right bin, shape (N, ).
             - weight_left (Tensor): Weight assigned to the left bin, shape (N, ).
@@ -184,7 +184,7 @@ class DFineLoss(RTDetrLoss):
         weight_dict (`Dict`):
             Dictionary relating each loss with its weights. These losses are configured in DFineConf as
             `weight_loss_vfl`, `weight_loss_bbox`, `weight_loss_giou`, `weight_loss_fgl`, `weight_loss_ddf`
-        losses (`List[str]`):
+        losses (`list[str]`):
             List of all the losses to be applied. See `get_loss` for a list of all available losses.
         alpha (`float`):
             Parameter alpha used to compute the focal loss.

@@ -15,7 +15,7 @@
 
 from abc import ABC, abstractmethod
 from collections import UserDict
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -41,7 +41,7 @@ PROCESS_INPUTS_DOCSTRING = r"""
             Beam indices indicating to which beam hypothesis the `next_tokens` correspond.
         pad_token_id (`int`, *optional*):
             The id of the *padding* token.
-        eos_token_id (`Union[int, List[int]]`, *optional*):
+        eos_token_id (`Union[int, list[int]]`, *optional*):
             The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
         beam_indices (`torch.LongTensor`, *optional*):
             Beam indices indicating to which beam hypothesis each token correspond.
@@ -77,7 +77,7 @@ FINALIZE_INPUTS_DOCSTRING = r"""
             The beam indices indicating to which beam the `final_beam_tokens` shall be added.
         pad_token_id (`int`, *optional*):
             The id of the *padding* token.
-        eos_token_id (`Union[int, List[int]]`, *optional*):
+        eos_token_id (`Union[int, list[int]]`, *optional*):
             The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
 
     Return:
@@ -103,7 +103,7 @@ class BeamScorer(ABC):
         next_tokens: torch.LongTensor,
         next_indices: torch.LongTensor,
         **kwargs,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         raise NotImplementedError("This is an abstract method.")
 
     @abstractmethod
@@ -154,7 +154,7 @@ class BeamSearchScorer(BeamScorer):
             [`~transformers.BeamSearchScorer.finalize`].
         num_beam_groups (`int`, *optional*, defaults to 1):
             Number of groups to divide `num_beams` into in order to ensure diversity among different groups of beams.
-            See [this paper](https://arxiv.org/pdf/1610.02424.pdf) for more details.
+            See [this paper](https://huggingface.co/papers/1610.02424) for more details.
         max_length (`int`, *optional*):
             The maximum length of the sequence to be generated.
     """
@@ -219,11 +219,11 @@ class BeamSearchScorer(BeamScorer):
         next_tokens: torch.LongTensor,
         next_indices: torch.LongTensor,
         pad_token_id: Optional[Union[int, torch.Tensor]] = None,
-        eos_token_id: Optional[Union[int, List[int], torch.Tensor]] = None,
+        eos_token_id: Optional[Union[int, list[int], torch.Tensor]] = None,
         beam_indices: Optional[torch.LongTensor] = None,
         group_index: Optional[int] = 0,
         decoder_prompt_len: Optional[int] = 0,
-    ) -> Dict[str, torch.Tensor]:
+    ) -> dict[str, torch.Tensor]:
         # add up to the length which the next_scores is calculated on (including decoder prompt)
         cur_len = input_ids.shape[-1] + 1
         batch_size = len(self._beam_hyps) // self.num_beam_groups
@@ -325,10 +325,10 @@ class BeamSearchScorer(BeamScorer):
         final_beam_indices: torch.LongTensor,
         max_length: int,
         pad_token_id: Optional[Union[int, torch.Tensor]] = None,
-        eos_token_id: Optional[Union[int, List[int], torch.Tensor]] = None,
+        eos_token_id: Optional[Union[int, list[int], torch.Tensor]] = None,
         beam_indices: Optional[torch.LongTensor] = None,
         decoder_prompt_len: Optional[int] = 0,
-    ) -> Tuple[torch.LongTensor]:
+    ) -> tuple[torch.LongTensor]:
         batch_size = len(self._beam_hyps) // self.num_beam_groups
 
         if eos_token_id is not None and not isinstance(eos_token_id, torch.Tensor):
@@ -426,7 +426,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
             Batch Size of `input_ids` for which standard beam search decoding is run in parallel.
         num_beams (`int`):
             Number of beams for beam search.
-        constraints (`List[Constraint]`):
+        constraints (`list[Constraint]`):
             A list of positive constraints represented as `Constraint` objects that must be fulfilled in the generation
             output. For more information, the documentation of [`Constraint`] should be read.
         device (`torch.device`):
@@ -448,7 +448,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
             [`~transformers.BeamSearchScorer.finalize`].
         num_beam_groups (`int`, *optional*, defaults to 1):
             Number of groups to divide `num_beams` into in order to ensure diversity among different groups of beams.
-            See [this paper](https://arxiv.org/pdf/1610.02424.pdf) for more details.
+            See [this paper](https://huggingface.co/papers/1610.02424) for more details.
         max_length (`int`, *optional*):
             The maximum length of the sequence to be generated.
     """
@@ -457,7 +457,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         self,
         batch_size: int,
         num_beams: int,
-        constraints: List[Constraint],
+        constraints: list[Constraint],
         device: torch.device,
         length_penalty: Optional[float] = 1.0,
         do_early_stopping: Optional[Union[bool, str]] = False,
@@ -518,10 +518,10 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         next_indices: torch.LongTensor,
         scores_for_all_vocab: torch.FloatTensor,
         pad_token_id: Optional[Union[int, torch.Tensor]] = None,
-        eos_token_id: Optional[Union[int, List[int], torch.Tensor]] = None,
+        eos_token_id: Optional[Union[int, list[int], torch.Tensor]] = None,
         beam_indices: Optional[torch.LongTensor] = None,
         decoder_prompt_len: Optional[int] = 0,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         r"""
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size * num_beams, sequence_length)`):
@@ -541,7 +541,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                 The scores of all tokens in the vocabulary for each of the beam hypotheses.
             pad_token_id (`int`, *optional*):
                 The id of the *padding* token.
-            eos_token_id (`Union[int, List[int]]`, *optional*):
+            eos_token_id (`Union[int, list[int]]`, *optional*):
                 The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
             beam_indices (`torch.LongTensor`, *optional*):
                 Beam indices indicating to which beam hypothesis each token correspond.
@@ -818,10 +818,10 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         final_beam_indices: torch.LongTensor,
         max_length: int,
         pad_token_id: Optional[Union[int, torch.Tensor]] = None,
-        eos_token_id: Optional[Union[int, List[int], torch.Tensor]] = None,
+        eos_token_id: Optional[Union[int, list[int], torch.Tensor]] = None,
         beam_indices: Optional[torch.LongTensor] = None,
         decoder_prompt_len: Optional[int] = 0,
-    ) -> Tuple[torch.LongTensor]:
+    ) -> tuple[torch.LongTensor]:
         batch_size = len(self._beam_hyps)
 
         if eos_token_id is not None and not isinstance(eos_token_id, torch.Tensor):

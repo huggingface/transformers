@@ -19,7 +19,7 @@ Processor class for Qwen2.5Omni.
 
 import logging
 import re
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -31,7 +31,7 @@ from ...video_utils import VideoInput, make_batched_videos
 
 
 class Qwen2_5_OmniVideosKwargs(VideosKwargs):
-    fps: Optional[List[int]] = None
+    fps: Optional[list[int]] = None
     use_audio_in_video: Optional[bool] = None
     seconds_per_chunk: Optional[float] = None
     position_id_per_seconds: Optional[int] = None
@@ -97,7 +97,6 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
     video_processor_class = "Qwen2VLVideoProcessor"
     feature_extractor_class = "WhisperFeatureExtractor"
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
-    valid_kwargs = ["chat_template"]
 
     def __init__(
         self, image_processor=None, video_processor=None, feature_extractor=None, tokenizer=None, chat_template=None
@@ -113,7 +112,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         images: ImageInput = None,
         videos: VideoInput = None,
         audio: AudioInput = None,
@@ -129,17 +128,17 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         of the above two methods for more information.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
-            videos (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            videos (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of videos to be prepared. Each video can be a 4D NumPy array or PyTorch
                 tensor, or a nested list of 3D frames. Both channels-first and channels-last formats are supported.
-            audio (`np.ndarray`, `List[np.ndarray]`):
+            audio (`np.ndarray`, `list[np.ndarray]`):
                 The audio or batch of audio to be prepared. Each audio can be a NumPy array.
         """
 
@@ -155,7 +154,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         seconds_per_chunk = output_kwargs["videos_kwargs"].pop("seconds_per_chunk")
         position_id_per_seconds = output_kwargs["videos_kwargs"].pop("position_id_per_seconds")
         use_audio_in_video = output_kwargs["videos_kwargs"].pop("use_audio_in_video")
-        fps = output_kwargs["videos_kwargs"].pop("fps", 2.0)
+        fps = output_kwargs["videos_kwargs"].get("fps", 2.0)
 
         if audio is not None:
             output_kwargs["audio_kwargs"]["padding"] = "max_length"  # Support "max_length" padding only here
@@ -301,7 +300,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
             t_ntoken_per_chunk (`int`): Number of tokens per chunk (used as the chunk size threshold).
 
         Returns:
-            `List[Tuple[int, int]]`: A list of tuples, each representing the start (inclusive)
+            `list[tuple[int, int]]`: A list of tuples, each representing the start (inclusive)
                                 and end (exclusive) indices of a chunk in `token_indices`.
         """
 
