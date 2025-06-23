@@ -17,10 +17,10 @@
       title: Customizing model components
     - local: model_sharing
       title: Sharing
-    - local: add_new_model
-      title: Adding a new model to Transformers
     - local: modular_transformers
-      title: Modular Transformers
+      title: Contributing a new model to Transformers
+    - local: add_new_model
+      title: Legacy model contribution
     - local: auto_docstring
       title: Document your models
     - local: attention_interface
