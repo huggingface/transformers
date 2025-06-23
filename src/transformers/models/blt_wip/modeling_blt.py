@@ -233,67 +233,86 @@ class BLTSelfAttention(nn.Module):
 
         return attn_output, attn_weights, past_key_value
 
+# Copied from transformers.models.llama.modeling_mllama.MllamaSelfAttentionDecoderLayer
 class BLTTransformerLayer(nn.Module):
-    def __init__(self, dim, n_heads, config, layer_idx=0):
+    def __init__(self, config: BLTConfig, layer_idx: int):
         super().__init__()
-
-        # Extract parameters from dictionary
-        head_dim = config.head_dim
-        n_kv_heads = config.n_kv_heads
-        multiple_of = config.multiple_of
-        norm_eps = config.norm_eps
-
-        self.head_dim = head_dim or dim // n_heads
-        self.n_heads = n_heads or dim // head_dim
-        self.n_kv_heads = n_kv_heads or self.n_heads
-
-        config.hidden_size = dim
+        self.hidden_size = config.hidden_size
+        self.layer_idx = layer_idx
 
         self.self_attn = BLTSelfAttention(config=config, layer_idx=layer_idx)
-
-        # Create a copy of config for MLP with pre-calculated dimensions
-        mlp_config = type(config)(**config.__dict__)
-        mlp_config.hidden_size = dim
-        
-        # Calculate intermediate_size using the same logic as BLTMLP
-        mlp_config.intermediate_size = multiple_of * (( int(8 * dim / 3) + multiple_of - 1) // multiple_of)
-        
-        self.mlp = BLTMLP(config=mlp_config)
-        self.input_layernorm = BLTRMSNorm(dim, eps=norm_eps)
-        self.post_attention_layernorm = BLTRMSNorm(dim, eps=norm_eps)
+        self.mlp = BLTMLP(config)
+        self.input_layernorm = BLTRMSNorm(config.hidden_size, eps=config.norm_eps)
+        self.post_attention_layernorm = BLTRMSNorm(config.hidden_size, eps=config.norm_eps)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        past_key_value: Optional[bool] = None,
-        position_embeddings: Optional[torch.Tensor] = None,
-
         attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
+        use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-
-    ) -> torch.Tensor:
-
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        **kwargs,
+    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`, *optional*):
+                attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
+                query_sequence_length, key_sequence_length)` if default attention is used.
+            position_ids (`torch.LongTensor`, *optional*):
+                Position indices of tokens in the sequence for RoPE computation.
+            past_key_value (`Cache`, *optional*): cached past key and value projection states
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            use_cache (`bool`, *optional*):
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
+            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+                Indices depicting the position of the input sequence tokens in the sequence
+            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
+                with `head_dim` being the embedding dimension of each attention head.
+            kwargs (`dict`, *optional*):
+                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
+                into the model
+        """
         residual = hidden_states
-        norm_hidden_states = self.input_layernorm(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
 
-
+        # Self Attention
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
-            hidden_states=norm_hidden_states,
-            # TODO: = BLT, attn_out = self.self_attn(self.input_layernorm(x), in TransformerBlock.forward,
-            past_key_value=past_key_value,
+            hidden_states=hidden_states,
             attention_mask=attention_mask,
-            layer_head_mask=layer_head_mask,
+            position_ids=position_ids,
+            past_key_value=past_key_value,
             output_attentions=output_attentions,
+            use_cache=use_cache,
             cache_position=cache_position,
-            position_embeddings=position_embeddings
+            position_embeddings=position_embeddings,
+            **kwargs,
         )
-
         hidden_states = residual + hidden_states
-        normalized_hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = hidden_states + self.mlp(normalized_hidden_states)
-        return hidden_states
+
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (self_attn_weights,)
+
+        if use_cache:
+            outputs += (present_key_value,)
+
+        return outputs
 
 def check_non_zero_after_zero(tensor):
     zero_mask = tensor == 0
@@ -509,11 +528,17 @@ class BLTLocalEncoder(nn.Module):
         self.norm_eps = config.norm_eps
         self.sliding_window = config.sliding_window
         
-        self.layers = nn.ModuleList([BLTTransformerLayer(self.dim_local_encoder, self.n_heads_local_encoder, config) for _ in range(self.n_layers_local_encoder)])
+        # Set up config for layers with proper dimensions
+        encoder_config = config
+        encoder_config.hidden_size = self.dim_local_encoder
+        encoder_config.num_attention_heads = self.n_heads_local_encoder
+        encoder_config.num_key_value_heads = getattr(config, 'n_kv_heads', None) or self.n_heads_local_encoder
+        encoder_config.head_dim = self.dim_local_encoder // self.n_heads_local_encoder
+        encoder_config.intermediate_size = config.multiple_of * ((int(8 * self.dim_local_encoder / 3) + config.multiple_of - 1) // config.multiple_of)
+
+        self.layers = nn.ModuleList([BLTTransformerLayer(encoder_config, layer_idx) for layer_idx in range(self.n_layers_local_encoder)])
 
         # Set up config for rotary embedding
-        encoder_config = config
-        encoder_config.head_dim = self.dim_local_encoder // self.n_heads_local_encoder
         encoder_config.max_position_embeddings = config.max_encoder_seq_length or config.max_seqlen
         self.rotary_emb = BLTRotaryEmbedding(config=encoder_config)
 
@@ -566,7 +591,8 @@ class BLTLocalEncoder(nn.Module):
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
 
         for idx, layer in enumerate(self.layers):
-            hidden_states = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None)
+            layer_outputs = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None)
+            hidden_states = layer_outputs[0]
 
             if self.cross_attn_encoder and (idx == len(self.layers) - 1 or self.cross_attn_all_layers_encoder):
                 # Initialize patch_embeds if not provided when cross attention is enabled
@@ -654,10 +680,16 @@ class BLTLocalDecoder(nn.Module):
         self.cross_attn_k = config.cross_attn_k
         self.sliding_window = config.sliding_window
 
-        self.layers = nn.ModuleList([BLTTransformerLayer(self.dim_local_decoder, self.n_heads_local_decoder, config) for _ in range(self.n_layers_local_decoder)])
-
+        # Set up config for layers with proper dimensions
         decoder_config = config
+        decoder_config.hidden_size = self.dim_local_decoder
+        decoder_config.num_attention_heads = self.n_heads_local_decoder
+        decoder_config.num_key_value_heads = getattr(config, 'n_kv_heads', None) or self.n_heads_local_decoder
         decoder_config.head_dim = self.dim_local_decoder // self.n_heads_local_decoder
+        decoder_config.intermediate_size = config.multiple_of * ((int(8 * self.dim_local_decoder / 3) + config.multiple_of - 1) // config.multiple_of)
+
+        self.layers = nn.ModuleList([BLTTransformerLayer(decoder_config, layer_idx) for layer_idx in range(self.n_layers_local_decoder)])
+
         decoder_config.max_position_embeddings = config.max_encoder_seq_length or config.max_seqlen
 
         self.rotary_emb = BLTRotaryEmbedding(config=decoder_config)
@@ -751,12 +783,13 @@ class BLTLocalDecoder(nn.Module):
                 )
                 hidden_states = hidden_states + cross_attention_output
 
-            hidden_states = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None)
+            layer_outputs = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None)
+            hidden_states = layer_outputs[0]
 
         logits = self.lm_head(self.norm(hidden_states))
         return logits, cache
 
-
+# Modified from transformers.models.mllama.modeling_mllama.MllamaTextCrossAttention
 class BLTCrossAttention(nn.Module):
     """Cross-attention module for BLT, following transformers style"""
 
@@ -871,15 +904,17 @@ class BLTGlobalTransformer(nn.Module):
         self.n_layers_global = config.n_layers_global
         self.dropout = config.dropout
 
-        self.layers = nn.ModuleList()
-        old = config.n_kv_heads 
-        config.n_kv_heads = config.n_kv_heads_global
-        for _ in range(self.n_layers_global):
-            self.layers.append(BLTTransformerLayer(self.dim_global, self.n_heads_global, config))
-        config.n_kv_heads = old
-
+        # Set up config for layers with proper dimensions
         global_config = config
+        global_config.hidden_size = self.dim_global
+        global_config.num_attention_heads = self.n_heads_global
+        global_config.num_key_value_heads = getattr(config, 'n_kv_heads_global', None) or self.n_heads_global
         global_config.head_dim = self.dim_global // self.n_heads_global
+        global_config.intermediate_size = config.multiple_of * ((int(8 * self.dim_global / 3) + config.multiple_of - 1) // config.multiple_of)
+
+        self.layers = nn.ModuleList()
+        for layer_idx in range(self.n_layers_global):
+            self.layers.append(BLTTransformerLayer(global_config, layer_idx))
 
         self.rotary_emb = BLTRotaryEmbedding(config=global_config)
 
@@ -912,7 +947,8 @@ class BLTGlobalTransformer(nn.Module):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)  
 
         for i, layer in enumerate(self.layers):
-            hidden_states = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None)
+            layer_outputs = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None)
+            hidden_states = layer_outputs[0]
 
         return hidden_states, cache
 
@@ -1256,8 +1292,16 @@ class BLTPatcher(BLTPreTrainedModel):
         self.rotary_emb = BLTRotaryEmbedding(config=self.config)
 
         self.layers = nn.ModuleList()
-        for _ in range(self.config.n_layers):
-            self.layers.append(BLTTransformerLayer(self.config.dim, self.config.n_heads, self.config))
+        # Set up config for layers with proper dimensions
+        patcher_config = self.config
+        patcher_config.hidden_size = self.config.dim
+        patcher_config.num_attention_heads = self.config.n_heads
+        patcher_config.num_key_value_heads = getattr(self.config, 'n_kv_heads', None) or self.config.n_heads
+        patcher_config.head_dim = self.config.dim // self.config.n_heads
+        patcher_config.intermediate_size = self.config.multiple_of * ((int(8 * self.config.dim / 3) + self.config.multiple_of - 1) // self.config.multiple_of)
+
+        for layer_idx in range(self.config.n_layers):
+            self.layers.append(BLTTransformerLayer(patcher_config, layer_idx))
 
 
         self.embed_tokens = torch.nn.Embedding(self.config.vocab_size, self.config.dim)
@@ -1309,7 +1353,8 @@ class BLTPatcher(BLTPreTrainedModel):
             position_embeddings = self.rotary_emb(hidden_states, position_ids)  # = BLT self.rope
             
             for i, layer in enumerate(self.layers):
-                hidden_states = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None) #, attn_impl=self.config.patcher_attn_impl )
+                layer_outputs = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None) #, attn_impl=self.config.patcher_attn_impl )
+                hidden_states = layer_outputs[0]
 
             logits = self.lm_head(self.norm(hidden_states))
             logits = logits.reshape(-1, logits.shape[-1])[: split.numel() - pad_size, :]  # [batch_size * seq_len, vocab]
