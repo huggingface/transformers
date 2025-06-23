@@ -101,11 +101,6 @@ class TestFSDPTrainerFP8(TestCasePlus):
             "accelerate",
             "launch",
             "--use_fsdp",
-            # this is the default and recommended format for training in
-            # accelerate 1.18.0 dataclass but the launcher sets it to e4m3
-            # TODO: remove when accelerate 1.18.1 is released
-            "--fp8_format",
-            "HYBRID",
             "--main_process_port",
             f"{get_torch_dist_unique_port()}",
             "--num_processes",
