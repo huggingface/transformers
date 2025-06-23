@@ -27,6 +27,9 @@ import re
 
 logger = logging.get_logger(__name__)
 
+from triton_kernels.matmul_ogs import matmul_ogs
+from triton_kernels.routing import (GatherIndx, RoutingData, ScatterIndx,
+                                    routing)
 
 class Mxfp4Linear(torch.nn.Linear):
     def __init__(self, in_features, out_features, bias, weight_dtype=torch.float32):
@@ -45,7 +48,6 @@ class Mxfp4Linear(torch.nn.Linear):
         update
         """
         return
-
 
 # maybe subclass
 class Mxfp4OpenAIMoeExperts(nn.Module):
@@ -74,41 +76,96 @@ class Mxfp4OpenAIMoeExperts(nn.Module):
         #     torch.zeros((self.num_experts, self.hidden_size, 1))
         # )
 
-    def forward(self, hidden_states: torch.Tensor, router_indices=None, routing_weights=None) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, router_logits=None, topk=None, router_indices=None, routing_weights=None) -> torch.Tensor:
         """
         To update with moe mxfp4 kernels, for now we just upcast the weights in torch.bfloat16
         """
-        if self.training:
-            next_states = torch.zeros_like(hidden_states, dtype=hidden_states.dtype, device=hidden_states.device)
-            with torch.no_grad():
-                expert_mask = torch.nn.functional.one_hot(router_indices, num_classes=self.num_experts).permute(2, 1, 0)
-                expert_hitted = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-            for expert_idx in expert_hitted:
-                with torch.no_grad():
-                    idx, top_x = torch.where(
-                        expert_mask[expert_idx][0]
-                    )  # idx: top-1/top-2 indicator, top_x: token indices
-                current_state = hidden_states[top_x]  # (num_tokens, hidden_dim)
-                gate_up = (
-                    current_state @ self.gate_up_proj[expert_idx].to(torch.bfloat16) + self.gate_up_proj_bias[expert_idx]
-                )  # (num_tokens, 2 * interm_dim)
-                gate, up = gate_up.chunk(2, dim=-1)  # (num_tokens, interm_dim)
-                glu = gate * torch.sigmoid(gate * self.alpha)  # (num_tokens, interm_dim)
-                gated_output = (up + 1) * glu  # (num_tokens, interm_dim)
-                out = (
-                    gated_output @ self.down_proj[expert_idx].to(torch.bfloat16) + self.down_proj_bias[expert_idx]
-                )  # (num_tokens, hidden_dim)
-                weighted_output = out * routing_weights[top_x, idx, None]  # (num_tokens, hidden_dim)
-                next_states.index_add_(0, top_x, weighted_output.to(hidden_states.dtype)[0])
-        else:
-            hidden_states = hidden_states.repeat(self.num_experts, 1)
-            hidden_states = hidden_states.view(self.num_experts, -1, self.hidden_size)
-            gate_up = torch.bmm(hidden_states, self.gate_up_proj.to(torch.bfloat16)) + self.gate_up_proj_bias[..., None, :]
-            gate, up = gate_up.chunk(2, dim=-1)  # not supported for DTensors
-            glu = gate * torch.sigmoid(gate * self.alpha)
-            next_states = torch.bmm(((up + 1) * glu), self.down_proj.to(torch.bfloat16)) + self.down_proj_bias[..., None, :]
-            next_states = next_states.view(-1, self.hidden_size)
-        return next_states
+        # if self.training:
+        #     next_states = torch.zeros_like(hidden_states, dtype=hidden_states.dtype, device=hidden_states.device)
+        #     with torch.no_grad():
+        #         expert_mask = torch.nn.functional.one_hot(router_indices, num_classes=self.num_experts).permute(2, 1, 0)
+        #         expert_hitted = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+        #     for expert_idx in expert_hitted:
+        #         with torch.no_grad():
+        #             idx, top_x = torch.where(
+        #                 expert_mask[expert_idx][0]
+        #             )  # idx: top-1/top-2 indicator, top_x: token indices
+        #         current_state = hidden_states[top_x]  # (num_tokens, hidden_dim)
+        #         gate_up = (
+        #             current_state @ self.gate_up_proj[expert_idx].to(torch.bfloat16) + self.gate_up_proj_bias[expert_idx]
+        #         )  # (num_tokens, 2 * interm_dim)
+        #         gate, up = gate_up.chunk(2, dim=-1)  # (num_tokens, interm_dim)
+        #         glu = gate * torch.sigmoid(gate * self.alpha)  # (num_tokens, interm_dim)
+        #         gated_output = (up + 1) * glu  # (num_tokens, interm_dim)
+        #         out = (
+        #             gated_output @ self.down_proj[expert_idx].to(torch.bfloat16) + self.down_proj_bias[expert_idx]
+        #         )  # (num_tokens, hidden_dim)
+        #         weighted_output = out * routing_weights[top_x, idx, None]  # (num_tokens, hidden_dim)
+        #         next_states.index_add_(0, top_x, weighted_output.to(hidden_states.dtype)[0])
+        # else:
+        #     hidden_states = hidden_states.repeat(self.num_experts, 1)
+        #     hidden_states = hidden_states.view(self.num_experts, -1, self.hidden_size)
+        #     gate_up = torch.bmm(hidden_states, self.gate_up_proj.to(torch.bfloat16)) + self.gate_up_proj_bias[..., None, :]
+        #     gate, up = gate_up.chunk(2, dim=-1)  # not supported for DTensors
+        #     glu = gate * torch.sigmoid(gate * self.alpha)
+        #     next_states = torch.bmm(((up + 1) * glu), self.down_proj.to(torch.bfloat16)) + self.down_proj_bias[..., None, :]
+        #     next_states = next_states.view(-1, self.hidden_size)
+        
+        use_oai_kernels = True
+        if use_oai_kernels:
+            renormalize = True
+            print(router_logits)
+            print(topk)
+            routing_data, gather_idx, scatter_idx = routing(router_logits, topk, renormalize)
+            print(routing_data)
+            print(gather_idx)
+            print(scatter_idx)
+            
+            # if global_num_experts == -1:
+            #     global_num_experts = E
+
+            # # consistent with default implementation
+            # intermediate_cache2 = torch.empty((M * n_expts_act, N // 2),
+            #                                 device="cuda",
+            #                                 dtype=dtype)
+
+            # intermediate_cache1 = matmul_ogs(hidden_states,
+            #                                 w1,
+            #                                 None,
+            #                                 routing_data,
+            #                                 gather_indx=gather_indx,
+            #                                 gammas=routing_data.gate_scal
+            #                                 if apply_router_weight_on_input else None)
+
+            # if activation == "silu":
+            #     torch.ops._C.silu_and_mul(intermediate_cache2,
+            #                             intermediate_cache1.view(-1, N))
+            # elif activation == "gelu":
+            #     torch.ops._C.gelu_and_mul(intermediate_cache2,
+            #                             intermediate_cache1.view(-1, N))
+            # else:
+            #     raise ValueError(f"Unsupported FusedMoe activation: {activation}")
+
+            # intermediate_cache3 = matmul_ogs(
+            #     intermediate_cache2,
+            #     w2,
+            #     None,
+            #     routing_data,
+            #     scatter_indx=scatter_indx,
+            #     gammas=None
+            #     if apply_router_weight_on_input else routing_data.gate_scal)
+
+            
+            
+            # if n_expts_tot > 1:
+            #     logits = matmul_ogs(xg, wg, bg, precision_config=pcg)
+            #     rdata, gather_indx, scatter_indx = routing(logits, n_expts_act, simulated_ep=EP)
+            # else:
+            #     rdata, gather_indx, scatter_indx = None, None, None
+            # x = matmul_ogs(x, w1, b1, rdata, gather_indx=gather_indx, precision_config=pc1, fused_activation=act)
+            # x = matmul_ogs(x, w2, b2, rdata, scatter_indx=scatter_indx, precision_config=pc2)
+        
+            # return intermediate_cache3
 
 def should_convert_module(current_key_name, patterns):
     current_key_name_str = ".".join(current_key_name)
