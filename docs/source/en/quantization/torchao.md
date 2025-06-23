@@ -278,10 +278,10 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 </hfoption>
 </hfoptions>
 
-### CPU/XPU
-<hfoptions id="examples-CPU/XPU">
+### CPU
+<hfoptions id="examples-CPU">
 <hfoption id="int8-dynamic-and-weight-only">
-
+    
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
@@ -295,7 +295,7 @@ quantization_config = TorchAoConfig(quant_type=quant_config)
 quantized_model = AutoModelForCausalLM.from_pretrained(
     "meta-llama/Llama-3.1-8B-Instruct",
     torch_dtype="auto",
-    device_map="auto",
+    device_map="cpu",
     quantization_config=quantization_config
 )
 
@@ -311,27 +311,22 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 <hfoption id="int4-weight-only">
 
 > [!TIP]
-> Please assign different data layout for CPU/XPU. The CPU need to assign `layout` to `Int4CPULayout()`. The XPU need to assign `layout` to `Int4XPULayout()` and assign `zero_point_domain` to `ZeroPointDomain.INT`
+> Run the quantized model on a CPU by changing `device_map` to `"cpu"` and `layout` to `Int4CPULayout()`.
 
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
 from torchao.quantization import Int4WeightOnlyConfig
-from torchao.dtypes import Int4CPULayout, Int4XPULayout
-from torchao.quantization.quant_primitives import ZeroPointDomain
+from torchao.dtypes import Int4CPULayout
 
-if hasattr(torch, "xpu") and torch.xpu.is_available():
-    quant_config = Int4WeightOnlyConfig(group_size=128, layout=Int4XPULayout(), zero_point_domain=ZeroPointDomain.INT)
-else:
-    quant_config = Int4WeightOnlyConfig(group_size=128, layout=Int4CPULayout())
-
+quant_config = Int4WeightOnlyConfig(group_size=128, layout=Int4CPULayout())
 quantization_config = TorchAoConfig(quant_type=quant_config)
 
 # Load and quantize the model
 quantized_model = AutoModelForCausalLM.from_pretrained(
     "meta-llama/Llama-3.1-8B-Instruct",
     torch_dtype="auto",
-    device_map="auto",
+    device_map="cpu",
     quantization_config=quantization_config
 )
 
@@ -368,7 +363,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 # Manual Testing
 prompt = "Hey, are you conscious? Can you talk to me?"
-inputs = tokenizer(prompt, return_tensors="pt").to(quantized_model.device.type)
+inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
 generated_ids = quantized_model.generate(**inputs, max_new_tokens=128)
 output_text = tokenizer.batch_decode(
     generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
@@ -439,7 +434,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device.type)
+input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
 
 # auto-compile the quantized model with `cache_implementation="static"` to get speed up
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
@@ -507,7 +502,7 @@ reloaded_model = AutoModelForCausalLM.from_pretrained(
 )
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to(reloaded_model.device.type)
+input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
 
 output = reloaded_model.generate(**input_ids, max_new_tokens=10)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
