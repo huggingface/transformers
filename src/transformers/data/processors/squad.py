@@ -23,7 +23,7 @@ from tqdm import tqdm
 
 from ...models.bert.tokenization_bert import whitespace_tokenize
 from ...tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase, TruncationStrategy
-from ...utils import is_tf_available, is_torch_available, logging
+from ...utils import is_tf_available, is_torch_available, is_torch_hpu_available, logging
 from .utils import DataProcessor
 
 
@@ -361,11 +361,29 @@ def squad_convert_examples_to_features(
         is_training=not evaluate,
     )
     ```"""
-    # Defining helper methods
-    features = []
 
-    threads = min(threads, cpu_count())
-    with Pool(threads, initializer=squad_convert_example_to_features_init, initargs=(tokenizer,)) as p:
+    if not is_torch_hpu_available():
+        threads = min(threads, cpu_count())
+        with Pool(threads, initializer=squad_convert_example_to_features_init, initargs=(tokenizer,)) as p:
+            annotate_ = partial(
+                squad_convert_example_to_features,
+                max_seq_length=max_seq_length,
+                doc_stride=doc_stride,
+                max_query_length=max_query_length,
+                padding_strategy=padding_strategy,
+                is_training=is_training,
+            )
+            features = list(
+                tqdm(
+                    p.imap(annotate_, examples, chunksize=32),
+                    total=len(examples),
+                    desc="convert squad examples to features",
+                    disable=not tqdm_enabled,
+                )
+            )
+    else:
+        # Non-parallel version for hpu https://github.com/huggingface/transformers/pull/38790#discussion_r2156470902
+        squad_convert_example_to_features_init(tokenizer_for_convert=tokenizer)
         annotate_ = partial(
             squad_convert_example_to_features,
             max_seq_length=max_seq_length,
@@ -376,7 +394,7 @@ def squad_convert_examples_to_features(
         )
         features = list(
             tqdm(
-                p.imap(annotate_, examples, chunksize=32),
+                map(annotate_, examples),
                 total=len(examples),
                 desc="convert squad examples to features",
                 disable=not tqdm_enabled,

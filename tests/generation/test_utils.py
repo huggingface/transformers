@@ -4892,7 +4892,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         # If the generate doesn't infer the DECODER device map correctly, this will fail
         _ = model.generate(**inputs, max_new_tokens=2, do_sample=False)
 
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_cpu_offload_doesnt_compile(self):
         """Test that CPU offload doesn't trigger compilation"""
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
