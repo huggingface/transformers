@@ -20,6 +20,7 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import Wav2Vec2BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ..wav2vec2.modeling_wav2vec2 import (
@@ -38,7 +39,7 @@ from ..wav2vec2.modeling_wav2vec2 import (
 from .configuration_data2vec_audio import Data2VecAudioConfig
 
 
-class Data2VecAudioConvLayer(nn.Module):
+class Data2VecAudioConvLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1

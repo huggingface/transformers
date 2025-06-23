@@ -18,13 +18,14 @@ import collections
 import math
 from collections import OrderedDict
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Optional, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import ModelOutput, auto_docstring, logging, torch_int
@@ -78,7 +79,7 @@ class FlavaModelOutput(ModelOutput):
     multimodal_embeddings: Optional[torch.FloatTensor] = None
     multimodal_output: Optional[BaseModelOutputWithPooling] = None
 
-    def to_tuple(self) -> Tuple[Any]:
+    def to_tuple(self) -> tuple[Any]:
         return tuple(
             self[k] if k not in ["text_output", "image_output", "multimodal_output"] else getattr(self, k).to_tuple()
             for k in self.keys()
@@ -210,7 +211,7 @@ class FlavaForPreTrainingOutput(ModelOutput):
     mmm_image_logits: Optional[torch.FloatTensor] = None
     mmm_text_logits: Optional[torch.FloatTensor] = None
 
-    def to_tuple(self) -> Tuple[Any]:
+    def to_tuple(self) -> tuple[Any]:
         transformer_outputs = [
             "text_output",
             "image_output",
@@ -332,7 +333,7 @@ class PatchEmbeddings(nn.Module):
     def __init__(
         self,
         image_size: int = 224,
-        patch_size: Union[int, Tuple[int, int]] = 16,
+        patch_size: Union[int, tuple[int, int]] = 16,
         num_channels: int = 3,
         embed_dim: int = 768,
     ):
@@ -447,7 +448,7 @@ class FlavaSelfAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         mixed_query_layer = self.query(hidden_states)
 
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -509,7 +510,7 @@ class FlavaAttention(nn.Module):
         self.output = FlavaSelfOutput(config)
         self.pruned_heads = set()
 
-    def prune_heads(self, heads: Set[int]) -> None:
+    def prune_heads(self, heads: set[int]) -> None:
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
@@ -533,7 +534,7 @@ class FlavaAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         self_outputs = self.attention(
             hidden_states, attention_mask=attention_mask, head_mask=head_mask, output_attentions=output_attentions
         )
@@ -577,7 +578,7 @@ class FlavaOutput(nn.Module):
         return hidden_states
 
 
-class FlavaLayer(nn.Module):
+class FlavaLayer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the timm implementation."""
 
     def __init__(self, config: FlavaPossibleConfigs) -> None:
@@ -598,7 +599,7 @@ class FlavaLayer(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in ViT, layernorm is applied before self-attention
             attention_mask=attention_mask,
@@ -648,16 +649,7 @@ class FlavaEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, attention_mask, layer_head_mask, output_attentions)
+            layer_outputs = layer_module(hidden_states, attention_mask, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -754,7 +746,7 @@ class FlavaImageModel(FlavaPreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.embeddings.patch_embeddings = value
 
-    def _prune_heads(self, heads_to_prune: Dict[int, List[int]]) -> None:
+    def _prune_heads(self, heads_to_prune: dict[int, list[int]]) -> None:
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
         class PreTrainedModel
@@ -849,7 +841,7 @@ class FlavaTextModel(FlavaPreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.embeddings.word_embeddings = value
 
-    def _prune_heads(self, heads_to_prune: Dict[int, List[int]]) -> None:
+    def _prune_heads(self, heads_to_prune: dict[int, list[int]]) -> None:
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
         class PreTrainedModel
@@ -959,7 +951,7 @@ class FlavaMultimodalModel(FlavaPreTrainedModel):
 
         self.post_init()
 
-    def _prune_heads(self, heads_to_prune: Dict[int, List[int]]) -> None:
+    def _prune_heads(self, heads_to_prune: dict[int, list[int]]) -> None:
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
         class PreTrainedModel
@@ -1201,7 +1193,7 @@ class FlavaModel(FlavaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: bool = True,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, FlavaOutput]:
+    ) -> Union[tuple, FlavaOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, image_num_patches + text_seq_len)`):
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
@@ -1446,7 +1438,7 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
                 param.requires_grad = False
 
     def get_codebook_indices(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        """
+        f"""
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
                 Pixel values. Codebook pixel values can be obtained using [`AutoImageProcessor`] by passing
@@ -1458,8 +1450,8 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoImageProcessor, FlavaImageCodebook
 
-        >>> model = FlavaImageCodebook.from_pretrained("{0}")
-        >>> image_processor = AutoImageProcessor.from_pretrained("{0}")
+        >>> model = FlavaImageCodebook.from_pretrained("{_CHECKPOINT_FOR_CODEBOOK_DOC}")
+        >>> image_processor = AutoImageProcessor.from_pretrained("{_CHECKPOINT_FOR_CODEBOOK_DOC}")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1469,7 +1461,7 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
 
         >>> outputs = model.get_codebook_indices(**inputs)
         ```
-        """.format(_CHECKPOINT_FOR_CODEBOOK_DOC)
+        """
         z_logits = self.blocks(pixel_values)
         return torch.argmax(z_logits, axis=1)
 
@@ -1478,7 +1470,7 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
         return nn.Softmax(dim=1)(z_logits)
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
-        """
+        f"""
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
                 Pixel values. Codebook pixel values can be obtained using [`AutoImageProcessor`] by passing
@@ -1491,8 +1483,8 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoImageProcessor, FlavaImageCodebook
 
-        >>> model = FlavaImageCodebook.from_pretrained("{0}")
-        >>> image_processor = AutoImageProcessor.from_pretrained("{0}")
+        >>> model = FlavaImageCodebook.from_pretrained("{_CHECKPOINT_FOR_CODEBOOK_DOC}")
+        >>> image_processor = AutoImageProcessor.from_pretrained("{_CHECKPOINT_FOR_CODEBOOK_DOC}")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1504,7 +1496,7 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
         >>> print(outputs.shape)
         (1, 196)
         ```
-        """.format(_CHECKPOINT_FOR_CODEBOOK_DOC)
+        """
         if len(pixel_values.shape) != 4:
             raise ValueError(f"input shape {pixel_values.shape} is not 4d")
         if pixel_values.shape[1] != self.input_channels:
@@ -1678,7 +1670,7 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
         output_hidden_states: bool = True,
         return_dict: Optional[bool] = None,
         return_loss: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], FlavaForPreTrainingOutput]:
+    ) -> Union[tuple[torch.Tensor], FlavaForPreTrainingOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, text_seq_len)`):
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See

@@ -21,7 +21,7 @@ import os
 import sys
 
 import transformers
-from transformers import is_torch_xpu_available
+from transformers import is_torch_hpu_available, is_torch_xpu_available
 
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -38,6 +38,9 @@ try:
         accelerator = "CUDA"
     elif is_torch_xpu_available():
         accelerator = "XPU"
+    elif is_torch_hpu_available():
+        accelerator = "HPU"
+
     print("Torch accelerator:", accelerator)
 
     if accelerator == "CUDA":
@@ -48,6 +51,9 @@ try:
     elif accelerator == "XPU":
         print("SYCL version:", torch.version.xpu)
         print("Number of XPUs available:", torch.xpu.device_count())
+    elif accelerator == "HPU":
+        print("HPU version:", torch.__version__.split("+")[-1])
+        print("Number of HPUs available:", torch.hpu.device_count())
 except ImportError:
     print("Torch version:", None)
 
