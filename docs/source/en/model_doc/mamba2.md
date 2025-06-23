@@ -38,6 +38,9 @@ Another note, shutdown of hidden states corresponding to padding tokens is done 
 This model was contributed by [Molbap](https://huggingface.co/Molbap), with tremendous help from [Anton Vlasjuk](https://github.com/vasqu).
 The original code can be found [here](https://github.com/state-spaces/mamba).
 
+**Code Ownership:**  
+Primary code ownership and maintenance for this integration belong to [Molbap](https://huggingface.co/Molbap) and [Anton Vlasjuk](https://github.com/vasqu), with reference to the [state-spaces/mamba](https://github.com/state-spaces/mamba) repository.  
+**Enterprise integration and deployment support provided by [nodoubtz enterprise](https://github.com/nodoubtz/enterprise).**
 
 # Usage
 
