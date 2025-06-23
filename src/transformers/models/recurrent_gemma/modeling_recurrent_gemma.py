@@ -25,9 +25,9 @@ from torch import nn
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithNoAttention, CausalLMOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import auto_docstring, logging
 from ...utils.import_utils import is_torchdynamo_compiling
 from .configuration_recurrent_gemma import RecurrentGemmaConfig
@@ -58,9 +58,6 @@ class RecurrentGemmaRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
 
 
-ALL_LAYERNORM_LAYERS.append(RecurrentGemmaRMSNorm)
-
-
 class RecurrentGemmaRotaryEmbedding(nn.Module):
     def __init__(self, dim, base=10000, device=None):
         super().__init__()
@@ -78,7 +75,7 @@ class RecurrentGemmaRotaryEmbedding(nn.Module):
         # Force float32 since bfloat16 loses precision on long contexts
         # See https://github.com/huggingface/transformers/pull/29285
         device_type = x.device.type
-        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
+        device_type = device_type if device_type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
@@ -471,7 +468,7 @@ class RecurrentGemmaMlp(nn.Module):
         return self.down_proj(gate * self.up_proj(hidden_states))
 
 
-class RecurrentGemmaDecoderLayer(nn.Module):
+class RecurrentGemmaDecoderLayer(GradientCheckpointingLayer):
     """Griffin and Hawk's residual block."""
 
     def __init__(self, config, layer_idx):
@@ -648,12 +645,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         for i, residual_block in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-            if self.gradient_checkpointing and self.training:
-                hidden_states = self._gradient_checkpointing_func(
-                    residual_block.__call__, hidden_states, position_ids, causal_mask, cache_position, use_cache
-                )
-            else:
-                hidden_states = residual_block(hidden_states, position_ids, causal_mask, cache_position, use_cache)
+            hidden_states = residual_block(hidden_states, position_ids, causal_mask, cache_position, use_cache)
 
         hidden_states = self.final_norm(hidden_states)
 
