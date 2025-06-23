@@ -157,8 +157,8 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
         "self_attention.proj": ".attn.c_proj.",  # New format
         "mlp.dense_h_to_4h": ".mlp.c_fc.",
         "mlp.dense_4h_to_h": ".mlp.c_proj.",
-        "layernorm_mlp.fc1": ".mlp.c_fc.",      # New format
-        "layernorm_mlp.fc2": ".mlp.c_proj.",    # New format
+        "layernorm_mlp.fc1": ".mlp.c_fc.",  # New format
+        "layernorm_mlp.fc2": ".mlp.c_proj.",  # New format
     }
 
     # Extract the layers.
@@ -193,7 +193,7 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
                     ln_name = "ln_2"  # Pre-MLP layer norm
                 else:
                     ln_name = "ln_1" if op_name.startswith("input") else "ln_2"
-                
+
                 param_name = "weight" if weight_or_bias == "layer_norm_weight" else "bias"
                 output_state_dict[layer_name + "." + ln_name + "." + param_name] = val
             else:
@@ -280,7 +280,9 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
                 output_state_dict[layer_name + ".mlp.c_proj.bias"] = val
 
         else:
-            print(f"DEBUG: Unhandled key: {key} (layer {layer_idx}, op_name: '{op_name}', weight_or_bias: '{weight_or_bias}')")
+            print(
+                f"DEBUG: Unhandled key: {key} (layer {layer_idx}, op_name: '{op_name}', weight_or_bias: '{weight_or_bias}')"
+            )
 
     # DEBUG.
     assert config.n_layer == layer_idx + 1
