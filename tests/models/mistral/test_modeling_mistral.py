@@ -347,6 +347,7 @@ class Mask4DTestHard(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        cleanup(torch_device, gc_collect=True)
         if cls.model_dtype is None:
             cls.model_dtype = torch.float16
         if cls.model is None:
@@ -361,8 +362,8 @@ class Mask4DTestHard(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     def setUp(self):
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, use_fast=False)
         cleanup(torch_device, gc_collect=True)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, use_fast=False)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
