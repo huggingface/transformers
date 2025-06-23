@@ -19,7 +19,7 @@ Processor class for SAM2.
 from collections import OrderedDict
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import torch.nn as nn
@@ -350,7 +350,7 @@ class Sam2Processor(ProcessorMixin):
         offload_video_to_cpu: bool = False,
         async_loading_frames: bool = False,
         device: torch.device = None,
-    ) -> Tuple[List[torch.Tensor], int, int]:
+    ) -> tuple[list[torch.Tensor], int, int]:
         """Load video frames from a directory of images."""
         video_path = Path(video_path)
 
@@ -435,12 +435,12 @@ class Sam2Processor(ProcessorMixin):
         self,
         frame_idx: int,
         obj_id: int,
-        points: Optional[List[List[float]]] = None,
-        labels: Optional[List[int]] = None,
+        points: Optional[list[list[float]]] = None,
+        labels: Optional[list[int]] = None,
         clear_old_points: bool = True,
         normalize_coords: bool = True,
-        box: Optional[List[float]] = None,
-    ) -> Dict[str, Any]:
+        box: Optional[list[float]] = None,
+    ) -> dict[str, Any]:
         """Add new points or box to a frame and return preprocessed inputs for model."""
         if self.inference_state is None:
             raise ValueError("Video state not initialized. Call init_state() first.")
@@ -547,7 +547,7 @@ class Sam2Processor(ProcessorMixin):
         frame_idx: int,
         obj_id: int,
         mask: Union[np.ndarray, torch.Tensor],
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Add new mask to a frame and return preprocessed inputs for model."""
         if self.inference_state is None:
             raise ValueError("Video state not initialized. Call init_state() first.")

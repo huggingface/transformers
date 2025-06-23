@@ -21,7 +21,7 @@ import math
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Any, Callable, Iterator, Optional, Union
 
 import numpy as np
 import torch
@@ -150,8 +150,8 @@ class Sam2ImageEncoderOutput(ModelOutput):
     last_hidden_state: torch.FloatTensor = None
     fpn_hidden_states: Optional[torch.FloatTensor] = None
     fpn_position_encoding: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -190,10 +190,10 @@ class Sam2ImageSegmentationOutput(ModelOutput):
     high_res_masks: torch.FloatTensor = None
     object_pointer: torch.FloatTensor = None
     object_score_logits: torch.FloatTensor = None
-    image_embeddings: Tuple[torch.FloatTensor, ...] = None
-    vision_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    vision_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    mask_decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    image_embeddings: tuple[torch.FloatTensor, ...] = None
+    vision_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    vision_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    mask_decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 class Sam2PatchEmbeddings(nn.Module):
@@ -372,7 +372,7 @@ class Sam2ImageEncoder(nn.Module):
         self.neck = Sam2VisionNeck(config)
         self.num_feature_levels = config.num_feature_levels
 
-    def _get_pos_embed(self, hw: Tuple[int, int]) -> torch.Tensor:
+    def _get_pos_embed(self, hw: tuple[int, int]) -> torch.Tensor:
         h, w = hw
         window_embed = self.pos_embed_window
         pos_embed = F.interpolate(self.pos_embed, size=(h, w), mode="bicubic")
@@ -386,7 +386,7 @@ class Sam2ImageEncoder(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, Sam2ImageEncoderOutput]:
+    ) -> Union[tuple, Sam2ImageEncoderOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -576,11 +576,11 @@ class Sam2PromptEncoder(nn.Module):
 
     def forward(
         self,
-        input_points: Optional[Tuple[torch.Tensor, torch.Tensor]],
+        input_points: Optional[tuple[torch.Tensor, torch.Tensor]],
         input_labels: Optional[torch.Tensor],
         input_boxes: Optional[torch.Tensor],
         input_masks: Optional[torch.Tensor],
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Embeds different types of prompts, returning both sparse and dense embeddings.
 
@@ -662,7 +662,7 @@ class Sam2TwoWayAttentionBlock(nn.Module):
 
     def forward(
         self, queries: Tensor, keys: Tensor, query_point_embedding: Tensor, key_point_embedding: Tensor
-    ) -> Tuple[Tensor, Tensor]:
+    ) -> tuple[Tensor, Tensor]:
         # Self attention block
         if self.skip_first_layer_pe:
             queries = self.self_attn(query=queries, key=queries, value=queries)
@@ -725,7 +725,7 @@ class Sam2TwoWayTransformer(nn.Module):
         image_embeddings: Tensor,
         image_positional_embeddings: Tensor,
         point_embeddings: Tensor,
-    ) -> Tuple[Tensor, Tensor]:
+    ) -> tuple[Tensor, Tensor]:
         if image_embeddings is None:
             raise ValueError("You have to specify an image_embedding")
 
@@ -811,8 +811,8 @@ class Sam2MaskDecoder(nn.Module):
         sparse_prompt_embeddings: torch.Tensor,
         dense_prompt_embeddings: torch.Tensor,
         multimask_output: bool,
-        high_resolution_features: Optional[List[torch.Tensor]] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        high_resolution_features: Optional[list[torch.Tensor]] = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Predict masks given image and prompt embeddings.
 
@@ -866,7 +866,7 @@ class Sam2MaskDecoder(nn.Module):
         upscaled_embedding = self.activation(self.upscale_layer_norm(upscaled_embedding))
         upscaled_embedding = self.activation(self.upscale_conv2(upscaled_embedding) + feat_s0)
 
-        hyper_in_list: List[torch.Tensor] = []
+        hyper_in_list: list[torch.Tensor] = []
         for i in range(self.num_mask_tokens):
             current_mlp = self.output_hypernetworks_mlps[i]
             hyper_in_list += [current_mlp(mask_tokens_out[:, :, i, :])]
@@ -1178,7 +1178,7 @@ class Sam2MultiScaleBlock(nn.Module):
         num_heads: int,
         mlp_ratio: float = 4.0,
         drop_path: float = 0.0,
-        q_stride: Tuple[int, int] = None,
+        q_stride: Optional[tuple[int, int]] = None,
         window_size: int = 0,
     ):
         super().__init__()
@@ -1213,7 +1213,7 @@ class Sam2MultiScaleBlock(nn.Module):
         if dim != dim_out:
             self.proj = nn.Linear(dim, dim_out)
 
-    def window_partition(self, hidden_states: torch.Tensor, window_size: int) -> Tuple[torch.Tensor, Tuple[int, int]]:
+    def window_partition(self, hidden_states: torch.Tensor, window_size: int) -> tuple[torch.Tensor, tuple[int, int]]:
         """
         Args:
         Partition into non-overlapping windows with padding if needed.
@@ -1238,7 +1238,7 @@ class Sam2MultiScaleBlock(nn.Module):
         return windows, (pad_height, pad_width)
 
     def window_unpartition(
-        self, windows: torch.Tensor, window_size: int, padding_shape: Tuple[int, int], original_shape: Tuple[int, int]
+        self, windows: torch.Tensor, window_size: int, padding_shape: tuple[int, int], original_shape: tuple[int, int]
     ) -> torch.Tensor:
         """
         Args:
@@ -1271,7 +1271,7 @@ class Sam2MultiScaleBlock(nn.Module):
         self,
         hidden_states: torch.Tensor,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor]:
+    ) -> tuple[torch.FloatTensor]:
         residual = hidden_states  # batch_size, height, width, channel
 
         hidden_states = self.layer_norm1(hidden_states)
@@ -1351,7 +1351,7 @@ class Sam2Attention(nn.Module):
         num_heads: int,
         downsample_rate: int = 1,
         dropout: float = 0.0,
-        kv_in_dim: int = None,
+        kv_in_dim: Optional[int] = None,
     ):
         super().__init__()
         self.config = config
@@ -1457,7 +1457,7 @@ class Sam2VisionRotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", torch.cat([freqs_x, freqs_y], dim=-1), persistent=False)
 
     @torch.no_grad()
-    def forward(self, feat_sizes: Tuple[int, int]) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, feat_sizes: tuple[int, int]) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Generate cosine and sine position embeddings for 2D spatial dimensions.
 
@@ -1489,7 +1489,7 @@ def apply_rotary_pos_emb_2d(
     cos: torch.Tensor,
     sin: torch.Tensor,
     repeat_freqs_k: bool = False,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Apply rotary position embedding to query and key tensors for vision models.
     Follows the standard transformers library pattern.
@@ -1889,7 +1889,7 @@ class Sam2MemoryEncoder(nn.Module):
         vision_features: torch.Tensor,
         masks: torch.Tensor,
         skip_mask_sigmoid: bool = False,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         ## Process masks
         # sigmoid, so that less domain shift from gt masks which are bool
         if not skip_mask_sigmoid:
@@ -2112,7 +2112,7 @@ class Sam2Model(Sam2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> List[Dict[str, torch.Tensor]]:
+    ) -> list[dict[str, torch.Tensor]]:
         r"""
         input_points (`torch.FloatTensor` of shape `(batch_size, num_points, 2)`):
             Input 2D spatial points, this is used by the prompt encoder to encode the prompt. Generally yields to much
@@ -2471,13 +2471,13 @@ class Sam2Model(Sam2PreTrainedModel):
     @torch.inference_mode()
     def add_new_points_or_box(
         self,
-        inference_state: Dict[str, Any],
+        inference_state: dict[str, Any],
         frame_idx: int,
         obj_idx: int,
-        point_inputs: Optional[Dict[str, torch.Tensor]] = None,
+        point_inputs: Optional[dict[str, torch.Tensor]] = None,
         mask_inputs: Optional[torch.Tensor] = None,
         is_init_cond_frame: bool = False,
-    ) -> Dict[str, torch.Tensor]:
+    ) -> dict[str, torch.Tensor]:
         """
         Add new conditioning inputs to a frame and run inference.
         """
@@ -2580,11 +2580,11 @@ class Sam2Model(Sam2PreTrainedModel):
     @torch.inference_mode()
     def propagate_in_video(
         self,
-        inference_state: Dict[str, Any],
+        inference_state: dict[str, Any],
         start_frame_idx: Optional[int] = None,
         max_frame_num_to_track: Optional[int] = None,
         reverse: bool = False,
-    ) -> Iterator[Tuple[int, int, torch.Tensor]]:
+    ) -> Iterator[tuple[int, int, torch.Tensor]]:
         """
         Propagate the objects through the video frames.
         Yields (frame_idx, obj_id, mask) for each frame and object.
@@ -2658,10 +2658,10 @@ class Sam2Model(Sam2PreTrainedModel):
 
     def _prepare_vision_features(
         self,
-        inference_state: Dict[str, Any],
+        inference_state: dict[str, Any],
         frame_idx: int,
         batch_size: int,
-    ) -> Tuple[torch.Tensor, List[torch.Tensor], List[Tuple[int, int]]]:
+    ) -> tuple[torch.Tensor, list[torch.Tensor], list[tuple[int, int]]]:
         """Prepare vision features for a frame."""
 
         # Check if features are cached
@@ -2805,9 +2805,9 @@ class Sam2Model(Sam2PreTrainedModel):
 
     def _get_memory_features(
         self,
-        output_dict: Dict,
+        output_dict: dict,
         device: torch.device,
-    ) -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
+    ) -> tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
         """Get memory features from stored outputs."""
         # Collect memory features from conditioning and non-conditioning frames
         maskmem_features_list = []
@@ -2905,9 +2905,9 @@ class Sam2Model(Sam2PreTrainedModel):
         self,
         frame_idx: int,
         is_initial_conditioning_frame: bool,
-        current_vision_features: List[torch.Tensor],
-        current_vision_positional_embeddings: List[torch.Tensor],
-        output_history: Dict[str, Dict[int, Dict[str, torch.Tensor]]],
+        current_vision_features: list[torch.Tensor],
+        current_vision_positional_embeddings: list[torch.Tensor],
+        output_history: dict[str, dict[int, dict[str, torch.Tensor]]],
         num_total_frames: int,
         track_in_reverse_time: bool = False,
     ):
