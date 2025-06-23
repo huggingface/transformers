@@ -621,8 +621,14 @@ class ModernBertPreTrainedModel(PreTrainedModel):
         # need the FA2 warning for non-fp16/bf16 dtypes so we set fp16 for the FA2 check.
 
         requested_attn_implementation = self._check_attn_implementation(attn_implementation)
-        if requested_attn_implementation is None and self._flash_attn_2_can_dispatch():
-            attn_implementation = "flash_attention_2"
+        try:
+            attn_implementation = (
+                "flash_attention_2"
+                if requested_attn_implementation is None and self._flash_attn_2_can_dispatch()
+                else attn_implementation
+            )
+        except (ValueError, ImportError):
+            pass
         return super().set_attention_implementation(attn_implementation=attn_implementation)
 
     def _maybe_set_compile(self):
