@@ -3751,12 +3751,7 @@ class Trainer:
         with self.compute_loss_context_manager():
             loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
 
-        actual_bs = None
-        if num_items_in_batch is not None:
-            actual_bs = num_items_in_batch[0].item()
-        else:
-            if "labels" in inputs:
-                actual_bs = inputs["labels"].shape[0]
+        actual_bs = inputs["labels"].shape[0] if "labels" in inputs else None
 
         del inputs
         if (
