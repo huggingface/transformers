@@ -33,8 +33,6 @@ from .configuration_blt import (
     PatchingModeEnum,
 )
 
-RMSNorm = nn.RMSNorm
-
 if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import BlockMask
 
@@ -44,18 +42,18 @@ if is_torch_flex_attn_available():
 logger = logging.get_logger(__name__)
 
 
-
-def repeat_kv(x: torch.Tensor, n_rep: int, dim: int) -> torch.Tensor:
-    """torch.repeat_interleave(x, dim=2, repeats=n_rep)"""
-    assert dim == 2, "Only dim=2 is supported. Check the implementation for other dims."
-    batch_size, slen, n_kv_heads, head_dim = x.shape
+# Copied from transformers.models.llama.modeling_llama.repeat_kv
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
     if n_rep == 1:
-        return x
-    return (
-        x[:, :, :, None, :]
-        .expand(batch_size, slen, n_kv_heads, n_rep, head_dim)
-        .reshape(batch_size, slen, n_kv_heads * n_rep, head_dim)
-    )
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
 
 class BLTMLP(nn.Module):
     def __init__(self, config):
@@ -76,6 +74,7 @@ class BLTMLP(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
+# Copied from transformers.models.llama.modeling_llama.eager_attention_forward
 def eager_attention_forward(
         module: nn.Module,
         query: torch.Tensor,
