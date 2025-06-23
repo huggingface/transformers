@@ -36,6 +36,7 @@ from ...modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel, get_parameter_device
 from ...utils import (
     auto_docstring,
+    can_return_tuple,
     is_accelerate_available,
     is_torch_accelerator_available,
     logging,
@@ -503,6 +504,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
             "attention_mask": attention_mask,
         }
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -516,8 +518,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple[torch.Tensor], CausalLMOutputWithPast]:
+    ) -> CausalLMOutputWithPast:
         r"""
         input_embeds (`torch.FloatTensor` of shape `(batch_size, input_sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
@@ -530,7 +531,6 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         loss = None
         if labels is not None:
@@ -633,11 +633,6 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         logits = self.lm_head(hidden_states)
-
-        if not return_dict:
-            return tuple(
-                v for v in [None, logits, present_key_values, all_hidden_states, all_self_attentions] if v is not None
-            )
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -1156,6 +1151,7 @@ class BarkFineModel(BarkPreTrainedModel):
             if hasattr(module, "_tie_weights"):
                 module._tie_weights()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1168,8 +1164,7 @@ class BarkFineModel(BarkPreTrainedModel):
         input_embeds: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple[torch.Tensor], MaskedLMOutput]:
+    ) -> MaskedLMOutput:
         r"""
         codebook_idx (`int`):
             Index of the codebook that will be predicted.
@@ -1185,7 +1180,6 @@ class BarkFineModel(BarkPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         loss = None
         if labels is not None:
@@ -1267,9 +1261,6 @@ class BarkFineModel(BarkPreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         logits = self.lm_heads[codebook_idx - self.config.n_codes_given](hidden_states)
-
-        if not return_dict:
-            return tuple(v for v in [None, logits, all_hidden_states, all_self_attentions] if v is not None)
 
         return MaskedLMOutput(
             loss=loss,
