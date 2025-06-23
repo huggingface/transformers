@@ -322,7 +322,10 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
 
     @staticmethod
     def generate(
-        exported_program: torch.export.ExportedProgram, prompt_token_ids: torch.Tensor, max_new_tokens: int
+        exported_program: torch.export.ExportedProgram,
+        prompt_token_ids: torch.Tensor,
+        max_new_tokens: int,
+        device: str = "cpu",
     ) -> torch.Tensor:
         """
         Generate a sequence of tokens using an exported program.
@@ -337,6 +340,7 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
             prompt_token_ids (`torch.Tensor`): Tensor representing the input prompt token IDs.
             max_new_tokens (`int`): Maximum number of new tokens to generate. Note that the total generation
                 length is limited by both `max_new_tokens` and the model's cache size.
+            device (str): The device to use.
 
         Returns:
             torch.Tensor: A tensor containing the generated sequence of token IDs, including the original prompt tokens.
@@ -353,7 +357,7 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         for input_pos in range(min(max_generation_length, prompt_token_len)):
             result = exported_program.module().forward(
                 input_ids=prompt_token_ids[:, input_pos : input_pos + 1],
-                cache_position=torch.tensor([input_pos], dtype=torch.long),
+                cache_position=torch.tensor([input_pos], dtype=torch.long, device=device),
             )
             response_tokens.append(prompt_token_ids[0][input_pos].item())
 
@@ -362,8 +366,8 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
 
         while len(response_tokens) < max_generation_length:
             result = exported_program.module().forward(
-                input_ids=torch.tensor([[current_token]], dtype=torch.long),
-                cache_position=torch.tensor([len(response_tokens)], dtype=torch.long),
+                input_ids=torch.tensor([[current_token]], dtype=torch.long, device=device),
+                cache_position=torch.tensor([len(response_tokens)], dtype=torch.long, device=device),
             )
             current_token = torch.argmax(result[:, -1, :], dim=-1).item()
             response_tokens.append(current_token)
