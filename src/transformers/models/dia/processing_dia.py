@@ -350,9 +350,7 @@ class DiaProcessor(ProcessorMixin):
         return self.batch_decode(decoder_input_ids, audio_prompt_len, **kwargs)[0]
 
     def get_audio_prompt_len(
-        self,
-        decoder_attention_mask: "torch.Tensor",
-        **kwargs: Unpack[DiaProcessorKwargs]
+        self, decoder_attention_mask: "torch.Tensor", **kwargs: Unpack[DiaProcessorKwargs]
     ) -> int:
         """Utility function to get the audio prompt length."""
         output_kwargs = self._merge_kwargs(

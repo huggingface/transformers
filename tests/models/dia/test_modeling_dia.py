@@ -567,8 +567,8 @@ class DiaForConditionalGenerationIntegrationTest(unittest.TestCase):
         dac_chunk_len = 512
         self.audio_prompt_1_path = "/tmp/dia_test_sample_1.mp3"
         self.audio_prompt_2_path = "/tmp/dia_test_sample_2.mp3"
-        sf.write(self.audio_prompt_1_path, audio_sample_1[:(dac_chunk_len*10)], self.sampling_rate)
-        sf.write(self.audio_prompt_2_path, audio_sample_2[:(dac_chunk_len*5)], self.sampling_rate)
+        sf.write(self.audio_prompt_1_path, audio_sample_1[: (dac_chunk_len * 10)], self.sampling_rate)
+        sf.write(self.audio_prompt_2_path, audio_sample_2[: (dac_chunk_len * 5)], self.sampling_rate)
 
     def tearDown(self):
         pathlib.Path(self.audio_prompt_1_path).unlink()
