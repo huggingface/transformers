@@ -15,16 +15,20 @@
 """Processor class for Dia"""
 
 import math
+from pathlib import Path
 from typing import Optional, Union
 
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack
-from ...utils import is_torch_available
+from ...utils import is_soundfile_available, is_torch_available
 
 
 if is_torch_available():
     import torch
+
+if is_soundfile_available():
+    import soundfile as sf
 
 
 class DiaAudioKwargs(AudioKwargs, total=False):
@@ -254,7 +258,6 @@ class DiaProcessor(ProcessorMixin):
             # Base idea is to shift on the sequence dim
             labels = data["decoder_input_ids"].clone()[:, 1:]
             labels[labels == audio_pad_token_id] = -100
-            # TODO: is this correct? this is based on that the delay doesn't need to predict
             labels[labels == audio_bos_token_id] = -100
 
             data["labels"] = labels.transpose(1, 2).reshape(batch_size * num_channels, -1)
@@ -338,9 +341,40 @@ class DiaProcessor(ProcessorMixin):
 
         return self.batch_decode(decoder_input_ids, **kwargs)[0]
 
-    # TODO: numpify, save, etc.
-    def save_audio(audio: Union[list["torch.Tensor"], "torch.Tensor"]):
-        pass
+    # Copied from transformers.models.csm.processing_csm.CsmProcessor.save_audio with Csm->Dia
+    def save_audio(
+        self,
+        audio: AudioInput,
+        saving_path: Union[str, Path, list[Union[str, Path]]],
+        **kwargs: Unpack[DiaProcessorKwargs],
+    ):
+        # TODO: @eustlb, this should be in AudioProcessor
+        if not is_soundfile_available():
+            raise ImportError("Please install `soundfile` to save audio files.")
+
+        # ensure correct audio input
+        audio = make_list_of_audio(audio)
+
+        # ensure correct saving path
+        if isinstance(saving_path, (str, Path)):
+            saving_path = [saving_path]
+        elif not (isinstance(saving_path, (list, tuple)) and all(isinstance(p, (str, Path)) for p in saving_path)):
+            raise ValueError("Invalid input path. Please provide a string, or a list of strings")
+
+        if len(audio) != len(saving_path):
+            raise ValueError("The number of audio and saving paths must be the same")
+
+        output_kwargs = self._merge_kwargs(
+            DiaProcessorKwargs,
+            **kwargs,
+        )
+        audio_kwargs = output_kwargs["audio_kwargs"]
+        sampling_rate = audio_kwargs["sampling_rate"]
+
+        for audio_value, p in zip(audio, saving_path):
+            if isinstance(audio_value, torch.Tensor):
+                audio_value = audio_value.cpu().float().numpy()
+            sf.write(p, audio_value, sampling_rate)
 
     @staticmethod
     def build_indices(
