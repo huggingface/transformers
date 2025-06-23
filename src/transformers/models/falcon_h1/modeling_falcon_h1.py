@@ -91,8 +91,6 @@ class FalconHybridMambaAttentionDynamicCache(DynamicCache):
         self.has_previous_state = False
         self.conv_kernel_size = config.mamba_d_conv
 
-        self._seen_tokens = 0
-
         self.intermediate_size = (
             config.mamba_d_ssm if config.mamba_d_ssm is not None else int(config.mamba_expand * config.hidden_size)
         )
@@ -149,10 +147,6 @@ class FalconHybridMambaAttentionDynamicCache(DynamicCache):
         Return:
             A tuple containing the updated key and value states.
         """
-        # Update the number of seen tokens
-        if layer_idx == 0:
-            self._seen_tokens += key_states.shape[-2]
-
         # Update the cache
         if len(self.key_cache) <= layer_idx:
             # There may be skipped layers, fill them with empty lists
