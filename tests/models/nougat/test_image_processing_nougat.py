@@ -16,7 +16,7 @@
 import unittest
 
 import numpy as np
-from huggingface_hub import hf_hub_download
+from datasets import load_dataset
 
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import cached_property, is_torch_available, is_vision_available
@@ -28,8 +28,6 @@ if is_torch_available():
     import torch
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import NougatImageProcessor
 
 
@@ -86,15 +84,8 @@ class NougatImageProcessingTester:
         return self.num_channels, self.size["height"], self.size["width"]
 
     def prepare_dummy_image(self):
-        revision = "ec57bf8c8b1653a209c13f6e9ee66b12df0fc2db"
-        filepath = hf_hub_download(
-            repo_id="hf-internal-testing/fixtures_docvqa",
-            filename="nougat_pdf.png",
-            repo_type="dataset",
-            revision=revision,
-        )
-        image = Image.open(filepath).convert("RGB")
-        return image
+        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test")
+        return ds[0]["image"].convert("RGB")
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         return prepare_image_inputs(
@@ -183,14 +174,8 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual((3, 100, 200), aligned_image.shape)
 
     def prepare_dummy_np_image(self):
-        revision = "ec57bf8c8b1653a209c13f6e9ee66b12df0fc2db"
-        filepath = hf_hub_download(
-            repo_id="hf-internal-testing/fixtures_docvqa",
-            filename="nougat_pdf.png",
-            repo_type="dataset",
-            revision=revision,
-        )
-        image = Image.open(filepath).convert("RGB")
+        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test")
+        image = ds[0]["image"].convert("RGB")
         return np.array(image)
 
     def test_crop_margin_equality_cv2_python(self):

@@ -505,7 +505,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
         image_processor = BeitImageProcessor(do_resize=True, size=640, do_center_crop=False)
 
         ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
-        image = Image.open(ds[0]["file"])
+        image = ds[0]["image"].convert("RGB")
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
@@ -548,7 +548,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
         image_processor = BeitImageProcessor(do_resize=True, size=640, do_center_crop=False)
 
         ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
-        image = Image.open(ds[0]["file"])
+        image = ds[0]["image"].convert("RGB")
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass

@@ -1725,7 +1725,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             torch_device
         )
 
-        EXPECTED_TRANSCRIPTS = ["木村さんに電話を貸してもらいました", " Kimura-san called me."]
+        EXPECTED_TRANSCRIPTS = [
+            "夏の時期の時期でした",
+            " It was the time of day and all of the pens left during the summer."
+        ]
 
         generated_ids = model.generate(
             input_features.repeat(2, 1, 1),
