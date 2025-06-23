@@ -34,7 +34,7 @@ from ..utils.quantization_config import (
     QuantizationMethod,
     QuantoConfig,
     QuarkConfig,
-    QuartetQatConfig,
+    QuartetConfig,
     SpQRConfig,
     TorchAoConfig,
     VptqConfig,
@@ -55,7 +55,7 @@ from .quantizer_higgs import HiggsHfQuantizer
 from .quantizer_hqq import HqqHfQuantizer
 from .quantizer_quanto import QuantoHfQuantizer
 from .quantizer_quark import QuarkHfQuantizer
-from .quantizer_quartet_qat import QuartetQatHfQuantizer
+from .quantizer_quartet import QuartetHfQuantizer
 from .quantizer_spqr import SpQRHfQuantizer
 from .quantizer_torchao import TorchAoHfQuantizer
 from .quantizer_vptq import VptqHfQuantizer
@@ -69,7 +69,7 @@ AUTO_QUANTIZER_MAPPING = {
     "aqlm": AqlmHfQuantizer,
     "quanto": QuantoHfQuantizer,
     "quark": QuarkHfQuantizer,
-    "quartet_qat": QuartetQatHfQuantizer,
+    "quartet": QuartetHfQuantizer,
     "eetq": EetqHfQuantizer,
     "higgs": HiggsHfQuantizer,
     "hqq": HqqHfQuantizer,
@@ -92,7 +92,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "aqlm": AqlmConfig,
     "quanto": QuantoConfig,
     "quark": QuarkConfig,
-    "quartet_qat": QuartetQatConfig,
+    "quartet": QuartetConfig,
     "hqq": HqqConfig,
     "compressed-tensors": CompressedTensorsConfig,
     "fbgemm_fp8": FbgemmFp8Config,

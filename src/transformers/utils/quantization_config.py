@@ -63,7 +63,7 @@ class QuantizationMethod(str, Enum):
     SPQR = "spqr"
     FP8 = "fp8"
     QUARK = "quark"
-    QUARTET_QAT = "quartet_qat"
+    QUARTET = "quartet"
     AUTOROUND = "auto-round"
 
 
@@ -1552,9 +1552,9 @@ class HiggsConfig(QuantizationConfigMixin):
 
 
 @dataclass
-class QuartetQatConfig(QuantizationConfigMixin):
+class QuartetConfig(QuantizationConfigMixin):
     """
-    QuartetQatConfig is a configuration class for quantization using the Quartet QAT method.
+    QuartetConfig is a configuration class for quantization using the Quartet method.
 
     Args:
         forward_dtype (`str`, *optional*, defaults to `"mxfp4"`):
@@ -1573,19 +1573,23 @@ class QuartetQatConfig(QuantizationConfigMixin):
     def __init__(
         self,
         forward_dtype: str = "mxfp4",
+        exponent_dtype: str = "e8m0",
         backward_dtype: str = "mxfp4",
         store_master_weights: bool = False,
-        hadamard_group_size: int = 32,
+        do_hadamard: bool = True,
+        group_size: int = 32,
         modules_to_not_convert: Optional[List[str]] = None,
         **kwargs,
     ):
         self.forward_dtype = forward_dtype
+        self.exponent_dtype = exponent_dtype
         self.backward_dtype = backward_dtype
         self.store_master_weights = store_master_weights
-        self.hadamard_group_size = hadamard_group_size
+        self.group_size = group_size
+        self.do_hadamard = do_hadamard
         self.modules_to_not_convert = modules_to_not_convert
 
-        self.quant_method = QuantizationMethod.QUARTET_QAT
+        self.quant_method = QuantizationMethod.QUARTET
         self.post_init()
 
     def post_init(self):
@@ -1594,10 +1598,14 @@ class QuartetQatConfig(QuantizationConfigMixin):
         """
         if self.forward_dtype not in ["mxfp4"]:
             raise ValueError("forward_dtype must be mxfp4 for now")
+        if self.exponent_dtype not in ["e8m0"]:
+            raise ValueError("exponent_dtype must be e8m0 for now")
         if self.backward_dtype not in ["mxfp4"]:
             raise ValueError("backward_dtype must be mxfp4 for now")
-        if self.hadamard_group_size not in [32]:
-            raise ValueError("hadamard_group_size must be 32 for now")
+        if self.group_size not in [32]:
+            raise ValueError("group_size must be 32 for now")
+        if self.do_hadamard not in [True]:
+            raise ValueError("do_hadamard must be True for now")
         if self.modules_to_not_convert is None:
             self.modules_to_not_convert = ["lm_head"]
 

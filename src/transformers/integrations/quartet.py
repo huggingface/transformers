@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"HIGGS through FLUTE (Flexible Lookup Table Engine for LUT-quantized LLMs) integration file"
+"Quartet integration file"
 
 from ..utils import (
     is_quartet_qat_available,
@@ -24,12 +24,12 @@ if is_torch_available():
 
 
 if is_quartet_qat_available():
-    from quartet_qat import QuartetConfig, QuartetDtype
+    from quartet_qat import QuartetConfig as QuartetLinearConfig, QuartetDtype
 
-from transformers.utils.quantization_config import QuartetQatConfig
+from transformers.utils.quantization_config import QuartetConfig
 
 
-def adapt_quartet_qat_config(config: QuartetQatConfig):
+def adapt_quartet_config(config: QuartetConfig):
     if config.forward_dtype == "mxfp4":
         forward_dtype = QuartetDtype.MXFP4
     else:
@@ -40,10 +40,10 @@ def adapt_quartet_qat_config(config: QuartetQatConfig):
     else:
         raise ValueError(f"Unsupported backward dtype: {config.backward_dtype}")
 
-    return QuartetConfig(
+    return QuartetLinearConfig(
         forward_dtype=forward_dtype,
         backward_dtype=backward_dtype,
         store_master_weights=config.store_master_weights,
-        hadamard_group_size=config.hadamard_group_size,
+        hadamard_group_size=config.group_size,
         modules_to_not_convert=config.modules_to_not_convert,
     )
