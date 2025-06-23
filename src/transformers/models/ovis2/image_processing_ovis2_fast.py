@@ -200,10 +200,11 @@ class Ovis2ImageProcessorFast(BaseImageProcessorFast):
         do_normalize: bool,
         image_mean: Optional[Union[float, List[float]]],
         image_std: Optional[Union[float, List[float]]],
+        disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
     ) -> BatchFeature:
         if crop_to_patches and max_patches > 1:
-            grouped_images, grouped_images_index = group_images_by_shape(images)
+            grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
             processed_images_grouped = {}
             grids = {}
             for shape, stacked_images in grouped_images.items():
@@ -224,7 +225,7 @@ class Ovis2ImageProcessorFast(BaseImageProcessorFast):
             grids = [[1, 1] for _ in range(len(images))]
 
         # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
@@ -234,7 +235,7 @@ class Ovis2ImageProcessorFast(BaseImageProcessorFast):
 
         # Group images by size for further processing
         # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_center_crop:
