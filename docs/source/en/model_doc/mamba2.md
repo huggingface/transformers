@@ -54,7 +54,7 @@ out = model.generate(input_ids, max_new_tokens=10)
 print(tokenizer.batch_decode(out))
 ```
 
-Here's a draft script for finetuning: 
+Here's a PR script for finetuning:
 ```python 
 from trl import SFTTrainer
 from peft import LoraConfig
