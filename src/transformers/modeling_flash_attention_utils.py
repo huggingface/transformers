@@ -25,6 +25,7 @@ from .utils import (
     is_flash_attn_greater_or_equal_2_10,
     is_torch_npu_available,
     logging,
+    is_flash_attn_v2_available,
 )
 
 
@@ -32,10 +33,13 @@ logger = logging.get_logger(__name__)
 flash_attn_func = None
 
 
-if is_flash_attn_2_available():
+if is_flash_attn_2_available() or is_flash_attn_v2_available():
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.layers.rotary import apply_rotary_emb  # noqa
+    
+    if is_flash_attn_v2_available():
+        from flash_attn import flash_attn_v2_func, flash_attn_varlen_v2_func
 
 
 # patch functions in package `flash-attn` when using flash-attention on Ascend NPU.
@@ -283,6 +287,9 @@ def fa_peft_integration_check(
 flash_241 = is_flash_attn_greater_or_equal("2.4.1")
 deterministic_g = None
 
+# Check if Flash Attention v2 is available
+is_fa2_available = is_flash_attn_2_available() or is_flash_attn_v2_available()
+
 
 def _flash_attention_forward(
     query_states: torch.Tensor,
@@ -424,7 +431,128 @@ def _flash_attention_forward(
             query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal, **flash_kwargs
         )
 
-    return attn_output
+    return attn_output, None
+
+
+def _flash_attention_v2_forward(
+    query_states: torch.Tensor,
+    key_states: torch.Tensor,
+    value_states: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    query_length: int,
+    is_causal: bool = False,
+    dropout: float = 0.0,
+    position_ids: Optional[torch.Tensor] = None,
+    softmax_scale: Optional[float] = None,
+    sliding_window: Optional[int] = None,
+    use_top_left_mask: bool = False,
+    softcap: Optional[float] = None,
+    deterministic: Optional[bool] = None,
+    cu_seq_lens_q: Optional[torch.LongTensor] = None,
+    cu_seq_lens_k: Optional[torch.LongTensor] = None,
+    max_length_q: Optional[int] = None,
+    max_length_k: Optional[int] = None,
+    target_dtype: Optional[torch.dtype] = None,
+    **kwargs,
+):
+    """
+    Calls the forward method of Flash Attention v2 - optimized version of Flash Attention with better memory efficiency
+    and performance.
+
+    Args:
+        query_states (`torch.Tensor`):
+            Input query states to be passed to Flash Attention API
+        key_states (`torch.Tensor`):
+            Input key states to be passed to Flash Attention API
+        value_states (`torch.Tensor`):
+            Input value states to be passed to Flash Attention API
+        attention_mask (`torch.Tensor`, *optional*):
+            The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
+            position of padding tokens and 1 for the position of non-padding tokens.
+        dropout (`float`):
+            Attention dropout
+        softmax_scale (`float`, *optional*):
+            The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
+        use_top_left_mask (`bool`, defaults to `False`):
+            Whether to use top-left aligned causal mask.
+        softcap (`float`, *optional*):
+            Softcap for the attention logits, used e.g. in gemma2.
+        deterministic (`bool`, *optional*):
+            Whether to use deterministic algorithms.
+    """
+    if not is_flash_attn_v2_available():
+        raise ImportError(
+            "Flash Attention v2 is not installed. Please install it with: pip install flash-attn --no-build-isolation"
+        )
+
+    if not use_top_left_mask:
+        causal = is_causal
+    else:
+        causal = is_causal and query_length != 1
+
+    # Window size for sliding window attention
+    if sliding_window is not None and key_states.shape[1] > sliding_window:
+        window_size = (sliding_window, sliding_window)
+    else:
+        window_size = (-1, -1)  # No windowing
+
+    # Handle deterministic mode
+    if deterministic is None:
+        global deterministic_g
+        if deterministic_g is None:
+            deterministic_g = os.environ.get("FLASH_ATTENTION_DETERMINISTIC", "0") == "1"
+        deterministic = deterministic_g
+
+    # Prepare flash attention kwargs
+    flash_kwargs = {
+        "window_size": window_size,
+        "deterministic": deterministic,
+    }
+
+    if softcap is not None:
+        flash_kwargs["softcap"] = softcap
+
+    # Handle PEFT integration
+    query_states, key_states, value_states = fa_peft_integration_check(
+        query_states, key_states, value_states, target_dtype
+    )
+
+    # Handle padding if attention_mask is provided
+    if attention_mask is not None:
+        batch_size = query_states.shape[0]
+        query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = _upad_input(
+            query_states, key_states, value_states, attention_mask, query_length
+        )
+        cu_seqlens_q, cu_seqlens_k = cu_seq_lens
+        max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
+
+        attn_output_unpad = flash_attn_varlen_v2_func(
+            query_states,
+            key_states,
+            value_states,
+            cu_seqlens_q=cu_seqlens_q,
+            cu_seqlens_k=cu_seqlens_k,
+            max_seqlen_q=max_seqlen_in_batch_q,
+            max_seqlen_k=max_seqlen_in_batch_k,
+            dropout_p=dropout,
+            softmax_scale=softmax_scale,
+            causal=causal,
+            **flash_kwargs,
+        )
+        attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
+    else:
+        # No padding, use standard attention
+        attn_output = flash_attn_v2_func(
+            query_states,
+            key_states,
+            value_states,
+            dropout_p=dropout,
+            softmax_scale=softmax_scale,
+            causal=causal,
+            **flash_kwargs,
+        )
+
+    return attn_output, None
 
 
 class FlashAttentionKwargs(TypedDict, total=False):

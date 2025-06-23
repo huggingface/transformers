@@ -30,6 +30,7 @@ from .utils import (
     _LazyModule,
     is_bitsandbytes_available,
     is_essentia_available,
+    is_flash_attn_v2_available,
     is_flax_available,
     is_g2p_en_available,
     is_keras_nlp_available,

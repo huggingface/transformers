@@ -1089,7 +1089,29 @@ def is_flash_attn_2_available():
         return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.0.4")
     elif is_torch_mlu_available():
         return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.3.3")
-    else:
+    return False
+
+
+def is_flash_attn_v2_available():
+    """
+    Check if Flash Attention v2 is available.
+    """
+    if not is_torch_available():
+        return False
+
+    if not _is_package_available("flash_attn"):
+        return False
+
+    # Flash Attention v2 requires CUDA
+    import torch
+    if not torch.cuda.is_available():
+        return False
+
+    try:
+        import flash_attn
+        # Check for Flash Attention v2 specific functions
+        return hasattr(flash_attn, 'flash_attn_v2_func') and hasattr(flash_attn, 'flash_attn_varlen_v2_func')
+    except ImportError:
         return False
 
 
