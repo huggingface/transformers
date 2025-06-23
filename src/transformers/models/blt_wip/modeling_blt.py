@@ -1,16 +1,29 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
+# coding=utf-8
+# Copyright 2025 the Facebook Research and HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""BLT model."""
 
-import logging
-import os
+from ...utils import is_torch_flex_attn_available, logging
 from typing import Callable, List, Optional, Tuple, Union
 
 from ...cache_utils import Cache
+from ...activations import ACT2FN
 
 import torch
 import torch.nn
 import torch.nn as nn
 from torch.nn import functional as F
-from torch.nn.attention.flex_attention import BlockMask, create_block_mask, flex_attention
 
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 
@@ -22,16 +35,14 @@ from .configuration_blt import (
 
 RMSNorm = nn.RMSNorm
 
-logger = logging.getLogger()
+if is_torch_flex_attn_available():
+    from torch.nn.attention.flex_attention import BlockMask
 
-flex_attention_comp = flex_attention
+    from ...integrations.flex_attention import make_flex_block_causal_mask
 
-def cross_entropy(pred, target, **kwargs):
-    return F.nll_loss(
-        F.log_softmax(pred.flatten(end_dim=-2).float(), -1),
-        target.flatten(end_dim=-1),
-        **kwargs,
-    )
+
+logger = logging.get_logger(__name__)
+
 
 
 def repeat_kv(x: torch.Tensor, n_rep: int, dim: int) -> torch.Tensor:
@@ -47,47 +58,23 @@ def repeat_kv(x: torch.Tensor, n_rep: int, dim: int) -> torch.Tensor:
     )
 
 class BLTMLP(nn.Module):
-    def __init__(
-        self,
-        dim: int,
-        hidden_dim: int,
-        multiple_of: int,
-        ffn_dim_multiplier: Optional[float],
-        mp_size: int = 1,
-    ):
+    def __init__(self, config):
         super().__init__()
-
-        hidden_dim = int(2 * hidden_dim / 3)
-        if ffn_dim_multiplier is not None:
-            hidden_dim = int(ffn_dim_multiplier * hidden_dim)
-        hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
-        assert hidden_dim % mp_size == 0
-
-        self.dim = dim
-        self.hidden_dim = hidden_dim
-
-        self.gate_proj = nn.Linear(
-            dim,
-            hidden_dim,
-            bias=False,
-        )
-        self.up_proj = nn.Linear(
-            dim,
-            hidden_dim,
-            bias=False,
-        )
-        self.down_proj = nn.Linear(
-            hidden_dim,
-            dim,
-            bias=False,
-        )
+        self.config = config
+        self.hidden_size = config.hidden_size
+        
+        # Calculate intermediate_size based on actual hidden_size (not config.dim)
+        base_dim = 4 * self.hidden_size
+        intermediate_dim = int(2 * base_dim / 3)
+        self.intermediate_size = config.multiple_of * ((intermediate_dim + config.multiple_of - 1) // config.multiple_of)
+        
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # B S D
-        x1 = self.gate_proj(x.view_as(x))
-        x3 = self.up_proj(x.view_as(x))
-        output = self.down_proj(F.silu(x1) * x3)
-        return output
+        return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 def eager_attention_forward(
         module: nn.Module,
@@ -149,7 +136,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_rot.type_as(q), k_rot.type_as(k)
 
 
-
+# Copied from transformers.models.mllama.modeling_mllama.MllamaTextSelfAttention with MllamaText->BLT
 class BLTSelfAttention(nn.Module):
     def __init__(self, config: BLTConfig, layer_idx: int):
         super().__init__()
@@ -253,12 +240,7 @@ class BLTTransformerLayer(nn.Module):
 
         self.self_attn = BLTSelfAttention(config=config, layer_idx=layer_idx)
 
-        self.mlp = BLTMLP(
-            dim=dim,
-            hidden_dim=4 * dim,
-            multiple_of=multiple_of,
-            ffn_dim_multiplier=ffn_dim_multiplier,
-        )
+        self.mlp = BLTMLP(config=config)
         self.input_layernorm = RMSNorm(dim, eps=norm_eps)
         self.post_attention_layernorm = RMSNorm(dim, eps=norm_eps)
 
@@ -347,86 +329,93 @@ def byte_group_hash_function(token_ids: torch.Tensor, group_size: int = 2, hash_
     return hash_values_range
 
 
-def create_patch_mask_from_ids(patch_ids, num_patches, window=None, patches_as_queries=False):
+def _prepare_patch_cross_attention_mask(
+    patch_ids: torch.Tensor,
+    num_patches: int,
+    sequence_length: int,
+    patches_as_queries: bool = False,
+    cross_attn_k: int = 1,
+    dtype: torch.dtype = torch.float32,
+) -> Tuple[torch.Tensor, torch.Tensor]:
     """
-    Creates a tensor of shape [batch_size, seq_len, num_patches] where each element at position (i, j, k)
-    is True if the patch id at position (i, j) is less than or equal to k.
+    Prepare cross-attention mask for patch-based attention, following mllama's robust approach.
+    
+    This function creates masks that control which patches can attend to which other patches,
+    with support for query/key role swapping and cross-attention multipliers.
+    
     Args:
         patch_ids (torch.Tensor): Tensor of shape [batch_size, seq_len] containing patch ids.
         num_patches (int): Total number of patches.
-        window (int): If not None, only considers patches within a window of size window.
-        patches_as_queries (bool): If True, the patches are used as queries
+        sequence_length (int): Length of the sequence.
+        patches_as_queries (bool): If True, patches are used as queries, otherwise as keys.
+        cross_attn_k (int): Cross-attention multiplier for repeating patches.
+        dtype (torch.dtype): Data type for the output mask.
+        
     Returns:
-        torch.Tensor: Tensor of shape [batch_size, q_len, kv_len] with the desired mask.
+        Tuple[torch.Tensor, torch.Tensor]: 
+            - cross_attention_mask: 4D tensor [batch_size, 1, q_len, kv_len] 
+            - full_text_row_masked_out_mask: 4D tensor indicating fully masked rows
     """
     batch_size, seq_len = patch_ids.shape
-    if not patches_as_queries:
-        q_ids = patch_ids.unsqueeze(-1).expand(batch_size, seq_len, num_patches)
-        kv_ids = (
-            torch.arange(num_patches, device=patch_ids.device)
-            .unsqueeze(0)
-            .unsqueeze(0)
-            .expand(batch_size, seq_len, num_patches)
+    device = patch_ids.device
+    
+    # Determine query and key lengths based on configuration
+    if patches_as_queries:
+        q_len = num_patches * cross_attn_k
+        kv_len = sequence_length
+        # Create patch-to-sequence mapping
+        q_patch_ids = torch.arange(num_patches, device=device).unsqueeze(0).unsqueeze(-1).expand(
+            batch_size, num_patches, seq_len
         )
+        kv_patch_ids = patch_ids.unsqueeze(1).expand(batch_size, num_patches, seq_len)
     else:
-        kv_ids = patch_ids.unsqueeze(1).expand(batch_size, num_patches, seq_len)
-        q_ids = (
-            torch.arange(num_patches, device=patch_ids.device)
-            .unsqueeze(0)
-            .unsqueeze(-1)
-            .expand(batch_size, num_patches, seq_len)
+        q_len = sequence_length
+        kv_len = num_patches * cross_attn_k
+        # Create sequence-to-patch mapping
+        q_patch_ids = patch_ids.unsqueeze(-1).expand(batch_size, seq_len, num_patches)
+        kv_patch_ids = torch.arange(num_patches, device=device).unsqueeze(0).unsqueeze(0).expand(
+            batch_size, seq_len, num_patches
         )
-    if window is None:
-        mask = q_ids == kv_ids
-    else:
-        mask = (kv_ids <= q_ids) & (q_ids < kv_ids + window)
-    return mask
+    
+    # Create base attention mask - boolean mask where True means "should attend"
+    # Exact patch matching
+    cross_attention_mask = q_patch_ids == kv_patch_ids
+    
+    # Handle cross_attn_k multiplier by repeating along appropriate dimension
+    repeat_dim = 1 if patches_as_queries else -1
+    cross_attention_mask = cross_attention_mask.repeat_interleave(cross_attn_k, dim=repeat_dim)
+    
+    # Validate dimensions
+    expected_shape = (batch_size, q_len, kv_len)
+    if cross_attention_mask.shape != expected_shape:
+        raise ValueError(f"Cross attention mask shape {cross_attention_mask.shape} doesn't match expected {expected_shape}")
+    
+    # Reshape so it can be used by attn module - add head dimension
+    cross_attention_mask = cross_attention_mask.unsqueeze(1)  # [batch_size, 1, q_len, kv_len]
+    
+    # Invert the mask (following mllama pattern exactly)
+    # True -> 0.0 (attend), False -> 1.0 (will become -inf)
+    inverted_cross_attn_mask = (1.0 - cross_attention_mask.to(dtype))
+    cross_attention_mask = inverted_cross_attn_mask.masked_fill(
+        inverted_cross_attn_mask.to(torch.bool), torch.finfo(dtype).min
+    )
+    
+    # Apply full-row bias (following mllama pattern exactly)
+    # Return 4D tensor of shape [B, H, S1, 1] where value is 0 if a full row in cross attn mask's
+    # last dimension contains negative infinity values, otherwise it's 1
+    negative_inf_value = torch.finfo(dtype).min
+    full_text_row_masked_out_mask = (
+        (cross_attention_mask != negative_inf_value).any(dim=-1).type_as(cross_attention_mask)[..., None]
+    )
+    cross_attention_mask *= full_text_row_masked_out_mask
+    
+    return cross_attention_mask, full_text_row_masked_out_mask
 
 
-def cross_attn_mask(
-    patch_ids,
-    patch_lengths,
-    N,
-    patches_as_queries=False,
-    cross_attn_k=1,
-    window=None,
-    block_mask=True,
-):
-    batch_size = patch_ids.shape[0]
-    with torch.no_grad():
-        # Create the patch mask
-        cross_mask = create_patch_mask_from_ids(
-            patch_ids,
-            patch_lengths.shape[1],
-            window=window,
-            patches_as_queries=patches_as_queries,
-        ).repeat_interleave(cross_attn_k, dim=1 if patches_as_queries else -1)
-        q_len = patch_lengths.shape[1] * cross_attn_k if patches_as_queries else N
-        kv_len = N if patches_as_queries else patch_lengths.shape[1] * cross_attn_k
-        assert cross_mask.shape == (
-            batch_size,
-            q_len,
-            kv_len,
-        ), f"{cross_mask.shape} != {(batch_size, q_len, kv_len)}"
-        block_mask = None
-        if block_mask:
 
-            def patch_mask(b, num_heads, q_idx, kv_idx):
-                return cross_mask[b, q_idx, kv_idx]
 
-            block_mask = create_block_mask(
-                patch_mask,
-                B=batch_size,
-                H=None,
-                Q_LEN=q_len,
-                KV_LEN=kv_len,
-                _compile=True,
-            )
-            return block_mask
-        else:
-            return torch.where(cross_mask, torch.tensor(0.0), torch.tensor(float("-inf"))).unsqueeze(
-                1
-            )  # [batch_size, 1, q_len, kv_len]
+
+
 
 
 def process_patch_lengths(patch_lengths: torch.Tensor, max_patch_length: int) -> torch.Tensor:
@@ -544,6 +533,7 @@ class BLTLocalEncoder(nn.Module):
         patch_embeds: Optional[torch.Tensor] = None,
         mask: Optional[Union["BlockMask", torch.Tensor, str]] = None,
         cross_mask: Optional[torch.Tensor] = None,
+        full_text_row_masked_out_mask: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         num_patches: Optional[int] = None,
         patch_ids: Optional[torch.Tensor] = None,
         cache: Optional[List[Tuple[torch.Tensor, torch.Tensor, int]]] = None,
@@ -580,6 +570,7 @@ class BLTLocalEncoder(nn.Module):
                     hidden_states=patch_embeds,
                     cross_attention_states=hidden_states,
                     attention_mask=cross_mask,
+                    full_text_row_masked_out_mask=full_text_row_masked_out_mask,
                     output_attentions=False,
                     use_cache=False,
                     cache_position=None,
@@ -712,6 +703,7 @@ class BLTLocalDecoder(nn.Module):
         patch_embeds: Optional[torch.Tensor] = None,
         mask: Optional[Union["BlockMask", torch.Tensor, str]] = None,
         cross_mask: Optional[torch.Tensor] = None,
+        full_text_row_masked_out_mask: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         cache: Optional[List[Tuple[torch.Tensor, torch.Tensor, int]]] = None,
     ):
         batch_size, sequence_length = tokens.shape
@@ -741,6 +733,7 @@ class BLTLocalDecoder(nn.Module):
                     hidden_states=hidden_states,
                     cross_attention_states=patch_embeds,
                     attention_mask=cross_mask,
+                    full_text_row_masked_out_mask=full_text_row_masked_out_mask,
                     output_attentions=False,
                     use_cache=False,
                     cache_position=None,
@@ -783,6 +776,7 @@ class BLTCrossAttention(nn.Module):
         cross_attention_states: Optional[torch.Tensor] = None,
         past_key_value: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        full_text_row_masked_out_mask: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         output_attentions: bool = False,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
@@ -844,7 +838,11 @@ class BLTCrossAttention(nn.Module):
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
 
-        attn_output = attn_output + hidden_states #TODO: they add the residual twice?? move this out
+        # Apply full row masking if provided (following mllama pattern)
+        if full_text_row_masked_out_mask is not None:
+            attn_output = full_text_row_masked_out_mask[:, 0] * attn_output
+
+        attn_output = attn_output + hidden_states
 
         if not output_attentions:
             attn_weights = None
@@ -1034,7 +1032,6 @@ class BLTModel(BLTPreTrainedModel):
         self.cross_attn_k = config.cross_attn_k
         self.cross_attn_window_encoder = config.cross_attn_window_encoder
         self.cross_attn_window_decoder = config.cross_attn_window_decoder
-        self.cross_attn_use_flex_attention = config.cross_attn_use_flex_attention
         self.boe_id = config.boe_id
         self.eos_token_id = config.eos_token_id
 
@@ -1102,17 +1099,17 @@ class BLTModel(BLTPreTrainedModel):
         #     f"{torch.max(patch_ids) + 1} > {torch.max((patch_lengths != 0).sum(dim=-1))}"
         # )
 
-        cross_attn_mask_enc = None
         # Cross-attention encoder
+        cross_attn_mask_enc = None
+        full_text_row_masked_out_mask_enc = None
         if self.cross_attn_encoder:
-            cross_attn_mask_enc = cross_attn_mask(
-                patch_ids,
-                patch_lengths,
-                sequence_length,
+            cross_attn_mask_enc, full_text_row_masked_out_mask_enc = _prepare_patch_cross_attention_mask(
+                patch_ids=patch_ids,
+                num_patches=patch_lengths.shape[1],
+                sequence_length=sequence_length,
                 patches_as_queries=True,
                 cross_attn_k=self.cross_attn_k,
-                window=self.cross_attn_window_encoder,
-                block_mask=self.cross_attn_use_flex_attention,
+                dtype=torch.float32,
             )
 
         # Hashing and embedding
@@ -1134,6 +1131,7 @@ class BLTModel(BLTPreTrainedModel):
             input_embeds=local_encoder_embeds,
             patch_embeds=None,
             cross_mask=cross_attn_mask_enc,
+            full_text_row_masked_out_mask=full_text_row_masked_out_mask_enc,
             num_patches=patch_lengths.shape[1],
             patch_ids=patch_ids,
         )
@@ -1171,20 +1169,20 @@ class BLTModel(BLTPreTrainedModel):
         # )
 
         # Cross-attention decoder
+        cross_attn_mask_dec = None
+        full_text_row_masked_out_mask_dec = None
         if not self.cross_attn_decoder:
             patch_hidden_states = torch.gather(global_hidden_states, 1, decoder_patch_ids.unsqueeze(-1).expand(-1, -1, global_hidden_states.shape[-1]))
-            cross_attn_mask_dec = None
             # assert local_decoder_tokens.shape == patch_hidden_states.shape[:-1]
         else:
             patch_hidden_states = global_hidden_states
-            cross_attn_mask_dec = cross_attn_mask(
-                decoder_patch_ids,
-                patch_lengths,
-                sequence_length,
+            cross_attn_mask_dec, full_text_row_masked_out_mask_dec = _prepare_patch_cross_attention_mask(
+                patch_ids=decoder_patch_ids,
+                num_patches=patch_lengths.shape[1],
+                sequence_length=sequence_length,
                 patches_as_queries=False,
                 cross_attn_k=self.cross_attn_k,
-                window=self.cross_attn_window_decoder,
-                block_mask=self.cross_attn_use_flex_attention,
+                dtype=torch.float32,
             )
 
         # Local decoder
@@ -1193,6 +1191,7 @@ class BLTModel(BLTPreTrainedModel):
             patch_embeds=patch_hidden_states,
             tokens=local_decoder_tokens,
             cross_mask=cross_attn_mask_dec,
+            full_text_row_masked_out_mask=full_text_row_masked_out_mask_dec,
         )
         return output
     
@@ -1445,6 +1444,8 @@ def init_hash_embeddings(
             )
 
     return nn.ModuleList(embeddings)
+
+
 
 
 __all__ = [

@@ -1,7 +1,5 @@
-# new config
-
 # coding=utf-8
-# Copyright 2024 Meta Platforms, Inc. and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 Facebook Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""BLT (Byte Latent Transformer) model configuration"""
+"""BLT model configuration"""
 
 from enum import Enum
 
@@ -150,6 +148,10 @@ class BLTPatcherConfig(PretrainedConfig):
         self.num_attention_heads = n_heads
         self.num_key_value_heads = self.n_kv_heads  # Use the computed n_kv_heads
         self.max_position_embeddings = max_seqlen
+        self.hidden_act = "silu"  # BLT uses silu activation
+        
+        # intermediate_size will be calculated in BLTMLP based on actual hidden_size
+        self.intermediate_size = None
         
         # Set simple rope scaling for patcher (no complex dynamic rope)
         self.rope_scaling = {"rope_type": "default"}
@@ -380,6 +382,7 @@ class BLTConfig(PretrainedConfig):
         dropout=0.0,
         ffn_dim_multiplier=1.0,
         multiple_of=256,
+        hidden_act="silu",
         # Positional encoding
         rope_theta=10000.0,
         rope_use_fp32_in_outer_product=False,
@@ -476,6 +479,7 @@ class BLTConfig(PretrainedConfig):
         self.dropout = dropout
         self.ffn_dim_multiplier = ffn_dim_multiplier
         self.multiple_of = multiple_of
+        self.hidden_act = hidden_act
 
         # Positional encoding
         self.rope_theta = rope_theta
@@ -569,6 +573,10 @@ class BLTConfig(PretrainedConfig):
         self.max_position_embeddings=max_seqlen
         self.hidden_size=dim_local_encoder
         self.num_attention_heads=n_heads_local_encoder
+        
+        # Calculate intermediate_size using BLTMLP logic for each component
+        # Note: Each component uses its own hidden dimension, not the main dim
+        self.intermediate_size = None  # Will be calculated per component
 
         super().__init__(
             bos_token_id=bos_token_id,
@@ -622,6 +630,8 @@ class BLTConfig(PretrainedConfig):
             return self.dim_token
         else:
             return self.dim_local_decoder
+
+
 
     def get_init_std_factor(self, depth: int) -> float:
         """
