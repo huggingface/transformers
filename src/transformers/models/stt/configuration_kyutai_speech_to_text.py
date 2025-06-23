@@ -28,6 +28,8 @@ class KyutaiSpeechToTextConfig(PretrainedConfig):
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
     2.6b-en model.
 
+    e.g. [kyutai/stt-2.6b-en](https://huggingface.co/kyutai/stt-2.6b-en)
+
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
