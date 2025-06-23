@@ -118,7 +118,6 @@ processed_outputs = processor.post_process_keypoint_detection(outputs, [image_si
 ## Resources
 
 - Refer to this [noteboook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/SuperPoint/Inference_with_SuperPoint_to_detect_interest_points_in_an_image.ipynb) for an inference and visualization example.
-- Check the [Keypoint detection task guide](../tasks/keypoint_detection) on how to use the model.
 
 ## SuperPointConfig
 
