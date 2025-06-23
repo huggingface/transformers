@@ -1036,7 +1036,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         if is_torch_available() and torch.distributed.is_initialized():
             self.device = self.model.device
         logger.warning(f"Device set to use {self.device}")
-        
+
         self.binary_output = binary_output
 
         # We shouldn't call `model.to()` for models loaded with accelerate as well as the case that model is already on device
