@@ -823,30 +823,6 @@ class ZambaPreTrainedModel(PreTrainedModel):
             module.A_log.data.copy_(torch.log(A).reshape(module.n_mamba_heads, module.mamba_head_dim, -1))
             module.D.data.fill_(1.0)
 
-    @classmethod
-    @classmethod
-    def _check_and_enable_flash_attn_2(
-        cls,
-        config,
-        torch_dtype: Optional[torch.dtype] = None,
-        device_map: Optional[Union[str, dict[str, int]]] = None,
-        hard_check_only: bool = False,
-        check_device_map: bool = False,
-    ):
-        """
-        Overloads `PreTrainedModel._check_and_enable_flash_attn_2` so as to DISABLE Flash Attention 2 by default on Zamba models.
-        Flash attention 2 is currently not supported in the HuggingFace implementation of Zamba v1.
-        """
-        config = super()._check_and_enable_flash_attn_2(
-            config, torch_dtype, device_map, hard_check_only=hard_check_only, check_device_map=check_device_map
-        )
-
-        # if using the default path -> swap sdpa by eager
-        if not hard_check_only and config._attn_implementation == "flash_attention_2":
-            config._attn_implementation = "eager"
-
-        return config
-
 
 @auto_docstring
 class ZambaModel(ZambaPreTrainedModel):

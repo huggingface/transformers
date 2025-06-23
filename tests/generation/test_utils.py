@@ -1994,7 +1994,7 @@ class GenerationTesterMixin:
             max_new_tokens = 20
 
             for dtype in (torch.float32, torch.float16):
-                model = model_class(config).to(torch_device).to(dtype).eval()
+                model = model_class(copy.deepcopy(config)).to(torch_device).to(dtype).eval()
                 inputs_dict = {
                     k: v.to(dtype) if isinstance(v, torch.Tensor) and torch.is_floating_point(v) else v
                     for k, v in inputs_dict.items()

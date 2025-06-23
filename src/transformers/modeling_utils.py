@@ -2020,7 +2020,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 f"`model = {self.__class__.__name__}.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         self.config = config
-        self.set_attention_implementation(self.config._attn_implementation_internal)
+
+        # The `hasattr` here is used as some Transformers tests for some reason do not call
+        # PretrainedConfig __init__ (e.g. test_no_super_init_config_and_model)
+        if hasattr(config, "_attn_implementation_internal"):
+            self.set_attention_implementation(self.config._attn_implementation_internal)
 
         # for initialization of the loss
         loss_type = self.__class__.__name__
@@ -2159,7 +2163,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         if config._attn_implementation_internal is not None:
             # In this case, the config has been created with the attn_implementation set by the user, which we should respect.
             attn_implementation = config._attn_implementation_internal
-            config._attn_implementation = kwargs.pop("attn_implementation", attn_implementation)
         else:
             attn_implementation = None
         config._attn_implementation = kwargs.pop("attn_implementation", attn_implementation)
@@ -2230,19 +2233,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
     def set_attention_implementation(self, attn_implementation: Union[str, dict]):
         """
-        Checks and dispatches to hhe requested attention implementation.
+        Checks and dispatches to the requested attention implementation.
         """
-        # Here we use config._attn_implementation_internal to check whether the attention implementation was explicitly set by the user.
-        # The property `PretrainedConfig._attn_implementation` is never `None`, for backward compatibility (always fall back on "eager").
-        # The `hasattr` here is used as some Transformers tests for some reason do not call PretrainedConfig __init__ (e.g. test_no_super_init_config_and_model)
-        requested_attn_implementation = None
-        if (
-            hasattr(self.config, "_attn_implementation_internal")
-            and self.config._attn_implementation_internal is not None
-        ):
-            # If a config is passed with a preset attn_implementation, we skip the automatic dispatch and use the user-provided config,
-            # with hard checks that the requested attention implementation is available.
-            requested_attn_implementation = self._check_attn_implementation(self.config._attn_implementation_internal)
+        requested_attn_implementation = self._check_attn_implementation(attn_implementation)
 
         # Composite models consisting of several PretrainedModels can specify attention implementation as a dict where
         # keys are sub-config names. But most people will specify one `str` which means that should dispatch it for all sub-models.

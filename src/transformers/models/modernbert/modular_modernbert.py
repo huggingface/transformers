@@ -813,36 +813,19 @@ class ModernBertPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 module.bias.data.zero_()
 
-    @classmethod
-    def _autoset_attn_implementation(
-        cls,
-        config,
-        torch_dtype: Optional[torch.dtype] = None,
-        device_map: Optional[Union[str, dict[str, int]]] = None,
-        check_device_map: bool = True,
-    ):
+    def set_attention_implementation(self, attn_implementation: Union[str, dict]):
+        """
+        Checks and dispatches to hhe requested attention implementation.
+        """
         # If the user didn't specify anything, try to use flash_attention_2 if available.
         # Otherwise we fall back to the default SDPA -> Eager from the super() method.
         # ModernBert's FA2 implementation correctly handles non-fp16/bf16 dtypes, we don't
         # need the FA2 warning for non-fp16/bf16 dtypes so we set fp16 for the FA2 check.
-        if config._attn_implementation_internal is None:
-            config._attn_implementation_internal = "flash_attention_2"
-            try:
-                return cls._check_and_enable_flash_attn_2(
-                    config,
-                    torch_dtype=torch.float16,
-                    device_map=device_map,
-                    hard_check_only=False,
-                    check_device_map=check_device_map,
-                )
-            except (ValueError, ImportError):
-                config._attn_implementation_internal = None
-        return super()._autoset_attn_implementation(
-            config,
-            torch_dtype=torch_dtype,
-            device_map=device_map,
-            check_device_map=check_device_map,
-        )
+
+        requested_attn_implementation = self._check_attn_implementation(attn_implementation)
+        if requested_attn_implementation is None and self._flash_attn_2_can_dispatch():
+            attn_implementation = "flash_attention_2"
+        return super().set_attention_implementation(attn_implementation=attn_implementation)
 
     def _maybe_set_compile(self):
         if self.config.reference_compile is False:
