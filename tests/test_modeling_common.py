@@ -4560,9 +4560,7 @@ class ModelTesterMixin:
 
                 model = (
                     model_class.from_pretrained(
-                        tmpdirname,
-                        torch_dtype=torch.bfloat16,
-                        attn_implementation="flash_attention_3"
+                        tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_3"
                     )
                     .to(torch_device)
                     .eval()
@@ -4634,9 +4632,7 @@ class ModelTesterMixin:
 
                 model = (
                     model_class.from_pretrained(
-                        tmpdirname,
-                        torch_dtype=torch.bfloat16,
-                        attn_implementation="flash_attention_3"
+                        tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_3"
                     )
                     .to(torch_device)
                     .eval()

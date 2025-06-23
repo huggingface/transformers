@@ -1084,6 +1084,7 @@ def is_flash_attn_3_available():
         return False
 
     import torch
+
     if not torch.cuda.is_available():
         return False
 

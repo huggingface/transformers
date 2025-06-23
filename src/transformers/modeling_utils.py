@@ -2549,7 +2549,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             else:
                 raise ValueError(
                     f"{preface} Flash Attention 3 is not available on CPU. Please make sure torch can access a CUDA device."
-                    )
+                )
 
         _is_bettertransformer = getattr(cls, "use_bettertransformer", False)
 
@@ -2570,9 +2570,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             )
 
         if getattr(config, "alibi", False) or getattr(config, "use_alibi", False):
-            raise ValueError(
-                "Model is configured to use ALiBi, which is not supported by Flash Attention 3."
-            )
+            raise ValueError("Model is configured to use ALiBi, which is not supported by Flash Attention 3.")
 
         # Check for attention dropout, which is incompatible with FA3
         if hasattr(config, "attention_dropout") and config.attention_dropout > 0:

@@ -47,7 +47,7 @@ from transformers import (
     is_torch_available,
     logging,
 )
-from transformers.modeling_flash_attention_utils import is_flash_attn_available, is_flash_attn_3_available
+from transformers.modeling_flash_attention_utils import is_flash_attn_available
 from transformers.testing_utils import (
     TOKEN,
     CaptureLogger,
@@ -75,8 +75,8 @@ from transformers.utils import (
     check_torch_load_is_safe,
 )
 from transformers.utils.import_utils import (
-    is_flash_attn_3_available,
     is_flash_attn_2_available,
+    is_flash_attn_3_available,
     is_flax_available,
     is_tf_available,
     is_torch_npu_available,

@@ -30,6 +30,7 @@ from .utils import (
 
 
 logger = logging.get_logger(__name__)
+flash_attn_func = None
 
 
 def _index_first_axis(tensor, indices):
@@ -92,6 +93,7 @@ def _fa3_pad_input(hidden_states, indices, batch, seqlen):
     output[indices] = hidden_states
     return output.view(batch, seqlen, *dim)
 
+
 FA_VERSION = None
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func as flash_attn_2_func
@@ -135,10 +137,19 @@ if FA_VERSION:
 
 # patch functions in package `flash-attn` when using flash-attention on Ascend NPU.
 if is_torch_npu_available():
-    from .integrations.npu_flash_attention import pad_input, unpad_input
-    from .integrations.npu_flash_attention import npu_apply_rotary_emb as apply_rotary_emb  # noqa
-    from .integrations.npu_flash_attention import npu_flash_attn_func as flash_attn_func
-    from .integrations.npu_flash_attention import npu_flash_attn_varlen_func as flash_attn_varlen_func
+    from .integrations.npu_flash_attention import (
+        npu_apply_rotary_emb as apply_rotary_emb,  # noqa: F401
+    )
+    from .integrations.npu_flash_attention import (
+        npu_flash_attn_func as flash_attn_func,
+    )
+    from .integrations.npu_flash_attention import (
+        npu_flash_attn_varlen_func as flash_attn_varlen_func,
+    )
+    from .integrations.npu_flash_attention import (
+        pad_input,
+        unpad_input,
+    )
 
 
 _flash_supports_window_size = False
@@ -279,9 +290,7 @@ def _upad_input(
     else:
         # The -q_len: slice assumes left padding.
         attention_mask = attention_mask[:, -query_length:]
-        query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q, *_ = unpad_input_func(
-            query_layer, attention_mask
-        )
+        query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q, *_ = unpad_input_func(query_layer, attention_mask)
 
     return (
         query_layer,

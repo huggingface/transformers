@@ -1,9 +1,11 @@
 # RUN_SLOW=1 pytest -s tests/generation/test_flash_attention_parity.py
+import unittest
+
 import pytest
 import torch
+
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.testing_utils import require_flash_attn, require_flash_attn_3, require_torch_gpu, slow
-import unittest
 
 
 class FlashAttentionParityTest(unittest.TestCase):
@@ -54,7 +56,7 @@ class FlashAttentionParityTest(unittest.TestCase):
         end_time.record()
         torch.cuda.synchronize()
 
-        return (start_time.elapsed_time(end_time) / n_runs)
+        return start_time.elapsed_time(end_time) / n_runs
 
     @pytest.mark.flash_attn_3_test
     @require_torch_gpu
@@ -87,8 +89,12 @@ class FlashAttentionParityTest(unittest.TestCase):
         inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
 
         with torch.no_grad():
-            output_2 = model_2.generate(**inputs, max_new_tokens=20, do_sample=False, output_scores=True, return_dict_in_generate=True)
-            output_3 = model_3.generate(**inputs, max_new_tokens=20, do_sample=False, output_scores=True, return_dict_in_generate=True)
+            output_2 = model_2.generate(
+                **inputs, max_new_tokens=20, do_sample=False, output_scores=True, return_dict_in_generate=True
+            )
+            output_3 = model_3.generate(
+                **inputs, max_new_tokens=20, do_sample=False, output_scores=True, return_dict_in_generate=True
+            )
 
         # 4. Correctness check
         # 4a. Logits
@@ -110,7 +116,7 @@ class FlashAttentionParityTest(unittest.TestCase):
             time_2 = self._benchmark_generation(model_2, inputs)
             time_3 = self._benchmark_generation(model_3, inputs)
 
-        print(f"\n--- Flash Attention {2,3} Parity Test on {model_id} ---")
+        print(f"\n--- Flash Attention {2, 3} Parity Test on {model_id} ---")
         print(f"Prompt: '{prompt}'")
         print(f"Generated text with Flash Attention 2: {text_2}")
         print(f"Generated text with Flash Attention 3: {text_3}")
@@ -118,5 +124,5 @@ class FlashAttentionParityTest(unittest.TestCase):
         print(f"Max absolute difference in logprobs: {max_logprob_diff:.5e}")
         print(f"Flash Attention 2 latency: {time_2:.2f} ms")
         print(f"Flash Attention 3 latency: {time_3:.2f} ms")
-        print(f"Speed-up: {time_2/time_3:.2f}x")
+        print(f"Speed-up: {time_2 / time_3:.2f}x")
         print("---")
