@@ -187,9 +187,11 @@ class DiaProcessor(ProcessorMixin):
                 padding_len = max_encoded_sequence_len - encoded_sequence_len
 
                 # compute non-padded forward pass; one extra bos (and eos if training) is added
-                input_ids = self.audio_tokenizer.encode(audio[None, ..., :current_audio_len]).audio_codes.transpose(
-                    1, 2
-                )
+                with torch.no_grad():
+                    input_ids = self.audio_tokenizer.encode(
+                        audio[None, ..., :current_audio_len]
+                    ).audio_codes.transpose(1, 2)
+
                 if not generation:
                     input_ids = torch.nn.functional.pad(
                         input_ids, pad=(0, 0, 0, 1, 0, 0), mode="constant", value=audio_eos_token_id
@@ -318,10 +320,11 @@ class DiaProcessor(ProcessorMixin):
         # retrieve the correct sequences each
         audios = []
         # TODO: see above, dac doesn't work in batches yet
-        for i in range(start_of_generation_idx.shape[0]):
-            output_i = output_sequences[i, :, start_of_generation_idx[i] : end_of_generation_idx[i]][None, ...]
-            audio_i = self.audio_tokenizer.decode(audio_codes=output_i).audio_values.detach()
-            audios.append(audio_i)
+        with torch.no_grad():
+            for i in range(start_of_generation_idx.shape[0]):
+                output_i = output_sequences[i, :, start_of_generation_idx[i] : end_of_generation_idx[i]][None, ...]
+                audio_i = self.audio_tokenizer.decode(audio_codes=output_i).audio_values
+                audios.append(audio_i)
 
         return audios
 
