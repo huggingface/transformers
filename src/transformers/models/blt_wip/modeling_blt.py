@@ -238,13 +238,9 @@ class BLTTransformerLayer(nn.Module):
         super().__init__()
 
         # Extract parameters from dictionary
-        dim = dim
-        n_heads = n_heads
         head_dim = config.head_dim
         n_kv_heads = config.n_kv_heads
-        rope_theta = config.rope_theta
         multiple_of = config.multiple_of
-        ffn_dim_multiplier = config.ffn_dim_multiplier
         norm_eps = config.norm_eps
 
         self.head_dim = head_dim or dim // n_heads
