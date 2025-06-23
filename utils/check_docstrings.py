@@ -682,8 +682,8 @@ def eval_math_expression(expression: str) -> Optional[Union[float, int]]:
 
 
 def eval_node(node):
-    if isinstance(node, ast.Num):  # <number>
-        return node.n
+    if isinstance(node, ast.Constant):  # <number>
+        return node.value
     elif isinstance(node, ast.BinOp):  # <left> <operator> <right>
         return MATH_OPERATORS[type(node.op)](eval_node(node.left), eval_node(node.right))
     elif isinstance(node, ast.UnaryOp):  # <operator> <operand> e.g., -1
