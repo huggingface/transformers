@@ -361,7 +361,6 @@ class Ovis2Model(LlavaModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        grids: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Union[Tuple, Ovis2CausalLMOutputWithPast]:
         r"""
@@ -507,7 +506,6 @@ class Ovis2ForConditionalGeneration(LlavaForConditionalGeneration, GenerationMix
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        grids: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Union[Tuple, Ovis2CausalLMOutputWithPast]:
         r"""
@@ -603,7 +601,6 @@ class Ovis2ForConditionalGeneration(LlavaForConditionalGeneration, GenerationMix
         past_key_values=None,
         inputs_embeds=None,
         pixel_values=None,
-        grids=None,
         attention_mask=None,
         cache_position=None,
         logits_to_keep=None,
@@ -625,7 +622,6 @@ class Ovis2ForConditionalGeneration(LlavaForConditionalGeneration, GenerationMix
             # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
             # Otherwise we need pixel values to be passed to model
             model_inputs["pixel_values"] = pixel_values
-            model_inputs["grids"] = grids
 
         return model_inputs
 

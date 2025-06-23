@@ -109,8 +109,8 @@ class Ovis2Processor(ProcessorMixin):
 
         if images is not None:
             image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
-            grids = iter(image_inputs["grids"])
-            text = self._expand_image_tokens(text, grids)
+            image_grids = image_inputs.pop("grids").tolist()
+            text = self._expand_image_tokens(text, image_grids)
 
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
         return BatchFeature(data={**text_inputs, **image_inputs})
@@ -123,18 +123,18 @@ class Ovis2Processor(ProcessorMixin):
         processed_text = []
         for sample in text:
             while "<image>" in sample:
-                grid = next(grids)
-                row, col = grid[0], grid[1]
-                placeholder = f"<IMG_START>{'<IMG_ATOM>' * self.image_seq_length}<IMG_GRID>"
-                if row * col > 1:
-                    for r in range(row):
-                        for c in range(col):
-                            placeholder += f"{'<IMG_ATOM>' * self.image_seq_length}"
-                            if c < col - 1:
-                                placeholder += "<IMG_COL>"
-                        if r < row - 1:
-                            placeholder += "<IMG_ROW>"
-                placeholder += "<IMG_END>"
+                for grid in grids:
+                    row, col = grid[0], grid[1]
+                    placeholder = f"<IMG_START>{'<IMG_ATOM>' * self.image_seq_length}<IMG_GRID>"
+                    if row * col > 1:
+                        for r in range(row):
+                            for c in range(col):
+                                placeholder += f"{'<IMG_ATOM>' * self.image_seq_length}"
+                                if c < col - 1:
+                                    placeholder += "<IMG_COL>"
+                            if r < row - 1:
+                                placeholder += "<IMG_ROW>"
+                    placeholder += "<IMG_END>"
 
                 sample = sample.replace("<image>", placeholder, 1)
             processed_text.append(sample)
