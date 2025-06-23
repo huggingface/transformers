@@ -1528,17 +1528,20 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
             # They may be in all, but not in the modular itself (if they are implicitly inherited), so we need to try/catch
             try:
                 class_ = getattr(module, name)
-                if not class_.__name__ in OBJECTS_TO_IGNORE:
+                if class_.__name__ not in OBJECTS_TO_IGNORE:
                     all_modular_public_classes.append(class_)
             except AttributeError:
                 pass
 
     # Skip objects that are private or not documented.
-    all_main_objects = [getattr(transformers, name) for name in dir(transformers) if not (name.startswith("_") or ignore_undocumented(name) or name in OBJECTS_TO_IGNORE)]
+    all_main_objects = [
+        getattr(transformers, name)
+        for name in dir(transformers)
+        if not (name.startswith("_") or ignore_undocumented(name) or name in OBJECTS_TO_IGNORE)
+    ]
 
     all_objects = all_main_objects + all_modular_public_classes
     for obj in all_objects:
-
         if not callable(obj) or not isinstance(obj, type) or getattr(obj, "__doc__", None) is None:
             continue
 
