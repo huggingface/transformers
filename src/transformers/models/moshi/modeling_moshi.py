@@ -111,7 +111,7 @@ class MoshiCausalLMOutputWithPast(ModelOutput):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
             `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
 
@@ -150,7 +150,7 @@ class MoshiConditionalGenerationOutputWithPast(ModelOutput):
             Prediction scores of the text language modeling head (scores for each vocabulary token before SoftMax).
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
             `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
 
@@ -171,7 +171,7 @@ class MoshiConditionalGenerationOutputWithPast(ModelOutput):
             Audio language modeling loss (for next-token prediction).
         audio_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the audio language modeling heads.
-        depth_past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        depth_past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             Past key-values of the depth decoder.
         depth_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Hidden states of the depth decoder
@@ -892,7 +892,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
         input_ids: Optional[torch.LongTensor] = None,
         last_hidden_state: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.BoolTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1729,7 +1729,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         user_audio_codes: Optional[torch.Tensor] = None,
         moshi_input_values: Optional[torch.FloatTensor] = None,
         moshi_audio_codes: Optional[torch.Tensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         text_labels: Optional[torch.LongTensor] = None,
         audio_labels: Optional[torch.LongTensor] = None,

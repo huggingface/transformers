@@ -27,6 +27,7 @@ from transformers.models.llava.modeling_llava import (
 )
 
 from ...activations import ACT2FN
+from ...cache_utils import Cache
 from ...utils import auto_docstring, is_torchdynamo_compiling, logging
 from .configuration_vipllava import VipLlavaConfig
 
@@ -109,7 +110,7 @@ class VipLlavaModel(LlavaModel):
         pixel_values: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         vision_feature_layers: Optional[Union[int, list[int]]] = None,
         use_cache: Optional[bool] = None,
@@ -195,7 +196,7 @@ class VipLlavaForConditionalGeneration(LlavaForConditionalGeneration):
         pixel_values: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         vision_feature_layers: Optional[Union[int, list[int]]] = None,
         labels: Optional[torch.LongTensor] = None,
