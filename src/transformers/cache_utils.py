@@ -462,7 +462,7 @@ class DynamicCache(Cache):
     def __init__(self, _distributed_cache_data: Optional[Iterable] = None) -> None:
         super().__init__()
         self.key_cache: list[torch.Tensor] = []
-        self.value_cache: ist[torch.Tensor] = []
+        self.value_cache: list[torch.Tensor] = []
 
         # `_distributed_cache_data` was originally added for compatibility with `torch.distributed` (DDP). See #36121
         # and #36373 for more information. In a nutshell, it is `map(gather_map, zip(*caches))`, i.e. each item in the
