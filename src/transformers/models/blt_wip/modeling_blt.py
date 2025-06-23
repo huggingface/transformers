@@ -31,6 +31,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from .configuration_blt import (
     BLTConfig,
     PatchingModeEnum,
+    TransformersLayerConfig,
 )
 
 if is_torch_flex_attn_available():
@@ -153,7 +154,7 @@ class BLTRMSNorm(nn.Module):
 
 # Copied from transformers.models.mllama.modeling_mllama.MllamaTextSelfAttention with MllamaText->BLT
 class BLTSelfAttention(nn.Module):
-    def __init__(self, config: BLTConfig, layer_idx: int):
+    def __init__(self, config: TransformersLayerConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.num_heads = config.num_attention_heads
@@ -233,9 +234,10 @@ class BLTSelfAttention(nn.Module):
 
         return attn_output, attn_weights, past_key_value
 
-# Copied from transformers.models.llama.modeling_mllama.MllamaSelfAttentionDecoderLayer
+
+# Copied from transformers.models.mllama.modeling_mllama.MllamaSelfAttentionDecoderLayer
 class BLTTransformerLayer(nn.Module):
-    def __init__(self, config: BLTConfig, layer_idx: int):
+    def __init__(self, config: TransformersLayerConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.layer_idx = layer_idx
@@ -480,7 +482,7 @@ def process_patch_lengths(patch_lengths: torch.Tensor, max_patch_length: int) ->
 
 
 class BLTRotaryEmbedding(nn.Module):
-    def __init__(self, config: BLTConfig, device=None):
+    def __init__(self, config: TransformersLayerConfig, device=None):
         super().__init__()
         self.rope_type = config.rope_scaling["rope_type"]
         self.max_seq_len_cached = config.max_position_embeddings
@@ -528,19 +530,9 @@ class BLTLocalEncoder(nn.Module):
         self.norm_eps = config.norm_eps
         self.sliding_window = config.sliding_window
         
-        # Set up config for layers with proper dimensions
-        encoder_config = config
-        encoder_config.hidden_size = self.dim_local_encoder
-        encoder_config.num_attention_heads = self.n_heads_local_encoder
-        encoder_config.num_key_value_heads = getattr(config, 'n_kv_heads', None) or self.n_heads_local_encoder
-        encoder_config.head_dim = self.dim_local_encoder // self.n_heads_local_encoder
-        encoder_config.intermediate_size = config.multiple_of * ((int(8 * self.dim_local_encoder / 3) + config.multiple_of - 1) // config.multiple_of)
+        self.layers = nn.ModuleList([BLTTransformerLayer(config.encoder_layer_config, layer_idx) for layer_idx in range(self.n_layers_local_encoder)])
 
-        self.layers = nn.ModuleList([BLTTransformerLayer(encoder_config, layer_idx) for layer_idx in range(self.n_layers_local_encoder)])
-
-        # Set up config for rotary embedding
-        encoder_config.max_position_embeddings = config.max_encoder_seq_length or config.max_seqlen
-        self.rotary_emb = BLTRotaryEmbedding(config=encoder_config)
+        self.rotary_emb = BLTRotaryEmbedding(config=config.encoder_layer_config)
 
         self.token_embedding_projection = (
             nn.Linear(config.encoder_dim_token_emb, self.dim_local_encoder, bias=False)
@@ -552,7 +544,6 @@ class BLTLocalEncoder(nn.Module):
 
         self.embed_tokens = nn.Embedding(self.vocab_size + self.pm_size, self.dim_local_encoder)
 
-        # Initialize cross attention layers only if cross attention is enabled
         self.cross_attn_layers = None
         if self.cross_attn_encoder and self.cross_attn_nheads is not None:
             self.cross_attn_layers = torch.nn.ModuleList()
@@ -680,19 +671,9 @@ class BLTLocalDecoder(nn.Module):
         self.cross_attn_k = config.cross_attn_k
         self.sliding_window = config.sliding_window
 
-        # Set up config for layers with proper dimensions
-        decoder_config = config
-        decoder_config.hidden_size = self.dim_local_decoder
-        decoder_config.num_attention_heads = self.n_heads_local_decoder
-        decoder_config.num_key_value_heads = getattr(config, 'n_kv_heads', None) or self.n_heads_local_decoder
-        decoder_config.head_dim = self.dim_local_decoder // self.n_heads_local_decoder
-        decoder_config.intermediate_size = config.multiple_of * ((int(8 * self.dim_local_decoder / 3) + config.multiple_of - 1) // config.multiple_of)
+        self.layers = nn.ModuleList([BLTTransformerLayer(config.decoder_layer_config, layer_idx) for layer_idx in range(self.n_layers_local_decoder)])
 
-        self.layers = nn.ModuleList([BLTTransformerLayer(decoder_config, layer_idx) for layer_idx in range(self.n_layers_local_decoder)])
-
-        decoder_config.max_position_embeddings = config.max_encoder_seq_length or config.max_seqlen
-
-        self.rotary_emb = BLTRotaryEmbedding(config=decoder_config)
+        self.rotary_emb = BLTRotaryEmbedding(config=config.decoder_layer_config)
 
         self.token_embedding_projection = (
             nn.Linear(config.decoder_dim_token_emb, self.dim_local_decoder, bias=False)
@@ -704,7 +685,6 @@ class BLTLocalDecoder(nn.Module):
 
         self.norm = BLTRMSNorm(self.dim_local_decoder, eps=self.norm_eps)
 
-        # Initialize cross attention layers only if cross attention is enabled
         self.cross_attn_layers = None
         if self.cross_attn_decoder and self.cross_attn_nheads is not None:
             self.cross_attn_layers = torch.nn.ModuleList()
@@ -789,7 +769,7 @@ class BLTLocalDecoder(nn.Module):
         logits = self.lm_head(self.norm(hidden_states))
         return logits, cache
 
-# Modified from transformers.models.mllama.modeling_mllama.MllamaTextCrossAttention
+
 class BLTCrossAttention(nn.Module):
     """Cross-attention module for BLT, following transformers style"""
 
@@ -898,25 +878,16 @@ class BLTGlobalTransformer(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        # Extract config values to instance attributes
         self.dim_global = config.dim_global
         self.n_heads_global = config.n_heads_global
         self.n_layers_global = config.n_layers_global
         self.dropout = config.dropout
 
-        # Set up config for layers with proper dimensions
-        global_config = config
-        global_config.hidden_size = self.dim_global
-        global_config.num_attention_heads = self.n_heads_global
-        global_config.num_key_value_heads = getattr(config, 'n_kv_heads_global', None) or self.n_heads_global
-        global_config.head_dim = self.dim_global // self.n_heads_global
-        global_config.intermediate_size = config.multiple_of * ((int(8 * self.dim_global / 3) + config.multiple_of - 1) // config.multiple_of)
-
         self.layers = nn.ModuleList()
         for layer_idx in range(self.n_layers_global):
-            self.layers.append(BLTTransformerLayer(global_config, layer_idx))
+            self.layers.append(BLTTransformerLayer(config.global_layer_config, layer_idx))
 
-        self.rotary_emb = BLTRotaryEmbedding(config=global_config)
+        self.rotary_emb = BLTRotaryEmbedding(config=config.global_layer_config)
 
         self.token_embedding_projection = None
         if config.global_dim_patch_emb is not None and config.global_dim_patch_emb != self.dim_global:
@@ -1292,17 +1263,8 @@ class BLTPatcher(BLTPreTrainedModel):
         self.rotary_emb = BLTRotaryEmbedding(config=self.config)
 
         self.layers = nn.ModuleList()
-        # Set up config for layers with proper dimensions
-        patcher_config = self.config
-        patcher_config.hidden_size = self.config.dim
-        patcher_config.num_attention_heads = self.config.n_heads
-        patcher_config.num_key_value_heads = getattr(self.config, 'n_kv_heads', None) or self.config.n_heads
-        patcher_config.head_dim = self.config.dim // self.config.n_heads
-        patcher_config.intermediate_size = self.config.multiple_of * ((int(8 * self.config.dim / 3) + self.config.multiple_of - 1) // self.config.multiple_of)
-
         for layer_idx in range(self.config.n_layers):
-            self.layers.append(BLTTransformerLayer(patcher_config, layer_idx))
-
+            self.layers.append(BLTTransformerLayer(config.patcher_layer_config, layer_idx))
 
         self.embed_tokens = torch.nn.Embedding(self.config.vocab_size, self.config.dim)
 

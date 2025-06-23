@@ -37,6 +37,44 @@ class PatchingModeEnum(str, Enum):
     byte = "byte"
 
 
+class TransformersLayerConfig:
+    """
+    Configuration class for BLT Transformer layers, providing all necessary parameters
+    for attention, MLP, and normalization components.
+    """
+    
+    def __init__(
+        self,
+        hidden_size: int,
+        num_attention_heads: int,
+        num_key_value_heads: int,
+        head_dim: int,
+        intermediate_size: int,
+        norm_eps: float,
+        dropout: float,
+        max_position_embeddings: int,
+        rope_theta: float,
+        rope_scaling: dict,
+        hidden_act: str = "silu",
+        **kwargs,
+    ):
+        self.hidden_size = hidden_size
+        self.num_attention_heads = num_attention_heads
+        self.num_key_value_heads = num_key_value_heads
+        self.head_dim = head_dim
+        self.intermediate_size = intermediate_size
+        self.norm_eps = norm_eps
+        self.dropout = dropout
+        self.max_position_embeddings = max_position_embeddings
+        self.rope_theta = rope_theta
+        self.rope_scaling = rope_scaling
+        self.hidden_act = hidden_act
+        
+        # Add any additional kwargs as attributes
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+
 class BLTPatcherConfig(PretrainedConfig):
     r"""
     Configuration class for the BLT Patcher/Entropy model component.
@@ -578,6 +616,63 @@ class BLTConfig(PretrainedConfig):
         # Note: Each component uses its own hidden dimension, not the main dim
         self.intermediate_size = None  # Will be calculated per component
 
+        # layer configurations as dictionaries (needed to be JSON serializable!)
+        self._encoder_layer_config_dict = {
+            "hidden_size": self.dim_local_encoder,
+            "num_attention_heads": self.n_heads_local_encoder,
+            "num_key_value_heads": getattr(self, 'n_kv_heads', None) or self.n_heads_local_encoder,
+            "head_dim": self.dim_local_encoder // self.n_heads_local_encoder,
+            "intermediate_size": self.multiple_of * ((int(8 * self.dim_local_encoder / 3) + self.multiple_of - 1) // self.multiple_of),
+            "norm_eps": self.norm_eps,
+            "dropout": self.dropout,
+            "max_position_embeddings": self.max_encoder_seq_length or self.max_seqlen,
+            "rope_theta": self.rope_theta,
+            "rope_scaling": self.rope_scaling,
+            "hidden_act": self.hidden_act,
+        }
+
+        self._decoder_layer_config_dict = {
+            "hidden_size": self.dim_local_decoder,
+            "num_attention_heads": self.n_heads_local_decoder,
+            "num_key_value_heads": getattr(self, 'n_kv_heads', None) or self.n_heads_local_decoder,
+            "head_dim": self.dim_local_decoder // self.n_heads_local_decoder,
+            "intermediate_size": self.multiple_of * ((int(8 * self.dim_local_decoder / 3) + self.multiple_of - 1) // self.multiple_of),
+            "norm_eps": self.norm_eps,
+            "dropout": self.dropout,
+            "max_position_embeddings": self.max_encoder_seq_length or self.max_seqlen,
+            "rope_theta": self.rope_theta,
+            "rope_scaling": self.rope_scaling,
+            "hidden_act": self.hidden_act,
+        }
+
+        self._global_layer_config_dict = {
+            "hidden_size": self.dim_global,
+            "num_attention_heads": self.n_heads_global,
+            "num_key_value_heads": getattr(self, 'n_kv_heads_global', None) or self.n_heads_global,
+            "head_dim": self.dim_global // self.n_heads_global,
+            "intermediate_size": self.multiple_of * ((int(8 * self.dim_global / 3) + self.multiple_of - 1) // self.multiple_of),
+            "norm_eps": self.norm_eps,
+            "dropout": self.dropout,
+            "max_position_embeddings": self.max_seqlen,
+            "rope_theta": self.rope_theta,
+            "rope_scaling": self.rope_scaling,
+            "hidden_act": self.hidden_act,
+        }
+
+        self._patcher_layer_config_dict = {
+            "hidden_size": self.patcher_config.dim,
+            "num_attention_heads": self.patcher_config.n_heads,
+            "num_key_value_heads": getattr(self.patcher_config, 'n_kv_heads', None) or self.patcher_config.n_heads,
+            "head_dim": self.patcher_config.dim // self.patcher_config.n_heads,
+            "intermediate_size": self.patcher_config.multiple_of * ((int(8 * self.patcher_config.dim / 3) + self.patcher_config.multiple_of - 1) // self.patcher_config.multiple_of),
+            "norm_eps": self.patcher_config.norm_eps,
+            "dropout": self.patcher_config.dropout,
+            "max_position_embeddings": self.patcher_config.max_seqlen,
+            "rope_theta": self.patcher_config.rope_theta,
+            "rope_scaling": self.patcher_config.rope_scaling,
+            "hidden_act": self.hidden_act,
+        }
+
         super().__init__(
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
@@ -585,6 +680,21 @@ class BLTConfig(PretrainedConfig):
             **kwargs,
         )
 
+    @property
+    def encoder_layer_config(self) -> TransformersLayerConfig:
+        return TransformersLayerConfig(**self._encoder_layer_config_dict)
+
+    @property
+    def decoder_layer_config(self) -> TransformersLayerConfig:
+        return TransformersLayerConfig(**self._decoder_layer_config_dict)
+
+    @property
+    def global_layer_config(self) -> TransformersLayerConfig:
+        return TransformersLayerConfig(**self._global_layer_config_dict)
+
+    @property
+    def patcher_layer_config(self) -> TransformersLayerConfig:
+        return TransformersLayerConfig(**self._patcher_layer_config_dict)
 
     @property
     def encoder_dim_token_emb(self):
@@ -648,6 +758,5 @@ class BLTConfig(PretrainedConfig):
         else:  # DISABLED
             return 1.0
 
-
-__all__ = ["BLTConfig", "BLTPatcherConfig", "InitStdFactor", "PatchingModeEnum"]
+__all__ = ["BLTConfig", "BLTPatcherConfig", "TransformersLayerConfig", "InitStdFactor", "PatchingModeEnum"]
 
