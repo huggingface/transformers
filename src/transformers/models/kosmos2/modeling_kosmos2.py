@@ -22,6 +22,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
+from flex_example_01 import is_causal
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -933,6 +934,8 @@ class KosmosTextAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
+        is_causal = None,
+        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -957,10 +960,7 @@ class KosmosTextAttention(nn.Module):
                 key_states = torch.cat([past_key_value[0], key_states], dim=2)
                 value_states = torch.cat([past_key_value[1], value_states], dim=2)
 
-        breakpoint()
-
-        query_states = self._shape(self.q_proj(hidden_states) * self.scaling)
-        attn_weights = torch.matmul(query_states, key_states.transpose(-1, -2))
+        query_states = self._shape(self.q_proj(hidden_states))
 
         if self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
@@ -972,34 +972,34 @@ class KosmosTextAttention(nn.Module):
             # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_states, value_states)
 
-        src_len = key_states.size(2)
+        attention_interface: Callable = eager_attention_forward
 
-        if attention_mask is not None:
-            if attention_mask.size() != (batch_size, 1, seq_length, src_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(batch_size, 1, seq_length, src_len)}, but is {attention_mask.size()}"
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and output_attentions:
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
-            attn_weights = attn_weights + attention_mask
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout,
+            scaling=self.scaling,
+            is_causal = is_causal,
+            **kwargs,
+        )
 
-        # Mask heads if we want to
-        if layer_head_mask is not None:
-            attn_weights = attn_weights * layer_head_mask
-
-        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-
-        #  attn_output = torch.bmm(attn_probs, value_states) ?
-        context_states = torch.matmul(attn_weights, value_states)
-        # attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim) ?
-        context_states = context_states.permute(0, 2, 1, 3).contiguous().view(batch_size, seq_length, -1)
-
-        breakpoint()
-
+        attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         if self.inner_attn_ln is not None:
-            context_states = self.inner_attn_ln(context_states)
+            attn_output = self.inner_attn_ln(attn_output)
 
-        attn_output = self.out_proj(context_states)
+        attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights, past_key_value
 
@@ -1773,6 +1773,7 @@ class Kosmos2ImageToTextProjection(nn.Module):
             past_key_value=None,
             attention_mask=None,
             output_attentions=None,
+            is_causal=False,
         )
 
         return hidden_states, attn_weights
