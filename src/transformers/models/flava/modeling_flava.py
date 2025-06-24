@@ -25,6 +25,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import ModelOutput, auto_docstring, logging, torch_int
@@ -48,27 +49,29 @@ FlavaPossibleConfigs = Union[FlavaTextConfig, FlavaImageConfig, FlavaMultimodalC
 
 
 @dataclass
-class FlavaModelOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Output from FlavaModel containing embeddings and outputs from individual encoders.
 
     Note that `image_embeddings` and `text_embeddigns` returned are similar to pooled output returned from a
     transformer. If you want embeddings for contrastive loss or retrieval use a FLAVA model's `image_projection` and
     `text_projection` layers on `image_embeddings` and `text_embeddings` respectively.
-
-    Args:
-        image_embeddings (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*, returned when `pixel_values` are present):
-            The image embeddings which are basically the pooled output of [`FlavaImageModel`].
-        image_output (`BaseModelOutputWithPooling`, *optional*, returned when `pixel_values` are present):
-            The output of the [`FlavaImageModel`].
-        text_embeddings (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*, returned when `input_ids` are present):
-            The text embeddings which are basically the pooled output of [`FlavaTextModel`].
-        text_output (`BaseModelOutputWithPooling`, *optional*, returned when `input_ids` are present):
-            The output of the [`FlavaTextModel`].
-        multimodal_embeddings (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*, returned when `input_ids` and `pixel_values` are present and `skip_multimodal_encoder` is `None` or `False`):
-            The multimodal embeddings which are basically the pooled output of [`FlavaTextModel`].
-        multimodal_output (`BaseModelOutputWithPooling`, returned when `input_ids` and `pixel_values` are present and `skip_multimodal_encoder` is `None` or `False`):
-            The output of the [`FlavaMultimodalModel`].
+    """
+)
+class FlavaModelOutput(ModelOutput):
+    r"""
+    image_embeddings (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*, returned when `pixel_values` are present):
+        The image embeddings which are basically the pooled output of [`FlavaImageModel`].
+    image_output (`BaseModelOutputWithPooling`, *optional*, returned when `pixel_values` are present):
+        The output of the [`FlavaImageModel`].
+    text_embeddings (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*, returned when `input_ids` are present):
+        The text embeddings which are basically the pooled output of [`FlavaTextModel`].
+    text_output (`BaseModelOutputWithPooling`, *optional*, returned when `input_ids` are present):
+        The output of the [`FlavaTextModel`].
+    multimodal_embeddings (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*, returned when `input_ids` and `pixel_values` are present and `skip_multimodal_encoder` is `None` or `False`):
+        The multimodal embeddings which are basically the pooled output of [`FlavaTextModel`].
+    multimodal_output (`BaseModelOutputWithPooling`, returned when `input_ids` and `pixel_values` are present and `skip_multimodal_encoder` is `None` or `False`):
+        The output of the [`FlavaMultimodalModel`].
     """
 
     image_embeddings: Optional[torch.FloatTensor] = None
@@ -86,24 +89,27 @@ class FlavaModelOutput(ModelOutput):
 
 
 @dataclass
+@auto_docstring(
+    custom_intro="""
+    Class representing pretraining losses from FLAVA model
+    """
+)
 class FlavaLosses(ModelOutput):
-    """Class representing pretraining losses from FLAVA model
-
-    Args:
-        mim (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `mim_labels` and `pixel_values` are present, `input_ids_masked` is absent and `mim_weight` > 0.:
-            Masked Image Modeling loss as used in BeIT calculated only for unimodal image data.
-        mlm (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `mlm_labels` and `input_ids_masked` are present, `pixel_values` is absent and `mlm_weight` > 0.:
-            Masked Language Modeling loss as used in BERT calculated only for unimodal text data.
-        itm (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `itm_labels`, `input_ids_masked`, `pixel_values` are present and `itm_weight` > 0.:
-            Image Text Matching (ITM) loss calculated for paired image-text data. Note that ITM loss is calculated on
-            masked pairs in FLAVA.
-        global_contrastive (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `input_ids` and `pixel_values` are present and `global_contrastive_weight` > 0.:
-            Contrastive loss for image-text similarity similar to CLIP but calculated globally for paired image-text
-            data. This is calculated on unmasked images and texts.
-        mmm_image (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `mim_labels`, `pixel_values` and `input_ids_masked` are present and `mmm_image_weight` > 0.:
-            Masked Multimodal Modeling loss's image component calculated on paired image-text data.
-        mmm_text (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `mlm_labels`, `pixel_values` and `input_ids_masked` are present and `mmm_text_weight` > 0.:
-            Masked Multimodal Modeling loss's text component calculated on paired image-text data.
+    r"""
+    mim (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `mim_labels` and `pixel_values` are present, `input_ids_masked` is absent and `mim_weight` > 0.):
+        Masked Image Modeling loss as used in BeIT calculated only for unimodal image data.
+    mlm (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `mlm_labels` and `input_ids_masked` are present, `pixel_values` is absent and `mlm_weight` > 0.):
+        Masked Language Modeling loss as used in BERT calculated only for unimodal text data.
+    itm (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `itm_labels`, `input_ids_masked`, `pixel_values` are present and `itm_weight` > 0.):
+        Image Text Matching (ITM) loss calculated for paired image-text data. Note that ITM loss is calculated on
+        masked pairs in FLAVA.
+    global_contrastive (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `input_ids` and `pixel_values` are present and `global_contrastive_weight` > 0.):
+        Contrastive loss for image-text similarity similar to CLIP but calculated globally for paired image-text
+        data. This is calculated on unmasked images and texts.
+    mmm_image (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `mim_labels`, `pixel_values` and `input_ids_masked` are present and `mmm_image_weight` > 0.):
+        Masked Multimodal Modeling loss's image component calculated on paired image-text data.
+    mmm_text (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `mlm_labels`, `pixel_values` and `input_ids_masked` are present and `mmm_text_weight` > 0.):
+        Masked Multimodal Modeling loss's text component calculated on paired image-text data.
     """
 
     mim: Optional[torch.FloatTensor] = None
@@ -123,69 +129,69 @@ class FlavaLosses(ModelOutput):
 
 
 @dataclass
-class FlavaForPreTrainingOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Output from FlavaForPreTraining containing embeddings, and outputs from individual encoders.
 
     Note that `image_embeddings` and `text_embeddings` returned are similar to pooled output returned from a
     transformer. If you want embeddings for contrastive loss or retrieval use a FLAVA model's `image_projection` and
     `text_projection` layers on `image_embeddings` and `text_embeddings` respectively.
-
-    Args:
-        loss (`torch.FloatTensor`, *optional*, returned when `return_loss` is True):
-            Total loss calculated for this model.
-        loss_info (`FlavaLosses`):
-            Detailed info for FLAVA Pretraining losses. Check `FlavaLosses` class description for the information on
-            the keys.
-        image_embeddings (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*, returned when `pixel_values` are present):
-            The image embeddings which are basically the pooled output of [`FlavaImageModel`].
-        image_output (`BaseModelOutputWithPooling`, *optional*, returned when `pixel_values` are present):
-            The output of the [`FlavaImageModel`].
-        text_embeddings (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*, returned when `input_ids` are present):
-            The text embeddings which are basically the pooled output of [`FlavaTextModel`].
-        text_output (`BaseModelOutputWithPooling`, *optional*, returned when `input_ids` are present):
-            The output of the [`FlavaTextModel`].
-        multimodal_embeddings (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*, returned when `input_ids` and `pixel_values` are present and `skip_unmasked_multimodal_encoder` is `None` or `False`):
-            The multimodal embeddings which are basically the pooled output of [`FlavaTextModel`].
-        multimodal_output (`BaseModelOutputWithPooling`, returned when `input_ids` and `pixel_values` are present and `skip_unmasked_multimodal_encoder` is `None` or `False`):
-            The output of the [`FlavaMultimodalModel`].
-
-        image_masked_embeddings (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*, returned when `pixel_values` are present):
-            The image embeddings which are basically the pooled output of [`FlavaImageModel`]. Uses `bool_masked_pos`
-            to create masked images.
-        image_masked_output (`BaseModelOutputWithPooling`, *optional*, returned when `pixel_values` are present):
-            The output of the [`FlavaImageModel`]. Uses `bool_masked_pos` to create masked images.
-        text_masked_embeddings (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*, returned when `input_ids_masked` are present):
-            The text embeddings which are basically the pooled output of [`FlavaTextModel`].
-        text_masked_output (`BaseModelOutputWithPooling`, *optional*, returned when `input_ids_masked` are present):
-            The output of the [`FlavaTextModel`].
-        multimodal_masked_embeddings (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*, returned when `input_ids` and `pixel_values` are present):
-            The multimodal embeddings which are basically the pooled output of [`FlavaTextModel`].
-        multimodal_masked_output (`BaseModelOutputWithPooling`, *optional*, returned when `input_ids_masked` and `pixel_values` are present):
-            The output of the [`FlavaMultimodalModel`].
-
-        mim_logits (`torch.FloatTensor` of shape `(batch_size, num_image_patches, image_vocab_size)` or of shape `(total_masked_patches, image_vocab_size)` , *optional*, returned when `pixel_values` are present and `input_ids_masked` are not):
-                The logits for MIM unimodal loss. Uses `book_masked_pos` to get masked patches. The flattened output is
-                returned when `bool_masked_pos` has some of the patches masked.
-        mlm_logits (`torch.FloatTensor` of shape `(batch_size, text_seq_length, text_vocab_size)` or of shape `(total_masked_seq_length, text_vocab_size)`, *optional*, returned when `input_ids_masked` are present and `pixel_values` are not):
-                The logits for MLM unimodal loss. The flattened output is returned when `input_ids_masked` has some of
-                the tokens masked.
-        itm_logits (`torch.FloatTensor` of shape `(batch_size, 2)`, *optional*, returned when `input_ids_masked` and `pixel_values` are present):
-                The logits for ITM loss. Note that ITM loss is calculated on masked pairs in FLAVA.
-        mmm_image_logits (`torch.FloatTensor` of shape `(batch_size, num_image_patches, image_vocab_size)` or of shape`(total_masked_patches, image_vocab_size)`, *optional*, returned when `pixel_values` and `input_ids_masked` are present):
-                The logits for MMM image multimodal loss. Uses `book_masked_pos` to get masked patches. The flattened
-                output is returned when `bool_masked_pos` has some of the patches masked.
-        mmm_text_logits (`torch.FloatTensor` of shape `(batch_size, text_seq_length, text_vocab_size)` or of shape `(`(total_masked_seq_length, text_vocab_size)`), *optional*, returned when `pixel_values` and `input_ids_masked` are present):
-                The logits for MMM text multimodal loss. The flattened output is returned when `input_ids_masked` has
-                some of the tokens masked.
-        contrastive_logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
-            The scaled dot product scores between `image_embeddings` and `text_embeddings` but passed through FLAVA's
-            `image_projection` and `text_projection` layers respectively. This represents the image-text similarity
-            scores. This is calculated on unmasked images and texts.
-        contrastive_logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
-            The scaled dot product scores between `text_embeddings` and `image_embeddings` but passed through FLAVA's
-            `text_projection` and `image_projection` layers respectively. This is calculated on unmasked images and
-            texts.
+    """
+)
+class FlavaForPreTrainingOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor`, *optional*, returned when `return_loss` is True):
+        Total loss calculated for this model.
+    loss_info (`FlavaLosses`):
+        Detailed info for FLAVA Pretraining losses. Check `FlavaLosses` class description for the information on
+        the keys.
+    image_embeddings (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*, returned when `pixel_values` are present):
+        The image embeddings which are basically the pooled output of [`FlavaImageModel`].
+    image_output (`BaseModelOutputWithPooling`, *optional*, returned when `pixel_values` are present):
+        The output of the [`FlavaImageModel`].
+    text_embeddings (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*, returned when `input_ids` are present):
+        The text embeddings which are basically the pooled output of [`FlavaTextModel`].
+    text_output (`BaseModelOutputWithPooling`, *optional*, returned when `input_ids` are present):
+        The output of the [`FlavaTextModel`].
+    multimodal_embeddings (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*, returned when `input_ids` and `pixel_values` are present and `skip_unmasked_multimodal_encoder` is `None` or `False`):
+        The multimodal embeddings which are basically the pooled output of [`FlavaTextModel`].
+    multimodal_output (`BaseModelOutputWithPooling`, returned when `input_ids` and `pixel_values` are present and `skip_unmasked_multimodal_encoder` is `None` or `False`):
+        The output of the [`FlavaMultimodalModel`].
+    image_masked_embeddings (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*, returned when `pixel_values` are present):
+        The image embeddings which are basically the pooled output of [`FlavaImageModel`]. Uses `bool_masked_pos`
+        to create masked images.
+    image_masked_output (`BaseModelOutputWithPooling`, *optional*, returned when `pixel_values` are present):
+        The output of the [`FlavaImageModel`]. Uses `bool_masked_pos` to create masked images.
+    text_masked_embeddings (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*, returned when `input_ids_masked` are present):
+        The text embeddings which are basically the pooled output of [`FlavaTextModel`].
+    text_masked_output (`BaseModelOutputWithPooling`, *optional*, returned when `input_ids_masked` are present):
+        The output of the [`FlavaTextModel`].
+    multimodal_masked_embeddings (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*, returned when `input_ids` and `pixel_values` are present):
+        The multimodal embeddings which are basically the pooled output of [`FlavaTextModel`].
+    multimodal_masked_output (`BaseModelOutputWithPooling`, *optional*, returned when `input_ids_masked` and `pixel_values` are present):
+        The output of the [`FlavaMultimodalModel`].
+    mim_logits (`torch.FloatTensor` of shape `(batch_size, num_image_patches, image_vocab_size)` or of shape `(total_masked_patches, image_vocab_size)` , *optional*, returned when `pixel_values` are present and `input_ids_masked` are not):
+        The logits for MIM unimodal loss. Uses `book_masked_pos` to get masked patches. The flattened output is
+            returned when `bool_masked_pos` has some of the patches masked.
+    mlm_logits (`torch.FloatTensor` of shape `(batch_size, text_seq_length, text_vocab_size)` or of shape `(total_masked_seq_length, text_vocab_size)`, *optional*, returned when `input_ids_masked` are present and `pixel_values` are not):
+        The logits for MLM unimodal loss. The flattened output is returned when `input_ids_masked` has some of
+            the tokens masked.
+    itm_logits (`torch.FloatTensor` of shape `(batch_size, 2)`, *optional*, returned when `input_ids_masked` and `pixel_values` are present):
+        The logits for ITM loss. Note that ITM loss is calculated on masked pairs in FLAVA.
+    contrastive_logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
+        The scaled dot product scores between `image_embeddings` and `text_embeddings` but passed through FLAVA's
+        `image_projection` and `text_projection` layers respectively. This represents the image-text similarity
+        scores. This is calculated on unmasked images and texts.
+    contrastive_logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
+        The scaled dot product scores between `text_embeddings` and `image_embeddings` but passed through FLAVA's
+        `text_projection` and `image_projection` layers respectively. This is calculated on unmasked images and
+        texts.
+    mmm_image_logits (`torch.FloatTensor` of shape `(batch_size, num_image_patches, image_vocab_size)` or of shape`(total_masked_patches, image_vocab_size)`, *optional*, returned when `pixel_values` and `input_ids_masked` are present):
+        The logits for MMM image multimodal loss. Uses `book_masked_pos` to get masked patches. The flattened
+            output is returned when `bool_masked_pos` has some of the patches masked.
+    mmm_text_logits (`torch.FloatTensor` of shape `(batch_size, text_seq_length, text_vocab_size)` or of shape `(`(total_masked_seq_length, text_vocab_size)`), *optional*, returned when `pixel_values` and `input_ids_masked` are present):
+        The logits for MMM text multimodal loss. The flattened output is returned when `input_ids_masked` has
+            some of the tokens masked.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -577,7 +583,7 @@ class FlavaOutput(nn.Module):
         return hidden_states
 
 
-class FlavaLayer(nn.Module):
+class FlavaLayer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the timm implementation."""
 
     def __init__(self, config: FlavaPossibleConfigs) -> None:
@@ -648,16 +654,7 @@ class FlavaEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, attention_mask, layer_head_mask, output_attentions)
+            layer_outputs = layer_module(hidden_states, attention_mask, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -1215,12 +1212,12 @@ class FlavaModel(FlavaPreTrainedModel):
             [What are token type IDs?](../glossary#token-type-ids)
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, image_num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
-        skip_multimodal_encoder (*bool*, *optional*):
-            Skip any calculations for multimodal encoder. Useful if multimodal encoding is not going to be used.
         image_attention_mask (`torch.Tensor` of shape `(batch_size, image_num_patches)`, *optional*):
             Mask to avoid performing attention on padding pixel values for image inputs. Mask values selected in `[0, 1]`:
             - 1 for pixel values that are real (i.e., **not masked**),
             - 0 for pixel values that are padding (i.e., **masked**).
+        skip_multimodal_encoder (*bool*, *optional*):
+            Skip any calculations for multimodal encoder. Useful if multimodal encoding is not going to be used.
 
         Examples:
 
@@ -1689,6 +1686,8 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
             to be used with MLM. Indices can be obtained using [`AutoTokenizer`] along with
             [`DataCollatorForMaskedLanguageModeling`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details. [What are input IDs?](../glossary#input-ids)
+        codebook_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_image_patches, patch_size, patch_size, 3)`, *optional*):
+            Pixel values for image patches that are used to compute the image codebook labels for masked image modeling.
         token_type_ids (`torch.LongTensor` of shape `(batch_size, text_seq_len)`, *optional*):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
             1]`:
@@ -1722,8 +1721,6 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
             The pairs with 0 will be skipped for calculation of MMM and global contrastive losses as well.
         return_loss (`bool`, *optional*, default to None):
             Whether to return calculated loss or not.
-        codebook_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_image_patches, patch_size, patch_size, 3)`, *optional*):
-            Pixel values for image patches that are used to compute the image codebook labels for masked image modeling.
 
         Examples:
         ```python

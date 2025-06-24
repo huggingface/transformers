@@ -27,6 +27,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
@@ -763,7 +764,7 @@ JETMOE_ATTENTION_CLASSES = {
 }
 
 
-class JetMoeBlock(nn.Module):
+class JetMoeBlock(GradientCheckpointingLayer):
     def __init__(self, config: JetMoeConfig, layer_idx: Optional[int] = None):
         """
         Initialize the JetMoeBlock module.
@@ -967,28 +968,15 @@ class JetMoeModel(JetMoePreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    position_ids,
-                    past_key_values,
-                    causal_mask,
-                    output_attentions,
-                    output_router_logits,
-                    use_cache,
-                    use_reentrant=False,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=causal_mask,
-                    position_ids=position_ids,
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    output_router_logits=output_router_logits,
-                    use_cache=use_cache,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                position_ids=position_ids,
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                output_router_logits=output_router_logits,
+                use_cache=use_cache,
+            )
 
             hidden_states = layer_outputs[0]
 

@@ -29,6 +29,7 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
@@ -39,32 +40,20 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class SamHQVisionEncoderOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for sam_hq vision model's outputs that also contains image embeddings obtained by applying the projection
     layer to the pooler_output.
-
-    Args:
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
-            The image embeddings obtained by applying the projection layer to the pooler_output.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-
-        intermediate_embeddings (`list(torch.FloatTensor)`, *optional*):
-            A list of intermediate embeddings collected from certain blocks within the model, typically those without
-            windowed attention. Each element in the list is of shape `(batch_size, sequence_length, hidden_size)`.
-            This is specific to SAM-HQ and not present in base SAM.
+    """
+)
+class SamHQVisionEncoderOutput(ModelOutput):
+    r"""
+    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+        The image embeddings obtained by applying the projection layer to the pooler_output.
+    intermediate_embeddings (`list(torch.FloatTensor)`, *optional*):
+        A list of intermediate embeddings collected from certain blocks within the model, typically those without
+        windowed attention. Each element in the list is of shape `(batch_size, sequence_length, hidden_size)`.
+        This is specific to SAM-HQ and not present in base SAM.
     """
 
     image_embeds: Optional[torch.FloatTensor] = None
@@ -76,32 +65,34 @@ class SamHQVisionEncoderOutput(ModelOutput):
 
 
 @dataclass
-class SamHQImageSegmentationOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for Segment-Anything model's output
+    """
+)
+class SamHQImageSegmentationOutput(ModelOutput):
+    r"""
+    iou_scores (`torch.FloatTensor` of shape `(batch_size, num_masks)`):
+        The iou scores of the predicted masks.
+    pred_masks (`torch.FloatTensor` of shape `(batch_size, num_masks, height, width)`):
+        The predicted low resolutions masks. Needs to be post-processed by the processor
+    vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+        one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
-    Args:
-        iou_scores (`torch.FloatTensor` of shape `(batch_size, num_masks)`):
-            The iou scores of the predicted masks.
-        pred_masks (`torch.FloatTensor` of shape `(batch_size, num_masks, height, width)`):
-            The predicted low resolutions masks. Needs to be post-processed by the processor
-        vision_hidden_states  (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+        Hidden-states of the vision model at the output of each layer plus the optional initial embedding outputs.
+    vision_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`.
 
-            Hidden-states of the vision model at the output of each layer plus the optional initial embedding outputs.
-        vision_attentions  (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
+        Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+        heads.
+    mask_decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`.
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        mask_decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+        Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+        heads.
     """
 
     iou_scores: Optional[torch.FloatTensor] = None
@@ -364,7 +355,7 @@ SAM_HQ_VISION_ATTENTION_CLASSES = {
 }
 
 
-class SamHQVisionLayer(nn.Module):
+class SamHQVisionLayer(GradientCheckpointingLayer):
     def __init__(self, config, window_size):
         super().__init__()
         self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -539,18 +530,10 @@ class SamHQVisionEncoder(nn.Module):
         all_self_attentions = () if output_attentions else None
         intermediate_embeddings = []
 
-        for i, layer_module in enumerate(self.layers):
+        for layer_module in self.layers:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
-
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, output_attentions=output_attentions)
-
+            layer_outputs = layer_module(hidden_states, output_attentions=output_attentions)
             hidden_states = layer_outputs[0]
 
             # Collect embeddings from non-windowed blocks

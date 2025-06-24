@@ -13,7 +13,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
@@ -109,9 +108,10 @@ class SamHQConfig(SamConfig):
     pass
 
 
-@dataclass
 class SamHQVisionEncoderOutput(SamVisionEncoderOutput):
-    """
+    r"""
+    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+        The image embeddings obtained by applying the projection layer to the pooler_output.
     intermediate_embeddings (`list(torch.FloatTensor)`, *optional*):
         A list of intermediate embeddings collected from certain blocks within the model, typically those without
         windowed attention. Each element in the list is of shape `(batch_size, sequence_length, hidden_size)`.
@@ -121,7 +121,6 @@ class SamHQVisionEncoderOutput(SamVisionEncoderOutput):
     intermediate_embeddings: Optional[list[torch.FloatTensor]] = None
 
 
-@dataclass
 class SamHQImageSegmentationOutput(SamImageSegmentationOutput):
     pass
 
@@ -151,18 +150,10 @@ class SamHQVisionEncoder(SamVisionEncoder):
         all_self_attentions = () if output_attentions else None
         intermediate_embeddings = []
 
-        for i, layer_module in enumerate(self.layers):
+        for layer_module in self.layers:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
-
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, output_attentions=output_attentions)
-
+            layer_outputs = layer_module(hidden_states, output_attentions=output_attentions)
             hidden_states = layer_outputs[0]
 
             # Collect embeddings from non-windowed blocks

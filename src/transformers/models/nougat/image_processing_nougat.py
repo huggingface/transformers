@@ -41,14 +41,10 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, filter_out_non_signature_kwargs, logging
-from ...utils.import_utils import is_cv2_available, is_vision_available
+from ...utils.import_utils import is_vision_available
 
 
 logger = logging.get_logger(__name__)
-
-
-if is_cv2_available():
-    pass
 
 
 if is_vision_available():
