@@ -14,6 +14,8 @@
 # limitations under the License.
 """PyTorch Grounding DINO model."""
 
+import copy
+
 import math
 import warnings
 from dataclasses import dataclass
@@ -2458,7 +2460,9 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
             shared_head = GroundingDinoMLPPredictionHead(
                 input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
             )
-            self.bbox_embed = nn.ModuleList([shared_head] * config.decoder_layers)
+            #self.bbox_embed = nn.ModuleList([shared_head] * config.decoder_layers)
+            
+            self.bbox_embed = nn.ModuleList( [copy.deepcopy(shared_head) for _ in range(config.decoder_layers)])
         else:
             # each layer has its own head (implicit deep copy through a new instance)
             self.bbox_embed = nn.ModuleList(
