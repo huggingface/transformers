@@ -41,8 +41,6 @@ if is_torch_available():
 
 
 if is_pytesseract_available():
-    from PIL import Image
-
     from transformers import LayoutLMv3ImageProcessor
 
 
