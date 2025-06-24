@@ -153,7 +153,7 @@ DataParallel 방식에 대해 더 알아보려면 [여기](perf_train_gpu_many#d
 [Reformer: The Efficient Transformer](https://arxiv.org/abs/2001.04451) 논문의 저자들은 이 연산이 `sequence_length` 차원에 대해 독립적이기 때문에,토큰마다 Feed Forward Layer의 출력 임베딩을 각 토큰별로 `[batch_size, config.hidden_size]`을 개별적으로 계산한 뒤, 이를 이어 붙여 `[batch_size, sequence_length, config.hidden_size]` 형태로 만들 수 있습니다.`n = sequence_length`. 이 방식은 계산 시간은 늘어나지만, 메모리 사용량은 줄어들게 됩니다.
 
 [`apply_chunking_to_forward`] 함수를 사용하는 모델의 경우, `chunk_size`는 병렬로 계산되는 출력 임베딩의 개수를 정의하며, 이는 메모리 사용량과 계산 시간 간의 트레이드오프를 결정합니다.
-`chunk_size`가 0으로 설정되면, Feed Forward 청킹은 수행되지 않습니다.
+`chunk_size`가 0으로 설정되면, 피드 포워드 청킹(Feed Forward Chunking)은 수행되지 않습니다.
 
 ### 파인튜닝 모델 (finetuned models)
 
