@@ -843,6 +843,8 @@
         title: GraniteSpeech
       - local: model_doc/hubert
         title: Hubert
+      - local: model_doc/stt
+        title: Kyutai Speech-To-Text
       - local: model_doc/mctct
         title: MCTCT
       - local: model_doc/mimi
