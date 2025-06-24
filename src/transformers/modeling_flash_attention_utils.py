@@ -302,7 +302,7 @@ def _upad_input(
     )
 
 
-def _prepare_flash_attention_from_position_ids(query, key, value, position_ids):
+def prepare_fa2_from_position_ids(query, key, value, position_ids):
     """
     This function returns necessary arguments to call `flash_attn_varlen_func`.
     All three query, key, value states will be flattened.
@@ -532,7 +532,7 @@ def _flash_attention_forward(
 
         if cu_seq_lens_q is None or cu_seq_lens_k is None:
             query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = (
-                _prepare_flash_attention_from_position_ids(query_states, key_states, value_states, position_ids)
+                prepare_fa2_from_position_ids(query_states, key_states, value_states, position_ids)
             )
 
             cu_seq_lens_q, cu_seq_lens_k = cu_seq_lens

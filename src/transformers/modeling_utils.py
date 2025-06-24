@@ -2551,13 +2551,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     f"{preface} Flash Attention 3 is not available on CPU. Please make sure torch can access a CUDA device."
                 )
 
-        _is_bettertransformer = getattr(cls, "use_bettertransformer", False)
-
-        if _is_bettertransformer:
-            raise ValueError(
-                "Flash Attention 3 and BetterTransformer API are not compatible. Please make sure to disable BetterTransformers by doing model.reverse_bettertransformer()"
-            )
-
         if torch_dtype is None:
             logger.warning_once(
                 "You are attempting to use Flash Attention 3 without specifying a torch dtype. This might lead to unexpected behaviour"
