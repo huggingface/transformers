@@ -361,8 +361,6 @@ def squad_convert_examples_to_features(
         is_training=not evaluate,
     )
     ```"""
-    # Defining helper methods
-    features = []
 
     threads = min(threads, cpu_count())
     with ThreadPool(threads, initializer=squad_convert_example_to_features_init, initargs=(tokenizer,)) as p:

@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from .albert import *
     from .align import *
     from .altclip import *
+    from .arcee import *
     from .aria import *
     from .audio_spectrogram_transformer import *
     from .auto import *
