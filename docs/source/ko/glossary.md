@@ -143,7 +143,7 @@ DataParallel 방식에 대해 더 알아보려면 [여기](perf_train_gpu_many#d
 
 머신러닝 알고리즘이 더 효과적으로 학습할 수 있도록, 원시 데이터를 선택하고 변환하여 더 유용한 특징(feature) 집합으로 만드는 과정입니다. 예를 들어, 원시 텍스트를 워드 임베딩으로 변환하거나 이미지나 비디오 데이터에서 윤곽선이나 형태와 같은 중요한 특징을 추출하는 것이 있습니다.
 
-### 피드포워드 청킹 (feed forward chunking)
+### 피드 포워드 청킹 (feed forward chunking)
 
 트랜스포머의 각 residual attention Block에서는 self-Attention Layer 다음에 보통 두 개의 Feed Forward Layer가 이어집니다. 이 Feed Forward Layers의 중간 임베딩 크기는 종종 모델의 히든 사이즈(hidden size)보다 큽니다(예:
 `google-bert/bert-base-uncased` 모델의 경우).
