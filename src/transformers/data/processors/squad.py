@@ -15,7 +15,7 @@
 import json
 import os
 from functools import partial
-from multiprocessing import cpu_count
+from multiprocessing import Pool, cpu_count
 from multiprocessing.pool import ThreadPool
 from typing import Optional
 
@@ -24,7 +24,7 @@ from tqdm import tqdm
 
 from ...models.bert.tokenization_bert import whitespace_tokenize
 from ...tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase, TruncationStrategy
-from ...utils import is_tf_available, is_torch_available, logging
+from ...utils import is_tf_available, is_torch_available, is_torch_hpu_available, logging
 from .utils import DataProcessor
 
 
@@ -363,7 +363,8 @@ def squad_convert_examples_to_features(
     ```"""
 
     threads = min(threads, cpu_count())
-    with ThreadPool(threads, initializer=squad_convert_example_to_features_init, initargs=(tokenizer,)) as p:
+    pool_cls = ThreadPool if is_torch_hpu_available() else Pool
+    with pool_cls(threads, initializer=squad_convert_example_to_features_init, initargs=(tokenizer,)) as p:
         annotate_ = partial(
             squad_convert_example_to_features,
             max_seq_length=max_seq_length,
