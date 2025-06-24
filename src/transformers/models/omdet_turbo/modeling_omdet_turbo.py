@@ -1023,6 +1023,9 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.init_std)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, OmDetTurboDecoder):
