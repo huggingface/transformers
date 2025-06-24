@@ -111,7 +111,7 @@ rendered properly in your Markdown viewer.
 
 DataParallel 방식에 대해 더 알아보려면 [여기](perf_train_gpu_many#dataparallel-vs-distributeddataparallel)를 참고하세요.
 
-### decoder input IDs
+### 디코더 입력 ID (decoder input IDs)
 
 이 입력은 인코더-디코더 모델에 특화된 것으로, 디코더에 전달될 input ID 들을 포함합니다. 이러한 입력은 번역이나 요약과 같은 시퀀스-투-시퀀스(sequence-to-sequence) 작업에 사용되며, 일반적으로 모델마다 고유한 방식으로 구성됩니다.
 
