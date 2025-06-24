@@ -4149,7 +4149,7 @@ class ModelTesterMixin:
     @require_torch_gpu
     @mark.flash_attn_3_test
     @slow
-    def test_flash_attn_3_padding_matches_padding_free_with_position_ids(self):
+    def test_flash_attention_3_padding_matches_padding_free_with_position_ids(self):
         self.flash_attention_padding_matches_padding_free_with_position_ids(attn_implementation="flash_attention_3")
 
     @require_flash_attn_3
