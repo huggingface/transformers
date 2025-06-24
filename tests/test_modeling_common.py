@@ -23,6 +23,7 @@ import re
 import tempfile
 import warnings
 from collections import defaultdict
+from collections.abc import Callable
 from contextlib import contextmanager
 
 import numpy as np
@@ -187,6 +188,18 @@ def _mock_all_init_weights(self):
         # Tie weights should be skipped when not initializing all weights
         # since from_pretrained(...) calls tie weights anyways
         self.tie_weights()
+
+
+def submodels_support_check(model: PreTrainedModel, support_check: Callable[[PreTrainedModel], bool]) -> bool:
+    """
+    Iterates through the submodels of the provided model and checks if they support the given check function.
+    """
+    support_results = [
+        support_check(module)
+        for name, module in model.named_modules()
+        if isinstance(module, PreTrainedModel) and name != ""
+    ]
+    return all(support_results) if support_results else support_check(model)
 
 
 @contextmanager
