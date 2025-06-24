@@ -449,47 +449,6 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
     def test_sdpa_can_compile_dynamic(self):
         pass
 
-    def test_encode_with_padding_cache(self):
-        """
-        This test can not be run on GPU because of precision issues.
-
-        We test here the possibility to run Mimi in a streaming manner, i.e. chunk by chunk.
-        1. we encode a first time the entire audio
-        2. we encode the audio chunk by chunk, each chunk being the smallest size possible for the model (i.e. the frame size)
-        """
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common(input_values_length=192)
-
-        # forcing cpu mode
-        inputs_dict["input_values"] = inputs_dict["input_values"].to("cpu")
-
-        config.use_cache = True
-        model = MimiModel(config)
-        model.eval()
-
-        frame_size = config.frame_size
-        audio_codes = model.encode(inputs_dict["input_values"]).audio_codes
-
-        # streaming chunk by chunk
-        encoder_past_key_values = None
-        padding_cache = None
-        encoded_frames_list = []
-
-        for start in range(0, inputs_dict["input_values"].shape[-1], frame_size):
-            input_values_chunk = inputs_dict["input_values"][:, :, start : start + frame_size]
-            encoder_outputs = model.encode(
-                input_values_chunk,
-                padding_cache=padding_cache,
-                encoder_past_key_values=encoder_past_key_values,
-                use_streaming=True,
-            )
-            encoder_past_key_values = encoder_outputs.encoder_past_key_values
-            padding_cache = encoder_outputs.padding_cache
-            encoded_frames_list.append(encoder_outputs.audio_codes)
-
-        streamed_audio_codes = torch.cat(encoded_frames_list, dim=-1)
-
-        torch.testing.assert_close(streamed_audio_codes, audio_codes)
-
 
 # Copied from transformers.tests.encodec.test_modeling_encodec.normalize
 def normalize(arr):
@@ -555,6 +514,52 @@ class MimiIntegrationTest(unittest.TestCase):
                 audio_output_entire_context.squeeze().cpu().numpy(),
             )
             self.assertTrue(rmse < 1e-3)
+
+    def test_integration_encode_with_padding_cache(self):
+        """
+        We test here the possibility to run Mimi in a streaming manner, i.e. chunk by chunk.
+        1. we encode a first time the entire audio
+        2. we encode the audio chunk by chunk, each chunk being the smallest size possible for the model (i.e. the frame size)
+        """
+        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+
+        model_id = "kyutai/mimi"
+
+        model = MimiModel.from_pretrained(model_id, use_cache=True).to(torch_device)
+        processor = AutoFeatureExtractor.from_pretrained(model_id)
+
+        librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
+        audio_sample = librispeech_dummy[-1]["audio"]["array"]
+
+        inputs = processor(
+            raw_audio=audio_sample,
+            sampling_rate=processor.sampling_rate,
+            return_tensors="pt",
+        ).to(torch_device)
+
+        frame_size = model.config.frame_size
+        audio_codes = model.encode(inputs["input_values"]).audio_codes
+
+        # streaming chunk by chunk
+        encoder_past_key_values = None
+        padding_cache = None
+        encoded_frames_list = []
+
+        for start in range(0, inputs["input_values"].shape[-1], frame_size):
+            input_values_chunk = inputs["input_values"][:, :, start : start + frame_size]
+            encoder_outputs = model.encode(
+                input_values_chunk,
+                padding_cache=padding_cache,
+                encoder_past_key_values=encoder_past_key_values,
+                use_streaming=True,
+            )
+            encoder_past_key_values = encoder_outputs.encoder_past_key_values
+            padding_cache = encoder_outputs.padding_cache
+            encoded_frames_list.append(encoder_outputs.audio_codes)
+
+        streamed_audio_codes = torch.cat(encoded_frames_list, dim=-1)
+
+        torch.testing.assert_close(streamed_audio_codes, audio_codes)
 
     def test_integration(self):
         expected_rmses = {
