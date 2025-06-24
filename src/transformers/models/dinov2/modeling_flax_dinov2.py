@@ -403,7 +403,7 @@ class FlaxDinov2SwiGLUFFN(nn.Module):
 
     def setup(self):
         hidden_features = int(self.config.hidden_size * self.config.mlp_ratio)
-        hidden_features = (int(self.hidden_features * 2 / 3) + 7) // 8 * 8
+        hidden_features = (int(hidden_features * 2 / 3) + 7) // 8 * 8
 
         self.weights_in = nn.Dense(
             2 * hidden_features,

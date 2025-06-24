@@ -42,7 +42,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_fx_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -90,8 +89,7 @@ if is_pyctcdecode_available():
     from transformers.models.wav2vec2_with_lm import processing_wav2vec2_with_lm
 
 
-if is_torch_fx_available():
-    from transformers.utils.fx import symbolic_trace
+from transformers.utils.fx import symbolic_trace
 
 
 def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
@@ -716,8 +714,8 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         # TODO: fix it
         self.skipTest(reason="torch 2.1 breaks torch fx tests for wav2vec2/hubert.")
 
-        if not is_torch_fx_available() or not self.fx_compatible:
-            self.skipTest(reason="torch fx not available or not compatible with this model")
+        if not self.fx_compatible:
+            self.skipTest(reason="torch fx is not compatible with this model")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.return_dict = False

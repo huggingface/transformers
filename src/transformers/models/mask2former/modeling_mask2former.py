@@ -448,7 +448,7 @@ class Mask2FormerHungarianMatcher(nn.Module):
             pred_probs = class_queries_logits[i].softmax(-1)
             pred_mask = masks_queries_logits[i]
 
-            # Compute the classification cost. Contrary to the loss, we don't use the NLL, but approximate it in 1 - proba[target class]. The 1 is a constant that doesn't change the matching, it can be ommitted.
+            # Compute the classification cost. Contrary to the loss, we don't use the NLL, but approximate it in 1 - proba[target class]. The 1 is a constant that doesn't change the matching, it can be omitted.
             cost_class = -pred_probs[:, class_labels[i]]
             target_mask = mask_labels[i].to(pred_mask)
             target_mask = target_mask[:, None]
@@ -465,7 +465,7 @@ class Mask2FormerHungarianMatcher(nn.Module):
 
             # compute the cross entropy loss between each mask pairs -> shape (num_queries, num_labels)
             cost_mask = pair_wise_sigmoid_cross_entropy_loss(pred_mask, target_mask)
-            # Compute the dice loss betwen each mask pairs -> shape (num_queries, num_labels)
+            # Compute the dice loss between each mask pairs -> shape (num_queries, num_labels)
             cost_dice = pair_wise_dice_loss(pred_mask, target_mask)
             # final cost matrix
             cost_matrix = self.cost_mask * cost_mask + self.cost_class * cost_class + self.cost_dice * cost_dice
@@ -473,7 +473,7 @@ class Mask2FormerHungarianMatcher(nn.Module):
             cost_matrix = torch.minimum(cost_matrix, torch.tensor(1e10))
             cost_matrix = torch.maximum(cost_matrix, torch.tensor(-1e10))
             cost_matrix = torch.nan_to_num(cost_matrix, 0)
-            # do the assigmented using the hungarian algorithm in scipy
+            # do the assignment using the hungarian algorithm in scipy
             assigned_indices: Tuple[np.array] = linear_sum_assignment(cost_matrix.cpu())
             indices.append(assigned_indices)
 
@@ -1275,9 +1275,9 @@ class Mask2FormerPixelDecoder(nn.Module):
         _, height, width = mask.shape
         valid_height = torch.sum(~mask[:, :, 0], 1)
         valid_width = torch.sum(~mask[:, 0, :], 1)
-        valid_ratio_heigth = valid_height.to(dtype) / height
+        valid_ratio_height = valid_height.to(dtype) / height
         valid_ratio_width = valid_width.to(dtype) / width
-        valid_ratio = torch.stack([valid_ratio_width, valid_ratio_heigth], -1)
+        valid_ratio = torch.stack([valid_ratio_width, valid_ratio_height], -1)
         return valid_ratio
 
     def forward(

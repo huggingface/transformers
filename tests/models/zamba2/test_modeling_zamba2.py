@@ -322,14 +322,22 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
 
-    @unittest.skip("Zamba2 has a hybrid cache")
     def test_past_key_values_format(self):
-        r"""
-        Zamba2's cache shape depends on whether a given layer is mamba or attention.
-        For mamba layers, the KV cache has shape is empty and has shape [batch_size, 0].
-        The shape checks of this test assume instead that every layer has an attention cache, so we skip it.
         """
-        pass
+        Overwritting to pass the expected cache shapes (Zamba2 has cache shape = [batch_size, 0] for mamba layers)
+        """
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        batch_size, seq_length = inputs["input_ids"].shape
+        per_head_embed_dim = config.attention_head_dim  # note: this one is not a common attribute name
+        self_attention_cache_shape = (batch_size, config.num_key_value_heads, seq_length, per_head_embed_dim)
+        # build the full cache shapes, including mamba layers
+        all_cache_shapes = []
+        for i in range(config.num_hidden_layers):
+            if config.layers_block_type[i] == "mamba":
+                all_cache_shapes.append([torch.Size([batch_size, 0]), torch.Size([batch_size, 0])])
+            else:
+                all_cache_shapes.append([self_attention_cache_shape, self_attention_cache_shape])
+        super().test_past_key_values_format(custom_all_cache_shapes=all_cache_shapes)
 
     @unittest.skip(reason="Zamba2 has hybrid cache.")
     def test_generate_continue_from_inputs_embeds(self):

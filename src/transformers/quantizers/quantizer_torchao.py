@@ -220,7 +220,7 @@ class TorchAoHfQuantizer(HfQuantizer):
         unexpected_keys: List[str],
     ):
         """
-        Each nn.Linear layer that needs to be quantized is processsed here.
+        Each nn.Linear layer that needs to be quantized is processed here.
         First, we set the value the weight tensor, then we move it to the target device. Finally, we quantize the module.
         """
         if self.quantization_config.quant_type == "autoquant":

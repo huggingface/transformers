@@ -68,6 +68,7 @@ class ChameleonProcessor(ProcessorMixin):
     def __init__(self, image_processor, tokenizer, image_seq_length: int = 1024, image_token: str = "<image>"):
         self.image_seq_length = image_seq_length
         self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         self.image_start_token = (
             tokenizer.boi_token if hasattr(tokenizer, "boi_token") else "<racm3:break>"
         )  # fixed tokens for start and end, so can hardcode
@@ -140,12 +141,14 @@ class ChameleonProcessor(ProcessorMixin):
                 sample += self.tokenizer.sep_token  # special Chameleon treatment to add sep for chat mode
             prompt_strings.append(sample)
 
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         data = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
+        self._check_special_mm_tokens(prompt_strings, data, modalities=["image"])
 
         if images is not None:
             data["pixel_values"] = self.image_processor(images, **output_kwargs["images_kwargs"])["pixel_values"]
 
-        return BatchFeature(data=data, tensor_type=output_kwargs["common_kwargs"]["return_tensors"])
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):

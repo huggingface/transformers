@@ -688,7 +688,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         image_sizes = [get_image_size(image, channel_dim=input_data_format) for image in images]
         for image in images:
             # convert image into a list of patches
-            # we intentially use the same data format as the input data format
+            # we intentionally use the same data format as the input data format
             image_patches = self.get_image_patches(
                 image,
                 image_grid_pinpoints,

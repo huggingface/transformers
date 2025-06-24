@@ -852,7 +852,7 @@ class DPTPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
+        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         if isinstance(module, (DPTViTEmbeddings, DPTViTHybridEmbeddings)):

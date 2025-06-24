@@ -32,7 +32,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_llava import LlavaConfig
 
@@ -144,23 +143,12 @@ class LlavaPreTrainedModel(PreTrainedModel):
         # important: this ported version of Llava isn't meant for training from scratch - only
         # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
         # https://github.com/haotian-liu/LLaVA/tree/main/llava should serve for that purpose
-        std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.text_config.initializer_range
-        )
+        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
 
-        if hasattr(module, "class_embedding"):
-            module.class_embedding.data.normal_(mean=0.0, std=std)
-
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
+        if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
 
 
 LLAVA_INPUTS_DOCSTRING = r"""
@@ -324,7 +312,6 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
         image_features = self.multi_modal_projector(selected_image_feature)
         return image_features
 
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(LLAVA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=LlavaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -418,10 +405,10 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
                 image_sizes=image_sizes,
             )
 
-            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
+            special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
             special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
             if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
-                n_image_tokens = (input_ids == self.config.image_token_index).sum()
+                n_image_tokens = (input_ids == self.config.image_token_id).sum()
                 n_image_features = image_features.shape[0] * image_features.shape[1]
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"

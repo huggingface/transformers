@@ -33,7 +33,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_paligemma import PaliGemmaConfig
 
@@ -50,7 +49,6 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
     sequence_length: int,
     target_length: int,
     dtype: torch.dtype,
-    device: torch.device,
     min_dtype: float,
     cache_position: torch.Tensor,
     batch_size: int,
@@ -71,8 +69,6 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
             The target length: when generating with static cache, the mask should be as long as the static cache, to account for the 0 padding, the part of the cache that is not filled yet.
         dtype (`torch.dtype`):
             The dtype to use for the 4D attention mask.
-        device (`torch.device`):
-            The device to place the 4D attention mask on.
         min_dtype (`float`):
             The minimum value representable with the dtype `dtype`.
         cache_position (`torch.Tensor`):
@@ -86,7 +82,9 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
         # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
         causal_mask = attention_mask
     else:
-        causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
+        causal_mask = torch.full(
+            (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=cache_position.device
+        )
         # Causal diagonal mask only if training, otherwise attend to the whole prefix. Training-specific attn for prefix is handled below
         if sequence_length != 1:
             if is_training:
@@ -199,23 +197,12 @@ class PaliGemmaPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         # important: this ported version of PaliGemmaisn't meant for training from scratch - only
         # inference and fine-tuning
-        std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.text_config.initializer_range
-        )
+        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
 
-        if hasattr(module, "class_embedding"):
-            module.class_embedding.data.normal_(mean=0.0, std=std)
-
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
+        if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
 
 
 PALIGEMMA_INPUTS_DOCSTRING = r"""
@@ -416,7 +403,6 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         image_features = image_features / (self.config.text_config.hidden_size**0.5)
         return image_features
 
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(PALIGEMMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=PaliGemmaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -486,8 +472,8 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         is_training = token_type_ids is not None and labels is not None
 
         # Replace image id woth PAD if the image token if OOV, to avoid index-errors
-        if input_ids is not None and self.config.image_token_index >= self.vocab_size:
-            special_image_mask = input_ids == self.config.image_token_index
+        if input_ids is not None and self.config.image_token_id >= self.vocab_size:
+            special_image_mask = input_ids == self.config.image_token_id
             llm_input_ids = input_ids.clone()
             llm_input_ids[special_image_mask] = 0
         else:
@@ -511,10 +497,10 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
 
             if input_ids is None:
                 special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_index, dtype=torch.long, device=inputs_embeds.device)
+                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             else:
-                special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
+                special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
                 special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
 
             if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():

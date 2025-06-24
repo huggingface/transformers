@@ -67,7 +67,7 @@ class YolosObjectDetectionOutput(ModelOutput):
             possible padding). You can use [`~YolosImageProcessor.post_process`] to retrieve the unnormalized bounding
             boxes.
         auxiliary_outputs (`list[Dict]`, *optional*):
-            Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
+            Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
             and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
             `pred_boxes`) for each decoder layer.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -155,9 +155,9 @@ class InterpolateInitialPositionEmbeddings(nn.Module):
         patch_pos_embed = patch_pos_embed.view(batch_size, hidden_size, patch_height, patch_width)
 
         height, width = img_size
-        new_patch_heigth, new_patch_width = height // self.config.patch_size, width // self.config.patch_size
+        new_patch_height, new_patch_width = height // self.config.patch_size, width // self.config.patch_size
         patch_pos_embed = nn.functional.interpolate(
-            patch_pos_embed, size=(new_patch_heigth, new_patch_width), mode="bicubic", align_corners=False
+            patch_pos_embed, size=(new_patch_height, new_patch_width), mode="bicubic", align_corners=False
         )
         patch_pos_embed = patch_pos_embed.flatten(2).transpose(1, 2)
         scale_pos_embed = torch.cat((cls_pos_embed, patch_pos_embed, det_pos_embed), dim=1)

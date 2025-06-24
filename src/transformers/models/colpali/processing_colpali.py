@@ -118,8 +118,10 @@ class ColPaliProcessor(ProcessorMixin):
             tokens_to_add = {"additional_special_tokens": [image_token]}
             tokenizer.add_special_tokens(tokens_to_add)
             self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
+            self.image_token = IMAGE_TOKEN
         else:
             self.image_token_id = tokenizer.image_token_id
+            self.image_token = tokenizer.image_token
 
         tokenizer.add_tokens(EXTRA_TOKENS)
         tokenizer.add_bos_token = False

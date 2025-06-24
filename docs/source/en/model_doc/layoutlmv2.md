@@ -310,6 +310,11 @@ print(encoding.keys())
 [[autodoc]] LayoutLMv2ImageProcessor
     - preprocess
 
+## LayoutLMv2ImageProcessorFast
+
+[[autodoc]] LayoutLMv2ImageProcessorFast
+    - preprocess
+
 ## LayoutLMv2Tokenizer
 
 [[autodoc]] LayoutLMv2Tokenizer

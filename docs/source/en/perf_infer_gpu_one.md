@@ -244,7 +244,7 @@ model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-8B", device_m
 
 ### Benchmarks
 
-FlashAttention2 speeds up inference considerably especially for inputs with long sequences. However, since FlashAttention2 doesn't support computing attention scores with padding tokens, you must manually pad and unpad the attention scores for batched inference if a sequence contains padding tokens. The downside is batched generation is slower with padding tokens. 
+FlashAttention2 speeds up inference considerably especially for inputs with long sequences. However, since FlashAttention2 doesn't support computing attention scores with padding tokens, you must manually pad and unpad the attention scores for batched inference if a sequence contains padding tokens. The downside is batched generation is slower with padding tokens.
 
 <hfoptions id="padded">
 <hfoption id="short sequence length">

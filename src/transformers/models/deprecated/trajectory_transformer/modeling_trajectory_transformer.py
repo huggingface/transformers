@@ -601,3 +601,10 @@ class TrajectoryTransformerModel(TrajectoryTransformerPreTrainedModel):
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
+
+
+__all__ = [
+    "TrajectoryTransformerModel",
+    "TrajectoryTransformerPreTrainedModel",
+    "load_tf_weights_in_trajectory_transformer",
+]

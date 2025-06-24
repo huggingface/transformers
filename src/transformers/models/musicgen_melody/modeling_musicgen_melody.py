@@ -1693,7 +1693,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
         return self.text_encoder
 
     def get_encoder(self):
-        # get the text encoder to compute the conditionning hidden-states for generation
+        # get the text encoder to compute the conditioning hidden-states for generation
         return self.get_text_encoder()
 
     def get_decoder(self):
@@ -2563,3 +2563,11 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
             return outputs
         else:
             return output_values
+
+
+__all__ = [
+    "MusicgenMelodyForConditionalGeneration",
+    "MusicgenMelodyForCausalLM",
+    "MusicgenMelodyModel",
+    "MusicgenMelodyPreTrainedModel",
+]

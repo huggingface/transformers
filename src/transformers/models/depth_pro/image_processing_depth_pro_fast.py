@@ -38,6 +38,7 @@ from ...utils import (
     logging,
     requires_backends,
 )
+from ...utils.import_utils import requires
 
 
 if TYPE_CHECKING:
@@ -63,6 +64,7 @@ if is_torchvision_available():
     "Constructs a fast DepthPro image processor.",
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
 )
+@requires(backends=("torchvision", "torch"))
 class DepthProImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_STANDARD_MEAN

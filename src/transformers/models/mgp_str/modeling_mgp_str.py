@@ -246,7 +246,7 @@ class MgpstrEncoder(nn.Module):
     def __init__(self, config: MgpstrConfig):
         super().__init__()
         # stochastic depth decay rule
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)]
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers, device="cpu")]
 
         self.blocks = nn.Sequential(
             *[MgpstrLayer(config=config, drop_path=dpr[i]) for i in range(config.num_hidden_layers)]

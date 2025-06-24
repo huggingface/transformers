@@ -166,15 +166,6 @@ class UperNetHead(nn.Module):
             padding=1,
         )
 
-    def init_weights(self):
-        self.apply(self._init_weights)
-
-    def _init_weights(self, module):
-        if isinstance(module, nn.Conv2d):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-
     def psp_forward(self, inputs):
         x = inputs[-1]
         psp_outs = [x]
@@ -266,15 +257,6 @@ class UperNetFCNHead(nn.Module):
 
         self.classifier = nn.Conv2d(self.channels, config.num_labels, kernel_size=1)
 
-    def init_weights(self):
-        self.apply(self._init_weights)
-
-    def _init_weights(self, module):
-        if isinstance(module, nn.Conv2d):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-
     def forward(self, encoder_hidden_states: torch.Tensor) -> torch.Tensor:
         # just take the relevant feature maps
         hidden_states = encoder_hidden_states[self.in_index]
@@ -296,18 +278,13 @@ class UperNetPreTrainedModel(PreTrainedModel):
     _no_split_modules = []
 
     def _init_weights(self, module):
-        if isinstance(module, UperNetPreTrainedModel):
-            module.backbone.init_weights()
-            module.decode_head.init_weights()
-            if module.auxiliary_head is not None:
-                module.auxiliary_head.init_weights()
-
-    def init_weights(self):
-        """Initialize the weights"""
-        self.backbone.init_weights()
-        self.decode_head.init_weights()
-        if self.auxiliary_head is not None:
-            self.auxiliary_head.init_weights()
+        if isinstance(module, nn.Conv2d):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.BatchNorm2d):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
 
 
 UPERNET_START_DOCSTRING = r"""

@@ -292,7 +292,8 @@ class TemperatureLogitsWarper(LogitsProcessor):
 class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] that prevents the repetition of previous tokens through a penalty. This penalty is applied at
-    most once per token. Note that, for decoder-only models like most LLMs, the considered tokens include the prompt.
+    most once per token. Note that, for decoder-only models like most LLMs, the considered tokens include the prompt
+    by default.
 
     In the original [paper](https://arxiv.org/pdf/1909.05858.pdf), the authors suggest the use of a penalty of around
     1.2 to achieve a good balance between truthful generation and lack of repetition. To penalize and reduce
@@ -303,11 +304,13 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         penalty (`float`):
             The parameter for repetition penalty. 1.0 means no penalty. Above 1.0 penalizes previously generated
             tokens. Between 0.0 and 1.0 rewards previously generated tokens.
+        prompt_ignore_length (`int`, *optional*):
+            The original input ids sequence length, which if provided, will not be used in the penalty calculation.
 
     Examples:
 
     ```py
-    >>> from transformers import AutoTokenizer, AutoModelForCausalLM
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM, RepetitionPenaltyLogitsProcessor
 
     >>> # Initializing the model and tokenizer for it
     >>> model = AutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
@@ -323,17 +326,36 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
     >>> penalized_ids = model.generate(**inputs, repetition_penalty=1.1)
     >>> print(tokenizer.batch_decode(penalized_ids, skip_special_tokens=True)[0])
     I'm not going to be able to do that. I'll just have to go out and play
+
+    >>> # We can also exclude the input prompt by creating an instance of this class
+    >>> # with a `prompt_ignore_length` and passing it as a custom logit processor
+    >>> rep_pen_processor = RepetitionPenaltyLogitsProcessor(
+    ...     penalty=1.1,
+    ...     prompt_ignore_length=inputs["input_ids"].shape[-1]
+    ... )
+    >>> penalized_ids = model.generate(**inputs, logits_processor=[rep_pen_processor])
+    >>> print(tokenizer.batch_decode(penalized_ids, skip_special_tokens=True)[0])
+    I'm not going to be able to do that. I'm going to have to go through a lot of things, and
     ```
     """
 
-    def __init__(self, penalty: float):
+    def __init__(self, penalty: float, prompt_ignore_length: Optional[int] = None):
         if not isinstance(penalty, float) or not (penalty > 0):
             raise ValueError(f"`penalty` has to be a strictly positive float, but is {penalty}")
 
+        if prompt_ignore_length is not None and (
+            not isinstance(prompt_ignore_length, int) or prompt_ignore_length < 0
+        ):
+            raise ValueError(f"`prompt_ignore_length` has to be a positive integer, but is {prompt_ignore_length}")
+
         self.penalty = penalty
+        self.prompt_ignore_length = prompt_ignore_length
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        if self.prompt_ignore_length:
+            input_ids = input_ids[:, self.prompt_ignore_length :]
+
         score = torch.gather(scores, 1, input_ids)
 
         # if score < 0 then repetition penalty has to be multiplied to reduce the token probabilities

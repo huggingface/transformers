@@ -844,3 +844,6 @@ class _LazyAutoMapping(OrderedDict):
                 raise ValueError(f"'{key}' is already used by a Transformers model.")
 
         self._extra_content[key] = value
+
+
+__all__ = ["get_values"]

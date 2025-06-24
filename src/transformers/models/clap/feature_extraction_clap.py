@@ -24,11 +24,13 @@ from ...audio_utils import mel_filter_bank, spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("torch",))
 class ClapFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a CLAP feature extractor.

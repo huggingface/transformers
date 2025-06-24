@@ -209,7 +209,7 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
                 Standard deviation to use if normalizing the image. Can be a float or a list of floats corresponding to the number of channels in the image.
             patch_size (`int`, *optional*, defaults to `self.patch_size`):
-                The spacial patch size of the vision encoder.
+                The spatial patch size of the vision encoder.
             temporal_patch_size (`int`, *optional*, defaults to `self.temporal_patch_size`):
                 The temporal patch size of the vision encoder.
             merge_size (`int`, *optional*, defaults to `self.merge_size`):
@@ -352,7 +352,7 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
             max_pixels (`int`, *optional*, defaults to `self.max_pixels`):
                 The max pixels of the image to resize the image.
             patch_size (`int`, *optional*, defaults to `self.patch_size`):
-                The spacial patch size of the vision encoder.
+                The spatial patch size of the vision encoder.
             temporal_patch_size (`int`, *optional*, defaults to `self.temporal_patch_size`):
                 The temporal patch size of the vision encoder.
             merge_size (`int`, *optional*, defaults to `self.merge_size`):

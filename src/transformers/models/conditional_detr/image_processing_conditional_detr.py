@@ -64,6 +64,7 @@ from ...utils import (
     is_vision_available,
     logging,
 )
+from ...utils.import_utils import requires
 
 
 if is_torch_available():
@@ -801,6 +802,7 @@ def compute_segments(
     return segmentation, segments
 
 
+@requires(backends=("vision",))
 class ConditionalDetrImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Conditional Detr image processor.

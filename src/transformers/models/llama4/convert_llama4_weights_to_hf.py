@@ -239,7 +239,7 @@ def write_model(
 
     config_kwargs = {}
     if params["use_scaled_rope"]:
-        # some constans from original code
+        # some constants from original code
         rope_scaling = {
             "rope_type": "llama3",
             "factor": 8.0,
@@ -288,7 +288,7 @@ def write_model(
         for_llm_compressor=_OFFLINE_QUANT_COMPATIBLE,
         **config_kwargs,
     )
-    # default vision config frmo params
+    # default vision config from params
 
     vision_params = params["vision_args"]
     vision_dim = vision_params["dim"]

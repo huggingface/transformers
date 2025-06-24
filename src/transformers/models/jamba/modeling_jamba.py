@@ -47,7 +47,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.import_utils import (
     is_causal_conv1d_available,
     is_mamba_ssm_available,
@@ -599,7 +598,7 @@ class JambaMambaMixer(nn.Module):
 
         # projection of the input hidden states
         self.in_proj = nn.Linear(self.hidden_size, self.intermediate_size * 2, bias=self.use_bias)
-        # selective projection used to make dt, B and C input dependant
+        # selective projection used to make dt, B and C input dependent
         self.x_proj = nn.Linear(self.intermediate_size, self.time_step_rank + self.ssm_state_size * 2, bias=False)
         # time step projection (discretization)
         self.dt_proj = nn.Linear(self.time_step_rank, self.intermediate_size, bias=True)
@@ -1115,6 +1114,13 @@ class JambaPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, JambaRMSNorm):
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, JambaMambaMixer):
+            A = torch.arange(1, module.ssm_state_size + 1)[None, :]
+            A = A.expand(module.intermediate_size, -1).contiguous()
+            module.A_log.data.copy_(torch.log(A))
+            module.D.data.fill_(1.0)
 
 
 JAMBA_INPUTS_DOCSTRING = r"""
@@ -1372,7 +1378,7 @@ class JambaModel(JambaPreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
@@ -1427,7 +1433,6 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
         return self.model
 
     @can_return_tuple
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(JAMBA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=MoeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1542,7 +1547,7 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
         use_cache=True,
         **kwargs,
     ):
-        # Overwitten -- has a unique cache type, `HybridMambaAttentionDynamicCache`
+        # Overwritten -- has a unique cache type, `HybridMambaAttentionDynamicCache`
 
         empty_past_kv = past_key_values is None
 

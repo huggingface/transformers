@@ -306,7 +306,6 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.model_tester.create_and_check_model_as_decoder(config, input_ids, input_mask)
 
     def test_model_as_decoder_with_default_input_mask(self):
-        # This regression test was failing with PyTorch < 1.3
         config, input_ids, input_mask, token_labels = self.model_tester.prepare_config_and_inputs_for_decoder()
 
         input_mask = None

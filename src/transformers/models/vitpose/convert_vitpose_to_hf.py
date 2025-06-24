@@ -207,7 +207,7 @@ def write_model(model_name, model_path, push_to_hub, check_logits=True):
     )
 
     print("Converting model...")
-    original_state_dict = torch.load(checkpoint_path, map_location="cpu")["state_dict"]
+    original_state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)["state_dict"]
     all_keys = list(original_state_dict.keys())
     new_keys = convert_old_keys_to_new_keys(all_keys)
 
@@ -264,7 +264,7 @@ def write_model(model_name, model_path, push_to_hub, check_logits=True):
     pixel_values = image_processor(images=image, boxes=boxes, return_tensors="pt").pixel_values
 
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename="vitpose_batch_data.pt", repo_type="dataset")
-    original_pixel_values = torch.load(filepath, map_location="cpu")["img"]
+    original_pixel_values = torch.load(filepath, map_location="cpu", weights_only=True)["img"]
     # we allow for a small difference in the pixel values due to the original repository using cv2
     assert torch.allclose(pixel_values, original_pixel_values, atol=1e-1)
 

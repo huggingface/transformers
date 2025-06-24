@@ -56,7 +56,7 @@ class LlavaNextProcessor(ProcessorMixin):
             Patch size from the vision tower.
         vision_feature_select_strategy (`str`, *optional*):
             The feature selection strategy used to select the vision feature from the vision backbone.
-            Shoudl be same as in model's config
+            Should be same as in model's config
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
         image_token (`str`, *optional*, defaults to `"<image>"`):
@@ -171,9 +171,11 @@ class LlavaNextProcessor(ProcessorMixin):
                 prompt_strings.append(sample)
             prompt_strings = [sample.replace("<placeholder>", self.image_token) for sample in prompt_strings]
 
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
+        self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
 
-        return BatchFeature(data={**text_inputs, **image_inputs})
+        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     def _get_number_of_features(self, orig_height: int, orig_width: int, height: int, width: int) -> int:
         image_grid_pinpoints = self.image_processor.image_grid_pinpoints

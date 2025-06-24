@@ -34,7 +34,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
 from .configuration_idefics2 import Idefics2Config, Idefics2PerceiverConfig, Idefics2VisionConfig
 
@@ -517,14 +516,7 @@ class Idefics2PreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
 
     def _init_weights(self, module):
-        std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.get_text_config().initializer_range
-        )
-
-        if hasattr(module, "class_embedding"):
-            module.class_embedding.data.normal_(mean=0.0, std=std)
+        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
 
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=std)
@@ -534,6 +526,17 @@ class Idefics2PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
+        elif isinstance(module, Idefics2RMSNorm):
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, nn.MultiheadAttention):
+            module._reset_parameters()  # native torch init
+        elif isinstance(module, Idefics2MultiheadAttentionPoolingHead):
+            module.probe.data.normal_()
+        elif isinstance(module, Idefics2PerceiverResampler):
+            module.latents.data.fill_(1.0)
 
 
 IDEFICS2_INPUTS_DOCSTRING = r"""
@@ -1289,7 +1292,6 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(IDEFICS2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Idefics2CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(

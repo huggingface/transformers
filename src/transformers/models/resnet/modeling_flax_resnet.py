@@ -514,7 +514,7 @@ class FlaxResNetPreTrainedModel(FlaxPreTrainedModel):
             output_hidden_states,
             return_dict,
             rngs=rngs,
-            mutable=["batch_stats"] if train else False,  # Returing tuple with batch_stats only when train is True
+            mutable=["batch_stats"] if train else False,  # Returning tuple with batch_stats only when train is True
         )
 
 

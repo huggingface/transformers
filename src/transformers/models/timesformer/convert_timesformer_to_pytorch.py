@@ -143,7 +143,7 @@ def convert_timesformer_checkpoint(checkpoint_url, pytorch_dump_folder_path, mod
     # download original checkpoint, hosted on Google Drive
     output = "pytorch_model.bin"
     gdown.cached_download(checkpoint_url, output, quiet=False)
-    files = torch.load(output, map_location="cpu")
+    files = torch.load(output, map_location="cpu", weights_only=True)
     if "model" in files:
         state_dict = files["model"]
     elif "module" in files:

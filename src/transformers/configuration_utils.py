@@ -843,28 +843,15 @@ class PretrainedConfig(PushToHubMixin):
             ):
                 serializable_config_dict[key] = value
 
+        self._remove_keys_not_serialized(serializable_config_dict)
+
         if hasattr(self, "quantization_config"):
             serializable_config_dict["quantization_config"] = (
                 self.quantization_config.to_dict()
                 if not isinstance(self.quantization_config, dict)
                 else self.quantization_config
             )
-            # Pop the `_pre_quantization_dtype` as torch.dtypes are not serializable.
-            _ = serializable_config_dict.pop("_pre_quantization_dtype", None)
-
         self.dict_torch_dtype_to_str(serializable_config_dict)
-
-        if "_attn_implementation_internal" in serializable_config_dict:
-            del serializable_config_dict["_attn_implementation_internal"]
-        # Do not serialize `base_model_tp_plan` for now
-        if "base_model_tp_plan" in serializable_config_dict:
-            del serializable_config_dict["base_model_tp_plan"]
-        # Do not serialize `base_model_pp_plan` for now
-        if "base_model_pp_plan" in serializable_config_dict:
-            del serializable_config_dict["base_model_pp_plan"]
-
-        if "_name_or_path" in serializable_config_dict:
-            del serializable_config_dict["_name_or_path"]
 
         return serializable_config_dict
 
@@ -878,18 +865,6 @@ class PretrainedConfig(PushToHubMixin):
         output = copy.deepcopy(self.__dict__)
         if hasattr(self.__class__, "model_type"):
             output["model_type"] = self.__class__.model_type
-        if "_auto_class" in output:
-            del output["_auto_class"]
-        if "_commit_hash" in output:
-            del output["_commit_hash"]
-        if "_attn_implementation_internal" in output:
-            del output["_attn_implementation_internal"]
-        # Do not serialize `base_model_tp_plan` for now
-        if "base_model_tp_plan" in output:
-            del output["base_model_tp_plan"]
-        # Do not serialize `base_model_pp_plan` for now
-        if "base_model_pp_plan" in output:
-            del output["base_model_pp_plan"]
 
         # Transformers version when serializing the model
         output["transformers_version"] = __version__
@@ -902,16 +877,14 @@ class PretrainedConfig(PushToHubMixin):
 
             output[key] = value
 
+        self._remove_keys_not_serialized(output)
+
         if hasattr(self, "quantization_config"):
             output["quantization_config"] = (
                 self.quantization_config.to_dict()
                 if not isinstance(self.quantization_config, dict)
                 else self.quantization_config
             )
-
-            # pop the `_pre_quantization_dtype` as torch.dtypes are not serializable.
-            _ = output.pop("_pre_quantization_dtype", None)
-
         self.dict_torch_dtype_to_str(output)
 
         return output
@@ -1010,6 +983,33 @@ class PretrainedConfig(PushToHubMixin):
         for value in d.values():
             if isinstance(value, dict):
                 self.dict_torch_dtype_to_str(value)
+
+    def _remove_keys_not_serialized(self, d: dict[str, Any]) -> None:
+        """
+        Checks and removes if there are any keys in the dict that should not be serialized when saving the config.
+        Runs recursive check on the dict, to remove from all sub configs.
+        """
+        if hasattr(self, "quantization_config"):
+            # Pop the `_pre_quantization_dtype` as torch.dtypes are not serializable.
+            _ = d.pop("_pre_quantization_dtype", None)
+
+        if "_auto_class" in d:
+            del d["_auto_class"]
+        if "_commit_hash" in d:
+            del d["_commit_hash"]
+        if "_attn_implementation_internal" in d:
+            del d["_attn_implementation_internal"]
+        # Do not serialize `base_model_tp_plan` for now
+        if "base_model_tp_plan" in d:
+            del d["base_model_tp_plan"]
+        # Do not serialize `base_model_pp_plan` for now
+        if "base_model_pp_plan" in d:
+            del d["base_model_pp_plan"]
+        if "_name_or_path" in d:
+            del d["_name_or_path"]
+        for value in d.values():
+            if isinstance(value, dict):
+                self._remove_keys_not_serialized(value)
 
     @classmethod
     def register_for_auto_class(cls, auto_class="AutoConfig"):

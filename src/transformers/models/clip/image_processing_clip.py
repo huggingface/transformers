@@ -40,6 +40,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -49,6 +50,7 @@ if is_vision_available():
     import PIL
 
 
+@requires(backends=("vision",))
 class CLIPImageProcessor(BaseImageProcessor):
     r"""
     Constructs a CLIP image processor.

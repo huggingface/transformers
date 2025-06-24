@@ -37,15 +37,15 @@ def load_audio(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None)
 
     Args:
         audio (`str` or `np.ndarray`):
-            The audio to be laoded to the numpy array format.
+            The audio to be loaded to the numpy array format.
         sampling_rate (`int`, *optional*, defaults to 16000):
-            The samlping rate to be used when loading the audio. It should be same as the
+            The sampling rate to be used when loading the audio. It should be same as the
             sampling rate the model you will be using further was trained with.
         timeout (`float`, *optional*):
             The timeout value in seconds for the URL request.
 
     Returns:
-        `np.ndarray`: A numpy artay representing the audio.
+        `np.ndarray`: A numpy array representing the audio.
     """
     requires_backends(load_audio, ["librosa"])
 

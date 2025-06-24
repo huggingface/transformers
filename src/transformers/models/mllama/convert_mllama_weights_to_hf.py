@@ -234,7 +234,7 @@ def write_model(
     text_rope_theta = params["rope_theta"]
     cross_attention_num_layers = params["vision_num_cross_attention_layers"]
 
-    # some constans from original code
+    # some constants from original code
     rope_scaling = {
         "rope_type": "llama3",
         "factor": 8.0,
@@ -342,10 +342,15 @@ def write_model(
             path = os.path.join(input_base_path, "consolidated.00.pth")
         else:
             path = os.path.join(input_base_path, "consolidated.pth")
-        loaded = [torch.load(path, map_location="cpu", mmap=True)]
+        loaded = [torch.load(path, map_location="cpu", mmap=True, weights_only=True)]
     else:
         loaded = [
-            torch.load(os.path.join(input_base_path, f"consolidated.{i:02d}.pth"), map_location="cpu", mmap=True)
+            torch.load(
+                os.path.join(input_base_path, f"consolidated.{i:02d}.pth"),
+                map_location="cpu",
+                mmap=True,
+                weights_only=True,
+            )
             for i in range(num_shards)
         ]
 

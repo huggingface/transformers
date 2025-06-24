@@ -275,7 +275,7 @@ def merge_transformers_sharded_states(path, num_checkpoints):
     state_dict = {}
     for i in range(1, num_checkpoints + 1):
         checkpoint_path = os.path.join(path, f"pytorch_model-{i:05d}-of-{num_checkpoints:05d}.bin")
-        current_chunk = torch.load(checkpoint_path, map_location="cpu")
+        current_chunk = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
         state_dict.update(current_chunk)
     return state_dict
 
@@ -298,7 +298,7 @@ def get_megatron_sharded_states(args, tp_size, pp_size, pp_rank):
             checkpoint_path = os.path.join(args.load_path, sub_dir_name, checkpoint_name)
             if os.path.isfile(checkpoint_path):
                 break
-        state_dict = torch.load(checkpoint_path, map_location="cpu")
+        state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
         tp_state_dicts.append(state_dict)
     return tp_state_dicts
 
@@ -338,7 +338,7 @@ def convert_checkpoint_from_megatron_to_transformers(args):
             rank0_checkpoint_path = os.path.join(args.load_path, sub_dir, rank0_checkpoint_name)
             break
     print(f"Loading Megatron-LM checkpoint arguments from: {rank0_checkpoint_path}")
-    state_dict = torch.load(rank0_checkpoint_path, map_location="cpu")
+    state_dict = torch.load(rank0_checkpoint_path, map_location="cpu", weights_only=True)
     megatron_args = state_dict.get("args", None)
     if megatron_args is None:
         raise ValueError(
@@ -634,7 +634,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
     sub_dirs = [x for x in os.listdir(args.load_path) if x.startswith("pytorch_model")]
     if len(sub_dirs) == 1:
         checkpoint_name = "pytorch_model.bin"
-        state_dict = torch.load(os.path.join(args.load_path, checkpoint_name), map_location="cpu")
+        state_dict = torch.load(os.path.join(args.load_path, checkpoint_name), map_location="cpu", weights_only=True)
     else:
         num_checkpoints = len(sub_dirs) - 1
         state_dict = merge_transformers_sharded_states(args.load_path, num_checkpoints)

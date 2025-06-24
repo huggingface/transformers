@@ -669,7 +669,7 @@ class PatchTSTPositionalEncoding(nn.Module):
             # cls_token: [1 x num_input_channels x 1 x d_model]
             self.cls_token = nn.Parameter(torch.zeros(1, 1, 1, config.d_model))
             num_patches += 1
-        # postional encoding: [num_patches x d_model]
+        # positional encoding: [num_patches x d_model]
         self.position_enc = self._init_pe(config, num_patches)
         # Positional dropout
         self.positional_dropout = (

@@ -383,7 +383,7 @@ class EfficientNetBlock(nn.Module):
 
 class EfficientNetEncoder(nn.Module):
     r"""
-    Forward propogates the embeddings through each EfficientNet block.
+    Forward propagates the embeddings through each EfficientNet block.
 
     Args:
         config ([`EfficientNetConfig`]):

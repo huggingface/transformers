@@ -112,6 +112,7 @@ _CONFIG_FOR_DOC = "FSMTConfig"
 """
 
 Here is how to compare BLEU scores against fairseq implementation:
+(don't forget to install sacrebleu: `pip install sacrebleu`)
 
 # en-ru
 

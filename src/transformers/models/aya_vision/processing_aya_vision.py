@@ -121,6 +121,7 @@ class AyaVisionProcessor(ProcessorMixin):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
         self.image_token = image_token
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         self.patch_size = patch_size * downsample_factor
         self.img_size = img_size
 
@@ -224,9 +225,11 @@ class AyaVisionProcessor(ProcessorMixin):
 
             text = processed_text
 
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
 
-        return BatchFeature(data={**text_inputs, **image_inputs})
+        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     def batch_decode(self, *args, **kwargs):
         """

@@ -667,7 +667,7 @@ class CharacterTokenizer:
         """
         Tokenizes a piece of text into characters.
 
-        For example, `input = "apple""` wil return as output `["a", "p", "p", "l", "e"]`.
+        For example, `input = "apple""` will return as output `["a", "p", "p", "l", "e"]`.
 
         Args:
             text: A single token or whitespace separated tokens.
@@ -866,7 +866,7 @@ class WordpieceTokenizer:
         Tokenizes a piece of text into its word pieces. This uses a greedy longest-match-first algorithm to perform
         tokenization using the given vocabulary.
 
-        For example, `input = "unaffable"` wil return as output `["un", "##aff", "##able"]`.
+        For example, `input = "unaffable"` will return as output `["un", "##aff", "##able"]`.
 
         Args:
             text: A single token or whitespace separated tokens. This should have

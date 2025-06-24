@@ -341,28 +341,8 @@ use_cpu: false
 ```
 
 </hfoption>
-<hfoption id="Tensor parallelism with PyTorch 2">
-
-```yaml
-compute_environment: LOCAL_MACHINE
-tp_config:
-  tp_size: 4
-distributed_type: TP
-downcast_bf16: 'no'
-machine_rank: 0
-main_training_function: main
-mixed_precision: 'no'
-num_machines: 1
-num_processes: 4
-rdzv_backend: static
-same_network: true
-tpu_env: []
-tpu_use_cluster: false
-tpu_use_sudo: false
-use_cpu: false
-```
-
 </hfoptions>
+
 
 Run [accelerate_launch](https://hf.co/docs/accelerate/package_reference/cli#accelerate-launch) to start training with the configurations set in `config_file.yaml`. This file is saved to the Accelerate cache folder and automatically loaded when you run `accelerate_launch`.
 

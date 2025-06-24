@@ -103,7 +103,7 @@ GEMMA_INPUTS_DOCSTRING = r"""
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
-        position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+        position_ids (`numpy.ndarray` of shape `(batch_size, input_ids_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.n_positions - 1]`.
 

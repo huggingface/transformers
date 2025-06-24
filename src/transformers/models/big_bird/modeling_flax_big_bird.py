@@ -1055,7 +1055,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
             from_block_size: int. size of block in from sequence.
             to_block_size: int. size of block in to sequence.
             num_heads: int. total number of heads.
-            plan_from_length: list. plan from length where num_random_blocks are choosen from.
+            plan_from_length: list. plan from length where num_random_blocks are chosen from.
             plan_num_rand_blocks: list. number of rand blocks within the plan.
             indices_prng_key: jax.random.PRNGKey. PRNG key that is used to perform random jax operations.
             deterministic: bool. When False random attention will be used.
@@ -1104,7 +1104,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
             if plan_idx > 0:
                 # set the row for all from_blocks starting from 0 to
                 # plan_block_length[plan_idx-1]
-                # column indx start fromm plan_block_length[plan_idx-1] and ends at
+                # column indx start from plan_block_length[plan_idx-1] and ends at
                 # plan_block_length[plan_idx]
                 if plan_num_rand_blocks[plan_idx] > 0:
                     rnd_r_cnt = int(sum(plan_num_rand_blocks[:plan_idx]))

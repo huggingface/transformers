@@ -261,7 +261,7 @@ class OneFormerHungarianMatcher(nn.Module):
         """
         super().__init__()
         if cost_class == 0 and cost_mask == 0 and cost_dice == 0:
-            raise ValueError("All costs cant be 0")
+            raise ValueError("All costs can't be 0")
         self.cost_class = cost_class
         self.cost_mask = cost_mask
         self.cost_dice = cost_dice
@@ -304,7 +304,7 @@ class OneFormerHungarianMatcher(nn.Module):
             pred_probs = pred_probs.softmax(-1)
             # Compute the classification cost. Contrary to the loss, we don't use the NLL,
             # but approximate it in 1 - proba[target class].
-            # The 1 is a constant that doesn't change the matching, it can be ommitted.
+            # The 1 is a constant that doesn't change the matching, it can be omitted.
             cost_class = -pred_probs[:, labels]
 
             pred_mask = pred_mask[:, None]
@@ -371,7 +371,7 @@ class OneFormerLoss(nn.Module):
             num_labels (`int`):
                 The number of classes.
             matcher (`OneFormerHungarianMatcher`):
-                A torch module that computes the assigments between the predictions and labels.
+                A torch module that computes the assignments between the predictions and labels.
             weight_dict (`Dict[str, float]`):
                 A dictionary of weights to be applied to the different losses.
             eos_coef (`float`):
@@ -684,7 +684,7 @@ class OneFormerLoss(nn.Module):
             - **loss_dice** -- The loss computed using dice loss on the predicted on the predicted and ground truth
               masks.
             - **loss_contrastive** -- The query-text contrstive loss computed using object and text queries.
-            if `use_auxiliary_loss` was set to `true` in [`OneFormerConfig`], the dictionary contains addional losses
+            if `use_auxiliary_loss` was set to `true` in [`OneFormerConfig`], the dictionary contains additional losses
             for each auxiliary predictions.
         """
 
@@ -1367,9 +1367,9 @@ class OneFormerPixelDecoder(nn.Module):
         _, height, width = mask.shape
         valid_height = torch.sum(~mask[:, :, 0], 1)
         valid_width = torch.sum(~mask[:, 0, :], 1)
-        valid_ratio_heigth = valid_height.to(dtype) / height
+        valid_ratio_height = valid_height.to(dtype) / height
         valid_ratio_width = valid_width.to(dtype) / width
-        valid_ratio = torch.stack([valid_ratio_width, valid_ratio_heigth], -1)
+        valid_ratio = torch.stack([valid_ratio_width, valid_ratio_height], -1)
         return valid_ratio
 
     def forward(

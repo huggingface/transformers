@@ -16,13 +16,16 @@
 import unittest
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_vision_available
+from transformers.utils import is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
 
 if is_vision_available():
     from transformers import MobileNetV2ImageProcessor
+
+    if is_torchvision_available():
+        from transformers import MobileNetV2ImageProcessorFast
 
 
 class MobileNetV2ImageProcessingTester:
@@ -79,6 +82,7 @@ class MobileNetV2ImageProcessingTester:
 @require_vision
 class MobileNetV2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = MobileNetV2ImageProcessor if is_vision_available() else None
+    fast_image_processing_class = MobileNetV2ImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
@@ -89,17 +93,19 @@ class MobileNetV2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        image_processor = self.image_processing_class(**self.image_processor_dict)
-        self.assertTrue(hasattr(image_processor, "do_resize"))
-        self.assertTrue(hasattr(image_processor, "size"))
-        self.assertTrue(hasattr(image_processor, "do_center_crop"))
-        self.assertTrue(hasattr(image_processor, "crop_size"))
+        for image_processing_class in self.image_processor_list:
+            image_processor = image_processing_class(**self.image_processor_dict)
+            self.assertTrue(hasattr(image_processor, "do_resize"))
+            self.assertTrue(hasattr(image_processor, "size"))
+            self.assertTrue(hasattr(image_processor, "do_center_crop"))
+            self.assertTrue(hasattr(image_processor, "crop_size"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
-        self.assertEqual(image_processor.size, {"shortest_edge": 20})
-        self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})
+        for image_processing_class in self.image_processor_list:
+            image_processor = image_processing_class.from_dict(self.image_processor_dict)
+            self.assertEqual(image_processor.size, {"shortest_edge": 20})
+            self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})
 
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42, crop_size=84)
-        self.assertEqual(image_processor.size, {"shortest_edge": 42})
-        self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
+            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42, crop_size=84)
+            self.assertEqual(image_processor.size, {"shortest_edge": 42})
+            self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})

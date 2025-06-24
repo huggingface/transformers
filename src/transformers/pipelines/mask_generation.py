@@ -33,7 +33,7 @@ logger = logging.get_logger(__name__)
 class MaskGenerationPipeline(ChunkPipeline):
     """
     Automatic mask generation for images using `SamForMaskGeneration`. This pipeline predicts binary masks for an
-    image, given an image. It is a `ChunkPipeline` because you can seperate the points in a mini-batch in order to
+    image, given an image. It is a `ChunkPipeline` because you can separate the points in a mini-batch in order to
     avoid OOM issues. Use the `points_per_batch` argument to control the number of points that will be processed at the
     same time. Default is `64`.
 

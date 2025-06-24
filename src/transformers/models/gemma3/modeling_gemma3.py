@@ -40,6 +40,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     can_return_tuple,
+    is_torch_flex_attn_available,
     is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
@@ -47,6 +48,12 @@ from ...utils import (
 from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_gemma3 import Gemma3Config, Gemma3TextConfig
+
+
+if is_torch_flex_attn_available():
+    from torch.nn.attention.flex_attention import BlockMask
+
+    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
@@ -371,6 +378,7 @@ class Gemma3DecoderLayer(nn.Module):
         self.is_sliding = self.self_attn.is_sliding
         self.sliding_window = config.sliding_window
 
+    @deprecate_kwarg("last_cache_position", version="4.53.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -382,7 +390,6 @@ class Gemma3DecoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        last_cache_position: int = 0,
         **kwargs,
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         if self.is_sliding and attention_mask is not None:  # efficient SDPA and no padding
@@ -401,11 +408,16 @@ class Gemma3DecoderLayer(nn.Module):
                 )
                 attention_mask = torch.where(sliding_window_mask, min_dtype, attention_mask)
                 # In case we are beyond the sliding window, we need to correctly offset the mask slicing
-                # `last_cache_position` is equivalent to `cache_position[-1]` but without breaking dynamo
-                offset = last_cache_position - effective_seq_len
+                offset = cache_position[-1] - effective_seq_len + 1
                 # Should only be used when beyond the sliding window (i.e. offset > 0)
                 offset = max(0, offset)
-                attention_mask = attention_mask[:, :, :, offset : offset + effective_seq_len]
+                # equivalent to: `attention_mask = attention_mask[:, :, :, offset : offset + effective_seq_len]`,
+                # but without data-dependent slicing (i.e. torch.compile friendly)
+                mask_indexes = torch.arange(
+                    min(effective_seq_len, attention_mask.shape[-1]), device=attention_mask.device
+                )
+                mask_indexes += offset
+                attention_mask = attention_mask[:, :, :, mask_indexes]
 
         residual = hidden_states
 
@@ -486,13 +498,7 @@ class Gemma3PreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
     def _init_weights(self, module):
-        # important: this ported version of Gemma2 isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed
-        std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.text_config.initializer_range
-        )
+        std = self.config.initializer_range
 
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=std)
@@ -502,6 +508,10 @@ class Gemma3PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, Gemma3RMSNorm):
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, Gemma3MultiModalProjector):
+            module.mm_input_projection_weight.data.zero_()
 
 
 GEMMA3_INPUTS_DOCSTRING = r"""
@@ -514,11 +524,14 @@ GEMMA3_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length) or `BlockMask`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
+
+            If the model is configured to use flex_attention, it will attempt to convert the mask Tensor into a BlockMask,
+            but you can also pass a `BlockMask` object directly here.
 
             [What are attention masks?](../glossary#attention-mask)
 
@@ -619,6 +632,7 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
 
     @can_return_tuple
     @add_start_docstrings_to_model_forward(GEMMA3_INPUTS_DOCSTRING)
+    @deprecate_kwarg("last_cache_position", version="4.53.0")
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -630,7 +644,6 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        last_cache_position: Optional[int] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> BaseModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -671,16 +684,6 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        # This is needed to correctly slice the mask without data-dependent slicing later on if using dynamo tracing
-        # (retrieving the same value from `cache_position` later on would crash dynamo)
-        if last_cache_position is None:
-            last_cache_position = 0
-            if attention_mask is not None:
-                # In case a 4d mask is passed directly without using `generate`, we have to rely on cache_position
-                # It will break dynamo tracing but there are no way around it (and it should never happen in practice)
-                last_cache_position = (
-                    attention_mask.shape[-1] if attention_mask.dim() == 2 else cache_position[-1].item()
-                )
         causal_mask = self._update_causal_mask(
             attention_mask,
             inputs_embeds,
@@ -716,7 +719,6 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
                     output_attentions,
                     use_cache,
                     cache_position,
-                    last_cache_position,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -729,7 +731,6 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                     cache_position=cache_position,
-                    last_cache_position=last_cache_position,
                     **flash_attn_kwargs,
                 )
 
@@ -753,17 +754,21 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
     @torch.no_grad()
     def _update_causal_mask(
         self,
-        attention_mask: torch.Tensor,
+        attention_mask: Union[torch.Tensor, "BlockMask"],
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: HybridCache,
-        output_attentions: bool,
+        output_attentions: bool = False,
     ):
         # Flash Attention currently doesn't support static cache but Gemma3Text work only with static cache.
         # So we will pass in attention mask as is in any case, not only when ther's padding. Then we'll use its shape
         # to cut out keys/values trailing 0 used in static cache. This workaround should be compile compatible
         # as it doesn't cause dynamic control issues.
         if self.config._attn_implementation == "flash_attention_2":
+            return attention_mask
+        if self.config._attn_implementation == "flex_attention":
+            if isinstance(attention_mask, torch.Tensor):
+                attention_mask = make_flex_block_causal_mask(attention_mask)
             return attention_mask
 
         dtype, device = input_tensor.dtype, input_tensor.device
@@ -791,7 +796,6 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
         sequence_length: int,
         target_length: int,
         dtype: torch.dtype,
-        device: torch.device,
         cache_position: torch.Tensor,
         batch_size: int,
         **kwargs,
@@ -811,8 +815,6 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
                 to account for the 0 padding, the part of the cache that is not filled yet.
             dtype (`torch.dtype`):
                 The dtype to use for the 4D attention mask.
-            device (`torch.device`):
-                The device to place the 4D attention mask on.
             cache_position (`torch.Tensor`):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):
@@ -824,11 +826,11 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
         else:
             min_dtype = torch.finfo(dtype).min
             causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=cache_position.device
             )
             if sequence_length != 1:
                 causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask *= torch.arange(target_length, device=cache_position.device) > cache_position.reshape(-1, 1)
             causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
             if attention_mask is not None:
                 causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
@@ -879,7 +881,6 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
         return self.model
 
     @can_return_tuple
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(GEMMA3_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -999,9 +1000,6 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        # This is needed to correctly slice the mask without data-dependent slicing later on if using dynamo tracing
-        # (retrieving the same value from `cache_position` later on would crash dynamo)
-        model_inputs["last_cache_position"] = attention_mask.shape[-1] if attention_mask is not None else 0
         if logits_to_keep is None:
             _ = model_inputs.pop("logits_to_keep", None)
 
@@ -1189,7 +1187,6 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         return image_features
 
     @can_return_tuple
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(GEMMA3_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Gemma3CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1274,8 +1271,8 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         is_training = token_type_ids is not None and labels is not None
 
         # Replace image id woth PAD if the image token if OOV, to avoid index-errors
-        if input_ids is not None and self.config.image_token_index >= self.vocab_size:
-            special_image_mask = input_ids == self.config.image_token_index
+        if input_ids is not None and self.config.image_token_id >= self.vocab_size:
+            special_image_mask = input_ids == self.config.image_token_id
             llm_input_ids = input_ids.clone()
             llm_input_ids[special_image_mask] = 0
         else:
@@ -1296,10 +1293,10 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
 
             if input_ids is None:
                 special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_index, dtype=torch.long, device=inputs_embeds.device)
+                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             else:
-                special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
+                special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
                 special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
 
             if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():

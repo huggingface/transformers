@@ -2,13 +2,18 @@ import os
 from typing import Dict, List, Optional, Union
 
 import tensorflow as tf
-from keras_nlp.tokenizers import BytePairTokenizer
 from tensorflow_text import pad_model_inputs
 
 from ...modeling_tf_utils import keras
+from ...utils.import_utils import is_keras_nlp_available, requires
 from .tokenization_gpt2 import GPT2Tokenizer
 
 
+if is_keras_nlp_available():
+    from keras_nlp.tokenizers import BytePairTokenizer
+
+
+@requires(backends=("keras_nlp",))
 class TFGPT2Tokenizer(keras.layers.Layer):
     """
     This is an in-graph tokenizer for GPT2. It should be initialized similarly to other tokenizers, using the
@@ -37,6 +42,7 @@ class TFGPT2Tokenizer(keras.layers.Layer):
         self.max_length = max_length
         self.vocab = vocab
         self.merges = merges
+
         self.tf_tokenizer = BytePairTokenizer(vocab, merges, sequence_length=max_length)
 
     @classmethod

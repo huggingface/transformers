@@ -54,6 +54,11 @@ BiT を始めるのに役立つ公式 Hugging Face およびコミュニティ (
 [[autodoc]] BitImageProcessor
     - preprocess
 
+## BitImageProcessorFast
+
+[[autodoc]] BitImageProcessorFast
+    - preprocess
+
 ## BitModel
 
 [[autodoc]] BitModel

@@ -2082,7 +2082,7 @@ class TFGenerationMixin:
 
         def gather_fn(tensor):
             if batch_axis > 0:
-                # pushes all dimentions before the batch to the end, so we get (batch, beam_id, ...)
+                # pushes all dimensions before the batch to the end, so we get (batch, beam_id, ...)
                 perm = tf.concat((tf.range(tf.rank(tensor))[batch_axis:], tf.range(batch_axis)), axis=0)
                 tensor = tf.transpose(tensor, perm=perm)
 

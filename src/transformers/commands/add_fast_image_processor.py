@@ -30,108 +30,6 @@ TRANSFORMERS_PATH = Path(__file__).parent.parent
 REPO_PATH = TRANSFORMERS_PATH.parent.parent
 
 
-def add_import_structure_entry_init(content: str, fast_image_processor_name: str, model_name: str):
-    """
-    Add an entry to the `_import_structure` dictionary in the `__init__.py` file of the transformers package.
-    """
-    # Step 1: Find the block
-    block_regex = re.compile(
-        r"if not is_torchvision_available\(\):.*?else:\s*(\n(?P<indent>\s+)_import_structure\[.*?\].*?\n(?:\s*(?P=indent)_import_structure\[.*?\].*?\n)*)",
-        re.DOTALL,
-    )
-    match = block_regex.search(content)
-
-    if not match:
-        raise ValueError("Couldn't find the '_import_structure' block.")
-
-    # Capture the block content and indentation
-    block_content = match.group(1)
-    indent = match.group("indent")
-
-    # Step 2: Parse existing entries
-    lines = block_content.strip().split("\n")
-    entries = []
-
-    import_structure_header = indent + lines[0]
-    entries = lines[1:]
-
-    # Add the new entry, maintaining alphabetical order
-    new_entry = f'{indent}_import_structure["models.{model_name}"].append("{fast_image_processor_name}")'
-    if new_entry not in entries:
-        entries.append(new_entry)
-
-    entries.sort()
-    entries = [import_structure_header] + entries
-
-    # Step 3: Reconstruct the block
-    updated_block = "\n".join(entry for entry in entries)
-
-    # Replace the original block in the content
-    updated_content = content[: match.start(1)] + "\n" + updated_block + "\n" + content[match.end(1) :]
-
-    return updated_content
-
-
-def add_import_statement_init(content: str, fast_image_processor_name: str, model_name: str):
-    """
-    Add an import statement to the `__init__.py` file of the transformers package.
-    """
-    # Step 1: Find the block
-    block_regex = re.compile(
-        r"if not is_torchvision_available\(\):\s+raise OptionalDependencyNotAvailable\(\)\s+except OptionalDependencyNotAvailable:\s+from \.utils\.dummy_torchvision_objects import \*\s+else:(?P<else_block>\s*(\n\s*from .+ import .*\n)+)(?=\s*try:\s+if not \(is_torchvision_available\(\) and is_timm_available\(\)\):)",
-        re.DOTALL,
-    )
-    match = block_regex.search(content)
-
-    if match:
-        block_content = match.group("else_block")  # The captured import block
-    else:
-        print("Couldn't find the import statement block.")
-
-    # Step 2: Parse existing entries
-    lines = block_content.strip().split("\n")
-    entries = []
-
-    indent = " " * (len(lines[1]) - len(lines[1].lstrip()))
-    import_structure_header = indent + lines[0]
-    entries = lines[1:]
-
-    # Add the new entry, maintaining alphabetical order
-    new_entry = f"{indent}from .models.{model_name} import {fast_image_processor_name}"
-    if new_entry not in entries:
-        entries.append(new_entry)
-
-    entries.sort()
-    entries = [import_structure_header] + entries
-
-    # Step 3: Reconstruct the block
-    updated_block = "\n".join(entry for entry in entries)
-
-    # Replace the original block in the content
-    updated_content = (
-        content[: match.start("else_block")] + "\n" + updated_block + "\n\n" + content[match.end("else_block") :]
-    )
-
-    return updated_content
-
-
-def add_fast_image_processor_to_main_init(fast_image_processor_name: str, model_name: str):
-    """
-    Add the fast image processor to the main __init__.py file of the transformers package.
-    """
-    with open(TRANSFORMERS_PATH / "__init__.py", "r", encoding="utf-8") as f:
-        content = f.read()
-
-    # add _import_structure entry
-    content = add_import_structure_entry_init(content, fast_image_processor_name, model_name)
-    # add import statement
-    content = add_import_statement_init(content, fast_image_processor_name, model_name)
-
-    # write the updated content
-    with open(TRANSFORMERS_PATH / "__init__.py", "w", encoding="utf-8") as f:
-        f.write(content)
-
-
 def add_fast_image_processor_to_model_init(
     fast_image_processing_module_file: str, fast_image_processor_name, model_name: str
 ):
@@ -263,40 +161,6 @@ def add_fast_image_processor_to_auto(image_processor_name: str, fast_image_proce
     # write the updated content
     with open(TRANSFORMERS_PATH / "models" / "auto" / "image_processing_auto.py", "w", encoding="utf-8") as f:
         f.write(updated_content)
-
-
-def add_fast_image_processor_to_dummy(fast_image_processor_name: str):
-    """
-    Add the fast image processor to the dummy torchvision objects file.
-    """
-    dummy_torchvision_objects_file = TRANSFORMERS_PATH / "utils" / "dummy_torchvision_objects.py"
-    with open(dummy_torchvision_objects_file, "r", encoding="utf-8") as f:
-        content = f.read()
-
-    # regex to find objects starting with "class " and ending with "ImageProcessorFast", including "ImageProcessorFast" in the match
-    image_processor_names = re.findall(r"class (\w*ImageProcessorFast)", content)
-    image_processor_names.append(fast_image_processor_name)
-    image_processor_names.sort()
-    index_new = image_processor_names.index(fast_image_processor_name)
-
-    new_dummy_object = (
-        f"class {fast_image_processor_name}(metaclass=DummyObject):\n"
-        '    _backends = ["torchvision"]\n\n'
-        "    def __init__(self, *args, **kwargs):\n"
-        '        requires_backends(self, ["torchvision"])\n'
-    )
-    if new_dummy_object not in content:
-        if index_new != len(image_processor_names) - 1:
-            # add the dummy object just before the next ImageProcessorFast
-            first_line = f"class {image_processor_names[index_new + 1]}(metaclass=DummyObject):"
-            updated_content = content.replace(first_line, new_dummy_object + "\n\n" + first_line)
-        else:
-            # add the dummy object at the very end
-            updated_content = content + "\n\n" + new_dummy_object
-
-        # write the updated content
-        with open(dummy_torchvision_objects_file, "w", encoding="utf-8") as f:
-            f.write(updated_content)
 
 
 def add_fast_image_processor_to_doc(fast_image_processor_name: str, model_name: str):
@@ -619,11 +483,6 @@ def add_fast_image_processor(model_name: str):
 
     print(f"Adding {fast_image_processor_name} to {fast_image_processing_module_file}")
 
-    add_fast_image_processor_to_main_init(
-        fast_image_processor_name=fast_image_processor_name,
-        model_name=model_name,
-    )
-
     add_fast_image_processor_to_model_init(
         fast_image_processing_module_file=fast_image_processing_module_file,
         fast_image_processor_name=fast_image_processor_name,
@@ -634,8 +493,6 @@ def add_fast_image_processor(model_name: str):
         image_processor_name=image_processor_name,
         fast_image_processor_name=fast_image_processor_name,
     )
-
-    add_fast_image_processor_to_dummy(fast_image_processor_name=fast_image_processor_name)
 
     add_fast_image_processor_to_doc(
         fast_image_processor_name=fast_image_processor_name,

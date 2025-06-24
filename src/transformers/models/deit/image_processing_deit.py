@@ -34,6 +34,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
+from ...utils.import_utils import requires
 
 
 if is_vision_available():
@@ -43,6 +44,7 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("vision",))
 class DeiTImageProcessor(BaseImageProcessor):
     r"""
     Constructs a DeiT image processor.

@@ -274,7 +274,7 @@ class Mamba2Mixer(nn.Module):
             projection_size,
             bias=config.use_bias,
         )
-        # selective projection used to make dt, B and C input dependant
+        # selective projection used to make dt, B and C input dependent
 
         # time step projection (discretization)
         # instantiate once and copy inv_dt in init_weights of PretrainedModel
@@ -572,8 +572,8 @@ class Mamba2Mixer(nn.Module):
             hidden_states = hidden_states.reshape(batch_size, seq_len, -1, self.head_dim).float()
             B = B.reshape(batch_size, seq_len, -1, self.ssm_state_size).float()
             C = C.reshape(batch_size, seq_len, -1, self.ssm_state_size).float()
-            B = B.repeat(1, 1, self.num_heads // self.n_groups, 1)
-            C = C.repeat(1, 1, self.num_heads // self.n_groups, 1)
+            B = B.repeat_interleave(self.num_heads // self.n_groups, dim=2, output_size=self.num_heads)
+            C = C.repeat_interleave(self.num_heads // self.n_groups, dim=2, output_size=self.num_heads)
             pad_size = (self.chunk_size - seq_len % self.chunk_size) % self.chunk_size
 
             D_residual = self.D[..., None] * pad_tensor_by_size(hidden_states, pad_size)
@@ -1032,7 +1032,7 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ):
-        # Overwitten -- uses `cache_params` as opposed to `past_key_values`
+        # Overwritten -- uses `cache_params` as opposed to `past_key_values`
 
         if use_cache:
             # `cache_position` should have been initialized in `generate`

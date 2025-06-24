@@ -871,7 +871,7 @@ class MaskFormerHungarianMatcher(nn.Module):
             pred_probs = pred_probs.softmax(-1)
             # Compute the classification cost. Contrary to the loss, we don't use the NLL,
             # but approximate it in 1 - proba[target class].
-            # The 1 is a constant that doesn't change the matching, it can be ommitted.
+            # The 1 is a constant that doesn't change the matching, it can be omitted.
             cost_class = -pred_probs[:, labels]
             # flatten spatial dimension "q h w -> q (h w)"
             pred_mask_flat = pred_mask.flatten(1)  # [num_queries, height*width]
@@ -879,11 +879,11 @@ class MaskFormerHungarianMatcher(nn.Module):
             target_mask_flat = target_mask[:, 0].flatten(1)  # [num_total_labels, height*width]
             # compute the focal loss between each mask pairs -> shape (num_queries, num_labels)
             cost_mask = pair_wise_sigmoid_focal_loss(pred_mask_flat, target_mask_flat)
-            # Compute the dice loss betwen each mask pairs -> shape (num_queries, num_labels)
+            # Compute the dice loss between each mask pairs -> shape (num_queries, num_labels)
             cost_dice = pair_wise_dice_loss(pred_mask_flat, target_mask_flat)
             # final cost matrix
             cost_matrix = self.cost_mask * cost_mask + self.cost_class * cost_class + self.cost_dice * cost_dice
-            # do the assigmented using the hungarian algorithm in scipy
+            # do the assignment using the hungarian algorithm in scipy
             assigned_indices: Tuple[np.array] = linear_sum_assignment(cost_matrix.cpu())
             indices.append(assigned_indices)
 
@@ -923,7 +923,7 @@ class MaskFormerLoss(nn.Module):
             num_labels (`int`):
                 The number of classes.
             matcher (`MaskFormerHungarianMatcher`):
-                A torch module that computes the assigments between the predictions and labels.
+                A torch module that computes the assignments between the predictions and labels.
             weight_dict (`Dict[str, float]`):
                 A dictionary of weights to be applied to the different losses.
             eos_coef (`float`):
@@ -1085,7 +1085,7 @@ class MaskFormerLoss(nn.Module):
             - **loss_mask** -- The loss computed using sigmoid focal loss on the predicted and ground truth masks.
             - **loss_dice** -- The loss computed using dice loss on the predicted on the predicted and ground truth
               masks.
-            if `use_auxiliary_loss` was set to `true` in [`MaskFormerConfig`], the dictionary contains addional losses
+            if `use_auxiliary_loss` was set to `true` in [`MaskFormerConfig`], the dictionary contains additional losses
             for each auxiliary predictions.
         """
 

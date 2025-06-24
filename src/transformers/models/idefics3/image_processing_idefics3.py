@@ -581,7 +581,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         padded_images_list = [
             [empty_image(pad_size, data_format) for _ in range(max_num_images)] for _ in range(batch_size)
         ]
-        padded_masks = [[np.zeros(pad_size) for _ in range(max_num_images)] for _ in range(batch_size)]
+        padded_masks = [[np.zeros(pad_size, dtype=np.int64) for _ in range(max_num_images)] for _ in range(batch_size)]
 
         for batch_idx in range(batch_size):
             for sample_idx, image in enumerate(images[batch_idx]):

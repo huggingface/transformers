@@ -902,14 +902,14 @@ class DepthProFeatureFusionStage(nn.Module):
         for _ in range(self.num_layers - 1):
             self.intermediate.append(DepthProFeatureFusionLayer(config))
 
-        # final layer doesnot require deconvolution
+        # final layer does not require deconvolution
         self.final = DepthProFeatureFusionLayer(config, use_deconv=False)
 
     def forward(self, hidden_states: List[torch.Tensor]) -> List[torch.Tensor]:
         if self.num_layers != len(hidden_states):
             raise ValueError(
                 f"num_layers={self.num_layers} in DepthProFeatureFusionStage"
-                f"doesnot match len(hidden_states)={len(hidden_states)}"
+                f"does not match len(hidden_states)={len(hidden_states)}"
             )
 
         fused_hidden_states = []

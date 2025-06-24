@@ -25,6 +25,7 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_torch_available, logging, requires_backends
+from ...utils.import_utils import requires
 
 
 if is_torch_available():
@@ -326,6 +327,7 @@ def scale_bbox_to_transformed_image(
     return [top_scaled, left_scaled, bottom_scaled, right_scaled]
 
 
+@requires(backends=("vision",))
 class FuyuProcessor(ProcessorMixin):
     r"""
     Constructs a Fuyu processor which wraps a Fuyu image processor and a Llama tokenizer into a single processor.

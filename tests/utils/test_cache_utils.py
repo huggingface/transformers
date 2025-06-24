@@ -40,9 +40,9 @@ if is_torch_available():
     from transformers import (
         AutoModelForCausalLM,
         AutoTokenizer,
+        ClvpForCausalLM,
         DynamicCache,
         GenerationConfig,
-        GPT2LMHeadModel,
         LlamaConfig,
         SinkCache,
         StaticCache,
@@ -103,7 +103,7 @@ class CacheTest(unittest.TestCase):
 
     def test_reorder_cache_retrocompatibility(self):
         """Tests that Cache.reorder_cache is retrocompatible with the legacy code path"""
-        legacy_reorder_fn = GPT2LMHeadModel._reorder_cache  # An example of a legacy `_reorder_cache` function
+        legacy_reorder_fn = ClvpForCausalLM._reorder_cache  # An example of a legacy `_reorder_cache` function
 
         legacy_cache = ()
         new_cache = DynamicCache()

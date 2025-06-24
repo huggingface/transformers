@@ -604,7 +604,7 @@ class FlavaLayer(nn.Module):
         self.intermediate = FlavaIntermediate(config)
         self.output = FlavaOutput(config)
 
-        # TODO: Check fp32 layer norm possiblity
+        # TODO: Check fp32 layer norm possibility
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 

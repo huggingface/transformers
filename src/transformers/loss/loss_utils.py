@@ -145,6 +145,7 @@ LOSS_MAPPING = {
     "ForMaskedLM": ForMaskedLMLoss,
     "ForQuestionAnswering": ForQuestionAnsweringLoss,
     "ForSequenceClassification": ForSequenceClassificationLoss,
+    "ForImageClassification": ForSequenceClassificationLoss,
     "ForTokenClassification": ForTokenClassification,
     "ForSegmentation": ForSegmentationLoss,
     "ForObjectDetection": ForObjectDetectionLoss,

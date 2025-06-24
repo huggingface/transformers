@@ -39,11 +39,13 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("vision",))
 class LlavaOnevisionVideoProcessor(BaseImageProcessor):
     r"""
     Constructs a LLaVa-Onevisino-Video video processor. Based on [`SiglipImageProcessor`] with incorporation of processing each video frame.

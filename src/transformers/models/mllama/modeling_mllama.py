@@ -36,7 +36,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_mllama import MllamaConfig, MllamaTextConfig, MllamaVisionConfig
 
 
@@ -1029,7 +1028,8 @@ class MllamaPreTrainedModel(PreTrainedModel):
     _supports_quantized_cache = True
 
     def _init_weights(self, module):
-        std = self.config.get_text_config().initializer_range
+        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
+
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
@@ -1038,20 +1038,30 @@ class MllamaPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.Parameter):
-            module.data.normal_(mean=0.0, std=std)
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
+        elif isinstance(module, MllamaTextRMSNorm):
+            module.weight.data.fill_(1.0)
         elif isinstance(module, MllamaVisionModel):
             nn.init.normal_(module.class_embedding.data, std=std)
         elif isinstance(module, MllamaPrecomputedPositionEmbedding):
             nn.init.normal_(module.embedding.data, std=std)
+            nn.init.zeros_(module.gate.data)
         elif isinstance(module, MllamaVisionEncoderLayer) and module.is_gated:
             nn.init.normal_(module.gate_attn.data, std=std)
             nn.init.normal_(module.gate_ffn.data, std=std)
+        elif isinstance(module, MllamaCrossAttentionDecoderLayer):
+            module.cross_attn_attn_gate.data.zero_()
+            module.cross_attn_mlp_gate.data.zero_()
+        elif isinstance(module, MllamaPrecomputedAspectRatioEmbedding):
+            if module.is_gated:
+                module.gate.data.zero_()
 
     # Copied from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
     def _update_causal_mask(
         self,
-        attention_mask: torch.Tensor,
+        attention_mask: Union[torch.Tensor, "BlockMask"],
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
@@ -1064,8 +1074,7 @@ class MllamaPreTrainedModel(PreTrainedModel):
         if self.config._attn_implementation == "flex_attention":
             if isinstance(attention_mask, torch.Tensor):
                 attention_mask = make_flex_block_causal_mask(attention_mask)
-            if isinstance(attention_mask, BlockMask):
-                return attention_mask
+            return attention_mask
 
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
@@ -1083,7 +1092,7 @@ class MllamaPreTrainedModel(PreTrainedModel):
             ):
                 return None
 
-        dtype, device = input_tensor.dtype, input_tensor.device
+        dtype = input_tensor.dtype
         sequence_length = input_tensor.shape[1]
         if using_static_cache:
             target_length = past_key_values.get_max_cache_shape()
@@ -1100,7 +1109,6 @@ class MllamaPreTrainedModel(PreTrainedModel):
             sequence_length=sequence_length,
             target_length=target_length,
             dtype=dtype,
-            device=device,
             cache_position=cache_position,
             batch_size=input_tensor.shape[0],
         )
@@ -1108,7 +1116,7 @@ class MllamaPreTrainedModel(PreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
@@ -1126,7 +1134,6 @@ class MllamaPreTrainedModel(PreTrainedModel):
         sequence_length: int,
         target_length: int,
         dtype: torch.dtype,
-        device: torch.device,
         cache_position: torch.Tensor,
         batch_size: int,
         **kwargs,
@@ -1146,8 +1153,6 @@ class MllamaPreTrainedModel(PreTrainedModel):
                 to account for the 0 padding, the part of the cache that is not filled yet.
             dtype (`torch.dtype`):
                 The dtype to use for the 4D attention mask.
-            device (`torch.device`):
-                The device to place the 4D attention mask on.
             cache_position (`torch.Tensor`):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):
@@ -1159,11 +1164,11 @@ class MllamaPreTrainedModel(PreTrainedModel):
         else:
             min_dtype = torch.finfo(dtype).min
             causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=cache_position.device
             )
             if sequence_length != 1:
                 causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask *= torch.arange(target_length, device=cache_position.device) > cache_position.reshape(-1, 1)
             causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
             if attention_mask is not None:
                 causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
@@ -1863,7 +1868,6 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(MLLAMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class="MllamaTextConfig")
     def forward(
@@ -2008,7 +2012,6 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.language_model.get_decoder()
 
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(MLLAMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class="MllamaConfig")
     def forward(

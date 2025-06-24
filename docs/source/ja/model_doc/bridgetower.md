@@ -144,6 +144,11 @@ BridgeTower は、ビジュアル エンコーダー、テキスト エンコー
 [[autodoc]] BridgeTowerImageProcessor
     - preprocess
 
+## BridgeTowerImageProcessorFast
+
+[[autodoc]] BridgeTowerImageProcessorFast
+    - preprocess
+
 ## BridgeTowerProcessor
 
 [[autodoc]] BridgeTowerProcessor

@@ -295,7 +295,7 @@ class TimesformerLayer(nn.Module):
         attention_type = config.attention_type
 
         drop_path_rates = [
-            x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)
+            x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers, device="cpu")
         ]  # stochastic depth decay rule
         drop_path_rate = drop_path_rates[layer_index]
 

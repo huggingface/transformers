@@ -91,7 +91,7 @@ class ModuleTransfer:
         for dest_m, src_m in zip(dest_traced, src_traced):
             dest_m.load_state_dict(src_m.state_dict())
             if self.verbose == 1:
-                print(f"Transfered from={src_m} to={dest_m}")
+                print(f"Transferred from={src_m} to={dest_m}")
 
 
 def copy_parameters(from_model: nn.Module, our_model: nn.Module) -> nn.Module:
@@ -129,7 +129,7 @@ def convert_weight_and_push(
     print(f"Downloading weights for {name}...")
     checkpoint_path = cached_download(checkpoint)
     print(f"Converting {name}...")
-    from_state_dict = torch.load(checkpoint_path)["state_dict"]
+    from_state_dict = torch.load(checkpoint_path, weights_only=True)["state_dict"]
     from_model.load_state_dict(from_state_dict)
     from_model.eval()
     with torch.no_grad():

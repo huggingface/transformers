@@ -316,6 +316,10 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
+    @unittest.skip(reason="The base class is LM only and cannot be init with XModelConfig`")
+    def test_save_load_fast_init_from_base(self):
+        pass
+
 
 @require_torch
 class Qwen2VLIntegrationTest(unittest.TestCase):
