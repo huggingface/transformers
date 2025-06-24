@@ -173,7 +173,8 @@ _is_quantized = False
 _is_ds_init_called = False
 _torch_distributed_available = torch.distributed.is_available()
 
-if _torch_distributed_available and is_torch_greater_or_equal("2.5"):
+_is_dtensor_available = _torch_distributed_available and is_torch_greater_or_equal("2.5")
+if _is_dtensor_available:
     from torch.distributed.tensor import DTensor
 
 
@@ -3882,7 +3883,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         for shard_file, tensors in filename_to_tensors:
             shard = {}
             for tensor in tensors:
-                if isinstance(state_dict[tensor], DTensor):
+                if _is_dtensor_available and isinstance(state_dict[tensor], DTensor):
                     full_tensor = state_dict[tensor].full_tensor()
                     # to get the correctly ordered tensor we need to repack if packed
                     if _get_parameter_tp_plan(tensor, self._tp_plan) in ("local_packed_rowwise",):
@@ -4382,6 +4383,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         tp_size = kwargs.pop("tp_size", None)
         device_mesh = kwargs.pop("device_mesh", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
+        use_kernels = kwargs.pop("use_kernels", False)
 
         key_mapping = kwargs.pop("key_mapping", None)
         # Load models with hardcoded key mapping on class for VLMs only, to keep BC and standardize model
@@ -4758,8 +4760,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # The _keep_in_fp32_modules flag is only used to avoid bf16 -> fp16 casting precision issues. It was introduced
         # in case of force loading a model that should stay bf16 in fp16 (which includes a few quantizers as this is a pre-processing
         # step for e.g. bitsandbytes). See https://github.com/huggingface/transformers/issues/20287 for details.
+        # Update: to extend _keep_in_fp32_modules flag feature, it can also be used to force modules that should stay in fp32
         if model._keep_in_fp32_modules is not None and (
-            torch_dtype == torch.float16 or getattr(hf_quantizer, "use_keep_in_fp32_modules", False)
+            torch_dtype == torch.float16
+            or torch_dtype == torch.bfloat16
+            or getattr(hf_quantizer, "use_keep_in_fp32_modules", False)
         ):
             # We need to match exact layers, so we add either `.` on each side, or start/end of string
             keep_in_fp32_regex = re.compile(
@@ -4833,6 +4838,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         # Set model in evaluation mode to deactivate DropOut modules by default
         model.eval()
+
+        # check if using kernels
+        if use_kernels:
+            from kernels import Device, kernelize
+
+            kernelize(model, device=Device(type=model.device.type))
 
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
         # custom generate function)

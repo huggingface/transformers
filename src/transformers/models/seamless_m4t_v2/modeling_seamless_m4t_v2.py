@@ -29,6 +29,7 @@ from ...generation import GenerationMixin
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -76,25 +77,27 @@ SEAMLESS_M4T_V2_COMMON_CUSTOM_ARGS = r"""
 
 
 @dataclass
-# Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TGenerationOutput with SeamlessM4T->SeamlessM4Tv2
-class SeamlessM4Tv2GenerationOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Class defining the generated outputs from [`SeamlessM4Tv2Model`], [`SeamlessM4Tv2ForTextToText`],
     [`SeamlessM4Tv2ForTextToSpeech`], [`SeamlessM4Tv2ForSpeechToSpeech`] and [`SeamlessM4Tv2ForTextToSpeech`].
-
-    Args:
-        waveform (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            The final audio waveform predicted by the model.
-        waveform_lengths (`torch.IntTensor` of shape `(batch_size,)`, *optional*):
-            The length in samples of each element in the `waveform` batch.
-        sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            The generated translated sequences. This is the output of the text-to-text or the speech-to-text models.
-            The second dimension (sequence_length) is either equal to `max_length` or shorter if all batches finished
-            early due to the `eos_token_id`.
-        unit_sequences (`torch.LongTensor` of shape `(batch_size, unit_sequence_length)`, *optional*):
-            The generated translated unit sequences. This is the output of the text-to-units model. The second
-            dimension (unit_sequence_length) is either equal to `t2u_max_length` or shorter if all batches finished
-            early due to the `t2u_eos_token_id`.
+    """
+)
+# Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TGenerationOutput with SeamlessM4T->SeamlessM4Tv2
+class SeamlessM4Tv2GenerationOutput(ModelOutput):
+    r"""
+    waveform (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        The final audio waveform predicted by the model.
+    waveform_lengths (`torch.IntTensor` of shape `(batch_size,)`, *optional*):
+        The length in samples of each element in the `waveform` batch.
+    sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        The generated translated sequences. This is the output of the text-to-text or the speech-to-text models.
+        The second dimension (sequence_length) is either equal to `max_length` or shorter if all batches finished
+        early due to the `eos_token_id`.
+    unit_sequences (`torch.LongTensor` of shape `(batch_size, unit_sequence_length)`, *optional*):
+        The generated translated unit sequences. This is the output of the text-to-units model. The second
+        dimension (unit_sequence_length) is either equal to `t2u_max_length` or shorter if all batches finished
+        early due to the `t2u_eos_token_id`.
     """
 
     waveform: Optional[torch.FloatTensor] = None
@@ -104,27 +107,16 @@ class SeamlessM4Tv2GenerationOutput(ModelOutput):
 
 
 @dataclass
-class SeamlessM4Tv2TextToUnitDecoderOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Class defining the outputs from [`SeamlessM4Tv2TextToUnitDecoder`].
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
-            for *masked*
+    """
+)
+class SeamlessM4Tv2TextToUnitDecoderOutput(ModelOutput):
+    r"""
+    padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
+        for *masked*
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
@@ -134,46 +126,24 @@ class SeamlessM4Tv2TextToUnitDecoderOutput(ModelOutput):
 
 
 @dataclass
-class SeamlessM4Tv2TextToUnitOutput(ModelOutput):
-    """
-        Class defining the outputs from [`SeamlessM4Tv2TextToUnitForConditionalGeneration`] and
+@auto_docstring(
+    custom_intro="""
+    Class defining the outputs from [`SeamlessM4Tv2TextToUnitForConditionalGeneration`] and
         [`SeamlessM4Tv2TextToUnitModel`].
+    """
+)
+class SeamlessM4Tv2TextToUnitOutput(ModelOutput):
+    r"""
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the decoder of the model.
 
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the decoder of the model.
-
-            If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
-            hidden_size)` is output.
-        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
-            for *masked*
-        decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the decoder at the output of each layer plus the optional initial embedding outputs.
-        decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
-            self-attention heads.
-        encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder of the model.
-        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the encoder at the output of each layer plus the optional initial embedding outputs.
-        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
-            self-attention heads.
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss.
+        If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
+        hidden_size)` is output.
+    padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
+        for *masked*
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss.
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
@@ -489,7 +459,7 @@ class SeamlessM4Tv2ConformerSelfAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class SeamlessM4Tv2ConformerEncoderLayer(nn.Module):
+class SeamlessM4Tv2ConformerEncoderLayer(GradientCheckpointingLayer):
     """Conformer block based on https://huggingface.co/papers/2005.08100."""
 
     # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerEncoderLayer.__init__ with Wav2Vec2->SeamlessM4Tv2, attention_dropout->speech_encoder_dropout, torch.nn->nn
@@ -645,21 +615,12 @@ class SeamlessM4Tv2ConformerEncoder(nn.Module):
             )
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        layer.__call__,
-                        hidden_states,
-                        attention_mask,
-                        output_attentions,
-                        conv_attention_mask,
-                    )
-                else:
-                    layer_outputs = layer(
-                        hidden_states,
-                        attention_mask=attention_mask,
-                        output_attentions=output_attentions,
-                        conv_attention_mask=conv_attention_mask,
-                    )
+                layer_outputs = layer(
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    output_attentions=output_attentions,
+                    conv_attention_mask=conv_attention_mask,
+                )
                 hidden_states = layer_outputs[0]
 
             if skip_the_layer:
@@ -1031,7 +992,7 @@ class SeamlessM4Tv2FeedForwardNetwork(nn.Module):
 
 
 # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TEncoderLayer with SeamlessM4T->SeamlessM4Tv2
-class SeamlessM4Tv2EncoderLayer(nn.Module):
+class SeamlessM4Tv2EncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: SeamlessM4Tv2Config, encoder_ffn_dim=None, encoder_attention_heads=None):
         super().__init__()
         encoder_ffn_dim = config.encoder_ffn_dim if encoder_ffn_dim is None else encoder_ffn_dim
@@ -1095,7 +1056,7 @@ class SeamlessM4Tv2EncoderLayer(nn.Module):
 
 
 # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TDecoderLayer with SeamlessM4T->SeamlessM4Tv2
-class SeamlessM4Tv2DecoderLayer(nn.Module):
+class SeamlessM4Tv2DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: SeamlessM4Tv2Config, decoder_ffn_dim=None, decoder_attention_heads=None):
         super().__init__()
         decoder_ffn_dim = config.decoder_ffn_dim if decoder_ffn_dim is None else decoder_ffn_dim
@@ -1210,7 +1171,7 @@ class SeamlessM4Tv2DecoderLayer(nn.Module):
         return outputs
 
 
-class SeamlessM4Tv2TextToUnitDecoderLayer(nn.Module):
+class SeamlessM4Tv2TextToUnitDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: SeamlessM4Tv2Config, decoder_ffn_dim=None, decoder_attention_heads=None):
         super().__init__()
         decoder_ffn_dim = config.decoder_ffn_dim if decoder_ffn_dim is None else decoder_ffn_dim
@@ -1760,19 +1721,11 @@ class SeamlessM4Tv2Encoder(SeamlessM4Tv2PreTrainedModel):
             if to_drop:
                 layer_outputs = (None, None)
             else:
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        encoder_layer.forward,
-                        hidden_states,
-                        attention_mask,
-                        output_attentions,
-                    )
-                else:
-                    layer_outputs = encoder_layer(
-                        hidden_states,
-                        attention_mask,
-                        output_attentions=output_attentions,
-                    )
+                layer_outputs = encoder_layer(
+                    hidden_states,
+                    attention_mask,
+                    output_attentions=output_attentions,
+                )
 
                 hidden_states = layer_outputs[0]
 
@@ -1936,27 +1889,15 @@ class SeamlessM4Tv2Decoder(SeamlessM4Tv2PreTrainedModel):
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    None,
-                    output_attentions,
-                    use_cache,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=attention_mask,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
-                    past_key_value=past_key_value,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                encoder_attention_mask=encoder_attention_mask,
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+            )
             hidden_states = layer_outputs[0]
 
             if use_cache:
@@ -2137,21 +2078,12 @@ class SeamlessM4Tv2TextToUnitDecoder(SeamlessM4Tv2PreTrainedModel):
                 if dropout_probability < self.layerdrop:
                     continue
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    padding_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=attention_mask,
-                    padding_mask=padding_mask,
-                    output_attentions=output_attentions,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=attention_mask,
+                padding_mask=padding_mask,
+                output_attentions=output_attentions,
+            )
             hidden_states = layer_outputs[0]
 
             if output_attentions:

@@ -25,6 +25,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import auto_docstring, logging
@@ -36,37 +37,28 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class Qwen2AudioCausalLMOutputWithPast(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for Qwen2Audio causal language model (or autoregressive) outputs.
+    """
+)
+class Qwen2AudioCausalLMOutputWithPast(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        Pre-computed hidden-states that can be used to speed up auto-regressive (sequential) decoding. There are
+        two sets of pre-computed hidden-states: key and values states in the self-attention blocks.
+        The `past_key_values` are returned when `use_cache=True` is passed or when `config.use_cache=True`.
+        It is a [`~cache_utils.Cache`] instance.
 
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss (for next-token prediction).
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Pre-computed hidden-states that can be used to speed up auto-regressive (sequential) decoding. There are
-            two sets of pre-computed hidden-states: key and values states in the self-attention blocks.
-            The `past_key_values` are returned when `use_cache=True` is passed or when `config.use_cache=True`.
-            It is a [`~cache_utils.Cache`] instance.
-
-            If `past_key_values` are used, the user can optionally input only the last `input_ids` (those
-            that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-            all `input_ids` of shape `(batch_size, sequence_length)`.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        attention_mask (`torch.FloatTensor`, *optional*):
-            Attentions mask, used to update attention mask and position_ids.
+        If `past_key_values` are used, the user can optionally input only the last `input_ids` (those
+        that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
+        all `input_ids` of shape `(batch_size, sequence_length)`.
+    attention_mask (`torch.FloatTensor`, *optional*):
+        Attentions mask, used to update attention mask and position_ids.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -200,7 +192,7 @@ class Qwen2AudioAttention(nn.Module):
 
 
 # Copied from transformers.models.whisper.modeling_whisper.WhisperEncoderLayer with Whisper->Qwen2Audio, WHISPER->QWEN2AUDIO
-class Qwen2AudioEncoderLayer(nn.Module):
+class Qwen2AudioEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Qwen2AudioConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -436,21 +428,12 @@ class Qwen2AudioEncoder(Qwen2AudioPreTrainedModel):
             if to_drop:
                 layer_outputs = (None, None)
             else:
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        encoder_layer.__call__,
-                        hidden_states,
-                        attention_mask,
-                        (head_mask[idx] if head_mask is not None else None),
-                        output_attentions,
-                    )
-                else:
-                    layer_outputs = encoder_layer(
-                        hidden_states,
-                        attention_mask,
-                        layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                        output_attentions=output_attentions,
-                    )
+                layer_outputs = encoder_layer(
+                    hidden_states,
+                    attention_mask,
+                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                    output_attentions=output_attentions,
+                )
 
                 hidden_states = layer_outputs[0]
 

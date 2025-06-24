@@ -58,6 +58,7 @@ from transformers.testing_utils import (
     is_staging_test,
     require_accelerate,
     require_flax,
+    require_non_hpu,
     require_read_token,
     require_safetensors,
     require_tf,
@@ -1009,6 +1010,7 @@ class ModelUtilsTest(TestCasePlus):
 
         self.assertIsNotNone(model)
 
+    @require_non_hpu
     @require_accelerate
     @mark.accelerate_tests
     @require_torch_multi_accelerator

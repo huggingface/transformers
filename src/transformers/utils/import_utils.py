@@ -815,8 +815,8 @@ def is_torch_hpu_available():
     ):
         return False
 
-    torch_hpu_min_version = "1.5.0"
-    if _accelerate_available and version.parse(_accelerate_version) < version.parse(torch_hpu_min_version):
+    torch_hpu_min_accelerate_version = "1.5.0"
+    if _accelerate_available and version.parse(_accelerate_version) < version.parse(torch_hpu_min_accelerate_version):
         return False
 
     import torch
@@ -849,6 +849,24 @@ def is_torch_hpu_available():
                 original_masked_fill_(self, mask, value)
 
         torch.Tensor.masked_fill_ = patched_masked_fill_
+
+    # IlyasMoutawwakil: we patch torch.compile to use the HPU backend by default
+    # https://github.com/huggingface/transformers/pull/38790#discussion_r2157043944
+    # This is necessary for cases where torch.compile is used as a decorator (defaulting to inductor)
+    # https://github.com/huggingface/transformers/blob/af6120b3eb2470b994c21421bb6eaa76576128b0/src/transformers/models/modernbert/modeling_modernbert.py#L204
+    original_compile = torch.compile
+
+    def hpu_backend_compile(*args, **kwargs):
+        if kwargs.get("backend", None) not in ["hpu_backend", "eager"]:
+            logger.warning(
+                f"Calling torch.compile with backend={kwargs.get('backend', None)} on a Gaudi device is not supported. "
+                "We will override the backend with 'hpu_backend' to avoid errors."
+            )
+            kwargs["backend"] = "hpu_backend"
+
+        return original_compile(*args, **kwargs)
+
+    torch.compile = hpu_backend_compile
 
     return True
 
