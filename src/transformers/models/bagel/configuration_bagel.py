@@ -21,85 +21,11 @@
 
 
 from ...configuration_utils import PretrainedConfig
+from ...modeling_utils import logging
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-class BagelVisionConfig(PretrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`BagelVisionModel`]. It is used to instantiate a
-    Bagel vision encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the vision encoder of the Bagel
-    [google/bagel-base-patch16-224](https://huggingface.co/google/bagel-base-patch16-224) architecture.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_channels (`int`, *optional*, defaults to 3):
-            Number of channels in the input images.
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each patch.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-
-    Example:
-
-    ```python
-    >>> from transformers import BagelVisionConfig, BagelVisionModel
-
-    >>> # Initializing a BagelVisionConfig with google/bagel-base-patch16-224 style configuration
-    >>> configuration = BagelVisionConfig()
-
-    >>> # Initializing a BagelVisionModel (with random weights) from the google/bagel-base-patch16-224 style configuration
-    >>> model = BagelVisionModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
-
-    model_type = "bagel_vision_model"
-    base_config_key = "vision_config"
-
-    def __init__(
-        self,
-        hidden_size=768,
-        intermediate_size=3072,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        num_channels=3,
-        image_size=224,
-        patch_size=16,
-        hidden_act="gelu_pytorch_tanh",
-        layer_norm_eps=1e-6,
-        attention_dropout=0.0,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_channels = num_channels
-        self.patch_size = patch_size
-        self.image_size = image_size
-        self.attention_dropout = attention_dropout
-        self.layer_norm_eps = layer_norm_eps
-        self.hidden_act = hidden_act
+logger = logging.get_logger(__name__)
 
 
 class BagelVQVAEConfig(PretrainedConfig):
@@ -135,3 +61,65 @@ class BagelVQVAEConfig(PretrainedConfig):
         self.out_channels = out_channels
         self.scale_factor = scale_factor
         self.shift_factor = shift_factor
+
+
+class BagelConfig(PretrainedConfig):
+    model_type = "bagel"
+    sub_configs = {
+        "text_config": AutoConfig,
+        "vision_config": AutoConfig,
+        "vq_config": BagelVQVAEConfig,
+    }
+
+    def __init__(
+        self,
+        text_config=None,
+        vision_config=None,
+        vq_config=None,
+        image_token_id=100581,
+        **kwargs,
+    ):
+        if isinstance(text_config, dict):
+            text_config["model_type"] = text_config.get("model_type", "llama")
+            self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
+
+        elif text_config is None:
+            logger.info("`text_config` is None. Initializing with default values")
+            self.text_config = CONFIG_MAPPING["qwen2"]()
+        elif isinstance(text_config, PretrainedConfig):
+            self.text_config = text_config
+        else:
+            raise ValueError(
+                f"Invalid type for `text_config`. Must be either `dict` or `LlamaConfig`."
+                f" Type found: {type(text_config)}"
+            )
+
+        if vision_config is None:
+            logger.info("`vision_config` is None. Initializing with default values")
+            self.vision_config = CONFIG_MAPPING["siglip_vision_model"]
+        elif isinstance(vision_config, PretrainedConfig):
+            self.vision_config = vision_config
+        else:
+            raise ValueError(
+                f"Invalid type for `vision_config`. Must be either `dict` or `JanusVisionConfig`."
+                f" Type found: {type(vision_config)}"
+            )
+
+        if vq_config is None:
+            logger.info("`vq_config` is None. Initializing with default JanusVQVAEConfig values")
+            self.vq_config = BagelVQVAEConfig()
+        elif isinstance(vq_config, dict):
+            self.vq_config = BagelVQVAEConfig(**vq_config)
+        elif isinstance(vq_config, BagelVQVAEConfig):
+            self.vq_config = vq_config
+        else:
+            raise ValueError(
+                f"Invalid type for `vq_config`. Must be either `dict` or `JanusVQVAEConfig`."
+                f" Type found: {type(vq_config)}"
+            )
+
+        self.image_token_id = image_token_id
+        super().__init__(**kwargs)
+
+
+__all__ = ["BagelVQVAEConfig", "BagelConfig"]
