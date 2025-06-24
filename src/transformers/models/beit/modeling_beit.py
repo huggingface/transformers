@@ -26,6 +26,7 @@ from torch import Tensor, nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BackboneOutput,
     BaseModelOutput,
@@ -43,39 +44,19 @@ from .configuration_beit import BeitConfig
 
 logger = logging.get_logger(__name__)
 
-# General docstring
-
-# Base docstring
-_EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
-
-# Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "microsoft/beit-base-patch16-224"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
-
 
 @dataclass
-class BeitModelOutputWithPooling(BaseModelOutputWithPooling):
-    """
+@auto_docstring(
+    custom_intro="""
     Class for outputs of [`BeitModel`].
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
-            Average of the last layer hidden states of the patch tokens (excluding the *[CLS]* token) if
-            *config.use_mean_pooling* is set to True. If set to False, then the final hidden state of the *[CLS]* token
-            will be returned.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    """
+)
+class BeitModelOutputWithPooling(BaseModelOutputWithPooling):
+    r"""
+    pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+        Average of the last layer hidden states of the patch tokens (excluding the *[CLS]* token) if
+        *config.use_mean_pooling* is set to True. If set to False, then the final hidden state of the *[CLS]* token
+        will be returned.
     """
 
 
@@ -497,7 +478,7 @@ class BeitOutput(nn.Module):
         return hidden_states
 
 
-class BeitLayer(nn.Module):
+class BeitLayer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the timm implementation."""
 
     def __init__(self, config: BeitConfig, window_size: Optional[tuple] = None, drop_path_rate: float = 0.0) -> None:
@@ -525,7 +506,7 @@ class BeitLayer(nn.Module):
         output_attentions: bool = False,
         relative_position_bias: Optional[torch.Tensor] = None,
         interpolate_pos_encoding: bool = False,
-        resolution: Optional[tuple[int]] = None,
+        resolution: Optional[tuple[int, int]] = None,
     ) -> Union[tuple[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in BEiT, layernorm is applied before self-attention
@@ -695,25 +676,14 @@ class BeitEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    layer_head_mask,
-                    output_attentions,
-                    relative_position_bias,
-                    interpolate_pos_encoding,
-                    resolution,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    layer_head_mask,
-                    output_attentions,
-                    relative_position_bias,
-                    interpolate_pos_encoding,
-                    resolution,
-                )
+            layer_outputs = layer_module(
+                hidden_states,
+                head_mask=layer_head_mask,
+                output_attentions=output_attentions,
+                relative_position_bias=relative_position_bias,
+                interpolate_pos_encoding=interpolate_pos_encoding,
+                resolution=resolution,
+            )
 
             hidden_states = layer_outputs[0]
 
