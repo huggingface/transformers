@@ -1439,7 +1439,7 @@ class ModularFileMapper(ModuleMapper):
 
         original_dependencies = []
         other_files_dependencies = defaultdict(list)
-        for dep in tuple(missing_dependencies):
+        for dep in sorted(missing_dependencies):
             if dep in self.added_objects_file_mapping:
                 file = self.added_objects_file_mapping[dep]
                 other_files_dependencies[file].append(dep)
