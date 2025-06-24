@@ -1542,17 +1542,6 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
             return
         print("    Checking docstrings in the following files:" + "\n    - " + "\n    - ".join(module_diff_files))
 
-    failures = []
-    hard_failures = []
-    to_clean = []
-
-    modular_glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**/modular_**")
-    modular_files = glob.glob(modular_glob_pattern)
-    modular_modules = [
-        os.path.relpath(path, start=Path("src").resolve()).replace("/", ".").replace(".py", "")
-        for path in modular_files
-    ]
-
     # Skip objects that are private or not documented.
     all_main_objects = [
         getattr(transformers, name)
@@ -1560,6 +1549,9 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
         if not (name.startswith("_") or ignore_undocumented(name) or name in OBJECTS_TO_IGNORE)
     ]
 
+    failures = []
+    hard_failures = []
+    to_clean = []
     all_objects = all_main_objects + lazily_import_modular_public_objects()
     for obj in all_objects:
         if not callable(obj) or not isinstance(obj, type) or getattr(obj, "__doc__", None) is None:
@@ -1581,15 +1573,15 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
                 old_doc, new_doc = None, None
         except Exception as e:
             print(e)
-            hard_failures.append(name)
+            hard_failures.append(obj.__name__)
             continue
         if old_doc != new_doc:
             if overwrite:
                 fix_docstring(obj, old_doc, new_doc)
             else:
-                failures.append(name)
+                failures.append(obj.__name__)
         elif not overwrite and new_doc is not None and ("<fill_type>" in new_doc or "<fill_docstring>" in new_doc):
-            to_clean.append(name)
+            to_clean.append(obj.__name__)
 
     # Deal with errors
     error_message = ""
