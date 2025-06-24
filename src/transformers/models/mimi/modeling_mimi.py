@@ -26,6 +26,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
@@ -46,29 +47,29 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
+@auto_docstring
 class MimiOutput(ModelOutput):
-    """
-    Args:
-        audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
-            Discret code embeddings computed using `model.encode`.
-        audio_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*)
-            Decoded audio values, obtained using the decoder part of Mimi.
-        encoder_past_key_values (`Cache`, *optional*):
-            Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding of the encoder transformer.
-            This typically consists in the `past_key_values` returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
+    r"""
+    audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
+        Discret code embeddings computed using `model.encode`.
+    audio_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        Decoded audio values, obtained using the decoder part of Mimi.
+    encoder_past_key_values (`Cache`, *optional*):
+        Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding of the encoder transformer.
+        This typically consists in the `past_key_values` returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
 
-            The model will output the same cache format that is fed as input.
+        The model will output the same cache format that is fed as input.
 
-            If `past_key_values` are used, the user can optionally input only the last `audio_values` or `audio_codes (those that don't
-            have their past key value states given to this model).
-        decoder_past_key_values (`Cache`, *optional*):
-            Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding of the decoder transformer.
-            This typically consists in the `past_key_values` returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
+        If `past_key_values` are used, the user can optionally input only the last `audio_values` or `audio_codes (those that don't
+        have their past key value states given to this model).
+    decoder_past_key_values (`Cache`, *optional*):
+        Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding of the decoder transformer.
+        This typically consists in the `past_key_values` returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
 
-            The model will output the same cache format that is fed as input.
+        The model will output the same cache format that is fed as input.
 
-            If `past_key_values` are used, the user can optionally input only the last `audio_values` or `audio_codes (those that don't
-            have their past key value states given to this model).
+        If `past_key_values` are used, the user can optionally input only the last `audio_values` or `audio_codes (those that don't
+        have their past key value states given to this model).
     """
 
     audio_codes: Optional[torch.LongTensor] = None
@@ -78,19 +79,19 @@ class MimiOutput(ModelOutput):
 
 
 @dataclass
+@auto_docstring
 class MimiEncoderOutput(ModelOutput):
-    """
-    Args:
-        audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
-            Discret code embeddings computed using `model.encode`.
-        encoder_past_key_values (`Cache`, *optional*):
-            Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding of the encoder transformer.
-            This typically consists in the `past_key_values` returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
+    r"""
+    audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
+        Discret code embeddings computed using `model.encode`.
+    encoder_past_key_values (`Cache`, *optional*):
+        Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding of the encoder transformer.
+        This typically consists in the `past_key_values` returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
 
-            The model will output the same cache format that is fed as input.
+        The model will output the same cache format that is fed as input.
 
-            If `past_key_values` are used, the user can optionally input only the last `audio_values` or `audio_codes (those that don't
-            have their past key value states given to this model).
+        If `past_key_values` are used, the user can optionally input only the last `audio_values` or `audio_codes (those that don't
+        have their past key value states given to this model).
     """
 
     audio_codes: Optional[torch.LongTensor] = None
@@ -98,19 +99,19 @@ class MimiEncoderOutput(ModelOutput):
 
 
 @dataclass
+@auto_docstring
 class MimiDecoderOutput(ModelOutput):
-    """
-    Args:
-        audio_values (`torch.FloatTensor`  of shape `(batch_size, segment_length)`, *optional*):
-            Decoded audio values, obtained using the decoder part of Mimi.
-        decoder_past_key_values (`Cache`, *optional*):
-            Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding of the decoder transformer.
-            This typically consists in the `past_key_values` returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
+    r"""
+    audio_values (`torch.FloatTensor`  of shape `(batch_size, segment_length)`, *optional*):
+        Decoded audio values, obtained using the decoder part of Mimi.
+    decoder_past_key_values (`Cache`, *optional*):
+        Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding of the decoder transformer.
+        This typically consists in the `past_key_values` returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
 
-            The model will output the same cache format that is fed as input.
+        The model will output the same cache format that is fed as input.
 
-            If `past_key_values` are used, the user can optionally input only the last `audio_values` or `audio_codes (those that don't
-            have their past key value states given to this model).
+        If `past_key_values` are used, the user can optionally input only the last `audio_values` or `audio_codes (those that don't
+        have their past key value states given to this model).
     """
 
     audio_values: Optional[torch.FloatTensor] = None
@@ -804,7 +805,7 @@ MIMI_ATTENTION_CLASSES = {
 }
 
 
-class MimiTransformerLayer(nn.Module):
+class MimiTransformerLayer(GradientCheckpointingLayer):
     def __init__(self, config: MimiConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -1019,27 +1020,15 @@ class MimiTransformerModel(nn.Module):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    causal_mask,
-                    position_ids,
-                    past_key_values,
-                    output_attentions,
-                    use_cache,
-                    cache_position,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=causal_mask,
-                    position_ids=position_ids,
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                position_ids=position_ids,
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+            )
 
             hidden_states = layer_outputs[0]
 
