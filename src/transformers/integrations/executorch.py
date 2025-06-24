@@ -325,7 +325,6 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         exported_program: torch.export.ExportedProgram,
         prompt_token_ids: torch.Tensor,
         max_new_tokens: int,
-        device: str = "cpu",
     ) -> torch.Tensor:
         """
         Generate a sequence of tokens using an exported program.
@@ -340,11 +339,11 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
             prompt_token_ids (`torch.Tensor`): Tensor representing the input prompt token IDs.
             max_new_tokens (`int`): Maximum number of new tokens to generate. Note that the total generation
                 length is limited by both `max_new_tokens` and the model's cache size.
-            device (str): The device to use.
 
         Returns:
             torch.Tensor: A tensor containing the generated sequence of token IDs, including the original prompt tokens.
         """
+        device = prompt_token_ids.device
         prompt_token_len = prompt_token_ids.shape[-1]
         max_generation_length = prompt_token_len + max_new_tokens
         for buffer_name, buffer in exported_program.named_buffers():
@@ -372,7 +371,7 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
             current_token = torch.argmax(result[:, -1, :], dim=-1).item()
             response_tokens.append(current_token)
 
-        return torch.tensor([response_tokens], dtype=torch.long)
+        return torch.tensor([response_tokens], dtype=torch.long, device=device)
 
 
 class TorchExportableModuleWithHybridCache(torch.nn.Module):
