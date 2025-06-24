@@ -13,12 +13,12 @@
 # limitations under the License.
 import json
 import os
-import regex as re
 import warnings
 from pathlib import Path
 from shutil import copyfile
 from typing import Any, Optional, Union
 
+import regex as re
 import sentencepiece
 
 from ...tokenization_utils import PreTrainedTokenizer
