@@ -321,7 +321,7 @@ RNN 모델과 달리 트랜스포머는 각 토큰의 위치 정보를 내부적
 
 ### 전처리 (preprocessing)
 
-머신러닝 모델이 쉽게 처리할 수 있도록 가공되지 않은 데이터를 정제하는 작업입니다. 예를 들어, 텍스트는 일반적으로 토크나이징(tokenization) 과정을 거칩니다. 다른 입력 유형에 대한 전처리 방식이 궁금하다면 [Preprocess](https://huggingface.co/docs/transformers/preprocessing) 튜토리얼을 참고해 보세요.
+머신러닝 모델이 쉽게 처리할 수 있도록 가공되지 않은 데이터를 정제하는 작업입니다. 예를 들어, 텍스트는 일반적으로 토큰화(tokenization) 과정을 거칩니다. 다른 입력 유형에 대한 전처리 방식이 궁금하다면 [Preprocess](https://huggingface.co/docs/transformers/preprocessing) 튜토리얼을 참고해 보세요.
 
 ### 사전 학습된 모델 (pretrained model)
 
