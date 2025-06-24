@@ -1150,7 +1150,7 @@ class TrOCRModelIntegrationTest(unittest.TestCase):
         model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-handwritten").to(torch_device)
 
         dataset = load_dataset("hf-internal-testing/fixtures_ocr", split="train")
-        image = dataset[0]["image"].convert("RGB")
+        image = dataset[1]["image"].convert("RGB")
 
         processor = self.default_processor
         pixel_values = processor(images=image, return_tensors="pt").pixel_values.to(torch_device)
