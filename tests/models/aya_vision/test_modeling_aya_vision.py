@@ -22,7 +22,6 @@ from transformers import (
     AutoProcessor,
     AyaVisionConfig,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
     Expectations,
@@ -49,10 +48,6 @@ if is_torch_available():
         AyaVisionForConditionalGeneration,
         AyaVisionModel,
     )
-
-
-if is_vision_available():
-    pass
 
 
 class AyaVisionVisionText2TextModelTester:
@@ -338,7 +333,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        del cls.model_checkpoint
+        del cls.model
         cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
@@ -347,7 +342,8 @@ class AyaVisionIntegrationTest(unittest.TestCase):
     @classmethod
     def get_model(cls):
         # Use 4-bit on T4
-        load_in_4bit = get_device_properties()[0] == "cuda" and get_device_properties()[1] < 8
+        device_type, major, _ = get_device_properties()
+        load_in_4bit = (device_type == "cuda") and (major < 8)
         torch_dtype = None if load_in_4bit else torch.float16
 
         if cls.model is None:

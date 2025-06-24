@@ -22,7 +22,8 @@ line-length = 119
 ignore = ["C901", "E501", "E741", "F402", "F823" ]
 # RUF013: Checks for the use of implicit Optional
 #  in type annotations when the default parameter value is None.
-select = ["C", "E", "F", "I", "W", "RUF013"]
+select = ["C", "E", "F", "I", "W", "RUF013", "UP006"]
+extend-safe-fixes = ["UP006"]
 
 # Ignore import violations in all `__init__.py` files.
 [tool.ruff.lint.per-file-ignores]

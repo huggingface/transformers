@@ -19,7 +19,7 @@ import copy
 import inspect
 import warnings
 from functools import partial
-from typing import Any, Dict, Optional, Union
+from typing import Any, Optional, Union
 
 import flax
 import jax
@@ -103,7 +103,7 @@ class GreedyState:
     sequences: jnp.ndarray
     running_token: jnp.ndarray
     is_sent_finished: jnp.ndarray
-    model_kwargs: Dict[str, jnp.ndarray]
+    model_kwargs: dict[str, jnp.ndarray]
 
 
 @flax.struct.dataclass
@@ -113,7 +113,7 @@ class SampleState:
     running_token: jnp.ndarray
     is_sent_finished: jnp.ndarray
     prng_key: jnp.ndarray
-    model_kwargs: Dict[str, jnp.ndarray]
+    model_kwargs: dict[str, jnp.ndarray]
 
 
 @flax.struct.dataclass
@@ -124,7 +124,7 @@ class BeamSearchState:
     sequences: jnp.ndarray
     scores: jnp.ndarray
     is_sent_finished: jnp.ndarray
-    model_kwargs: Dict[str, jnp.ndarray]
+    model_kwargs: dict[str, jnp.ndarray]
 
 
 class FlaxGenerationMixin:
@@ -173,7 +173,7 @@ class FlaxGenerationMixin:
         batch_size: int,
         decoder_start_token_id: Optional[int] = None,
         bos_token_id: Optional[int] = None,
-        model_kwargs: Optional[Dict[str, jnp.ndarray]] = None,
+        model_kwargs: Optional[dict[str, jnp.ndarray]] = None,
     ) -> jnp.ndarray:
         if model_kwargs is not None and "decoder_input_ids" in model_kwargs:
             # Only use this arg if not None, otherwise just remove from model_kwargs
@@ -249,7 +249,7 @@ class FlaxGenerationMixin:
                 exception_message += f" Please use one of the following classes instead: {generate_compatible_classes}"
             raise TypeError(exception_message)
 
-    def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
+    def _validate_model_kwargs(self, model_kwargs: dict[str, Any]):
         """Validates model kwargs for generation. Generate argument typos will also be caught here."""
         unused_model_args = []
         model_args = set(inspect.signature(self.prepare_inputs_for_generation).parameters)
@@ -273,7 +273,7 @@ class FlaxGenerationMixin:
         generation_config: Optional[GenerationConfig] = None,
         prng_key: Optional[jnp.ndarray] = None,
         trace: bool = True,
-        params: Optional[Dict[str, jnp.ndarray]] = None,
+        params: Optional[dict[str, jnp.ndarray]] = None,
         logits_processor: Optional[FlaxLogitsProcessorList] = None,
         **kwargs,
     ):
@@ -293,13 +293,13 @@ class FlaxGenerationMixin:
             trace (`bool`, *optional*, defaults to `True`):
                 Whether to trace generation. Setting `trace=False` should only be used for debugging and will lead to a
                 considerably slower runtime.
-            params (`Dict[str, jnp.ndarray]`, *optional*):
+            params (`dict[str, jnp.ndarray]`, *optional*):
                 Optionally the model parameters can be passed. Can be useful for parallelized generation.
             logits_processor (`FlaxLogitsProcessorList `, *optional*):
                 Custom logits processors that complement the default logits processors built from arguments and
                 generation config. If a logit processor is passed that is already created with the arguments or a
                 generation config an error is thrown. This feature is intended for advanced users.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
                 specific kwargs should not be prefixed and decoder specific kwargs should be prefixed with *decoder_*.
@@ -580,8 +580,8 @@ class FlaxGenerationMixin:
         eos_token_id: Optional[int] = None,
         logits_processor: Optional[FlaxLogitsProcessorList] = None,
         trace: bool = True,
-        params: Optional[Dict[str, jnp.ndarray]] = None,
-        model_kwargs: Optional[Dict[str, jnp.ndarray]] = None,
+        params: Optional[dict[str, jnp.ndarray]] = None,
+        model_kwargs: Optional[dict[str, jnp.ndarray]] = None,
     ):
         # init values
         max_length = max_length if max_length is not None else self.generation_config.max_length
@@ -668,8 +668,8 @@ class FlaxGenerationMixin:
         logits_processor: Optional[FlaxLogitsProcessorList] = None,
         logits_warper: Optional[FlaxLogitsProcessorList] = None,
         trace: bool = True,
-        params: Optional[Dict[str, jnp.ndarray]] = None,
-        model_kwargs: Optional[Dict[str, jnp.ndarray]] = None,
+        params: Optional[dict[str, jnp.ndarray]] = None,
+        model_kwargs: Optional[dict[str, jnp.ndarray]] = None,
     ):
         # init values
         max_length = max_length if max_length is not None else self.generation_config.max_length
@@ -765,9 +765,9 @@ class FlaxGenerationMixin:
         early_stopping: Optional[Union[bool, str]] = None,
         logits_processor: Optional[FlaxLogitsProcessorList] = None,
         trace: bool = True,
-        params: Optional[Dict[str, jnp.ndarray]] = None,
+        params: Optional[dict[str, jnp.ndarray]] = None,
         num_return_sequences: Optional[int] = None,
-        model_kwargs: Optional[Dict[str, jnp.ndarray]] = None,
+        model_kwargs: Optional[dict[str, jnp.ndarray]] = None,
     ):
         """
         This beam search function is heavily inspired by Flax's official example:

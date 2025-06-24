@@ -19,7 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
@@ -93,7 +93,7 @@ class ColQwen2Processor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[ColQwen2ProcessorKwargs],
@@ -110,11 +110,11 @@ class ColQwen2Processor(ProcessorMixin):
         Please refer to the doctsring of the above two methods for more information.
 
         Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
@@ -209,7 +209,7 @@ class ColQwen2Processor(ProcessorMixin):
             if suffix is None:
                 suffix = self.query_augmentation_token * 10
 
-            texts_query: List[str] = []
+            texts_query: list[str] = []
 
             for query in text:
                 augmented_query = self.query_prefix + query + suffix
@@ -228,10 +228,10 @@ class ColQwen2Processor(ProcessorMixin):
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
 
         Args:
-            image_sizes (List[List[str]], *optional*):
+            image_sizes (list[list[str]], *optional*):
                 The input sizes formatted as (height, width) per each image.
         Returns:
-            Dict[str, List[int]]: A dictionary mapping each modality ("image", "video", "audio")
+            dict[str, list[int]]: A dictionary mapping each modality ("image", "video", "audio")
             to a list containing the number of placeholder tokens required. If the model doesn't accept
             a certain modality or no input sizes are provided, the dict value is set to an empty list.
         """
@@ -283,7 +283,7 @@ class ColQwen2Processor(ProcessorMixin):
         This method forwards the `images` and `kwargs` arguments to the image processor.
 
         Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
@@ -308,7 +308,7 @@ class ColQwen2Processor(ProcessorMixin):
 
     def process_queries(
         self,
-        text: Union[TextInput, List[TextInput]],
+        text: Union[TextInput, list[TextInput]],
         **kwargs: Unpack[ColQwen2ProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -318,7 +318,7 @@ class ColQwen2Processor(ProcessorMixin):
         This method forwards the `text` and `kwargs` arguments to the tokenizer.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
@@ -342,8 +342,8 @@ class ColQwen2Processor(ProcessorMixin):
 
     def score_retrieval(
         self,
-        query_embeddings: Union["torch.Tensor", List["torch.Tensor"]],
-        passage_embeddings: Union["torch.Tensor", List["torch.Tensor"]],
+        query_embeddings: Union["torch.Tensor", list["torch.Tensor"]],
+        passage_embeddings: Union["torch.Tensor", list["torch.Tensor"]],
         batch_size: int = 128,
         output_dtype: Optional["torch.dtype"] = None,
         output_device: Union["torch.device", str] = "cpu",
@@ -360,8 +360,8 @@ class ColQwen2Processor(ProcessorMixin):
             obtained by padding the list of tensors.
 
         Args:
-            query_embeddings (`Union[torch.Tensor, List[torch.Tensor]`): Query embeddings.
-            passage_embeddings (`Union[torch.Tensor, List[torch.Tensor]`): Passage embeddings.
+            query_embeddings (`Union[torch.Tensor, list[torch.Tensor]`): Query embeddings.
+            passage_embeddings (`Union[torch.Tensor, list[torch.Tensor]`): Passage embeddings.
             batch_size (`int`, *optional*, defaults to 128): Batch size for computing scores.
             output_dtype (`torch.dtype`, *optional*, defaults to `torch.float32`): The dtype of the output tensor.
                 If `None`, the dtype of the input embeddings is used.
@@ -386,10 +386,10 @@ class ColQwen2Processor(ProcessorMixin):
         if output_dtype is None:
             output_dtype = query_embeddings[0].dtype
 
-        scores: List[torch.Tensor] = []
+        scores: list[torch.Tensor] = []
 
         for i in range(0, len(query_embeddings), batch_size):
-            batch_scores: List[torch.Tensor] = []
+            batch_scores: list[torch.Tensor] = []
             batch_queries = torch.nn.utils.rnn.pad_sequence(
                 query_embeddings[i : i + batch_size], batch_first=True, padding_value=0
             )
