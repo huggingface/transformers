@@ -233,40 +233,16 @@ class Glm4vModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
 
         return config, filtered_inputs_dict
 
-    @unittest.skip(reason="Feedforward chunking is not yet supported")
-    def test_feed_forward_chunking(self):
-        pass
-
-    @unittest.skip(reason="CPU offload is not yet supported")
-    def test_cpu_offload(self):
-        pass
-
-    @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
-    def test_disk_offload_bin(self):
-        pass
-
-    @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
-    def test_disk_offload_safetensors(self):
-        pass
-
-    @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
-    def test_model_parallelism(self):
-        pass
-
-    @unittest.skip(reason="Compile not yet supported because in Glm4v models")
-    def test_sdpa_can_compile_dynamic(self):
-        pass
-
-    @unittest.skip(reason="Compile not yet supported because in Glm4v models")
+    @unittest.skip(reason="No available kernels - not supported")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
     @parameterized.expand([("greedy", 1), ("beam search", 2)])
-    @unittest.skip("Cannot generate from inputs embeds")
+    @unittest.skip("Cannot generate from inputs embeds with pixel values")
     def test_generate_from_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
+    @unittest.skip(reason="Size mismatch")
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
@@ -274,14 +250,8 @@ class Glm4vModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     def test_model_is_small(self):
         pass
 
-    @unittest.skip(
-        reason="VLMs can't generate from inputs embeds and pixels. This can be tested as part of bacbone LM, no need to run the test for VLMs"
-    )
+    @unittest.skip("Cannot generate from inputs embeds with pixel values")
     def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip(reason="The base class is LM only and cannot be init with XModelConfig`")
-    def test_save_load_fast_init_from_base(self):
         pass
 
     # The multimodal base model embeds will not match ids, due to pixel values. We can't change base test
