@@ -22,8 +22,6 @@ from ..llama.modeling_llama import (
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
-    LlamaModel,
-    LlamaPreTrainedModel,
 )
 from ..nemotron.modeling_nemotron import NemotronMLP
 
@@ -135,7 +133,6 @@ class ArceeConfig(LlamaConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
@@ -194,61 +191,26 @@ class ArceeConfig(LlamaConfig):
 
 
 class ArceeMLP(NemotronMLP):
-    """Arcee MLP with configurable activation function (typically relu2)"""
-
     pass
 
 
-class ArceePreTrainedModel(LlamaPreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    pass
-
-
-class ArceeModel(LlamaModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`ArceeDecoderLayer`]
-
-    Args:
-        config: ArceeConfig
-    """
-
-    pass
-
-
+@auto_docstring(checkpoint="arcee-ai/AFM-4.5B")
 class ArceeForCausalLM(LlamaForCausalLM):
-    """Arcee Model transformer with a language modeling head on top (linear layer with weights tied to the input embeddings)."""
-
     pass
 
 
 @auto_docstring(checkpoint="arcee-ai/AFM-4.5B")
 class ArceeForSequenceClassification(LlamaForSequenceClassification):
-    """
-    The Arcee Model transformer with a sequence classification head on top (linear layer).
-    """
-
     pass
 
 
 @auto_docstring(checkpoint="arcee-ai/AFM-4.5B")
 class ArceeForQuestionAnswering(LlamaForQuestionAnswering):
-    """
-    The Arcee Model transformer with a span classification head on top for extractive question-answering tasks.
-    """
-
     pass
 
 
 @auto_docstring(checkpoint="arcee-ai/AFM-4.5B")
 class ArceeForTokenClassification(LlamaForTokenClassification):
-    """
-    The Arcee Model transformer with a token classification head on top.
-    """
-
     pass
 
 
@@ -258,6 +220,6 @@ __all__ = [
     "ArceeForQuestionAnswering",
     "ArceeForSequenceClassification",
     "ArceeForTokenClassification",
-    "ArceeModel",
-    "ArceePreTrainedModel",
+    "ArceeModel",  # noqa: F822
+    "ArceePreTrainedModel",  # noqa: F822
 ]
