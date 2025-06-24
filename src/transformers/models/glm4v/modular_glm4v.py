@@ -22,28 +22,6 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch.nn import LayerNorm
 
-from transformers.models.glm4.modeling_glm4 import Glm4MLP, Glm4RMSNorm, eager_attention_forward
-from transformers.models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLConfig
-from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
-    Qwen2_5_VisionPatchEmbed,
-    Qwen2_5_VisionRotaryEmbedding,
-    Qwen2_5_VLCausalLMOutputWithPast,
-    Qwen2_5_VLForConditionalGeneration,
-    Qwen2_5_VLMLP,
-    Qwen2_5_VLModel,
-    Qwen2_5_VLModelOutputWithPast,
-    Qwen2_5_VLPreTrainedModel,
-    Qwen2_5_VLRotaryEmbedding,
-    Qwen2_5_VLTextModel,
-    Qwen2_5_VLVisionBlock,
-    apply_rotary_pos_emb_vision,
-)
-from transformers.models.qwen2_5_vl.processing_qwen2_5_vl import (
-    Qwen2_5_VLProcessor,
-    Qwen2_5_VLProcessorKwargs,
-    Qwen2_5_VLVideosProcessorKwargs,
-)
-
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PretrainedConfig
@@ -59,6 +37,27 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import LossKwargs, is_torchdynamo_compiling, logging
 from ...video_utils import VideoInput
+from ..glm4.modeling_glm4 import Glm4MLP, Glm4RMSNorm, eager_attention_forward
+from ..qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLConfig
+from ..qwen2_5_vl.modeling_qwen2_5_vl import (
+    Qwen2_5_VisionPatchEmbed,
+    Qwen2_5_VisionRotaryEmbedding,
+    Qwen2_5_VLCausalLMOutputWithPast,
+    Qwen2_5_VLForConditionalGeneration,
+    Qwen2_5_VLMLP,
+    Qwen2_5_VLModel,
+    Qwen2_5_VLModelOutputWithPast,
+    Qwen2_5_VLPreTrainedModel,
+    Qwen2_5_VLRotaryEmbedding,
+    Qwen2_5_VLTextModel,
+    Qwen2_5_VLVisionBlock,
+    apply_rotary_pos_emb_vision,
+)
+from ..qwen2_5_vl.processing_qwen2_5_vl import (
+    Qwen2_5_VLProcessor,
+    Qwen2_5_VLProcessorKwargs,
+    Qwen2_5_VLVideosProcessorKwargs,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -357,10 +356,6 @@ class Glm4vConfig(Qwen2_5_VLConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "glm4v"
-    sub_configs = {"vision_config": Glm4vVisionConfig, "text_config": Glm4vTextConfig}
-    keys_to_ignore_at_inference = ["past_key_values"]
-
     def __init__(
         self,
         text_config=None,
@@ -373,7 +368,7 @@ class Glm4vConfig(Qwen2_5_VLConfig):
         video_end_token_id=151342,
         **kwargs,
     ):
-        super().__init__(**kwargs)
+        super().__init__()
         self.video_start_token_id = video_start_token_id
         self.video_end_token_id = video_end_token_id
         self.image_start_token_id = image_start_token_id
