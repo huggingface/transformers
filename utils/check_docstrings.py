@@ -37,7 +37,6 @@ import argparse
 import ast
 import enum
 import glob
-import importlib
 import inspect
 import operator as op
 import os
@@ -50,7 +49,6 @@ from check_repo import ignore_undocumented
 from git import Repo
 
 from transformers.utils import direct_transformers_import
-from transformers.utils.import_utils import fetch__all__, _LazyModule
 from transformers.utils.args_doc import (
     ImageProcessorArgs,
     ModelArgs,
@@ -59,6 +57,7 @@ from transformers.utils.args_doc import (
     parse_docstring,
     set_min_indent,
 )
+from transformers.utils.import_utils import _LazyModule, fetch__all__
 
 
 PATH_TO_REPO = Path(__file__).parent.parent.resolve()
@@ -1502,7 +1501,11 @@ def lazily_import_modular_public_objects():
         module_name = re.search(rf"(models{os.sep}.*)\.py", file).group(1).replace(os.sep, ".")
 
         # They may be in __all__, but not in the modular itself (if they are implicitly inherited)
-        public_classes = [obj for obj in fetch__all__(file_content) if f"class {obj}" in file_content and obj not in OBJECTS_TO_IGNORE]
+        public_classes = [
+            obj
+            for obj in fetch__all__(file_content)
+            if f"class {obj}" in file_content and obj not in OBJECTS_TO_IGNORE
+        ]
 
         # Lazily import them (to avoid importing dependencies such as torch etc)
         requirements = frozenset({"torch", "vision", "torch", "torchvision"})
@@ -1511,7 +1514,7 @@ def lazily_import_modular_public_objects():
         public_class_objects = [getattr(lazy_module, public_class) for public_class in public_classes]
 
         all_modular_public_classses.extend(public_class_objects)
-    
+
     return all_modular_public_classses
 
 
