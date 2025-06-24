@@ -98,10 +98,7 @@ class DiaTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer_classes.append(self.rust_tokenizer_class)
 
         for tokenizer_class in tokenizer_classes:
-            tokenizer = tokenizer_class.from_pretrained(
-                # TODO: move/upload to correct repo
-                "AntonV/Dia-1.6B",
-            )
+            tokenizer = tokenizer_class.from_pretrained("AntonV/Dia-1.6B")
 
             encoding = tokenizer(sequences)
             encoding_data = encoding.data

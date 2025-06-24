@@ -131,11 +131,12 @@ def convert_dia_model_to_hf(checkpoint_path, verbose=False):
 
             # dense general
             if key in hf_model_keys:
+                tensor_shape = tensor.shape
                 target_shape = hf_model_dict[key].shape
                 try:
                     tensor = tensor.reshape(target_shape[1], target_shape[0]).T
                     if verbose:
-                        print(f"{key}: transpose reshaped from {tensor.shape} to {target_shape}")
+                        print(f"{key}: transpose reshaped from {tensor_shape} to {target_shape}")
                 except Exception as e:
                     print(f"WARNING: Could not reshape {key}: {e}")
 
