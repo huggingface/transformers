@@ -85,7 +85,7 @@ def convert_dia_model_to_hf(checkpoint_path, verbose=False):
             Whether to print information during conversion.
     """
     # Download from HF Hub if checkpoint_path is None
-    checkpoint_path = snapshot_download(repo_id=checkpoint_path, allow_patterns="*.safetensors")
+    checkpoint_path = snapshot_download(repo_id=checkpoint_path, allow_patterns=["*.pth", "*.safetensors"])
     print(f"Downloaded checkpoint from Hugging Face Hub: {checkpoint_path}")
 
     # Initialize base model with default config == 1.6B model
@@ -99,7 +99,7 @@ def convert_dia_model_to_hf(checkpoint_path, verbose=False):
     for file in files:
         if file.endswith(".safetensors"):
             load_function = load_file
-        elif file.endswith(".pt"):
+        elif file.endswith(".pth"):
             load_function = torch.load
     checkpoint_path = os.path.join(checkpoint_path, files[0])
     nari_state_dict = load_function(checkpoint_path, "cpu")
