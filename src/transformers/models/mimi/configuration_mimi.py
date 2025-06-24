@@ -38,8 +38,8 @@ class MimiConfig(PretrainedConfig):
     Args:
         sampling_rate (`int`, *optional*, defaults to 24000):
             The sampling rate at which the audio waveform should be digitalized expressed in hertz (Hz).
-        frame_rate (`float`, *optional*, defaults to 12.5):
-            Framerate of the model.
+        frame_rate (`float`, *optional*):
+            Should be computed from the other parameters, yet kept for backward compatibility.
         audio_channels (`int`, *optional*, defaults to 1):
             Number of channels in the audio data. Either 1 for mono or 2 for stereo.
         hidden_size (`int`, *optional*, defaults to 512):
@@ -143,7 +143,7 @@ class MimiConfig(PretrainedConfig):
     def __init__(
         self,
         sampling_rate=24_000,
-        frame_rate=12.5,
+        frame_rate=None,
         audio_channels=1,
         hidden_size=512,
         num_filters=64,
@@ -183,7 +183,6 @@ class MimiConfig(PretrainedConfig):
         **kwargs,
     ):
         self.sampling_rate = sampling_rate
-        self.frame_rate = frame_rate
         self.audio_channels = audio_channels
         self.hidden_size = hidden_size
         self.num_filters = num_filters
@@ -220,6 +219,14 @@ class MimiConfig(PretrainedConfig):
         self.layer_scale_initial_scale = layer_scale_initial_scale
         self.attention_bias = attention_bias
 
+        # Handle backward compatibility for frame_rate:
+        # If frame_rate is explicitly provided, use it (backward compatibility)
+        # Otherwise, compute it from other parameters (correctly)
+        if frame_rate is not None:
+            self._frame_rate = frame_rate
+        else:
+            self._frame_rate = None
+
         if num_semantic_quantizers >= self.num_quantizers:
             raise ValueError(
                 f"The number of semantic quantizers should be lower than the total number of quantizers {self.num_quantizers}, but is currently {num_semantic_quantizers}."
@@ -239,7 +246,34 @@ class MimiConfig(PretrainedConfig):
 
     @property
     def frame_size(self) -> int:
-        return int(self.sampling_rate / self.frame_rate)
+        # 1. we need each encoder conv stride
+        # first conv
+        strides = [1]
+
+        # layer convs
+        for ratio in reversed(self.upsampling_ratios):
+            for j in range(self.num_residual_layers):
+                len_kernel_sizes = len(self.residual_kernel_size) if isinstance(self.residual_kernel_size, list) else 1
+                strides.extend([1] * (len_kernel_sizes + 1))
+                if self.use_conv_shortcut:  # skip connection
+                    strides.append(1)
+
+            strides.append(ratio)
+
+        # last conv
+        strides.append(1)
+
+        # downsampling layer
+        strides.append(2)
+
+        return math.prod(strides)
+
+    @property
+    def frame_rate(self) -> float:
+        # handle backward compatibility
+        if self._frame_rate is not None:
+            return self._frame_rate
+        return self.sampling_rate / self.frame_size
 
 
 __all__ = ["MimiConfig"]
