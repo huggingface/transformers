@@ -319,6 +319,7 @@ extras["audio"] = deps_list(
     "pyctcdecode",
     "phonemizer",
     "kenlm",
+)
 # `pip install ".[speech]"` is deprecated and `pip install ".[torch-speech]"` should be used instead
 extras["speech"] = deps_list("torchaudio") + extras["audio"]
 extras["torch-speech"] = deps_list("torchaudio") + extras["audio"]
