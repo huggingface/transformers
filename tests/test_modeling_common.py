@@ -3922,14 +3922,22 @@ class ModelTesterMixin:
                 model = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
 
                 sub_models_supporting_fa = [
-                    (module._supports_flash_attn_3 if attn_implementation == "flash_attention_3" else module._supports_flash_attn_2)
+                    (
+                        module._supports_flash_attn_3
+                        if attn_implementation == "flash_attention_3"
+                        else module._supports_flash_attn_2
+                    )
                     for name, module in model.named_modules()
                     if isinstance(module, PreTrainedModel) and name != ""
                 ]
                 supports_fa_all_modules = (
                     all(sub_models_supporting_fa)
                     if len(sub_models_supporting_fa) > 0
-                    else (model._supports_flash_attn_3 if attn_implementation == "flash_attention_3" else model._supports_flash_attn_2)
+                    else (
+                        model._supports_flash_attn_3
+                        if attn_implementation == "flash_attention_3"
+                        else model._supports_flash_attn_2
+                    )
                 )
                 if not supports_fa_all_modules:
                     with self.assertRaises(ValueError):
@@ -4028,14 +4036,20 @@ class ModelTesterMixin:
                     # with attention mask
                     _ = model(dummy_input, attention_mask=dummy_attention_mask)
 
-    def flash_attention_padding_matches_padding_free_with_position_ids(self, attn_implementation: str, fa_kwargs: bool = False):
+    def flash_attention_padding_matches_padding_free_with_position_ids(
+        self, attn_implementation: str, fa_kwargs: bool = False
+    ):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
         max_new_tokens = 30
 
         for model_class in self.all_generative_model_classes:
-            if not (model_class._supports_flash_attn_2 if attn_implementation == "flash_attention_2" else model_class._supports_flash_attn_3):
+            if not (
+                model_class._supports_flash_attn_2
+                if attn_implementation == "flash_attention_2"
+                else model_class._supports_flash_attn_3
+            ):
                 self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -4079,14 +4093,16 @@ class ModelTesterMixin:
                 if fa_kwargs:
                     # flatten
                     features = [
-                    {"input_ids": i[a.bool()].tolist()}
+                        {"input_ids": i[a.bool()].tolist()}
                         for i, a in zip(inputs_dict["input_ids"], inputs_dict["attention_mask"])
                     ]
 
                     # add position_ids + fa_kwargs
                     data_collator = DataCollatorWithFlattening(return_tensors="pt", return_flash_attn_kwargs=True)
                     batch = data_collator(features)
-                    padfree_inputs_dict = {k: t.to(torch_device) if torch.is_tensor(t) else t for k, t in batch.items()}
+                    padfree_inputs_dict = {
+                        k: t.to(torch_device) if torch.is_tensor(t) else t for k, t in batch.items()
+                    }
                 else:
                     # flatten
                     padfree_inputs_dict = {
@@ -4125,7 +4141,9 @@ class ModelTesterMixin:
     @mark.flash_attn_test
     @slow
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
-        self.flash_attention_padding_matches_padding_free_with_position_ids(attn_implementation="flash_attention_2", fa_kwargs=True)
+        self.flash_attention_padding_matches_padding_free_with_position_ids(
+            attn_implementation="flash_attention_2", fa_kwargs=True
+        )
 
     @require_flash_attn_3
     @require_torch_gpu
@@ -4139,7 +4157,9 @@ class ModelTesterMixin:
     @mark.flash_attn_3_test
     @slow
     def test_flash_attention_3_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
-        self.flash_attention_padding_matches_padding_free_with_position_ids(attn_implementation="flash_attention_3", fa_kwargs=True)
+        self.flash_attention_padding_matches_padding_free_with_position_ids(
+            attn_implementation="flash_attention_3", fa_kwargs=True
+        )
 
     def flash_attn_from_config(self, attn_implementation: str):
         r"""
