@@ -4413,6 +4413,7 @@ class ModelTesterMixin:
 
     @slow
     @require_torch_accelerator
+    @torch._dynamo.config.patch(capture_dynamic_output_shape_ops=True, capture_scalar_outputs=True)
     def test_torch_compile_for_training(self):
         if version.parse(torch.__version__) < version.parse("2.3"):
             self.skipTest(reason="This test requires torch >= 2.3 to run.")
