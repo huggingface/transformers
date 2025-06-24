@@ -23,6 +23,7 @@ from torch import Tensor, nn
 
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, is_timm_available, logging, requires_backends
@@ -827,7 +828,7 @@ class ConditionalDetrEncoderLayer(nn.Module):
         return outputs
 
 
-class ConditionalDetrDecoderLayer(nn.Module):
+class ConditionalDetrDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: ConditionalDetrConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -1297,31 +1298,18 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
                 pos_transformation = self.query_scale(hidden_states)
             # apply transformation
             query_sine_embed = query_sine_embed_before_transformation * pos_transformation
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    None,
-                    object_queries,
-                    query_position_embeddings,
-                    query_sine_embed,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    None,
-                    None,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=None,
-                    object_queries=object_queries,
-                    query_position_embeddings=query_position_embeddings,
-                    query_sine_embed=query_sine_embed,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
-                    output_attentions=output_attentions,
-                    is_first=(idx == 0),
-                )
+
+            layer_outputs = decoder_layer(
+                hidden_states,
+                None,  # attention_mask
+                object_queries,
+                query_position_embeddings,
+                query_sine_embed,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                encoder_attention_mask=encoder_attention_mask,
+                output_attentions=output_attentions,
+                is_first=(idx == 0),
+            )
 
             hidden_states = layer_outputs[0]
 
