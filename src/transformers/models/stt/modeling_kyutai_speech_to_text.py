@@ -180,7 +180,6 @@ class KyutaiSpeechToTextConv1dPaddingCache:
     def update(self, hidden_states: torch.Tensor, layer_idx: int):
         """
         Updates the padding cache with the new padding states for the layer `layer_idx` and returns the current cache.
-        If cache was not yet initialized, it is initialized with the padding states and None is returned.
 
         Parameters:
             hidden_states (`torch.Tensor`):
