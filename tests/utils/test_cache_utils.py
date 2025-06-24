@@ -627,6 +627,12 @@ class CacheExportIntegrationTest(unittest.TestCase):
             self.assertTrue(torch.allclose(v1, v2))
 
     def test_dynamic_cache_exportability_multiple_run(self):
+        # When exporting with DynamicCache, you should export two graphs:
+        #   1. A graph without cache
+        #   2. A graph with cache
+        # In the future, we will make improvements to export API to export two graphs
+        # more seamlessly.
+
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
         model = model.eval()
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
