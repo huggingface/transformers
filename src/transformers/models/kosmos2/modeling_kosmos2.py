@@ -22,7 +22,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from flex_example_01 import is_causal
+
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
