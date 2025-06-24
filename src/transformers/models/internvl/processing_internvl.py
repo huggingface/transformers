@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -21,7 +21,7 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, concatenate_list, make_flat_list_of_images
 from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...video_utils import VideoInput, VideoMetadata, load_video, make_batched_videos
+from ...video_utils import VideoInput, make_batched_videos
 
 
 class InternVLImagesKwargs(ImagesKwargs, total=False):
@@ -156,7 +156,7 @@ class InternVLProcessor(ProcessorMixin):
     def __call__(
         self,
         images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
         audio=None,
         videos: Optional[VideoInput] = None,
         **kwargs: Unpack[InternVLProcessorKwargs],
@@ -169,14 +169,14 @@ class InternVLProcessor(ProcessorMixin):
         GotOcr2ImageProcessor's [`~GotOcr2ImageProcessor.__call__`] if `images` is not `None`.
 
         Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            videos (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            videos (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of videos to be prepared. Each video can be a 4D NumPy array or PyTorch
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
@@ -223,12 +223,15 @@ class InternVLProcessor(ProcessorMixin):
             image_num_patches_indices = np.cumsum(image_num_patches)
         if videos is not None:
             videos = make_batched_videos(videos)
-            num_frames_per_video = [len(video) for video in videos]
-            video_patch_indices = np.cumsum(num_frames_per_video)
             video_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
+            video_pixel_values = video_inputs.pop("pixel_values_videos")
+
+            # Obtain per frame information first and then flatten to (BS * T, ...)
+            num_frames_per_video = [len(video) for video in video_pixel_values]
             video_num_patches = [1 for frames in num_frames_per_video for _ in range(frames)]
-            video_pixel_values = video_inputs.pop("pixel_values_videos").flatten(0, 1)
+            video_patch_indices = np.cumsum(num_frames_per_video)
             video_num_patches_indices = np.cumsum(video_num_patches)
+            video_pixel_values = video_pixel_values.flatten(0, 1)
 
         if images is not None or videos is not None:
             text, image_video_patches, image_index, video_index = self._insert_media_placeholders(
@@ -267,7 +270,7 @@ class InternVLProcessor(ProcessorMixin):
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
 
         Args:
-            image_sizes (`List[List[int]]`, *optional*):
+            image_sizes (`list[list[int]]`, *optional*):
                 The input sizes formatted as (height, width) per each image.
 
         Returns:
@@ -290,32 +293,6 @@ class InternVLProcessor(ProcessorMixin):
 
         return MultiModalData(**vision_data)
 
-    def sample_indices_fn(
-        self, metadata: VideoMetadata, num_frames: Optional[int] = None, initial_shift: Union[bool, float, int] = True
-    ):
-        """
-        The function to generate indices of frames to sample from a video.
-
-        Args:
-            metadata (`VideoMetadata`):
-                `VideoMetadata` object containing metadata about the video, such as "total_num_frames" or "fps".
-            num_frames (`int`, *optional*):
-                Number of frames to sample uniformly. If None, all frames are sampled.
-            initial_shift (`bool`, `float` or `int`, defaults to `0`):
-                The initial shift to apply when sampling frames. If `True`, the shift is set so that frames are sampled from the middle of the video.
-
-        Returns:
-            `np.ndarray`: Array of frame indices to sample.
-        """
-        num_frames = num_frames if num_frames is not None else metadata.total_num_frames
-
-        if initial_shift is True:
-            initial_shift = metadata.total_num_frames / num_frames / 2
-        indices = np.arange(initial_shift, metadata.total_num_frames, metadata.total_num_frames / num_frames).astype(
-            int
-        )
-        return indices
-
     def batch_decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
@@ -335,40 +312,6 @@ class InternVLProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(tokenizer_input_names) + list(image_processor_input_names)
-
-    # TODO: raushan, has to be public method under `VideoProcessorBase` when API is added
-    def _load_video_for_model(
-        self,
-        video: Union[str, "VideoInput"],
-        num_frames: Optional[int],
-        backend: str = "pyav",
-        initial_shift: bool = True,
-        **kwargs,
-    ) -> np.array:
-        """
-        Loads `video` to a numpy array.
-
-        Args:
-            video (`str` or `VideoInput`):
-                The video to convert to the numpy array format. Can be a link to video or local path.
-            num_frames (`int`, *optional*):
-                Number of frames to sample uniformly. If not passed, the whole video is loaded.
-            backend (`str`, *optional*, defaults to `"pyav"`):
-                The backend to use when loading the video. Can be any of ["decord", "pyav", "opencv", "torchvision"]. Defaults to "pyav".
-            initial_shift (`bool`, *optional*, defaults to `True`):
-                The initial shift to apply when sampling frames. If `True`, the shift is set so that frames are sampled from the middle of the video.
-
-        Returns:
-            Tuple[`np.array`, Dict]: A tuple containing:
-                - Numpy array of frames in RGB (shape: [num_frames, height, width, 3]).
-                - Metadata dictionary.
-        """
-
-        def sample_indices_fn_func(metadata, **fn_kwargs):
-            return self.sample_indices_fn(metadata, num_frames=num_frames, initial_shift=initial_shift, **fn_kwargs)
-
-        video, metadata = load_video(video, backend=backend, sample_indices_fn=sample_indices_fn_func)
-        return video, metadata
 
 
 __all__ = ["InternVLProcessor"]

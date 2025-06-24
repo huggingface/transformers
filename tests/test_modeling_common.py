@@ -84,6 +84,7 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_deepspeed,
     require_flash_attn,
+    require_non_hpu,
     require_safetensors,
     require_torch,
     require_torch_accelerator,
@@ -92,6 +93,7 @@ from transformers.testing_utils import (
     require_torch_multi_accelerator,
     require_torch_multi_gpu,
     require_torch_sdpa,
+    run_first,
     run_test_using_subprocess,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
@@ -578,87 +580,6 @@ class ModelTesterMixin:
                 f"The following keys are not properly handled by `_init_weights()`:\n{different_weights}",
             )
 
-    @slow
-    @require_accelerate
-    @mark.accelerate_tests
-    def test_save_load_low_cpu_mem_usage(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        with tempfile.TemporaryDirectory() as saved_model_path:
-            for model_class in self.all_model_classes:
-                model_to_save = model_class(config)
-                model_to_save.save_pretrained(saved_model_path)
-
-                self._check_save_load_low_cpu_mem_usage(model_class, saved_model_path)
-
-    @slow
-    @require_accelerate
-    @mark.accelerate_tests
-    def test_save_load_low_cpu_mem_usage_checkpoints(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        with tempfile.TemporaryDirectory() as saved_model_path:
-            for model_class in self.all_model_classes:
-                model_to_save = model_class(config)
-                model_to_save.config.save_pretrained(saved_model_path)
-                torch.save(model_to_save.state_dict(), os.path.join(saved_model_path, "pytorch_model.bin"))
-
-                self._check_save_load_low_cpu_mem_usage(model_class, saved_model_path)
-
-    @slow
-    @require_accelerate
-    @mark.accelerate_tests
-    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
-        with tempfile.TemporaryDirectory() as saved_model_path:
-            for model_class in self.all_model_classes:
-                config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-                model_to_save = model_class(config)
-
-                model_to_save.save_pretrained(saved_model_path, safe_serialization=False)
-                self._check_save_load_low_cpu_mem_usage(model_class, saved_model_path)
-
-    def _check_save_load_low_cpu_mem_usage(self, model_class, saved_model_path):
-        from accelerate.utils.modeling import named_module_tensors
-
-        # Load the low usage and the normal models.
-        model_low_usage, loading_info = model_class.from_pretrained(
-            saved_model_path,
-            low_cpu_mem_usage=True,
-            output_loading_info=True,
-        )
-        model_non_low_usage = model_class.from_pretrained(saved_model_path)
-
-        # Check that there were no missing keys.
-        self.assertEqual(loading_info["missing_keys"], [])
-
-        # The low_cpu_mem_usage=True causes the model params to be initialized with device=meta, and then
-        # subsequently loaded with the correct values and onto the correct device. We check if there are any
-        # remaining params that were not properly loaded.
-        for name, tensor in named_module_tensors(model_low_usage, recurse=True):
-            self.assertNotEqual(
-                tensor.device,
-                torch.device("meta"),
-                "Tensor '" + name + "' has not been properly loaded and has device=meta.",
-            )
-
-        # Check that the parameters are equal.
-        for p1, p2 in zip(model_low_usage.parameters(), model_non_low_usage.parameters()):
-            self.assertEqual(p1.data.ne(p2.data).sum(), 0)
-
-        # Check that the state dict keys are equal.
-        self.assertEqual(set(model_low_usage.state_dict().keys()), set(model_non_low_usage.state_dict().keys()))
-
-        # Check that the shared tensors are equal.
-        tensor_ptrs1 = collections.defaultdict(list)
-        for name, tensor in model_low_usage.state_dict().items():
-            tensor_ptrs1[id_tensor_storage(tensor)].append(name)
-        tied_params1 = [names for _, names in tensor_ptrs1.items() if len(names) > 1]
-
-        tensor_ptrs2 = collections.defaultdict(list)
-        for name, tensor in model_non_low_usage.state_dict().items():
-            tensor_ptrs2[id_tensor_storage(tensor)].append(name)
-        tied_params2 = [names for _, names in tensor_ptrs2.items() if len(names) > 1]
-
-        self.assertEqual(tied_params1, tied_params2)
-
     def test_torch_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if config.__class__ not in MODEL_MAPPING:
@@ -716,8 +637,16 @@ class ModelTesterMixin:
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad:
+                    data = torch.flatten(param.data)
+                    n_elements = torch.numel(data)
+                    # skip 2.5% of elements on each side to avoid issues caused by `nn.init.trunc_normal_` described in
+                    # https://github.com/huggingface/transformers/pull/27906#issuecomment-1846951332
+                    n_elements_to_skip_on_each_side = int(n_elements * 0.025)
+                    data_to_check = torch.sort(data).values
+                    if n_elements_to_skip_on_each_side > 0:
+                        data_to_check = data_to_check[n_elements_to_skip_on_each_side:-n_elements_to_skip_on_each_side]
                     self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
+                        ((data_to_check.mean() * 1e9).round() / 1e9).item(),
                         [0.0, 1.0],
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
@@ -936,7 +865,7 @@ class ModelTesterMixin:
                     model = AutoModelForCausalLM.from_pretrained(
                         tmpdir, torch_dtype=torch.float32, device_map=torch_device
                     )
-                    inputs_dict["num_items_in_batch"] = inputs_dict["input_ids"].shape[0]
+                    inputs_dict["num_items_in_batch"] = torch.tensor(inputs_dict["input_ids"].shape[0])
                     inputs_dict["labels"] = inputs_dict["input_ids"]
                     _ = model(**inputs_dict, return_dict=False)
 
@@ -1293,6 +1222,7 @@ class ModelTesterMixin:
                     "input_values",
                     "inputs_embeds",
                     "pixel_values",
+                    "pixel_values_videos",
                     "token_type_ids",
                     "visual_feats",
                     "visual_pos",
@@ -2869,6 +2799,7 @@ class ModelTesterMixin:
                     else:
                         torch.testing.assert_close(base_output[0], new_output[0], rtol=1e-5, atol=1e-5)
 
+    @require_non_hpu
     @require_accelerate
     @mark.accelerate_tests
     @require_torch_multi_accelerator
@@ -3635,7 +3566,11 @@ class ModelTesterMixin:
             # TODO: if we can also check with `batch_size=1` without being flaky?
             for batch_size in [7]:
                 # musicgen decoder models; TODO: find better abstraction
-                if hasattr(self.model_tester, "num_codebooks") and not hasattr(model_eager, "text_encoder"):
+                if (
+                    model.__class__.__name__.startswith("Musicgen")
+                    and hasattr(self.model_tester, "num_codebooks")
+                    and not hasattr(model_eager, "text_encoder")
+                ):
                     input_data_batch_size = batch_size * self.model_tester.num_codebooks
                 else:
                     input_data_batch_size = batch_size
@@ -3695,7 +3630,7 @@ class ModelTesterMixin:
 
                 if is_encoder_decoder:
                     # musicgen encoder-decoder models; TODO: find better abstraction
-                    if hasattr(self.model_tester, "num_codebooks"):
+                    if model.__class__.__name__.startswith("Musicgen") and hasattr(self.model_tester, "num_codebooks"):
                         input_data_batch_size = batch_size * self.model_tester.num_codebooks
                     else:
                         input_data_batch_size = batch_size
@@ -3799,6 +3734,9 @@ class ModelTesterMixin:
                 if torch_device in ["cpu", "cuda"]:
                     atol = atols[torch_device, enable_kernels, torch_dtype]
                     rtol = rtols[torch_device, enable_kernels, torch_dtype]
+                elif torch_device == "hpu":
+                    atol = atols["cuda", enable_kernels, torch_dtype]
+                    rtol = rtols["cuda", enable_kernels, torch_dtype]
                 elif torch_device == "xpu":
                     # As of PyTorch 2.5 XPU backend supports only torch.nn.attention.SDPBackend.MATH
                     # which is implemented on PyTorch level using aten operators and is
@@ -3847,7 +3785,7 @@ class ModelTesterMixin:
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
-        (device_type, major) = get_device_properties()
+        device_type, major, minor = get_device_properties()
         if device_type == "cuda" and major < 8:
             self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
         elif device_type == "rocm" and major < 9:
@@ -3867,11 +3805,27 @@ class ModelTesterMixin:
                 self.skipTest(
                     "PaliGemma-like models currently (transformers==4.41.0) requires an attention_mask input"
                 )
+            if config.model_type in ["modernbert", "gemma3"]:
+                self.skipTest(
+                    reason=f"{config.model_type} currently (transformers==4.52.0) automatically adds an attention_mask input"
+                )
             if config.model_type in ["idefics", "idefics2", "idefics3"]:
                 self.skipTest(reason="Idefics currently (transformers==4.39.1) requires an image_attention_mask input")
             if config.model_type in ["sam"]:
                 self.skipTest(reason="SAM requires an attention_mask input for relative positional embeddings")
+
             model = model_class(config)
+
+            sub_models_supporting_sdpa = [
+                module._supports_sdpa
+                for name, module in model.named_modules()
+                if isinstance(module, PreTrainedModel) and name != ""
+            ]
+            supports_sdpa_all_modules = (
+                all(sub_models_supporting_sdpa) if len(sub_models_supporting_sdpa) > 0 else model._supports_sdpa
+            )
+            if not supports_sdpa_all_modules:
+                self.skipTest(reason="This models' submodels does not support sdpa")
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
@@ -3895,7 +3849,7 @@ class ModelTesterMixin:
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
-        (device_type, major) = get_device_properties()
+        device_type, major, minor = get_device_properties()
         if device_type == "cuda" and major < 8:
             self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
         elif device_type == "rocm" and major < 9:
@@ -3920,7 +3874,19 @@ class ModelTesterMixin:
                     "Cannot compile forward without an existing cache with Hybrid, as `torch._dynamo.mark_static_address` "
                     "is a forbidden call."
                 )
+
             model = model_class(config)
+
+            sub_models_supporting_sdpa = [
+                module._supports_sdpa
+                for name, module in model.named_modules()
+                if isinstance(module, PreTrainedModel) and name != ""
+            ]
+            supports_sdpa_all_modules = (
+                all(sub_models_supporting_sdpa) if len(sub_models_supporting_sdpa) > 0 else model._supports_sdpa
+            )
+            if not supports_sdpa_all_modules:
+                self.skipTest(reason="This models' submodels does not support sdpa")
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
@@ -4091,7 +4057,6 @@ class ModelTesterMixin:
                     tmpdirname,
                     torch_dtype=torch.float16,
                     attn_implementation="flash_attention_2",
-                    low_cpu_mem_usage=True,
                     load_in_4bit=True,
                 )
 
@@ -4164,7 +4129,6 @@ class ModelTesterMixin:
                         tmpdirname,
                         torch_dtype=torch.float16,
                         attn_implementation="flash_attention_2",
-                        low_cpu_mem_usage=True,
                     )
                     .to(torch_device)
                     .eval()
@@ -4239,7 +4203,6 @@ class ModelTesterMixin:
                         tmpdirname,
                         torch_dtype=torch.float16,
                         attn_implementation="flash_attention_2",
-                        low_cpu_mem_usage=True,
                     )
                     .to(torch_device)
                     .eval()
@@ -4560,10 +4523,7 @@ class ModelTesterMixin:
 
                 # Export model
                 exported_model = torch.export.export(
-                    model,
-                    args=(),
-                    kwargs=inputs_dict,
-                    strict=True,
+                    model, args=(), kwargs=inputs_dict, strict=getattr(self, "test_torch_exportable_strictly", True)
                 )
 
                 # Run exported model and eager model
@@ -4716,6 +4676,7 @@ class ModelTesterMixin:
 
     # Here we need to run with a subprocess as otherwise setting back the default device to the default value ("cpu")
     # may bring unwanted consequences on other tests. See PR #37553
+    @run_first
     @run_test_using_subprocess
     @require_torch_accelerator
     def test_can_load_with_global_device_set(self):

@@ -28,6 +28,7 @@ from transformers.testing_utils import (
     get_tests_dir,
     require_deepspeed,
     require_torch_accelerator,
+    run_first,
     slow,
     torch_device,
 )
@@ -327,6 +328,7 @@ params = list(itertools.product(stages, task_cmds.keys()))
 
 
 @slow
+@run_first
 @require_deepspeed
 @require_torch_accelerator
 class TestDeepSpeedModelZoo(TestCasePlus):
