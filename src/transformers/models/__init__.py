@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from .albert import *
     from .align import *
     from .altclip import *
+    from .arcee import *
     from .aria import *
     from .audio_spectrogram_transformer import *
     from .auto import *
@@ -162,6 +163,7 @@ if TYPE_CHECKING:
     from .layoutxlm import *
     from .led import *
     from .levit import *
+    from .lightglue import *
     from .lilt import *
     from .llama import *
     from .llama4 import *
