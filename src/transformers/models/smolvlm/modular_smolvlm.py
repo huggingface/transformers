@@ -22,7 +22,7 @@ from torch import nn
 from ...cache_utils import DynamicCache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils import logging
 from ..idefics3.configuration_idefics3 import Idefics3Config, Idefics3VisionConfig
 from ..idefics3.image_processing_idefics3 import Idefics3ImageProcessor
 from ..idefics3.image_processing_idefics3_fast import Idefics3ImageProcessorFast
