@@ -294,8 +294,35 @@ def infer_framework_load_model(
                     model = model.eval()
                 # Stop loading on the first successful load.
                 break
-            except (OSError, ValueError):
-                all_traceback[model_class.__name__] = traceback.format_exc()
+            except (OSError, ValueError, TypeError, RuntimeError):
+                # `from_pretrained` may raise a `TypeError` or `RuntimeError` when the requested `torch_dtype`
+                # is not supported on the execution device (e.g. bf16 on a consumer GPU). We capture those so
+                # we can transparently retry the load in float32 before surfacing an error to the user.
+                fallback_tried = False
+                if is_torch_available() and ("torch_dtype" in kwargs):
+                    import torch  # local import to avoid unnecessarily importing torch for TF/JAX users
+
+                    fallback_tried = True
+                    fp32_kwargs = kwargs.copy()
+                    fp32_kwargs["torch_dtype"] = torch.float32
+
+                    try:
+                        model = model_class.from_pretrained(model, **fp32_kwargs)
+                        if hasattr(model, "eval"):
+                            model = model.eval()
+                        logger.warning(
+                            "Falling back to torch.float32 because loading with the original dtype failed on the"
+                            " target device."
+                        )
+                        break
+                    except Exception:
+                        # If it still fails, capture the traceback and continue to the next class.
+                        all_traceback[model_class.__name__] = traceback.format_exc()
+                        continue
+
+                # If no fallback was attempted or it also failed, record the original traceback.
+                if not fallback_tried:
+                    all_traceback[model_class.__name__] = traceback.format_exc()
                 continue
 
         if isinstance(model, str):
@@ -1011,6 +1038,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         logger.warning(f"Device set to use {self.device}")
 
         self.binary_output = binary_output
+
         # We shouldn't call `model.to()` for models loaded with accelerate as well as the case that model is already on device
         if (
             self.framework == "pt"
