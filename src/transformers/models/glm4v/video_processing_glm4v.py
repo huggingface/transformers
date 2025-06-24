@@ -80,7 +80,7 @@ class Glm4vVideoProcessorInitKwargs(VideosKwargs):
 @requires(backends=("torchvision",))
 class Glm4vVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
-    size = {"shortest_edge": 112 * 112, "longest_edge": 28 * 28 * 30000}
+    size = {"shortest_edge": 112 * 112, "longest_edge": 28 * 28 * 2 * 30000}
     max_image_size = {"longest_edge": 28 * 28 * 2 * 30000}
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD
