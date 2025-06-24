@@ -260,7 +260,7 @@ class Qwen3IntegrationTest(unittest.TestCase):
         max_generation_length = tokenizer(EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True)[
             "input_ids"
         ].shape[-1]
-        device = "cpu"
+        device = torch_device
         dtype = torch.bfloat16
         cache_implementation = "static"
         attn_implementation = "sdpa"

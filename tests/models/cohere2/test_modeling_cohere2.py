@@ -242,7 +242,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
 
         tokenizer = AutoTokenizer.from_pretrained(model_id, pad_token="<PAD>", padding_side="right")
         # Load model
-        device = "cpu"
+        device = torch_device
         dtype = torch.bfloat16
         cache_implementation = "static"
         attn_implementation = "sdpa"

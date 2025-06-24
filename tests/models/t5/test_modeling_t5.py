@@ -1774,7 +1774,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, T5ForConditionalGeneration
         from transformers.integrations.executorch import Seq2SeqLMExportableModule
 
-        device = "cpu"
+        device = torch_device
         batch_size = 1
         max_cache_length = 1234
         max_hidden_seq_length = 5678
