@@ -530,34 +530,25 @@ class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedMo
 
 
 @dataclass
-class Qwen2_5OmniThinkerCausalLMOutputWithPast(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for Qwen2.5OmniThinker causal language model (or autoregressive) outputs.
+    """
+)
+class Qwen2_5OmniThinkerCausalLMOutputWithPast(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`, *optional*):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
 
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss (for next-token prediction).
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`, *optional*):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-            `past_key_values` input) to speed up sequential decoding.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-            The rope index difference between sequence length and multimodal rope.
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
+        The rope index difference between sequence length and multimodal rope.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -727,7 +718,7 @@ QWEN2_5_OMNI_AUDIO_ATTENTION_CLASSES = {
 }
 
 
-class Qwen2_5OmniAudioEncoderLayer(nn.Module):
+class Qwen2_5OmniAudioEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Qwen2_5OmniAudioEncoderConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -889,19 +880,8 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
             )
         ).to(torch.int32)
 
-        for idx, encoder_layer in enumerate(self.layers):
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    encoder_layer.__call__,
-                    hidden_states,
-                    cu_seqlens,
-                )
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    cu_seqlens,
-                )
-
+        for encoder_layer in self.layers:
+            layer_outputs = encoder_layer(hidden_states, cu_seqlens)
             hidden_states = layer_outputs[0]
 
         hidden_states_list = hidden_states.split(aftercnn_lens.tolist(), dim=0)
@@ -1107,7 +1087,7 @@ QWEN2_5_OMNI_VISION_ATTENTION_CLASSES = {
 }
 
 
-class Qwen2_5OmniVisionBlock(nn.Module):
+class Qwen2_5OmniVisionBlock(GradientCheckpointingLayer):
     def __init__(self, config: Qwen2_5OmniVisionEncoderConfig) -> None:
         super().__init__()
         self.norm1 = Qwen2RMSNorm(config.hidden_size, eps=1e-6)
@@ -1324,16 +1304,11 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
                 cu_seqlens_now = cu_seqlens
             else:
                 cu_seqlens_now = cu_window_seqlens
-            if self.gradient_checkpointing and self.training:
-                hidden_states = self._gradient_checkpointing_func(
-                    blk.__call__, hidden_states, cu_seqlens_now, rotary_pos_emb
-                )
-            else:
-                hidden_states = blk(
-                    hidden_states,
-                    cu_seqlens=cu_seqlens_now,
-                    rotary_pos_emb=rotary_pos_emb,
-                )
+            hidden_states = blk(
+                hidden_states,
+                cu_seqlens=cu_seqlens_now,
+                rotary_pos_emb=rotary_pos_emb,
+            )
         hidden_states = self.merger(hidden_states)
         reverse_indices = torch.argsort(window_index)
         hidden_states = hidden_states[reverse_indices, :]
@@ -1760,30 +1735,17 @@ class Qwen2_5OmniThinkerTextModel(Qwen2_5OmniPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    causal_mask_mapping[decoder_layer.attention_type],
-                    position_ids,
-                    past_key_values,
-                    output_attentions,
-                    use_cache,
-                    cache_position,
-                    position_embeddings,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=causal_mask_mapping[decoder_layer.attention_type],
-                    position_ids=position_ids,
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                    position_embeddings=position_embeddings,
-                    **kwargs,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                position_ids=position_ids,
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                position_embeddings=position_embeddings,
+                **kwargs,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -1846,6 +1808,12 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
 
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
+
+    def set_decoder(self, decoder):
+        self.model = decoder
+
+    def get_decoder(self):
+        return self.model
 
     def get_video_features(
         self, pixel_values_videos: torch.FloatTensor, video_grid_thw: Optional[torch.LongTensor] = None
@@ -2174,34 +2142,28 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
 
 
 @dataclass
-class Qwen2_5OmniTalkerCausalLMOutputWithPast(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for Qwen2.5OmniTalker causal language model (or autoregressive) outputs.
+    """
+)
+class Qwen2_5OmniTalkerCausalLMOutputWithPast(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
 
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss (for next-token prediction).
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-            `past_key_values` input) to speed up sequential decoding.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-            The rope index difference between sequence length and multimodal rope.
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
+        The rope index difference between sequence length and multimodal rope.
+    thinker_reply_part (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        Hidden states from the thinker model that are used as input for the talker model. These represent the encoded
+        response that the talker model will use to generate speech tokens.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -2325,30 +2287,17 @@ class Qwen2_5OmniTalkerModel(Qwen2_5OmniPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    causal_mask_mapping[decoder_layer.attention_type],
-                    position_ids,
-                    past_key_values,
-                    output_attentions,
-                    use_cache,
-                    cache_position,
-                    position_embeddings,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=causal_mask_mapping[decoder_layer.attention_type],
-                    position_ids=position_ids,
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                    position_embeddings=position_embeddings,
-                    **kwargs,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                position_ids=position_ids,
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                position_embeddings=position_embeddings,
+                **kwargs,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -2432,20 +2381,20 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, Qwen2_5OmniTalkerCausalLMOutputWithPast]:
         r"""
+        thinker_reply_part (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Hidden states from the thinker model's output that represent the text reply part to be processed.
         rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
             The rope index difference between sequence length and multimodal rope.
+        input_text_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Input token IDs for text-only content, used for position calculation in multimodal contexts.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
-        audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
-            The length of feature shape of each audio in LLM.
-        thinker_reply_part (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Hidden states from the thinker model's output that represent the text reply part to be processed.
-        input_text_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Input token IDs for text-only content, used for position calculation in multimodal contexts.
         use_audio_in_video (`bool`, *optional*):
             Whether or not use audio track in video, should same as the parameter in `process_audio_info`.
+        audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
+            The length of feature shape of each audio in LLM.
         video_second_per_grid (`torch.LongTensor` of shape `(num_videos)`, *optional*):
             Number of seconds per grid for each video, used for temporal feature mapping.
 

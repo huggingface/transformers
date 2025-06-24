@@ -32,6 +32,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     MoeCausalLMOutputWithPast,
@@ -485,7 +486,7 @@ class MiniMaxSparseMoeBlock(nn.Module):
         return final_hidden_states, router_logits
 
 
-class MiniMaxDecoderLayer(nn.Module):
+class MiniMaxDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: MiniMaxConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -1208,17 +1209,6 @@ class MiniMaxForQuestionAnswering(MiniMaxPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         **kwargs,
     ) -> QuestionAnsweringModelOutput:
-        r"""
-        start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        """
-
         outputs: BaseModelOutputWithPast = self.model(
             input_ids,
             attention_mask=attention_mask,

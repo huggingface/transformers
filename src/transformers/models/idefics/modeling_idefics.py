@@ -32,10 +32,10 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PretrainedConfig, PreTrainedModel
 from ...processing_utils import Unpack
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import LossKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
 from .configuration_idefics import IdeficsConfig
 from .perceiver import IdeficsPerceiverResampler
@@ -52,41 +52,32 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class IdeficsBaseModelOutputWithPast(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for Idefics model's outputs that may also contain a past key/values (to speed up sequential decoding).
+    """
+)
+class IdeficsBaseModelOutputWithPast(ModelOutput):
+    r"""
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the model.
 
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
+        If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
+        hidden_size)` is output.
+    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+        `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
+        `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
+        encoder_sequence_length, embed_size_per_head)`.
 
-            If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
-            hidden_size)` is output.
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
-            `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
-            encoder_sequence_length, embed_size_per_head)`.
+        Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
+        `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
+        input) to speed up sequential decoding.
+    image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+        Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
+        sequence_length, hidden_size)`.
 
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
-            `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
-            input) to speed up sequential decoding.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
-            sequence_length, hidden_size)`.
-
-            image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
+        image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
@@ -97,37 +88,28 @@ class IdeficsBaseModelOutputWithPast(ModelOutput):
 
 
 @dataclass
-class IdeficsCausalLMOutputWithPast(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for Idefics causal language model (or autoregressive) outputs.
+    """
+)
+class IdeficsCausalLMOutputWithPast(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
 
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss (for next-token prediction).
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+        Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
+        sequence_length, hidden_size)`.
 
-            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-            `past_key_values` input) to speed up sequential decoding.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
-            sequence_length, hidden_size)`.
-
-            image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
+        image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -384,9 +366,6 @@ class IdeficsRMSNorm(nn.Module):
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-ALL_LAYERNORM_LAYERS.append(IdeficsRMSNorm)
 
 
 # this was adapted from LlamaRotaryEmbedding
@@ -672,7 +651,7 @@ class IdeficsAttention(nn.Module):
 
 
 # this was adapted from LlamaDecoderLayer
-class IdeficsDecoderLayer(nn.Module):
+class IdeficsDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: IdeficsConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -753,7 +732,7 @@ class IdeficsDecoderLayer(nn.Module):
         return outputs
 
 
-class IdeficsGatedCrossAttentionLayer(nn.Module):
+class IdeficsGatedCrossAttentionLayer(GradientCheckpointingLayer):
     def __init__(self, config: IdeficsConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -1189,95 +1168,32 @@ class IdeficsModel(IdeficsPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            def vblock(
-                main_block,
-                hidden_states,
-                attention_mask,
-                position_ids,
-                past_key_value,
-                image_hidden_states,
-                image_attention_mask,
-                cross_attention_gate,
-                output_attentions,
-                use_cache,
-                layer_idx,
-                cross_layer_interval,
-                gated_cross_attn_layers,
-                cache_position,
-            ):
-                # TODO(ls): Add cross attention values to respective lists
-                if layer_idx % cross_layer_interval == 0:
-                    xblock = gated_cross_attn_layers[layer_idx // cross_layer_interval]
-                    outputs = xblock(
-                        hidden_states,
-                        attention_mask=attention_mask,
-                        image_hidden_states=image_hidden_states,
-                        image_attention_mask=image_attention_mask,
-                        cross_attention_gate=cross_attention_gate,
-                        output_attentions=output_attentions,
-                        use_cache=use_cache,
-                        past_key_value=None,  # not implemented
-                        **kwargs,
-                    )
-                    hidden_states = outputs[0]
-
-                layer_outputs = main_block(
-                    hidden_states,
-                    attention_mask=attention_mask,
-                    position_ids=position_ids,
-                    past_key_value=past_key_value,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                    **kwargs,
-                )
-
-                return layer_outputs
-
-            if self.gradient_checkpointing and self.training:
-                past_key_values = None
-                if use_cache:
-                    logger.warning_once(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
-
-                layer_outputs = self._gradient_checkpointing_func(
-                    vblock,
-                    decoder_layer,
+            # TODO(ls): Add cross attention values to respective lists
+            if idx % self.cross_layer_interval == 0:
+                cross_attn_block = self.gated_cross_attn_layers[idx // self.cross_layer_interval]
+                outputs = cross_attn_block(
                     hidden_states,
                     attention_mask,
-                    position_ids,
-                    past_key_values,
                     image_hidden_states,
-                    image_attention_mask,
-                    cross_attention_gate,
-                    output_attentions,
-                    use_cache,
-                    idx,
-                    self.cross_layer_interval,
-                    self.gated_cross_attn_layers,
-                    cache_position,
-                )
-            else:
-                layer_outputs = vblock(
-                    decoder_layer,
-                    hidden_states,
-                    attention_mask=attention_mask,
-                    position_ids=position_ids,
-                    past_key_value=past_key_values,
-                    image_hidden_states=image_hidden_states,
                     image_attention_mask=image_attention_mask,
                     cross_attention_gate=cross_attention_gate,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
-                    layer_idx=idx,
-                    cross_layer_interval=self.cross_layer_interval,
-                    gated_cross_attn_layers=self.gated_cross_attn_layers,
-                    cache_position=cache_position,
+                    past_key_value=None,  # not implemented
                     **kwargs,
                 )
+                hidden_states = outputs[0]
 
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                **kwargs,
+            )
             hidden_states = layer_outputs[0]
 
             if use_cache:
@@ -1511,16 +1427,16 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[tuple, IdeficsCausalLMOutputWithPast]:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         image_encoder_embeddings (`torch.FloatTensor`, *optional*):
             The output of the image encoder.
         perceiver_embeddings (`torch.FloatTensor`, *optional*):
             The output of the perceiver resampler.
         image_attention_mask (`torch.LongTensor`, *optional*):
             The attention mask for the image encoder.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 
