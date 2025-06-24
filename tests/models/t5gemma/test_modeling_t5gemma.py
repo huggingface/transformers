@@ -885,8 +885,8 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             encoder_seq_length = encoder_seq_length * self.model_tester.num_hashes
 
         for model_class in self.all_model_classes:
-            # Skip token classification.
-            if model_class == self.model_tester.for_token_class:
+            # Skip token and sequence classification.
+            if model_class in [self.model_tester.for_token_class, self.model_tester.for_sequence_class]:
                 continue
 
             inputs_dict["output_attentions"] = True
@@ -1251,7 +1251,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     # Adjust token classiifcation
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
-            if model_class == self.model_tester.for_token_class:
+            if model_class in [self.model_tester.for_token_class, self.model_tester.for_sequence_class]:
                 model = model_class(config, is_encoder_decoder=False)
             else:
                 model = model_class(config)

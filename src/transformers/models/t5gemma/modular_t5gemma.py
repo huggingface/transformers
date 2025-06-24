@@ -28,7 +28,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
-    Seq2SeqSequenceClassifierOutput,
+    SequenceClassifierOutput,
     TokenClassifierOutput,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -906,11 +906,12 @@ class T5GemmaDecoder(T5GemmaEncoder):
 class T5GemmaModel(T5GemmaPreTrainedModel):
     def __init__(self, config: T5GemmaConfig):
         super().__init__(config)
-        self.encoder = T5GemmaEncoder(config.encoder)
 
-        # In encoder-only mode, only encoder is adopted.
-        if self.config.is_encoder_decoder:
-            self.decoder = T5GemmaDecoder(config.decoder)
+        if not config.is_encoder_decoder:
+            raise ValueError("T5GemmaModel only support encoder-decoder modeling. Use `T5GemmaEncoderModel` instead.")
+
+        self.encoder = T5GemmaEncoder(config.encoder)
+        self.decoder = T5GemmaDecoder(config.decoder)
 
         self.post_init()
 
@@ -918,8 +919,6 @@ class T5GemmaModel(T5GemmaPreTrainedModel):
         return self.encoder
 
     def get_decoder(self):
-        if not self.config.is_encoder_decoder:
-            return None
         return self.decoder
 
     def get_input_embeddings(self):
@@ -974,50 +973,42 @@ class T5GemmaModel(T5GemmaPreTrainedModel):
 
         encoder_hidden_states = encoder_outputs.last_hidden_state
 
-        if self.config.is_encoder_decoder:
-            # Decode
-            decoder_outputs = self.decoder(
-                input_ids=decoder_input_ids,
-                attention_mask=decoder_attention_mask,
-                position_ids=decoder_position_ids,
-                inputs_embeds=decoder_inputs_embeds,
-                past_key_values=past_key_values,
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=attention_mask,
-                use_cache=use_cache,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                cache_position=cache_position,
-                **flash_attn_kwargs,
-            )
+        # Decode
+        decoder_outputs = self.decoder(
+            input_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            position_ids=decoder_position_ids,
+            inputs_embeds=decoder_inputs_embeds,
+            past_key_values=past_key_values,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=attention_mask,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            cache_position=cache_position,
+            **flash_attn_kwargs,
+        )
 
-            return Seq2SeqModelOutput(
-                last_hidden_state=decoder_outputs.last_hidden_state,
-                past_key_values=decoder_outputs.past_key_values,
-                decoder_hidden_states=decoder_outputs.hidden_states,
-                decoder_attentions=decoder_outputs.attentions,
-                cross_attentions=decoder_outputs.cross_attentions,
-                encoder_last_hidden_state=encoder_outputs.last_hidden_state,
-                encoder_hidden_states=encoder_outputs.hidden_states,
-                encoder_attentions=encoder_outputs.attentions,
-            )
-        else:
-            return Seq2SeqModelOutput(
-                last_hidden_state=None,
-                past_key_values=None,
-                decoder_hidden_states=None,
-                decoder_attentions=None,
-                cross_attentions=None,
-                encoder_last_hidden_state=encoder_outputs.last_hidden_state,
-                encoder_hidden_states=encoder_outputs.hidden_states,
-                encoder_attentions=encoder_outputs.attentions,
-            )
+        return Seq2SeqModelOutput(
+            last_hidden_state=decoder_outputs.last_hidden_state,
+            past_key_values=decoder_outputs.past_key_values,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
+        )
 
 
 @auto_docstring
 class T5GemmaEncoderModel(T5GemmaPreTrainedModel):
     def __init__(self, config: T5GemmaConfig):
         super().__init__(config)
+
+        if config.is_encoder_decoder:
+            raise ValueError("T5GemmaEncoderModel only supports encoder-only model. Use `T5GemmaModel` instead.")
+
         self.encoder = T5GemmaEncoder(config.encoder)
         self.post_init()
 
@@ -1122,13 +1113,6 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        logits_to_keep (`int` or `torch.Tensor`, *optional*):
-            If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
-            `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-            token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-            If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
-            This is useful when using packed tensor format (single dimension for batch and sequence length).
         """
         if self.training and self.config._attn_implementation != "eager":
             logger.warning_once(
@@ -1200,10 +1184,14 @@ class T5GemmaForSequenceClassification(T5GemmaPreTrainedModel):
             config.is_encoder_decoder = is_encoder_decoder
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.model = T5GemmaModel(config)
+
+        if config.is_encoder_decoder:
+            self.model = T5GemmaModel(config)
+        else:
+            self.model = T5GemmaEncoderModel(config)
 
         hidden_size = config.encoder.hidden_size
-        if is_encoder_decoder:
+        if config.is_encoder_decoder:
             hidden_size = config.decoder.hidden_size
 
         classifier_dropout = getattr(config, "classifier_dropout_rate", 0.1)
@@ -1235,7 +1223,7 @@ class T5GemmaForSequenceClassification(T5GemmaPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-    ) -> Seq2SeqSequenceClassifierOutput:
+    ) -> SequenceClassifierOutput:
         r"""
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, decoder_sequence_length)`, *optional*):
             Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the range `[0,
@@ -1261,27 +1249,38 @@ class T5GemmaForSequenceClassification(T5GemmaPreTrainedModel):
                 )
             decoder_input_ids = self._shift_right(input_ids)
 
-        outputs: Seq2SeqModelOutput = self.model(
-            input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            decoder_position_ids=decoder_position_ids,
-            encoder_outputs=encoder_outputs,
-            inputs_embeds=inputs_embeds,
-            decoder_inputs_embeds=decoder_inputs_embeds,
-            use_cache=False,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-        )
         if self.config.is_encoder_decoder:
-            hidden_states = outputs.last_hidden_state
-            if hidden_states is None:
-                raise ValueError("Hidden states shouldn't be None under encoder-decoder mode.")
+            outputs: Seq2SeqModelOutput = self.model(
+                input_ids,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                decoder_input_ids=decoder_input_ids,
+                decoder_attention_mask=decoder_attention_mask,
+                decoder_position_ids=decoder_position_ids,
+                encoder_outputs=encoder_outputs,
+                inputs_embeds=inputs_embeds,
+                decoder_inputs_embeds=decoder_inputs_embeds,
+                use_cache=False,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
+            last_hidden_state = outputs.last_hidden_state
+            hidden_states = outputs.decoder_hidden_states
+            attentions = outputs.decoder_attentions
         else:
-            hidden_states = outputs.encoder_last_hidden_state
-        logits = self.score(hidden_states)
+            outputs: BaseModelOutput = self.model(
+                input_ids,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                inputs_embeds=inputs_embeds,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
+            last_hidden_state = outputs.last_hidden_state
+            hidden_states = outputs.hidden_states
+            attentions = outputs.attentions
+
+        logits = self.score(last_hidden_state)
 
         if input_ids is not None:
             batch_size = input_ids.shape[0]
@@ -1314,16 +1313,11 @@ class T5GemmaForSequenceClassification(T5GemmaPreTrainedModel):
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
 
-        return Seq2SeqSequenceClassifierOutput(
+        return SequenceClassifierOutput(
             loss=loss,
             logits=pooled_logits,
-            past_key_values=outputs.past_key_values,
-            decoder_hidden_states=outputs.decoder_hidden_states,
-            decoder_attentions=outputs.decoder_attentions,
-            cross_attentions=outputs.cross_attentions,
-            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-            encoder_hidden_states=outputs.encoder_hidden_states,
-            encoder_attentions=outputs.encoder_attentions,
+            hidden_states=hidden_states,
+            attentions=attentions,
         )
 
 
@@ -1338,10 +1332,14 @@ class T5GemmaForTokenClassification(T5GemmaPreTrainedModel):
             config.is_encoder_decoder = is_encoder_decoder
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.model = T5GemmaModel(config)
+
+        if config.is_encoder_decoder:
+            self.model = T5GemmaModel(config)
+        else:
+            self.model = T5GemmaEncoderModel(config)
 
         hidden_size = config.encoder.hidden_size
-        if is_encoder_decoder:
+        if config.is_encoder_decoder:
             hidden_size = config.decoder.hidden_size
 
         classifier_dropout = getattr(config, "classifier_dropout_rate", 0.1)
@@ -1400,29 +1398,38 @@ class T5GemmaForTokenClassification(T5GemmaPreTrainedModel):
                 )
             decoder_input_ids = self._shift_right(input_ids)
 
-        outputs: Seq2SeqModelOutput = self.model(
-            input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            decoder_position_ids=decoder_position_ids,
-            encoder_outputs=encoder_outputs,
-            inputs_embeds=inputs_embeds,
-            decoder_inputs_embeds=decoder_inputs_embeds,
-            use_cache=False,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-        )
         if self.config.is_encoder_decoder:
-            hidden_states = outputs.last_hidden_state
-            if hidden_states is None:
-                raise ValueError("Hidden states shouldn't be None under encoder-decoder mode.")
+            outputs: Seq2SeqModelOutput = self.model(
+                input_ids,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                decoder_input_ids=decoder_input_ids,
+                decoder_attention_mask=decoder_attention_mask,
+                decoder_position_ids=decoder_position_ids,
+                encoder_outputs=encoder_outputs,
+                inputs_embeds=inputs_embeds,
+                decoder_inputs_embeds=decoder_inputs_embeds,
+                use_cache=False,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
+            last_hidden_state = outputs.last_hidden_state
+            hidden_states = outputs.decoder_hidden_states
+            attentions = outputs.decoder_attentions
         else:
-            hidden_states = outputs.encoder_last_hidden_state
+            outputs: BaseModelOutput = self.model(
+                input_ids,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                inputs_embeds=inputs_embeds,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
+            last_hidden_state = outputs.last_hidden_state
+            hidden_states = outputs.hidden_states
+            attentions = outputs.attentions
 
-        sequence_output = hidden_states
-        logits = self.score(sequence_output)
+        logits = self.score(last_hidden_state)
 
         loss = None
         if labels is not None:
@@ -1431,10 +1438,8 @@ class T5GemmaForTokenClassification(T5GemmaPreTrainedModel):
         return TokenClassifierOutput(
             loss=loss,
             logits=logits,
-            hidden_states=outputs.decoder_hidden_states
-            if self.config.is_encoder_decoder
-            else outputs.encoder_hidden_states,
-            attentions=outputs.decoder_attentions if self.config.is_encoder_decoder else outputs.encoder_attentions,
+            hidden_states=hidden_states,
+            attentions=attentions,
         )
 
 
