@@ -45,7 +45,7 @@ class ChameleonImageProcessor(BaseImageProcessor):
     Constructs a Chameleon image processor.
 
     Args:
-        do_resize (`bool`, *optional*, defaults to True):
+        do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by
             `do_resize` in the `preprocess` method.
         size (`dict[str, int]` *optional*, defaults to `{"shortest_edge": 512}`):
@@ -54,19 +54,19 @@ class ChameleonImageProcessor(BaseImageProcessor):
             method.
         resample (`PILImageResampling`, *optional*, defaults to 1):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
-        do_center_crop (`bool`, *optional*, defaults to True):
+        do_center_crop (`bool`, *optional*, defaults to `True`):
             Whether to center crop the image to the specified `crop_size`. Can be overridden by `do_center_crop` in the
             `preprocess` method.
         crop_size (`dict[str, int]` *optional*, defaults to {"height": 512, "width": 512}):
             Size of the output image after applying `center_crop`. Can be overridden by `crop_size` in the `preprocess`
             method.
-        do_rescale (`bool`, *optional*, defaults to True):
+        do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by `do_rescale` in
             the `preprocess` method.
         rescale_factor (`int` or `float`, *optional*, defaults to 0.0078):
             Scale factor to use if rescaling the image. Can be overridden by `rescale_factor` in the `preprocess`
             method.
-        do_normalize (`bool`, *optional*, defaults to True):
+        do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by `do_normalize` in the `preprocess` method.
         image_mean (`float` or `list[float]`, *optional*, defaults to `[1.0, 1.0, 1.0]`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
@@ -75,7 +75,7 @@ class ChameleonImageProcessor(BaseImageProcessor):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
-        do_convert_rgb (`bool`, *optional*, defaults to True):
+        do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
     """
 

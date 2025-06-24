@@ -595,14 +595,14 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
             The epsilon used by the rms normalization layers.
         head_dim (`int`, *optional*, defaults to 128):
             The dimension of each attention head.
-        use_cache (`bool`, *optional*, defaults to True):
+        use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        tie_word_embeddings (`bool`, *optional*, defaults to True):
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
         rope_theta (`float`, *optional*, defaults to 1000000.0):
             The base period of the RoPE embeddings.
-        use_sliding_window (`bool`, *optional*, defaults to True):
+        use_sliding_window (`bool`, *optional*, defaults to `False`):
             Whether to use sliding window attention.
         sliding_window (`int`, *optional*, defaults to 32768):
             Sliding window attention (SWA) window size. If not specified, will default to `4096`.
@@ -1008,7 +1008,7 @@ class Qwen2_5OmniConfig(PretrainedConfig):
         thinker_config (`dict`, *optional*): Configuration of the underlying thinker sub-model.
         talker_config (`dict`, *optional*): Configuration of the underlying talker sub-model.
         token2wav_config (`dict`, *optional*): Configuration of the underlying codec sub-model.
-        enable_audio_output (`bool`, *optional*, defaults to True): Whether enable audio output and load talker and token2wav module.
+        enable_audio_output (`bool`, *optional*, defaults to `True`): Whether enable audio output and load talker and token2wav module.
 
     Example:
 

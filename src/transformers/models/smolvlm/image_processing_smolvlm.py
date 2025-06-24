@@ -250,10 +250,10 @@ class SmolVLMImageProcessor(BaseImageProcessor):
     r"""
     Constructs a SmolVLM image processor.
     Args:
-        do_convert_rgb (`bool`, *optional*, defaults to True):
+        do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB. This is useful if the input image is of a different format e.g. RGBA.
             Only has an effect if the input image is in the PIL format.
-        do_resize (`bool`, *optional*, defaults to True):
+        do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image. The longest edge of the image is resized to  be <= `size["longest_edge"]`, with the
             shortest edge resized to keep the input aspect ratio.
         size (`Dict`, *optional*, defaults to `{"longest_edge": 4 * 364}`):
@@ -262,16 +262,16 @@ class SmolVLMImageProcessor(BaseImageProcessor):
             to keep the input aspect ratio.
         resample (`Resampling`, *optional*, defaults to `Resampling.LANCZOS`):
             Resampling filter to use when resizing the image.
-        do_image_splitting (`bool`, *optional*, defaults to True):
+        do_image_splitting (`bool`, *optional*, defaults to `True`):
             Whether to split the image into sub-images concatenated with the original image. They are split into patches
             such that each patch has a size of `max_image_size["height"]` x `max_image_size["width"]`.
         max_image_size (`Dict`, *optional*, defaults to `{"longest_edge": 364}`):
             Maximum resolution of the patches of images accepted by the model. This is a dictionary containing the key "longest_edge".
-        do_rescale (`bool`, *optional*, defaults to True):
+        do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image. If set to `True`, the image is rescaled to have pixel values between 0 and 1.
         rescale_factor (`float`, *optional*, defaults to `1/255`):
             Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-        do_normalize (`bool`, *optional*, defaults to True):
+        do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. If set to `True`, the image is normalized to have a mean of `image_mean` and
             a standard deviation of `image_std`.
         image_mean (`float` or `list[float]`, *optional*, defaults to `IDEFICS_STANDARD_MEAN`):
@@ -282,7 +282,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
-        do_pad (`bool`, *optional*, defaults to True):
+        do_pad (`bool`, *optional*, defaults to `True`):
             Whether or not to pad the images to the largest height and width in the batch and number of images per
             sample in the batch, such that the returned tensor is of shape (batch_size, max_num_images, num_channels, max_height, max_width).
     """

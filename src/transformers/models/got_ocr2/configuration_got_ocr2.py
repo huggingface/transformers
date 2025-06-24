@@ -57,11 +57,11 @@ class GotOcr2VisionConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 1e-10):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        qkv_bias (`bool`, *optional*, defaults to True):
+        qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to query, key, value projections.
-        use_abs_pos (`bool`, *optional*, defaults to True):
+        use_abs_pos (`bool`, *optional*, defaults to `True`):
             Whether to use absolute position embedding.
-        use_rel_pos (`bool`, *optional*, defaults to True):
+        use_rel_pos (`bool`, *optional*, defaults to `True`):
             Whether to use relative position embedding.
         window_size (`int`, *optional*, defaults to 14):
             Window size for relative position.

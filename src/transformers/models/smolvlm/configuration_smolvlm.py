@@ -123,12 +123,12 @@ class SmolVLMConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        use_cache (`bool`, *optional*, defaults to True):
+        use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should cache the key/value pairs of the attention mechanism. Only
             relevant if `config.is_decoder=True`.
         image_token_id (`int`, *optional*, defaults to 128257):
             The id of the "image" token.
-        tie_word_embeddings (`bool`, *optional*, defaults to True):
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether or not to tie the word embeddings with the token embeddings.
         vision_config (`IdeficsVisionConfig` or `dict`, *optional*, defaults to `IdeficsVisionConfig`):
             Custom vision config or dict for the vision tower

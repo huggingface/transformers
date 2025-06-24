@@ -56,7 +56,7 @@ class JanusVisionConfig(PretrainedConfig):
             `"relu"`, `"selu"`, and `"gelu_new"` are supported.
         mlp_ratio (`float`, *optional*, defaults to 4.0):
             Ratio of MLP hidden dimensionality to embedding dimensionality.
-        attention_bias (`bool`, *optional*, defaults to True):
+        attention_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys, and values in the attention layers.
         hidden_dropout_rate (`float`, *optional*, defaults to 0.0):
             The dropout probability for fully connected layers in the encoder.
@@ -64,7 +64,7 @@ class JanusVisionConfig(PretrainedConfig):
             Dimensionality of the MLP projection head.
         projection_dropout (`float`, *optional*, defaults to 0.0):
             Dropout probability for the projection layer.
-        use_qk_norm (`bool`, *optional*, defaults to True):
+        use_qk_norm (`bool`, *optional*, defaults to `False`):
             Whether to normalize the query and key matrices.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated normal initializer for initializing all weight matrices.
@@ -136,7 +136,7 @@ class JanusVQVAEConfig(PretrainedConfig):
             Dimensionality of each embedding vector.
         num_embeddings (`int`, *optional*, defaults to 16384):
             Number of codebook embeddings.
-        double_latent (`bool`, *optional*, defaults to True):
+        double_latent (`bool`, *optional*, defaults to `False`):
             Whether to use double z channels.
         latent_channels (`int`, *optional*, defaults to 256):
             Number of channels for the latent space.
