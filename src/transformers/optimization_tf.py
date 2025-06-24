@@ -296,12 +296,12 @@ class AdamWeightDecay(Adam):
 
         if self._include_in_weight_decay:
             for r in self._include_in_weight_decay:
-                if re.search(r, param_name) is not None:
+                if r in param_name:
                     return True
 
         if self._exclude_from_weight_decay:
             for r in self._exclude_from_weight_decay:
-                if re.search(r, param_name) is not None:
+                if r in param_name:
                     return False
         return True
 

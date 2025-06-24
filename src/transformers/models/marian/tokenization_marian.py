@@ -13,7 +13,7 @@
 # limitations under the License.
 import json
 import os
-import re
+import regex as re
 import warnings
 from pathlib import Path
 from shutil import copyfile
@@ -104,7 +104,7 @@ class MarianTokenizer(PreTrainedTokenizer):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    language_code_re = re.compile(">>.+<<")  # type: re.Pattern
+    language_code_re = re.compile(">>.++<<")  # type: re.Pattern
 
     def __init__(
         self,
