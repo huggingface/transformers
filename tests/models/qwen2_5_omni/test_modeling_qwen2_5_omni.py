@@ -33,6 +33,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_flash_attn,
     require_torch,
@@ -365,6 +366,8 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
+    # TODO (joao, raushan): there are multiple standardization issues in this model that prevent this test from
+    # passing, fix me
     @unittest.skip("Cannot handle 4D attention mask")
     def test_generate_compile_model_forward(self):
         pass
@@ -380,6 +383,143 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
     @unittest.skip("Cannot handle 4D attention mask")
     def test_custom_4d_attention_mask(self):
         pass
+
+    def test_get_rope_index_video_with_audio(self):
+        image_grid_thw = torch.empty((0, 3), dtype=torch.long)
+
+        # 3 * 2 * 2 = 12 video tokens
+        video_grid_thw = torch.tensor([[3, 2, 2]], dtype=torch.long)
+
+        # num_audio_tokens = ((audio_seqlen - 1) // 2 + 1 - 2) // 2 + 1
+        # i.e.: 300 audio_seqlen -> 75 audio tokens
+        audio_seqlens = torch.tensor([300], dtype=torch.long)
+
+        second_per_grids = torch.tensor([1.0], dtype=torch.float)
+
+        use_audio_in_video = True
+
+        # fmt: off
+        expected_position_ids = torch.tensor([
+            [[
+                 0,  1, # text
+                 2,  2, # vision_bos + audio_bos
+
+                # video chunk
+                  3,  3,  3,  3,
+                 28, 28, 28, 28,
+
+                # audio chunk
+                 3,  4,  5,  6,  7,  8, 9, 10, 11, 12, 13, 14, 15, 16,
+                17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
+                31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44,
+                45, 46, 47, 48, 49, 50, 51, 52,
+
+                # video chunk
+                53, 53, 53, 53,
+
+                # audio chunk
+                53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66,
+                67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77,
+
+                78, 78, # audio_eos + vision_eos
+                79, 80, # text
+            ]],
+            [[
+                 0,  1, # text
+                 2,  2, # vision_bos + audio_bos
+
+                # video chunk
+                 3,  3,  4,  4,
+                 3,  3,  4,  4,
+
+                # audio chunk
+                 3,  4,  5,  6,  7,  8, 9, 10, 11, 12, 13, 14, 15, 16,
+                17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
+                31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44,
+                45, 46, 47, 48, 49, 50, 51, 52,
+
+                # video chunk
+                 3,  3,  4,  4,
+
+                # audio chunk
+                53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66,
+                67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77,
+
+                78, 78, # audio_eos + vision_eos
+                79, 80, # text
+            ]],
+            [[
+                 0,  1, # text
+                 2,  2, # vision_bos + audio_bos
+
+                # video chunk
+                 3,  4,  3,  4,
+                 3,  4,  3,  4,
+
+                # audio chunk
+                 3,  4,  5,  6,  7,  8, 9, 10, 11, 12, 13, 14, 15, 16,
+                17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
+                31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44,
+                45, 46, 47, 48, 49, 50, 51, 52,
+
+                # video chunk
+                3,  4,  3,  4,
+
+                # audio chunk
+                53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66,
+                67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77,
+
+                78, 78, # audio_eos + vision_eos
+                79, 80, # text
+            ]],
+        ], dtype=torch.long)
+        # fmt: on
+
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            input_ids = torch.tensor(
+                [
+                    [
+                        100,
+                        101,
+                    ]
+                    + [
+                        config.vision_start_token_id,
+                        config.audio_start_token_id,
+                    ]
+                    # 1st chunk: 8 video tokens, 50 audio tokens
+                    + [config.video_token_id] * 2 * 2 * 2
+                    + [config.audio_token_id] * 50
+                    +
+                    # 2nd chunk: 4 video tokens, 25 audio tokens
+                    [config.video_token_id] * 1 * 2 * 2
+                    + [config.audio_token_id] * 25
+                    + [
+                        config.audio_end_token_id,
+                        config.vision_end_token_id,
+                    ]
+                    + [
+                        102,
+                        103,
+                    ]
+                ],
+                dtype=torch.long,
+            )
+
+            model = model_class(config)
+
+            position_ids, mrope_position_deltas = model.get_rope_index(
+                input_ids=input_ids,
+                image_grid_thw=image_grid_thw,
+                video_grid_thw=video_grid_thw,
+                attention_mask=None,
+                use_audio_in_video=use_audio_in_video,
+                audio_seqlens=audio_seqlens,
+                second_per_grids=second_per_grids,
+            )
+
+            self.assertTrue(torch.equal(position_ids, expected_position_ids))
 
 
 @require_torch
@@ -416,13 +556,13 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test(self):
         model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2.5-Omni-7B", torch_dtype=torch.float32, device_map="auto"
+            "Qwen/Qwen2.5-Omni-7B", torch_dtype=torch.bfloat16, device_map="auto"
         )
 
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(
-            text=[text], audio=[self.raw_audio], images=[self.raw_image], return_tensors="pt", padding=True
-        )
+            text=text, audio=[self.raw_audio], images=[self.raw_image], return_tensors="pt", padding=True
+        ).to(torch.bfloat16)
 
         expected_input_ids = torch.tensor(
             [
@@ -442,7 +582,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
                 198,
                 151647,
                 151646,
-                151648,
+                151646,
             ]
         )
         assert torch.allclose(expected_input_ids, inputs.input_ids[0][:17], atol=3e-3)
@@ -456,7 +596,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
                 [1.3902, 1.4048, 1.4194],
                 [1.5216, 1.5362, 1.5362],
             ],
-            dtype=torch.float32,
+            dtype=torch.bfloat16,
             device="cpu",
         )
         assert torch.allclose(expected_pixel_slice, inputs.pixel_values[:6, :3], atol=3e-3)
@@ -464,9 +604,11 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         # verify generation
         inputs = inputs.to(torch_device)
 
-        output = model.generate(**inputs, thinker_temperature=0, thinker_do_sample=False, return_audio=False)
+        output = model.generate(
+            **inputs, thinker_temperature=0, thinker_do_sample=False, return_audio=False, thinker_max_new_tokens=20
+        )
 
-        EXPECTED_DECODED_TEXT = "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever."
+        EXPECTED_DECODED_TEXT = "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever."
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -476,23 +618,34 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_batch(self):
         model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2.5-Omni-7B", torch_dtype=torch.float32, device_map="auto"
+            "Qwen/Qwen2.5-Omni-7B", torch_dtype=torch.bfloat16, device_map="auto"
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(
-            text=[text, text],
+            text=text * 2,
             audio=[self.raw_audio, self.raw_audio],
             images=[self.raw_image, self.raw_image],
             return_tensors="pt",
             padding=True,
-        ).to(torch_device)
+        ).to(torch_device, dtype=torch.bfloat16)
 
-        output = model.generate(**inputs, thinker_temperature=0, thinker_do_sample=False, return_audio=False)
+        output = model.generate(
+            **inputs, thinker_temperature=0, thinker_do_sample=False, return_audio=False, thinker_max_new_tokens=20
+        )
 
-        EXPECTED_DECODED_TEXT = [
-            "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever.",
-            "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever.",
-        ]
+        EXPECTED_DECODED_TEXTS = Expectations(
+            {
+                ("cuda", 7) : [
+                    "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is of glass shattering, and the dog in the picture is a Labrador Retriever",
+                    "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is of glass shattering, and the dog in the picture is a Labrador Retriever",
+                ],
+                ("cuda", 8): [
+                    "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
+                    "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
+                ],
+            }
+        )  # fmt: skip
+        EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
 
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
@@ -502,14 +655,19 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_multiturn(self):
         model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2.5-Omni-7B", torch_dtype=torch.float32, device_map="auto"
+            "Qwen/Qwen2.5-Omni-7B", torch_dtype=torch.bfloat16, device_map="auto"
         )
 
         messages = [
             self.messages[0],
             {
                 "role": "assistant",
-                "content": "The sound is glass shattering, and the dog appears to be a Labrador Retriever.",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "The sound is glass shattering, and the dog appears to be a Labrador Retriever.",
+                    }
+                ],
             },
             {
                 "role": "user",
@@ -522,14 +680,16 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
 
         text = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(
-            text=[text],
+            text=text,
             audio=[self.raw_audio, self.raw_audio_additional],
             images=[self.raw_image],
             return_tensors="pt",
             padding=True,
-        ).to(torch_device)
+        ).to(torch_device, dtype=torch.bfloat16)
 
-        output = model.generate(**inputs, thinker_temperature=0, thinker_do_sample=False, return_audio=False)
+        output = model.generate(
+            **inputs, thinker_temperature=0, thinker_do_sample=False, return_audio=False, thinker_max_new_tokens=20
+        )
 
         EXPECTED_DECODED_TEXT = "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever.\nuser\nHow about this one?\nassistant\nThe sound is a cough."
 
@@ -541,14 +701,19 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_w_audio(self):
         model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2.5-Omni-7B", torch_dtype=torch.float32, device_map="auto"
+            "Qwen/Qwen2.5-Omni-7B", torch_dtype=torch.bfloat16, device_map="auto"
         )
         audio_url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/guess_age_gender.wav"
 
         messages = [
             {
                 "role": "system",
-                "content": "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.",
+                    }
+                ],
             },
             {
                 "role": "user",
@@ -558,11 +723,25 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         audio, _ = librosa.load(BytesIO(urlopen(audio_url).read()), sr=self.processor.feature_extractor.sampling_rate)
 
         text = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        inputs = self.processor(text=[text], audio=[audio], return_tensors="pt", padding=True).to(torch_device)
+        inputs = self.processor(text=text, audio=[audio], return_tensors="pt", padding=True).to(
+            torch_device, dtype=torch.bfloat16
+        )
 
-        output = model.generate(**inputs, thinker_temperature=0, thinker_do_sample=False)
+        output = model.generate(
+            **inputs,
+            thinker_temperature=0,
+            thinker_do_sample=False,
+            thinker_max_new_tokens=20,
+            talker_max_new_tokens=10,
+        )
 
-        EXPECTED_DECODED_TEXT = "system\nYou are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.\nuser\n\nassistant\nWell, I can't really guess your age and gender just from your voice. There are so many factors that can affect how a voice sounds, like the environment you're in, how you're feeling at the moment, and even the microphone you're using. But if you want to share more about your voice, like if it's high - pitched or low - pitched, that might give me a bit of an idea. So, what can you tell me about your voice?"
+        EXPECTED_DECODED_TEXTS = Expectations(
+            {
+                ("cuda", 7): "system\nYou are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.\nuser\n\nassistant\nWell, I can try. But it's not always that accurate. I might be able to make",
+                ("cuda", 8): "system\nYou are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.\nuser\n\nassistant\nWell, I can't really guess your age and gender just from your voice. There are are a",
+            }
+        )  # fmt: skip
+        EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
 
         self.assertEqual(
             self.processor.decode(output[0][0], skip_special_tokens=True),

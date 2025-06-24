@@ -32,7 +32,7 @@ SmolVLM2 is an adaptation of the Idefics3 model with two main differences:
 
 Input images are processed either by upsampling (if resizing is enabled) or at their original resolution. The resizing behavior depends on two parameters: do_resize and size.
 
-Videos should not be upsampled. 
+Videos should not be upsampled.
 
 If `do_resize` is set to `True`, the model resizes images so that the longest edge is 4*512 pixels by default.
 The default resizing behavior can be customized by passing a dictionary to the `size` parameter. For example, `{"longest_edge": 4 * 512}` is the default, but you can change it to a different value if needed.
@@ -192,11 +192,17 @@ print(generated_texts[0])
 [[autodoc]] SmolVLMForConditionalGeneration
     - forward
 
-
 ## SmolVLMImageProcessor
 [[autodoc]] SmolVLMImageProcessor
     - preprocess
 
+## SmolVLMImageProcessorFast
+[[autodoc]] SmolVLMImageProcessorFast
+    - preprocess
+
+## SmolVLMVideoProcessor
+[[autodoc]] SmolVLMVideoProcessor
+    - preprocess
 
 ## SmolVLMProcessor
 [[autodoc]] SmolVLMProcessor

@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch PaliGemma model."""
 
+import copy
 import unittest
 
 import pytest
@@ -22,9 +23,9 @@ from transformers import (
     PaliGemmaConfig,
     PaliGemmaForConditionalGeneration,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
+    is_flaky,
     require_torch,
     torch_device,
 )
@@ -36,10 +37,6 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
-
-
-if is_vision_available():
-    pass
 
 
 class PaliGemma2VisionText2TextModelTester:
@@ -239,16 +236,17 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
-            _ = model(**input_dict)  # successful forward with no modifications
+            curr_input_dict = copy.deepcopy(input_dict)  # in=place modifications further
+            _ = model(**curr_input_dict)  # successful forward with no modifications
 
             # remove one image but leave the image token in text
-            input_dict["pixel_values"] = input_dict["pixel_values"][-1:, ...]
+            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-1:, ...]
             with self.assertRaises(ValueError):
-                _ = model(**input_dict)
+                _ = model(**curr_input_dict)
 
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
-            input_ids = input_dict["input_ids"][:1]
-            pixel_values = input_dict["pixel_values"][:1]
+            input_ids = curr_input_dict["input_ids"][:1]
+            pixel_values = curr_input_dict["pixel_values"][:1]
             input_ids = torch.cat([input_ids, input_ids], dim=0)
 
             # one image and two image tokens raise an error
@@ -294,7 +292,7 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         pass
 
     @unittest.skip(
-        reason="PaliGemmma's SigLip encoder uses the same initialization scheme as the Flax original implementation"
+        reason="PaliGemma's SigLip encoder uses the same initialization scheme as the Flax original implementation"
     )
     def test_initialization(self):
         pass
@@ -313,37 +311,16 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="PaliGemma does not support low_cpu_mem_usage.")
-    def test_save_load_low_cpu_mem_usage(self):
-        pass
-
-    @unittest.skip(reason="PaliGemma does not support low_cpu_mem_usage.")
-    def test_save_load_low_cpu_mem_usage_checkpoints(self):
-        pass
-
-    @unittest.skip(reason="PaliGemma does not support low_cpu_mem_usage.")
-    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
-        pass
-
     @unittest.skip(
-        reason="VLMs doen't accept inputs embeds and pixel values at the same time. So if the test passed for bacbone LM, it passes for VLM also"
+        reason="VLMs doesn't accept inputs embeds and pixel values at the same time. So if the test passed for backbone LM, it passes for VLM also"
     )
     def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip("FlashAttention only support fp16 and bf16 data type")
-    def test_flash_attn_2_fp32_ln(self):
         pass
 
     @unittest.skip(
         "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
     )
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
-        pass
-
-    # TODO (joao, raushan): fix me -- the problem is in `cache_position[0] == 0`, i.e. dynamic control flow
-    @unittest.skip("PaliGemma is not compatible with end-to-end generation compilation")
-    def test_generate_compile_model_forward(self):
         pass
 
     @unittest.skip("Low memory will be removed soon so no need to fix it")
@@ -388,3 +365,8 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     @unittest.skip("Gemma2 has HybridCache and doesn't support StaticCache")
     def test_generate_with_static_cache(self):
         pass
+
+    @pytest.mark.generate
+    @is_flaky
+    def test_generate_compile_model_forward(self):
+        super().test_generate_compile_model_forward()

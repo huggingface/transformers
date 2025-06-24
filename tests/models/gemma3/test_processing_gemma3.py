@@ -88,7 +88,7 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         image = self.prepare_image_inputs()
 
-        # If text has no image tokens, iamge should be `None`
+        # If text has no image tokens, image should be `None`
         with self.assertRaises(ValueError):
             _ = processor(text=text_no_image, images=image, return_tensors="np")
 
@@ -124,3 +124,28 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # base image + 4 crops
         self.assertEqual(len(inputs[self.images_input_name]), 5)
         self.assertEqual(len(inputs[self.text_input_name][0]), 67)
+
+    def test_special_mm_token_truncation(self):
+        """Tests that special vision tokens do not get truncated when `truncation=True` is set."""
+
+        processor = self.get_processor()
+
+        input_str = self.prepare_text_inputs(batch_size=2, modality="image")
+        image_input = self.prepare_image_inputs(batch_size=2)
+        _ = processor(
+            text=input_str,
+            images=image_input,
+            return_tensors="pt",
+            truncation=None,
+            padding=True,
+        )
+
+        with self.assertRaises(ValueError):
+            _ = processor(
+                text=input_str,
+                images=image_input,
+                return_tensors="pt",
+                truncation=True,
+                padding=True,
+                max_length=5,
+            )
