@@ -16,14 +16,12 @@
 import collections
 import copy
 import datetime
-import io
 import gc
 import inspect
 import random
 import tempfile
 import unittest
 import warnings
-from contextlib import redirect_stdout
 from pathlib import Path
 
 import numpy as np
@@ -4994,16 +4992,9 @@ class GenerationIntegrationTests(unittest.TestCase):
             custom_generate_dir = Path(tmp_dir) / "custom_generate"
             custom_generate_dir.mkdir()
             with open(custom_generate_dir / "generate.py", "w") as f:
-                f.write(
-                "from .helper import ret_success\n"
-                "def generate(*args, **kwargs):\n"
-                "    return ret_success()\n"
-            )
+                f.write("from .helper import ret_success\ndef generate(*args, **kwargs):\n    return ret_success()\n")
             with open(custom_generate_dir / "helper.py", "w") as f:
-                f.write(
-                "def ret_success():\n"
-                "    return \"success\"\n"
-            )
+                f.write('def ret_success():\n    return "success"\n')
             model = AutoModelForCausalLM.from_pretrained(
                 "hf-internal-testing/tiny-random-MistralForCausalLM", device_map="auto"
             )
