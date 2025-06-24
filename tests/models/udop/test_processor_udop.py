@@ -188,7 +188,7 @@ class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = UdopProcessor.from_pretrained("microsoft/udop-large", apply_ocr=False)
 
         def preprocess_data(examples):
-            images = [Image.open(path).convert("RGB") for path in examples["image_path"]]
+            images = [image.convert("RGB") for image in examples["image"]]
             words = examples["words"]
             boxes = examples["bboxes"]
             word_labels = examples["ner_tags"]

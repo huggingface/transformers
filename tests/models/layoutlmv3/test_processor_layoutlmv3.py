@@ -171,7 +171,7 @@ class LayoutLMv3ProcessorIntegrationTests(unittest.TestCase):
         from datasets import load_dataset
 
         ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test")
-        return ds[0]["image"], ds[1]["image"]
+        return ds[0]["image"].convert("RGB"), ds[1]["image"].convert("RGB")
 
     @cached_property
     def get_tokenizers(self):

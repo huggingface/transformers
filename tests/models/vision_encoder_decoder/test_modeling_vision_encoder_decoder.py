@@ -1149,7 +1149,7 @@ class TrOCRModelIntegrationTest(unittest.TestCase):
     def test_inference_handwritten(self):
         model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-handwritten").to(torch_device)
 
-        dataset = load_dataset("hf-internal-testing/fixtures_ocr", split="test")
+        dataset = load_dataset("hf-internal-testing/fixtures_ocr", split="train")
         image = dataset[0]["image"].convert("RGB")
 
         processor = self.default_processor
@@ -1174,7 +1174,7 @@ class TrOCRModelIntegrationTest(unittest.TestCase):
     def test_inference_printed(self):
         model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-printed").to(torch_device)
 
-        dataset = load_dataset("hf-internal-testing/fixtures_ocr", split="test")
+        dataset = load_dataset("hf-internal-testing/fixtures_ocr", split="train")
         image = dataset[0]["image"].convert("RGB")
 
         processor = self.default_processor
