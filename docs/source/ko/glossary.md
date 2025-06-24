@@ -127,7 +127,7 @@ DataParallel 방식에 대해 더 알아보려면 [여기](perf_train_gpu_many#d
 
 ### 딥러닝 (deep learning)
 
-여러층의 신경망 (neural network)을 사용하는 머신러닝 알고리즘입니다.
+여러 층의 신경망(neural network)을 사용하는 머신러닝 알고리즘입니다.
 
 ## E
 
