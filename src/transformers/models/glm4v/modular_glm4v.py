@@ -35,7 +35,7 @@ from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ImagesKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import LossKwargs, is_torchdynamo_compiling, logging
+from ...utils import LossKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ...video_utils import VideoInput
 from ..glm4.modeling_glm4 import Glm4MLP, Glm4RMSNorm, eager_attention_forward
 from ..qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLConfig
@@ -382,22 +382,15 @@ class Glm4VisionMlp(Qwen2_5_VLMLP):
 
 
 class Glm4vVisionPatchEmbed(Qwen2_5_VisionPatchEmbed):
-    def __init__(
-        self,
-        patch_size: int = 14,
-        temporal_patch_size: int = 1,
-        in_channels: int = 3,
-        embed_dim: int = 1536,
-        bias: bool = True,
-    ) -> None:
-        super().__init__(
-            patch_size=patch_size,
-            temporal_patch_size=temporal_patch_size,
-            in_channels=in_channels,
-            embed_dim=embed_dim,
-        )
-        kernel_size = [temporal_patch_size, patch_size, patch_size]
-        self.proj = nn.Conv3d(in_channels, embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=bias)
+    def __init__(self, config: Glm4vVisionConfig) -> None:
+        Qwen2_5_VisionPatchEmbed.__init__()
+        self.patch_size = config.patch_size
+        self.temporal_patch_size = config.temporal_patch_size
+        self.in_channels = config.in_channels
+        self.embed_dim = config.hidden_size
+
+        kernel_size = [self.temporal_patch_size, self.patch_size, self.patch_size]
+        self.proj = nn.Conv3d(self.in_channels, self.embed_dim, kernel_size=kernel_size, stride=kernel_size)
 
 
 class Glm4vVisionRotaryEmbedding(Qwen2_5_VisionRotaryEmbedding):
@@ -537,17 +530,20 @@ class Glm4vVisionAttention(nn.Module):
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
-        q, k, v = self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
-        cos, sin = position_embeddings
-        q, k = apply_rotary_pos_emb_vision(q, k, cos, sin)
+        query_states, key_states, value_states = (
+            self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
+        )
 
-        attention_mask = torch.zeros([1, 1, seq_length, seq_length], device=q.device, dtype=torch.bool)
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
+
+        query_states = query_states.transpose(0, 1).unsqueeze(0)
+        key_states = key_states.transpose(0, 1).unsqueeze(0)
+        value_states = value_states.transpose(0, 1).unsqueeze(0)
+
+        attention_mask = torch.zeros([1, 1, seq_length, seq_length], device=query_states.device, dtype=torch.bool)
         for i in range(1, len(cu_seqlens)):
             attention_mask[..., cu_seqlens[i - 1] : cu_seqlens[i], cu_seqlens[i - 1] : cu_seqlens[i]] = True
-
-        q = q.transpose(0, 1).unsqueeze(0)
-        k = k.transpose(0, 1).unsqueeze(0)
-        v = v.transpose(0, 1).unsqueeze(0)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -555,9 +551,9 @@ class Glm4vVisionAttention(nn.Module):
 
         attn_output, _ = attention_interface(
             self,
-            q,
-            k,
-            v,
+            query_states,
+            key_states,
+            value_states,
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scale,
@@ -580,9 +576,7 @@ class Glm4vVisionBlock(Qwen2_5_VLVisionBlock):
 
 
 class Glm4vPreTrainedModel(Qwen2_5_VLPreTrainedModel):
-    config_class = Glm4vConfig
     _no_split_modules = ["Glm4vTextDecoderLayer", "Glm4vVisionBlock"]
-    _skip_keys_device_placement = "past_key_values"
 
     def _init_weights(self, module):
         std = self.config.get_text_config().initializer_range
@@ -597,29 +591,21 @@ class Glm4vPreTrainedModel(Qwen2_5_VLPreTrainedModel):
         elif isinstance(module, Glm4vRMSNorm):
             module.weight.data.fill_(1.0)
         elif isinstance(module, nn.LayerNorm):
-            if module.weight is not None:
-                module.weight.data.fill_(1.0)
-            if module.bias is not None:
-                module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
 
 
 class Glm4vVisionModel(Glm4vPreTrainedModel):
     config_class = Glm4vVisionConfig
     _no_split_modules = ["Glm4vVisionBlock"]
 
-    def __init__(self, config, **kwargs) -> None:
-        super().__init__(config, **kwargs)
+    def __init__(self, config) -> None:
+        super().__init__(config)
         self.spatial_merge_size = config.spatial_merge_size
         self.patch_size = config.patch_size
 
         self.embeddings = Glm4vVisionEmbeddings(config)
-        self.patch_embed = Glm4vVisionPatchEmbed(
-            patch_size=config.patch_size,
-            temporal_patch_size=config.temporal_patch_size,
-            in_channels=config.in_channels,
-            embed_dim=config.hidden_size,
-            bias=True,
-        )
+        self.patch_embed = Glm4vVisionPatchEmbed(config)
 
         head_dim = config.hidden_size // config.num_heads
         self.rotary_pos_emb = Glm4vVisionRotaryEmbedding(head_dim // 2)
@@ -805,12 +791,6 @@ class Glm4vTextAttention(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        if layer_idx is None:
-            logger.warning_once(
-                f"Instantiating {self.__class__.__name__} without passing `layer_idx` is not recommended and will "
-                "to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
-                "when creating this class."
-            )
 
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
@@ -822,11 +802,6 @@ class Glm4vTextAttention(nn.Module):
         self.rope_scaling = config.rope_scaling
         self.scaling = self.head_dim**-0.5
 
-        if (self.head_dim * self.num_heads) != self.hidden_size:
-            raise ValueError(
-                f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
-                f" and `num_heads`: {self.num_heads})."
-            )
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=True)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
@@ -835,13 +810,13 @@ class Glm4vTextAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
@@ -855,7 +830,7 @@ class Glm4vTextAttention(nn.Module):
         value_states = value_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_multimodal_rotary_pos_emb(
+        query_states, key_states = apply_multimodal_rotary_pos_emb(  # diff with Llama
             query_states, key_states, cos, sin, self.rope_scaling["mrope_section"]
         )
 
@@ -897,37 +872,15 @@ class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs,
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
-                `(batch, sequence_length)` where padding elements are indicated by 0.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence.
-            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
-                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
-                with `head_dim` being the embedding dimension of each attention head.
-            kwargs (`dict`, *optional*):
-                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
-                into the model
-        """
-
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
@@ -935,13 +888,13 @@ class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
         # Self Attention
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
+            position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_value=past_key_value,
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
-            position_embeddings=position_embeddings,
         )
 
         hidden_states = self.post_self_attn_layernorm(hidden_states)
@@ -968,21 +921,16 @@ class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
 class Glm4vTextModel(Qwen2_5_VLTextModel):
     def __init__(self, config: Glm4vTextConfig):
         super().__init__(config)
-        self.padding_idx = config.pad_token_id
-        self.vocab_size = config.vocab_size
-
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
             [Glm4vTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self._attn_implementation = config._attn_implementation
         self.norm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Glm4vTextRotaryEmbedding(config=config)
+        del self._attn_implementation
         del self.has_sliding_layers
-        self.gradient_checkpointing = False
-        # Initialize weights and apply final processing
-        self.post_init()
 
+    @auto_docstring
+    @can_return_tuple
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -993,7 +941,6 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[tuple, BaseModelOutputWithPast]:
@@ -1002,8 +949,6 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1050,7 +995,6 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        next_decoder_cache = None
 
         for decoder_layer in self.layers:
             if output_hidden_states:
@@ -1058,20 +1002,17 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
 
             layer_outputs = decoder_layer(
                 hidden_states,
+                position_embeddings=position_embeddings,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
                 past_key_value=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                position_embeddings=position_embeddings,
                 **kwargs,
             )
 
             hidden_states = layer_outputs[0]
-
-            if use_cache:
-                next_decoder_cache = layer_outputs[2 if output_attentions else 1]
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
@@ -1082,32 +1023,21 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=past_key_values if use_cache else None,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
 
 
 class Glm4vModel(Qwen2_5_VLModel):
-    base_model_prefix = ""
     _checkpoint_conversion_mapping = None
-    config_class = Glm4vConfig
     _no_split_modules = ["Glm4vTextDecoderLayer", "Glm4vVisionBlock"]
 
     def __init__(self, config):
         super().__init__(config)
         self.visual = Glm4vVisionModel._from_config(config.vision_config)
-        self.language_model = Glm4vTextModel._from_config(config.text_config)
-        self.rope_deltas = None  # cache rope_deltas here
-
-        # Initialize weights and apply final processing
-        self.post_init()
 
     def get_rope_index(
         self,
@@ -1298,6 +1228,8 @@ class Glm4vModel(Qwen2_5_VLModel):
 
             return position_ids, mrope_position_deltas
 
+    @auto_docstring
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1308,7 +1240,6 @@ class Glm4vModel(Qwen2_5_VLModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         pixel_values: Optional[torch.Tensor] = None,
         pixel_values_videos: Optional[torch.FloatTensor] = None,
         image_grid_thw: Optional[torch.LongTensor] = None,
@@ -1334,7 +1265,6 @@ class Glm4vModel(Qwen2_5_VLModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1382,9 +1312,7 @@ class Glm4vModel(Qwen2_5_VLModel):
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
         if position_ids is None:
-            attention_mask_tensor = (
-                attention_mask if not isinstance(attention_mask, dict) else attention_mask["full_attention"]
-            )
+            attention_mask_tensor = attention_mask
             if attention_mask_tensor is not None and attention_mask_tensor.ndim == 4:
                 attention_mask_tensor = torch.diagonal(attention_mask_tensor[:, 0], dim1=1, dim2=2)
                 attention_mask_tensor = attention_mask_tensor / torch.finfo(attention_mask_tensor.dtype).min
@@ -1439,14 +1367,13 @@ class Glm4vModel(Qwen2_5_VLModel):
             **kwargs,
         )
 
-        output = Glm4vModelOutputWithPast(
+        return Glm4vModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             rope_deltas=self.rope_deltas,
         )
-        return output if return_dict else output.to_tuple()
 
 
 class Glm4vCausalLMOutputWithPast(Qwen2_5_VLCausalLMOutputWithPast):
@@ -1455,7 +1382,6 @@ class Glm4vCausalLMOutputWithPast(Qwen2_5_VLCausalLMOutputWithPast):
 
 class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
     _checkpoint_conversion_mapping = None
-    config_class = Glm4vConfig
 
     def forward(
         self,
@@ -1528,7 +1454,6 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.model(
             input_ids=input_ids,
@@ -1543,7 +1468,6 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
             **kwargs,
         )
@@ -1554,10 +1478,6 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
         loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
 
         return Glm4vCausalLMOutputWithPast(
             loss=loss,
