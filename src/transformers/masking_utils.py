@@ -685,10 +685,7 @@ def create_causal_mask(
     """
     # If we have an HybridCache structure, here we want to create the mask for the full layers
     if past_key_values is not None and hasattr(past_key_values, "is_sliding"):
-        for i, is_sliding in enumerate(past_key_values.is_sliding):
-            if not is_sliding:
-                layer_idx = i
-                break
+        layer_idx = next(i for i, is_sliding in enumerate(past_key_values.is_sliding) if not is_sliding)
     else:
         layer_idx = 0
 
