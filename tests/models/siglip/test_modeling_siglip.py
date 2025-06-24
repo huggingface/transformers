@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -104,7 +103,7 @@ class SiglipVisionModelTester:
         patch_size=2,
         num_channels=3,
         is_training=True,
-        hidden_size=32,
+        hidden_size=64,
         num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
@@ -275,7 +274,7 @@ class SiglipTextModelTester:
         use_input_mask=True,
         use_labels=True,
         vocab_size=99,
-        hidden_size=32,
+        hidden_size=64,
         num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,

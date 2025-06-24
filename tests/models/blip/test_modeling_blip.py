@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -476,8 +475,19 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
                     else:
+                        # See PR #38607 (to avoid flakiness)
+                        data = torch.flatten(param.data)
+                        n_elements = torch.numel(data)
+                        # skip 2.5% of elements on each side to avoid issues caused by `nn.init.trunc_normal_` described in
+                        # https://github.com/huggingface/transformers/pull/27906#issuecomment-1846951332
+                        n_elements_to_skip_on_each_side = int(n_elements * 0.025)
+                        data_to_check = torch.sort(data).values
+                        if n_elements_to_skip_on_each_side > 0:
+                            data_to_check = data_to_check[
+                                n_elements_to_skip_on_each_side:-n_elements_to_skip_on_each_side
+                            ]
                         self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
+                            ((data_to_check.mean() * 1e9).round() / 1e9).item(),
                             [0.0, 1.0],
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
@@ -783,7 +793,7 @@ class BlipVQAModelTester:
 @require_vision
 class BlipVQAModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (BlipForQuestionAnswering,) if is_torch_available() else ()
-    # Doesn't run generation tests. There are interface mismatches when using `generate` -- TODO @gante
+    # Doesn't run generation tests due to custom generation logic -- won't fix
     all_generative_model_classes = ()
     fx_compatible = False
     test_head_masking = False
@@ -1092,7 +1102,7 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (BlipForConditionalGeneration,) if is_torch_available() else ()
-    # Doesn't run generation tests. There are interface mismatches when using `generate` -- TODO @gante
+    # Doesn't run generation tests due to custom generation logic -- wont fix
     all_generative_model_classes = ()
     fx_compatible = False
     test_head_masking = False

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The Qwen team, Alibaba Group and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,6 +34,7 @@ if is_torch_available():
 
     from transformers import (
         GotOcr2ForConditionalGeneration,
+        GotOcr2Model,
     )
 
 
@@ -138,37 +138,17 @@ class GotOcr2VisionText2TextModelTester:
         }
         return config, inputs_dict
 
-    def create_and_check_model_fp16_forward(self, config, input_ids, pixel_values, attention_mask):
-        model = GotOcr2ForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.half()
-        model.eval()
-        logits = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            pixel_values=pixel_values.to(torch.bfloat16),
-            return_dict=True,
-        )["logits"]
-        self.parent.assertFalse(torch.isnan(logits).any().item())
-
-    def create_and_check_model_fp16_autocast_forward(self, config, input_ids, pixel_values, attention_mask):
-        config.torch_dtype = torch.float16
-        model = GotOcr2ForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.autocast(device_type="cuda", dtype=torch.float16):
-            logits = model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                pixel_values=pixel_values.to(torch.bfloat16),
-                return_dict=True,
-            )["logits"]
-        self.parent.assertFalse(torch.isnan(logits).any().item())
-
 
 @require_torch
 class GotOcr2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (GotOcr2ForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            GotOcr2Model,
+            GotOcr2ForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = (
         {
             "image-to-text": GotOcr2ForConditionalGeneration,
@@ -254,10 +234,6 @@ class GotOcr2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         reason="GotOcr2's language backbone is Qwen2 which uses GQA so the KV cache is a non standard format"
     )
     def test_past_key_values_format(self):
-        pass
-
-    @unittest.skip("FlashAttention only support fp16 and bf16 data type")
-    def test_flash_attn_2_fp32_ln(self):
         pass
 
 

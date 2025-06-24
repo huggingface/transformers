@@ -15,7 +15,7 @@
 """PyTorch ErnieM model."""
 
 import math
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -125,9 +125,9 @@ class ErnieMSelfAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         mixed_query_layer = self.q_proj(hidden_states)
 
         # If this is instantiated as a cross-attention module, the keys
@@ -252,9 +252,9 @@ class ErnieMAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         self_outputs = self.self_attn(
             hidden_states,
             attention_mask,
@@ -294,7 +294,7 @@ class ErnieMEncoderLayer(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = True,
     ):
         residual = hidden_states
@@ -343,11 +343,11 @@ class ErnieMEncoder(nn.Module):
         input_embeds: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
         hidden_states = () if output_hidden_states else None
         attentions = () if output_attentions else None
 
@@ -484,7 +484,7 @@ ERNIE_M_INPUTS_DOCSTRING = r"""
 )
 class ErnieMModel(ErnieMPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
-        super(ErnieMModel, self).__init__(config)
+        super().__init__(config)
         self.initializer_range = config.initializer_range
         self.embeddings = ErnieMEmbeddings(config)
         self.encoder = ErnieMEncoder(config)
@@ -519,12 +519,12 @@ class ErnieMModel(ErnieMPreTrainedModel):
         attention_mask: Optional[tensor] = None,
         head_mask: Optional[tensor] = None,
         inputs_embeds: Optional[tensor] = None,
-        past_key_values: Optional[Tuple[Tuple[tensor]]] = None,
+        past_key_values: Optional[tuple[tuple[tensor]]] = None,
         use_cache: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], BaseModelOutputWithPoolingAndCrossAttentions]:
+    ) -> Union[tuple[torch.FloatTensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time.")
 
@@ -626,13 +626,13 @@ class ErnieMForSequenceClassification(ErnieMPreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.Tensor]] = None,
+        past_key_values: Optional[list[torch.Tensor]] = None,
         use_cache: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = True,
         labels: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple[torch.FloatTensor], SequenceClassifierOutput]:
+    ) -> Union[tuple[torch.FloatTensor], SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -728,7 +728,7 @@ class ErnieMForMultipleChoice(ErnieMPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple[torch.FloatTensor], MultipleChoiceModelOutput]:
+    ) -> Union[tuple[torch.FloatTensor], MultipleChoiceModelOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
@@ -815,12 +815,12 @@ class ErnieMForTokenClassification(ErnieMPreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.Tensor]] = None,
+        past_key_values: Optional[list[torch.Tensor]] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = True,
         labels: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple[torch.FloatTensor], TokenClassifierOutput]:
+    ) -> Union[tuple[torch.FloatTensor], TokenClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -896,7 +896,7 @@ class ErnieMForQuestionAnswering(ErnieMPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple[torch.FloatTensor], QuestionAnsweringModelOutput]:
+    ) -> Union[tuple[torch.FloatTensor], QuestionAnsweringModelOutput]:
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
@@ -964,7 +964,7 @@ class ErnieMForQuestionAnswering(ErnieMPreTrainedModel):
 )
 class ErnieMForInformationExtraction(ErnieMPreTrainedModel):
     def __init__(self, config):
-        super(ErnieMForInformationExtraction, self).__init__(config)
+        super().__init__(config)
         self.ernie_m = ErnieMModel(config)
         self.linear_start = nn.Linear(config.hidden_size, 1)
         self.linear_end = nn.Linear(config.hidden_size, 1)
@@ -984,7 +984,7 @@ class ErnieMForInformationExtraction(ErnieMPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple[torch.FloatTensor], QuestionAnsweringModelOutput]:
+    ) -> Union[tuple[torch.FloatTensor], QuestionAnsweringModelOutput]:
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for position (index) for computing the start_positions loss. Position outside of the sequence are
@@ -1045,3 +1045,14 @@ class ErnieMForInformationExtraction(ErnieMPreTrainedModel):
             hidden_states=result.hidden_states,
             attentions=result.attentions,
         )
+
+
+__all__ = [
+    "ErnieMForMultipleChoice",
+    "ErnieMForQuestionAnswering",
+    "ErnieMForSequenceClassification",
+    "ErnieMForTokenClassification",
+    "ErnieMModel",
+    "ErnieMPreTrainedModel",
+    "ErnieMForInformationExtraction",
+]

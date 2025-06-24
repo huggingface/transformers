@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -126,10 +125,7 @@ class GotOcr2ProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
 
         torch.testing.assert_close(encoding_slow.num_patches, encoding_fast.num_patches)
-        self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1))
-        self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 1e-3
-        )
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
 
     def test_slow_fast_equivalence_batched_crop_to_patches(self):
         # Prepare image inputs so that we have two groups of images with equal resolution with a group of images with
@@ -145,10 +141,7 @@ class GotOcr2ProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         encoding_fast = image_processor_fast(dummy_images, return_tensors="pt")
 
         torch.testing.assert_close(encoding_slow.num_patches, encoding_fast.num_patches)
-        self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1))
-        self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 1e-3
-        )
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
 
     def test_crop_to_patches(self):
         # test slow image processor

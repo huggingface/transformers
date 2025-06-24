@@ -20,7 +20,7 @@ from __future__ import annotations
 import math
 import warnings
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -161,10 +161,10 @@ class TFBertEmbeddings(keras.layers.Layer):
 
     def call(
         self,
-        input_ids: tf.Tensor = None,
-        position_ids: tf.Tensor = None,
-        token_type_ids: tf.Tensor = None,
-        inputs_embeds: tf.Tensor = None,
+        input_ids: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
         past_key_values_length=0,
         training: bool = False,
     ) -> tf.Tensor:
@@ -243,10 +243,10 @@ class TFBertSelfAttention(keras.layers.Layer):
         head_mask: tf.Tensor,
         encoder_hidden_states: tf.Tensor,
         encoder_attention_mask: tf.Tensor,
-        past_key_value: Tuple[tf.Tensor],
+        past_key_value: tuple[tf.Tensor],
         output_attentions: bool,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> tuple[tf.Tensor]:
         batch_size = shape_list(hidden_states)[0]
         mixed_query_layer = self.query(inputs=hidden_states)
 
@@ -379,10 +379,10 @@ class TFBertAttention(keras.layers.Layer):
         head_mask: tf.Tensor,
         encoder_hidden_states: tf.Tensor,
         encoder_attention_mask: tf.Tensor,
-        past_key_value: Tuple[tf.Tensor],
+        past_key_value: tuple[tf.Tensor],
         output_attentions: bool,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> tuple[tf.Tensor]:
         self_outputs = self.self_attention(
             hidden_states=input_tensor,
             attention_mask=attention_mask,
@@ -493,10 +493,10 @@ class TFBertLayer(keras.layers.Layer):
         head_mask: tf.Tensor,
         encoder_hidden_states: tf.Tensor | None,
         encoder_attention_mask: tf.Tensor | None,
-        past_key_value: Tuple[tf.Tensor] | None,
+        past_key_value: tuple[tf.Tensor] | None,
         output_attentions: bool,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> tuple[tf.Tensor]:
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
         self_attention_outputs = self.attention(
@@ -588,13 +588,13 @@ class TFBertEncoder(keras.layers.Layer):
         head_mask: tf.Tensor,
         encoder_hidden_states: tf.Tensor | None,
         encoder_attention_mask: tf.Tensor | None,
-        past_key_values: Tuple[Tuple[tf.Tensor]] | None,
+        past_key_values: tuple[tuple[tf.Tensor]] | None,
         use_cache: Optional[bool],
         output_attentions: bool,
         output_hidden_states: bool,
         return_dict: bool,
         training: bool = False,
-    ) -> Union[TFBaseModelOutputWithPastAndCrossAttentions, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPastAndCrossAttentions, tuple[tf.Tensor]]:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
@@ -749,7 +749,7 @@ class TFBertLMPredictionHead(keras.layers.Layer):
         self.input_embeddings.weight = value
         self.input_embeddings.vocab_size = shape_list(value)[0]
 
-    def get_bias(self) -> Dict[str, tf.Variable]:
+    def get_bias(self) -> dict[str, tf.Variable]:
         return {"bias": self.bias}
 
     def set_bias(self, value: tf.Variable):
@@ -851,13 +851,13 @@ class TFBertMainLayer(keras.layers.Layer):
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
         encoder_hidden_states: np.ndarray | tf.Tensor | None = None,
         encoder_attention_mask: np.ndarray | tf.Tensor | None = None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        past_key_values: Optional[tuple[tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[TFBaseModelOutputWithPoolingAndCrossAttentions, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPoolingAndCrossAttentions, tuple[tf.Tensor]]:
         if not self.config.is_decoder:
             use_cache = False
 
@@ -1048,10 +1048,10 @@ class TFBertForPreTrainingOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    prediction_logits: tf.Tensor = None
-    seq_relationship_logits: tf.Tensor = None
-    hidden_states: Optional[Union[Tuple[tf.Tensor], tf.Tensor]] = None
-    attentions: Optional[Union[Tuple[tf.Tensor], tf.Tensor]] = None
+    prediction_logits: Optional[tf.Tensor] = None
+    seq_relationship_logits: Optional[tf.Tensor] = None
+    hidden_states: Optional[Union[tuple[tf.Tensor], tf.Tensor]] = None
+    attentions: Optional[Union[tuple[tf.Tensor], tf.Tensor]] = None
 
 
 BERT_START_DOCSTRING = r"""
@@ -1098,7 +1098,7 @@ BERT_START_DOCSTRING = r"""
 
 BERT_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `({0})`):
+        input_ids (`np.ndarray`, `tf.Tensor`, `list[tf.Tensor]` ``dict[str, tf.Tensor]` or `dict[str, np.ndarray]` and each example must have the shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
@@ -1179,13 +1179,13 @@ class TFBertModel(TFBertPreTrainedModel):
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
         encoder_hidden_states: np.ndarray | tf.Tensor | None = None,
         encoder_attention_mask: np.ndarray | tf.Tensor | None = None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        past_key_values: Optional[tuple[tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-    ) -> Union[TFBaseModelOutputWithPoolingAndCrossAttentions, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPoolingAndCrossAttentions, tuple[tf.Tensor]]:
         r"""
         encoder_hidden_states  (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
@@ -1197,7 +1197,7 @@ class TFBertModel(TFBertPreTrainedModel):
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-        past_key_values (`Tuple[Tuple[tf.Tensor]]` of length `config.n_layers`)
+        past_key_values (`tuple[tuple[tf.Tensor]]` of length `config.n_layers`)
             contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
@@ -1279,7 +1279,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
         labels: np.ndarray | tf.Tensor | None = None,
         next_sentence_label: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
-    ) -> Union[TFBertForPreTrainingOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFBertForPreTrainingOutput, tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1291,7 +1291,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
 
             - 0 indicates sequence B is a continuation of sequence A,
             - 1 indicates sequence B is a random sequence.
-        kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
+        kwargs (`dict[str, any]`, *optional*, defaults to `{}`):
             Used to hide legacy arguments that have been deprecated.
 
         Return:
@@ -1410,7 +1410,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
         return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
-    ) -> Union[TFMaskedLMOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFMaskedLMOutput, tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1509,7 +1509,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
         encoder_hidden_states: np.ndarray | tf.Tensor | None = None,
         encoder_attention_mask: np.ndarray | tf.Tensor | None = None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        past_key_values: Optional[tuple[tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1517,7 +1517,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
         labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
         **kwargs,
-    ) -> Union[TFCausalLMOutputWithCrossAttentions, Tuple[tf.Tensor]]:
+    ) -> Union[TFCausalLMOutputWithCrossAttentions, tuple[tf.Tensor]]:
         r"""
         encoder_hidden_states  (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
@@ -1529,7 +1529,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-        past_key_values (`Tuple[Tuple[tf.Tensor]]` of length `config.n_layers`)
+        past_key_values (`tuple[tuple[tf.Tensor]]` of length `config.n_layers`)
             contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
@@ -1622,7 +1622,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
         return_dict: Optional[bool] = None,
         next_sentence_label: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
-    ) -> Union[TFNextSentencePredictorOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFNextSentencePredictorOutput, tuple[tf.Tensor]]:
         r"""
         Return:
 
@@ -1736,7 +1736,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
         return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
-    ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFSequenceClassifierOutput, tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1825,7 +1825,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
         return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
-    ) -> Union[TFMultipleChoiceModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFMultipleChoiceModelOutput, tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices]`
@@ -1951,7 +1951,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
         return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
-    ) -> Union[TFTokenClassifierOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFTokenClassifierOutput, tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -2051,7 +2051,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
         start_positions: np.ndarray | tf.Tensor | None = None,
         end_positions: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
-    ) -> Union[TFQuestionAnsweringModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFQuestionAnsweringModelOutput, tuple[tf.Tensor]]:
         r"""
         start_positions (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.

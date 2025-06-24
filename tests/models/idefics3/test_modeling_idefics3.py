@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -366,10 +365,6 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
         reason="Prompt lookup decoding needs a way to indicate `bad_word_ids` that should not be suggested as candidates"
     )
     def test_prompt_lookup_decoding_matches_greedy_search(self):
-        pass
-
-    @unittest.skip(reason=" FlashAttention only support fp16 and bf16 data type")
-    def test_flash_attn_2_fp32_ln(self):
         pass
 
     @pytest.mark.generate

@@ -200,7 +200,7 @@ def make_state_dict(converted_params, is_encoder_only: bool):
 
 
 def load_t5x_weights_in_t5(model, config, t5x_checkpoint_path, is_encoder_only, scalable_attention):
-    """Replaces the params in model witht the T5X converted params."""
+    """Replaces the params in model with the T5X converted params."""
     variables = checkpoints.load_t5x_checkpoint(t5x_checkpoint_path)
     converted = convert_t5x_to_pytorch(
         variables, num_layers=config.num_layers, is_encoder_only=is_encoder_only, scalable_attention=scalable_attention

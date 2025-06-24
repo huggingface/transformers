@@ -94,7 +94,8 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
     print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
     # Load weights
     loaded = [
-        torch.load(os.path.join(input_base_path, f"consolidated.{i:02d}.pt"), map_location="cpu") for i in range(8)
+        torch.load(os.path.join(input_base_path, f"consolidated.{i:02d}.pt"), map_location="cpu", weights_only=True)
+        for i in range(8)
     ]
 
     merged_state_dict = {}
@@ -226,7 +227,7 @@ def main():
     parser.add_argument(
         "--model_size",
         choices=["7B"],
-        help="'f' models correspond to the finetuned versions, and are specific to the Mixtral official release. For more details on Mixtral, checkout the original repo: https://huggingface.co/mistral-ai",
+        help="'f' models correspond to the finetuned versions, and are specific to the Mixtral official release. For more details on Mixtral, check out the original repo: https://huggingface.co/mistral-ai",
         default="7B",
     )
     parser.add_argument("--output_dir", help="Location to write HF model", required=True)

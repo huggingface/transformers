@@ -60,7 +60,7 @@ def load_orig_config_file(orig_cfg_file):
             for k, v in flat_cfg.items():
                 setattr(config, k, v)
         except yaml.YAMLError as exc:
-            logger.error("Error while loading config file: {}. Error message: {}".format(orig_cfg_file, str(exc)))
+            logger.error(f"Error while loading config file: {orig_cfg_file}. Error message: {str(exc)}")
     return config
 
 
@@ -239,7 +239,7 @@ def convert_mobilevitv2_checkpoint(task_name, checkpoint_path, orig_config_path,
     config = get_mobilevitv2_config(task_name, orig_config_path)
 
     # load original state_dict
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
 
     # load huggingface model
     if task_name.startswith("ade20k_") or task_name.startswith("voc_"):

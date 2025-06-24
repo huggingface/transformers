@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -253,8 +252,17 @@ class Dinov2WithRegistersModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad and "register_tokens" not in name:
+                    # See PR #38607 (to avoid flakiness)
+                    data = torch.flatten(param.data)
+                    n_elements = torch.numel(data)
+                    # skip 2.5% of elements on each side to avoid issues caused by `nn.init.trunc_normal_` described in
+                    # https://github.com/huggingface/transformers/pull/27906#issuecomment-1846951332
+                    n_elements_to_skip_on_each_side = int(n_elements * 0.025)
+                    data_to_check = torch.sort(data).values
+                    if n_elements_to_skip_on_each_side > 0:
+                        data_to_check = data_to_check[n_elements_to_skip_on_each_side:-n_elements_to_skip_on_each_side]
                     self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
+                        ((data_to_check.mean() * 1e9).round() / 1e9).item(),
                         [0.0, 1.0],
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )

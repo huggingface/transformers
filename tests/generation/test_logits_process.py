@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,7 @@
 # limitations under the License.
 
 import unittest
-from typing import List, Union
+from typing import Union
 
 import numpy as np
 from parameterized import parameterized
@@ -86,7 +85,7 @@ class LogitsProcessorTest(unittest.TestCase):
         self.assertFalse(torch.isinf(scores_before_min_length).any())
 
     @parameterized.expand([(0,), ([0, 18],)])
-    def test_new_min_length_dist_processor(self, eos_token_id: Union[int, List[int]]):
+    def test_new_min_length_dist_processor(self, eos_token_id: Union[int, list[int]]):
         vocab_size = 20
         batch_size = 4
 
@@ -193,6 +192,56 @@ class LogitsProcessorTest(unittest.TestCase):
         rep_penalty_proc = RepetitionPenaltyLogitsProcessor(penalty=2.0)
 
         processed_scores = rep_penalty_proc(input_ids, scores)
+
+        # check that values were correctly changed
+        self.assertAlmostEqual(processed_scores[0, 0].item(), -(1 / vocab_size) * 2)
+        self.assertAlmostEqual(processed_scores[0, 1].item(), (1 / vocab_size) / 2)
+
+        self.assertAlmostEqual(processed_scores[1, 0].item(), (1 / vocab_size) / 2)
+        self.assertAlmostEqual(processed_scores[1, 5].item(), (4 / vocab_size) / 2)
+
+        # processor should not change logits in-place
+        self.assertFalse(torch.all(scores == processed_scores))
+
+    def test_repetition_penalty_dist_process_exclusion_no_new_input_ids(self):
+        input_ids = torch.tensor([[0, 1], [5, 0]], device=torch_device, dtype=torch.long)
+        vocab_size = 10
+
+        scores = self._get_uniform_logits(batch_size=2, length=vocab_size)
+
+        # give values special values
+        scores[0, 0] = -(1 / vocab_size)
+        scores[1, 5] = 4 / vocab_size
+
+        rep_penalty_proc = RepetitionPenaltyLogitsProcessor(
+            penalty=2.0,
+            prompt_ignore_length=input_ids.shape[-1],
+        )
+
+        processed_scores = rep_penalty_proc(input_ids, scores)
+
+        # Because input IDs were provided & we call with the same input
+        # IDs that we initialize with, it should be the same as calling
+        # with no input IDs, so no scores should be penalized.
+        self.assertTrue(torch.all(scores == processed_scores))
+
+    def test_repetition_penalty_dist_process_exclusion_with_new_input_ids(self):
+        orig_input_ids = torch.tensor([[0, 1], [5, 0]], device=torch_device, dtype=torch.long)
+        curr_input_ids = torch.tensor([[0, 1, 0, 1], [5, 0, 5, 0]], device=torch_device, dtype=torch.long)
+        vocab_size = 10
+
+        scores = self._get_uniform_logits(batch_size=2, length=vocab_size)
+
+        # give values special values
+        scores[0, 0] = -(1 / vocab_size)
+        scores[1, 5] = 4 / vocab_size
+
+        rep_penalty_proc = RepetitionPenaltyLogitsProcessor(
+            penalty=2.0,
+            prompt_ignore_length=orig_input_ids.shape[-1],
+        )
+
+        processed_scores = rep_penalty_proc(curr_input_ids, scores)
 
         # check that values were correctly changed
         self.assertAlmostEqual(processed_scores[0, 0].item(), -(1 / vocab_size) * 2)

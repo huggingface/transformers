@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,9 +20,12 @@ from parameterized import parameterized
 
 from transformers import AutoTokenizer, DeepseekV3Config, is_torch_available, set_seed
 from transformers.testing_utils import (
+    cleanup,
     require_read_token,
     require_torch,
     require_torch_accelerator,
+    require_torch_gpu,
+    require_torch_large_accelerator,
     require_torch_sdpa,
     slow,
     torch_device,
@@ -192,116 +194,6 @@ class DeepseekV3ModelTester:
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    def create_and_check_model_as_decoder(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        config.add_cross_attention = True
-        model = DeepseekV3Model(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-        )
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            encoder_hidden_states=encoder_hidden_states,
-        )
-        result = model(input_ids, attention_mask=input_mask)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    def create_and_check_for_causal_lm(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        model = DeepseekV3ForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
-    def create_and_check_decoder_model_past_large_inputs(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        config.is_decoder = True
-        config.add_cross_attention = True
-        model = DeepseekV3ForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        # first forward pass
-        outputs = model(
-            input_ids,
-            attention_mask=input_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            use_cache=True,
-        )
-        past_key_values = outputs.past_key_values
-
-        # create hypothetical multiple next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
-        next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
-
-        # append to next input_ids and
-        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-        next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
-
-        output_from_no_past = model(
-            next_input_ids,
-            attention_mask=next_attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            output_hidden_states=True,
-        )["hidden_states"][0]
-        output_from_past = model(
-            next_tokens,
-            attention_mask=next_attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
-            output_hidden_states=True,
-        )["hidden_states"][0]
-
-        # select random slice
-        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
-        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
-
-        self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
-
-        # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -408,10 +300,6 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         "DeepseekV3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
     )
     def test_generate_continue_from_inputs_embeds(self):
-        pass
-
-    @unittest.skip("DeepseekV3's eager attn/sdpa attn outputs are expected to be different")
-    def test_sdpa_equivalence(self):
         pass
 
     @unittest.skip("Deepseek-V3 uses MLA so it is not compatible with the standard cache format")
@@ -539,15 +427,30 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(yarn_sin_long, original_sin_long)
 
-    @unittest.skip(reason="Deepseek-V3 uses MLA on all models so the KV cache is a non standard format")
     def test_past_key_values_format(self):
-        pass
+        """
+        Overwriting to pass the expected cache shapes (Deepseek-V3 uses MLA so the cache shapes are non-standard)
+        """
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        batch_size, seq_length = inputs["input_ids"].shape
+        # difference: last dim
+        k_embed_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
+        v_embed_dim = config.v_head_dim
+        self_attention_key_cache_shape = (batch_size, config.num_key_value_heads, seq_length, k_embed_dim)
+        self_attention_value_cache_shape = (batch_size, config.num_key_value_heads, seq_length, v_embed_dim)
+        # build the full cache shapes
+        num_hidden_layers = config.num_hidden_layers
+        all_cache_shapes = [
+            [self_attention_key_cache_shape, self_attention_value_cache_shape] for _ in range(num_hidden_layers)
+        ]
+        super().test_past_key_values_format(custom_all_cache_shapes=all_cache_shapes)
 
+    @require_torch_large_accelerator
     @require_torch_sdpa
     @slow
     def test_eager_matches_sdpa_generate(self):
         """
-        Overwritting the common test as the test is flaky on tiny models
+        Overwriting the common test as the test is flaky on tiny models
         """
         max_new_tokens = 30
 
@@ -556,7 +459,6 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         model_sdpa = DeepseekV3ForCausalLM.from_pretrained(
             "bzantium/tiny-deepseek-v3",
             torch_dtype=torch.float16,
-            low_cpu_mem_usage=True,
         ).to(torch_device)
 
         self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
@@ -564,7 +466,6 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         model_eager = DeepseekV3ForCausalLM.from_pretrained(
             "bzantium/tiny-deepseek-v3",
             torch_dtype=torch.float16,
-            low_cpu_mem_usage=True,
             attn_implementation="eager",
         ).to(torch_device)
 
@@ -592,18 +493,41 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                     msg=f"\n{tokenizer.batch_decode(res_eager)} \nvs\n{tokenizer.batch_decode(res_sdpa)}",
                 )
 
+    @require_torch_gpu
+    def test_flex_attention_with_grads(self):
+        """
+        Overwriting as the namings/functionality on the attention part are different; for now it's more of a unique model.
+        Original issue is also due to dimensionalities, here specifically due to dims not being a multiple of 2.
+        """
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config._attn_implementation = "flex_attention"
+
+            # Disable dropout
+            config.attention_dropout = 0.0
+
+            # Deepseek 3 specific - manipulate nope and adjust calculated total head dim
+            config.qk_nope_head_dim = 16
+            config.qk_head_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
+
+            model = model_class(config).to(device=torch_device)
+            self.assertTrue(model.config._attn_implementation == "flex_attention")
+
+            # Elaborate workaround for encoder-decoder models as some do not specify their main input
+            dummy_inputs = {model.main_input_name: inputs_dict[model.main_input_name].to(torch_device)}
+            if config.is_encoder_decoder:
+                dummy_inputs["decoder_input_ids"] = inputs_dict["decoder_input_ids"].to(torch_device)
+                dummy_inputs["decoder_attention_mask"] = inputs_dict["decoder_attention_mask"].to(torch_device)
+
+            # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
+            _ = model(**dummy_inputs)
+
 
 @require_torch_accelerator
 class DeepseekV3IntegrationTest(unittest.TestCase):
-    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
-    # Depending on the hardware we get different logits / generations
-    cuda_compute_capability_major_version = None
-
-    @classmethod
-    def setUpClass(cls):
-        if is_torch_available() and torch.cuda.is_available():
-            # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
+    def tearDown(self):
+        # See LlamaIntegrationTest.tearDown(). Can be removed once LlamaIntegrationTest.tearDown() is removed.
+        cleanup(torch_device, gc_collect=False)
 
     @slow
     @require_torch_accelerator
@@ -615,14 +539,12 @@ class DeepseekV3IntegrationTest(unittest.TestCase):
             self.skipTest(reason="This test requires torch >= 2.3 to run.")
 
         NUM_TOKENS_TO_GENERATE = 40
-        # Note on `EXPECTED_TEXT_COMPLETION`'s diff: the current value matches the original test if the original test
-        # was changed to have a cache of 53 tokens (as opposed to 4096), on Ampere GPUs.
+        # https://github.com/huggingface/transformers/pull/38562#issuecomment-2939209171
+        # The reason why the output is gibberish is because the testing model bzantium/tiny-deepseek-v3 is not trained
+        # one. Since original DeepSeek-V3 model is too big to debug and test, there was no testing with the original one.
         EXPECTED_TEXT_COMPLETION = [
-            "Simply put, the theory of relativity states that 1) the speed of light is constant in all inertial "
-            "reference frames, and 2) the laws of physics are the same for all inertial reference frames.\nThe "
-            "theory of relativ",
-            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, "
-            "my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
+            "Simply put, the theory of relativity states that  Frojekecdytesాలు sicʰtinaccianntuala breej的效率和质量的控制lavestock-PraccuraciesOTTensorialoghismos的思路astiomotivityosexualriad TherapeuticsoldtYPEface Kishsatellite-TV",
+            "My favorite all time favorite condiment is ketchup.ieden沟渠係室温 Fryrok般地Segmentation Cycle/physicalwarenkrautempsాలు蹈梗 Mesomac一等asan lethality suspended Causewaydreamswith Fossilsdorfాలు蹈 ChristiansenHOMEbrew",
         ]
 
         prompts = [

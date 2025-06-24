@@ -18,7 +18,8 @@
 
 import collections
 import math
-from typing import Iterable, Optional, Tuple, Union
+from collections.abc import Iterable
+from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -30,24 +31,11 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-)
+from ...utils import auto_docstring, logging
 from .configuration_pvt import PvtConfig
 
 
 logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "PvtConfig"
-
-_CHECKPOINT_FOR_DOC = "Zetatech/pvt-tiny-224"
-_EXPECTED_OUTPUT_SHAPE = [1, 50, 512]
-
-_IMAGE_CLASS_CHECKPOINT = "Zetatech/pvt-tiny-224"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
@@ -83,7 +71,7 @@ class PvtDropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
 class PvtPatchEmbeddings(nn.Module):
@@ -132,7 +120,7 @@ class PvtPatchEmbeddings(nn.Module):
         interpolated_embeddings = interpolated_embeddings.reshape(1, -1, height * width).permute(0, 2, 1)
         return interpolated_embeddings
 
-    def forward(self, pixel_values: torch.Tensor) -> Tuple[torch.Tensor, int, int]:
+    def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, int, int]:
         batch_size, num_channels, height, width = pixel_values.shape
         if num_channels != self.num_channels:
             raise ValueError(
@@ -167,7 +155,7 @@ class PvtSelfOutput(nn.Module):
 
 
 class PvtEfficientSelfAttention(nn.Module):
-    """Efficient self-attention mechanism with reduction of the sequence [PvT paper](https://arxiv.org/abs/2102.12122)."""
+    """Efficient self-attention mechanism with reduction of the sequence [PvT paper](https://huggingface.co/papers/2102.12122)."""
 
     def __init__(
         self, config: PvtConfig, hidden_size: int, num_attention_heads: int, sequences_reduction_ratio: float
@@ -209,7 +197,7 @@ class PvtEfficientSelfAttention(nn.Module):
         height: int,
         width: int,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         query_layer = self.transpose_for_scores(self.query(hidden_states))
 
         if self.sequences_reduction_ratio > 1:
@@ -282,7 +270,7 @@ class PvtAttention(nn.Module):
 
     def forward(
         self, hidden_states: torch.Tensor, height: int, width: int, output_attentions: bool = False
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         self_outputs = self.self(hidden_states, height, width, output_attentions)
 
         attention_output = self.output(self_outputs[0])
@@ -369,7 +357,7 @@ class PvtEncoder(nn.Module):
         self.config = config
 
         # stochastic depth decay rule
-        drop_path_decays = torch.linspace(0, config.drop_path_rate, sum(config.depths)).tolist()
+        drop_path_decays = torch.linspace(0, config.drop_path_rate, sum(config.depths), device="cpu").tolist()
 
         # patch embeddings
         embeddings = []
@@ -420,7 +408,7 @@ class PvtEncoder(nn.Module):
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -452,12 +440,8 @@ class PvtEncoder(nn.Module):
         )
 
 
+@auto_docstring
 class PvtPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = PvtConfig
     base_model_prefix = "pvt"
     main_input_name = "pixel_values"
@@ -488,37 +472,7 @@ class PvtPreTrainedModel(PreTrainedModel):
                 )
 
 
-PVT_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`~PvtConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-PVT_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`PvtImageProcessor.__call__`]
-            for details.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare Pvt encoder outputting raw hidden-states without any specific head on top.",
-    PVT_START_DOCSTRING,
-)
+@auto_docstring
 class PvtModel(PvtPreTrainedModel):
     def __init__(self, config: PvtConfig):
         super().__init__(config)
@@ -538,21 +492,14 @@ class PvtModel(PvtPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(PVT_INPUTS_DOCSTRING.format("(batch_size, channels, height, width)"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -577,12 +524,11 @@ class PvtModel(PvtPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     Pvt Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
     the [CLS] token) e.g. for ImageNet.
-    """,
-    PVT_START_DOCSTRING,
+    """
 )
 class PvtForImageClassification(PvtPreTrainedModel):
     def __init__(self, config: PvtConfig) -> None:
@@ -599,13 +545,7 @@ class PvtForImageClassification(PvtPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(PVT_INPUTS_DOCSTRING.format("(batch_size, channels, height, width)"))
-    @add_code_sample_docstrings(
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ImageClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor],

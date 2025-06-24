@@ -25,7 +25,6 @@ from transformers import (
 )
 from transformers.pipelines import AudioClassificationPipeline, pipeline
 from transformers.testing_utils import (
-    _run_pipeline_tests,
     compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     nested_simplify,
@@ -46,9 +45,15 @@ if is_torch_available():
 class AudioClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
+    _dataset = None
 
-    if _run_pipeline_tests:
-        _dataset = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+    @classmethod
+    def _load_dataset(cls):
+        # Lazy loading of the dataset. Because it is a class method, it will only be loaded once per pytest process.
+        if cls._dataset is None:
+            cls._dataset = datasets.load_dataset(
+                "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+            )
 
     def get_test_pipeline(
         self,
@@ -99,6 +104,7 @@ class AudioClassificationPipelineTests(unittest.TestCase):
 
     @require_torchaudio
     def run_torchaudio(self, audio_classifier):
+        self._load_dataset()
         # test with a local file
         audio = self._dataset[0]["audio"]["array"]
         output = audio_classifier(audio)

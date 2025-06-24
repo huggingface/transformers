@@ -21,6 +21,18 @@ from huggingface_hub.constants import HF_HUB_DISABLE_TELEMETRY as DISABLE_TELEME
 from packaging import version
 
 from .. import __version__
+from .args_doc import (
+    ClassAttrs,
+    ClassDocstring,
+    ImageProcessorArgs,
+    ModelArgs,
+    ModelOutputArgs,
+    auto_class_docstring,
+    auto_docstring,
+    get_args_doc_from_source,
+    parse_docstring,
+    set_min_indent,
+)
 from .backbone_utils import BackboneConfigMixin, BackboneMixin
 from .chat_template_utils import DocstringParsingException, TypeHintParsingException, get_json_schema
 from .constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
@@ -39,8 +51,6 @@ from .generic import (
     ModelOutput,
     PaddingStrategy,
     TensorType,
-    add_model_info_to_auto_map,
-    add_model_info_to_custom_pipelines,
     cached_property,
     can_return_loss,
     can_return_tuple,
@@ -71,10 +81,13 @@ from .generic import (
     working_or_temp_dir,
 )
 from .hub import (
+    CHAT_TEMPLATE_DIR,
+    CHAT_TEMPLATE_FILE,
     CLOUDFRONT_DISTRIB_PREFIX,
     HF_MODULES_CACHE,
     HUGGINGFACE_CO_PREFIX,
     HUGGINGFACE_CO_RESOLVE_ENDPOINT,
+    LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE,
     PYTORCH_PRETRAINED_BERT_CACHE,
     PYTORCH_TRANSFORMERS_CACHE,
     S3_BUCKET_PREFIX,
@@ -94,6 +107,7 @@ from .hub import (
     http_user_agent,
     is_offline_mode,
     is_remote_url,
+    list_repo_templates,
     send_example_telemetry,
     try_to_load_from_cache,
 )
@@ -111,6 +125,7 @@ from .import_utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     ccl_version,
+    check_torch_load_is_safe,
     direct_transformers_import,
     get_torch_version,
     is_accelerate_available,
@@ -119,12 +134,15 @@ from .import_utils import (
     is_aqlm_available,
     is_auto_awq_available,
     is_auto_gptq_available,
+    is_auto_round_available,
     is_av_available,
     is_bitsandbytes_available,
     is_bitsandbytes_multi_backend_available,
     is_bs4_available,
+    is_ccl_available,
     is_coloredlogs_available,
     is_compressed_tensors_available,
+    is_cuda_platform,
     is_cv2_available,
     is_cython_available,
     is_datasets_available,
@@ -149,6 +167,7 @@ from .import_utils import (
     is_habana_gaudi1,
     is_hadamard_available,
     is_hqq_available,
+    is_huggingface_hub_greater_or_equal,
     is_in_notebook,
     is_ipex_available,
     is_jieba_available,
@@ -156,10 +175,12 @@ from .import_utils import (
     is_jumanpp_available,
     is_kenlm_available,
     is_keras_nlp_available,
+    is_kernels_available,
     is_levenshtein_available,
     is_librosa_available,
     is_liger_kernel_available,
     is_lomo_available,
+    is_matplotlib_available,
     is_mlx_available,
     is_natten_available,
     is_ninja_available,
@@ -183,6 +204,7 @@ from .import_utils import (
     is_quark_available,
     is_rich_available,
     is_rjieba_available,
+    is_rocm_platform,
     is_sacremoses_available,
     is_safetensors_available,
     is_sagemaker_dp_enabled,
@@ -205,6 +227,7 @@ from .import_utils import (
     is_tiktoken_available,
     is_timm_available,
     is_tokenizers_available,
+    is_torch_accelerator_available,
     is_torch_available,
     is_torch_bf16_available,
     is_torch_bf16_available_on_device,
@@ -265,11 +288,12 @@ SAFE_WEIGHTS_NAME = "model.safetensors"
 SAFE_WEIGHTS_INDEX_NAME = "model.safetensors.index.json"
 CONFIG_NAME = "config.json"
 FEATURE_EXTRACTOR_NAME = "preprocessor_config.json"
-IMAGE_PROCESSOR_NAME = FEATURE_EXTRACTOR_NAME
+IMAGE_PROCESSOR_NAME = "preprocessor_config.json"
+VIDEO_PROCESSOR_NAME = "video_preprocessor_config.json"
 PROCESSOR_NAME = "processor_config.json"
-CHAT_TEMPLATE_NAME = "chat_template.json"
 GENERATION_CONFIG_NAME = "generation_config.json"
 MODEL_CARD_NAME = "modelcard.json"
+
 
 SENTENCEPIECE_UNDERLINE = "▁"
 SPIECE_UNDERLINE = SENTENCEPIECE_UNDERLINE  # Kept for backward compatibility

@@ -32,11 +32,12 @@ class Wav2Vec2BertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Wav2Vec2BertProcessor
     text_input_name = "labels"
 
-    def setUp(self):
+    @classmethod
+    def setUpClass(cls):
         vocab = "<pad> <s> </s> <unk> | E T A O N I H S R D L U M W C F G Y P B V K ' X J Q Z".split(" ")
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
 
-        self.add_kwargs_tokens_map = {
+        cls.add_kwargs_tokens_map = {
             "pad_token": "<pad>",
             "unk_token": "<unk>",
             "bos_token": "<s>",
@@ -50,28 +51,30 @@ class Wav2Vec2BertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "do_normalize": True,
         }
 
-        self.tmpdirname = tempfile.mkdtemp()
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.feature_extraction_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
+        cls.tmpdirname = tempfile.mkdtemp()
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        cls.feature_extraction_file = os.path.join(cls.tmpdirname, FEATURE_EXTRACTOR_NAME)
+        with open(cls.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
 
-        with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
+        with open(cls.feature_extraction_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(feature_extractor_map) + "\n")
 
-        tokenizer = self.get_tokenizer()
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer = cls.get_tokenizer()
+        tokenizer.save_pretrained(cls.tmpdirname)
 
-    def get_tokenizer(self, **kwargs_init):
-        kwargs = self.add_kwargs_tokens_map.copy()
+    @classmethod
+    def get_tokenizer(cls, **kwargs_init):
+        kwargs = cls.add_kwargs_tokens_map.copy()
         kwargs.update(kwargs_init)
-        return Wav2Vec2CTCTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+        return Wav2Vec2CTCTokenizer.from_pretrained(cls.tmpdirname, **kwargs)
 
     def get_feature_extractor(self, **kwargs):
         return SeamlessM4TFeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def test_save_load_pretrained_default(self):
         tokenizer = self.get_tokenizer()
@@ -79,8 +82,9 @@ class Wav2Vec2BertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = Wav2Vec2BertProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
-        processor.save_pretrained(self.tmpdirname)
-        processor = Wav2Vec2BertProcessor.from_pretrained(self.tmpdirname)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            processor.save_pretrained(tmpdir)
+            processor = Wav2Vec2BertProcessor.from_pretrained(tmpdir)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
         self.assertIsInstance(processor.tokenizer, Wav2Vec2CTCTokenizer)
@@ -89,17 +93,22 @@ class Wav2Vec2BertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(processor.feature_extractor, SeamlessM4TFeatureExtractor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = Wav2Vec2BertProcessor(
-            tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor()
-        )
-        processor.save_pretrained(self.tmpdirname)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            processor = Wav2Vec2BertProcessor(
+                tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor()
+            )
+            processor.save_pretrained(tmpdir)
 
-        tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        feature_extractor_add_kwargs = self.get_feature_extractor(do_normalize=False, padding_value=1.0)
+            tokenizer_add_kwargs = Wav2Vec2CTCTokenizer.from_pretrained(
+                tmpdir, **(self.add_kwargs_tokens_map | {"bos_token": "(BOS)", "eos_token": "(EOS)"})
+            )
+            feature_extractor_add_kwargs = SeamlessM4TFeatureExtractor.from_pretrained(
+                tmpdir, do_normalize=False, padding_value=1.0
+            )
 
-        processor = Wav2Vec2BertProcessor.from_pretrained(
-            self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
-        )
+            processor = Wav2Vec2BertProcessor.from_pretrained(
+                tmpdir, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
+            )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, Wav2Vec2CTCTokenizer)
