@@ -3305,9 +3305,9 @@ class WhisperEncoderModelTester:
     def encoder_seq_length(self):
         return self.get_subsampled_output_lengths(self.seq_length)
 
-    def create_and_check_model_forward(self, config, inputs_dict, use_weighted_layer_sum=False):
+    def create_and_check_model_forward(self, config, inputs_dict, device_map=None, use_weighted_layer_sum=False):
         config.use_weighted_layer_sum = use_weighted_layer_sum
-        model = WhisperForAudioClassification(config=config)
+        model = WhisperForAudioClassification(config=config, device_map=device_map)
         model.to(torch_device).eval()
 
         input_features = inputs_dict["input_features"]
@@ -3354,21 +3354,17 @@ class WhisperEncoderModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_forward(*config_and_inputs, use_weighted_layer_sum=True)
 
-    @unittest.skip(reason="Some undefined behavior encountered with tiny versions of this model. Skip for now.")
     def test_cpu_offload(self):
-        pass
+        super().test_cpu_offload()
 
-    @unittest.skip(reason="Some undefined behavior encountered with tiny versions of this model. Skip for now.")
     def test_disk_offload_bin(self):
-        pass
+        super().test_disk_offload_bin()
 
-    @unittest.skip(reason="Some undefined behavior encountered with tiny versions of this model. Skip for now.")
     def test_disk_offload_safetensors(self):
-        pass
+        super().test_disk_offload_safetensors()
 
-    @unittest.skip(reason="Some undefined behavior encountered with tiny versions of this model. Skip for now.")
     def test_model_parallelism(self):
-        pass
+        super().test_model_parallelism()
 
     @unittest.skip(reason="Not applicable for an encoder-only acoustic model")
     def test_inputs_embeds(self):
