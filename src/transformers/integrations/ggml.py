@@ -688,6 +688,7 @@ GGUF_TO_FAST_CONVERTERS = {
     "llama": GGUFLlamaConverter,
     "qwen2": GGUFQwen2Converter,
     "qwen2_moe": GGUFQwen2Converter,
+    "qwen3": GGUFQwen2Converter,
     "phi3": GGUFPhi3Converter,
     "bloom": GGUFGPTConverter,
     "falcon": GGUFGPTConverter,
