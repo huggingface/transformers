@@ -3566,7 +3566,11 @@ class ModelTesterMixin:
             # TODO: if we can also check with `batch_size=1` without being flaky?
             for batch_size in [7]:
                 # musicgen decoder models; TODO: find better abstraction
-                if hasattr(self.model_tester, "num_codebooks") and not hasattr(model_eager, "text_encoder"):
+                if (
+                    model.__class__.__name__.startswith("Musicgen")
+                    and hasattr(self.model_tester, "num_codebooks")
+                    and not hasattr(model_eager, "text_encoder")
+                ):
                     input_data_batch_size = batch_size * self.model_tester.num_codebooks
                 else:
                     input_data_batch_size = batch_size
@@ -3626,7 +3630,7 @@ class ModelTesterMixin:
 
                 if is_encoder_decoder:
                     # musicgen encoder-decoder models; TODO: find better abstraction
-                    if hasattr(self.model_tester, "num_codebooks"):
+                    if model.__class__.__name__.startswith("Musicgen") and hasattr(self.model_tester, "num_codebooks"):
                         input_data_batch_size = batch_size * self.model_tester.num_codebooks
                     else:
                         input_data_batch_size = batch_size
