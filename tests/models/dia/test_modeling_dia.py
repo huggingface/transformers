@@ -543,8 +543,11 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_torchscript_simple(self):
         pass
 
+    @unittest.skip(reason="Encoder-Decoder cache can not be initialized.")
+    def test_multi_gpu_data_parallel_forward(self):
+        pass
 
-# TODO: Check against A10 GPU
+
 class DiaForConditionalGenerationIntegrationTest(unittest.TestCase):
     """
     See https://gist.github.com/vasqu/0e3b06360373a4e612aa3b9a7c09185e for generating the integration tests

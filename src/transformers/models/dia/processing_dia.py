@@ -274,6 +274,10 @@ class DiaProcessor(ProcessorMixin):
         """
         Decodes a batch of audio codebook sequences into their respective audio waveforms via the
         `audio_tokenizer`. See [`~DacModel.decode`] for more information.
+
+        Args:
+            decoder_input_ids (`torch.Tensor`): The complete output sequence of the decoder.
+            audio_prompt_len (`int`): The audio prefix length (e.g. when using voice cloning).
         """
         output_kwargs = self._merge_kwargs(
             DiaProcessorKwargs,
@@ -340,7 +344,7 @@ class DiaProcessor(ProcessorMixin):
     ) -> "torch.Tensor":
         """
         Decodes a single sequence of audio codebooks into the respective audio waveform via the
-        `audio_tokenizer`. See [`~DacModel.decode`] for more information.
+        `audio_tokenizer`. See [`~DacModel.decode`] and [`~DiaProcessor.batch_decode`] for more information.
         """
         if decoder_input_ids.shape[0] != 1:
             raise ValueError(
@@ -350,7 +354,9 @@ class DiaProcessor(ProcessorMixin):
         return self.batch_decode(decoder_input_ids, audio_prompt_len, **kwargs)[0]
 
     def get_audio_prompt_len(
-        self, decoder_attention_mask: "torch.Tensor", **kwargs: Unpack[DiaProcessorKwargs]
+        self,
+        decoder_attention_mask: "torch.Tensor",
+        **kwargs: Unpack[DiaProcessorKwargs],
     ) -> int:
         """Utility function to get the audio prompt length."""
         output_kwargs = self._merge_kwargs(
