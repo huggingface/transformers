@@ -958,6 +958,7 @@ class KosmosTextAttention(nn.Module):
                 key_states = torch.cat([past_key_value[0], key_states], dim=2)
                 value_states = torch.cat([past_key_value[1], value_states], dim=2)
 
+        breakpoint()
         query_states = self._shape(self.q_proj(hidden_states))
 
         if self.is_decoder:
@@ -992,6 +993,7 @@ class KosmosTextAttention(nn.Module):
             **kwargs,
         )
 
+        breakpoint()
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         if self.inner_attn_ln is not None:
             attn_output = self.inner_attn_ln(attn_output)
