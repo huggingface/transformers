@@ -773,7 +773,9 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
         cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
 
         for blk in self.blocks:
-            hidden_states = blk(hidden_states, cu_seqlens=cu_seqlens, position_embeddings=position_embeddings, **kwargs)
+            hidden_states = blk(
+                hidden_states, cu_seqlens=cu_seqlens, position_embeddings=position_embeddings, **kwargs
+            )
 
         return self.merger(hidden_states)
 
