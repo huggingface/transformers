@@ -107,9 +107,9 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
             strict(`Optional[bool]`):
                 Flag to instruct `torch.export` to use `torchdynamo`.
         """
-
-        example_input_ids = input_ids if input_ids is not None else torch.tensor([[1]], dtype=torch.long)
-        example_cache_position = cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long)
+        model_device=self.model.model.device
+        example_input_ids = input_ids if input_ids is not None else torch.tensor([[1]], dtype=torch.long, device=model_device)
+        example_cache_position = cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long, device=model_device)
 
         exported_program = torch.export.export(
             self.model,
@@ -608,7 +608,7 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
         self.exported_decoder = None
 
     def _export_encoder(self, encoder_input_ids):
-        wrapped_encoder = Seq2SeqLMEncoderExportableModule(self.encoder).to("cpu").eval()
+        wrapped_encoder = Seq2SeqLMEncoderExportableModule(self.encoder).to(self.full_model.device).eval()
 
         # Define dynamic sequence length for encoder
         seq_len_dim = torch.export.Dim("encoder_seq_length", max=self.max_hidden_seq_length)
@@ -651,18 +651,19 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
         return exported_decoder
 
     def export(self, encoder_input_ids=None, decoder_input_ids=None, encoder_hidden_states=None, cache_position=None):
+        device = self.full_model.device
         example_encoder_input_ids = (
-            encoder_input_ids if encoder_input_ids is not None else torch.ones((1, 10), dtype=torch.long)
+            encoder_input_ids if encoder_input_ids is not None else torch.ones((1, 10), dtype=torch.long, device=device)
         )
         example_decoder_input_ids = (
-            decoder_input_ids if decoder_input_ids is not None else torch.tensor([[0]], dtype=torch.long)
+            decoder_input_ids if decoder_input_ids is not None else torch.tensor([[0]], dtype=torch.long, device=device)
         )  # Start token
-        example_cache_position = cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long)
+        example_cache_position = cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long, device=device)
         example_encoder_hidden_states = (
             encoder_hidden_states
             if encoder_hidden_states is not None
             else torch.zeros(
-                (self.generation_config.cache_config.batch_size, 10, self.config.d_model), dtype=torch.float32
+                (self.generation_config.cache_config.batch_size, 10, self.config.d_model), dtype=torch.float32, device=device
             )
         )
         self.exported_encoder = self._export_encoder(example_encoder_input_ids)
