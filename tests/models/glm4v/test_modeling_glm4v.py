@@ -330,6 +330,7 @@ class Glm4vModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
             torch.testing.assert_close(out_embeds, out_ids)
 
 
+@unittest.skip("Model checkpoint not yet released")
 @require_torch
 class Glm4vIntegrationTest(unittest.TestCase):
     def setUp(self):
