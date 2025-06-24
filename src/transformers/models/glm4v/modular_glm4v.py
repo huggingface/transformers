@@ -375,6 +375,11 @@ class Glm4vConfig(Qwen2_5_VLConfig):
         self.image_end_token_id = image_end_token_id
 
 
+# Will be used for both Text and Vision modalities
+class Glm4vRMSNorm(Glm4RMSNorm):
+    pass
+
+
 class Glm4VisionMlp(Qwen2_5_VLMLP):
     def __init__(self, config, bias: bool = False):
         super().__init__(config, bias)
@@ -394,14 +399,6 @@ class Glm4vVisionPatchEmbed(Qwen2_5_VisionPatchEmbed):
 
 
 class Glm4vVisionRotaryEmbedding(Qwen2_5_VisionRotaryEmbedding):
-    pass
-
-
-class Glm4vTextMLP(Glm4MLP):
-    pass
-
-
-class Glm4vRMSNorm(Glm4RMSNorm):
     pass
 
 
@@ -706,13 +703,6 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         return hidden_states
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
-
-class Glm4vModelOutputWithPast(Qwen2_5_VLModelOutputWithPast):
-    pass
-
-
 class Glm4vTextRotaryEmbedding(Qwen2_5_VLRotaryEmbedding):
     pass
 
@@ -858,6 +848,10 @@ class Glm4vTextAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
+class Glm4vTextMLP(Glm4MLP):
+    pass
+
+
 class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Glm4vTextConfig, layer_idx: int):
         super().__init__()
@@ -916,6 +910,13 @@ class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
             outputs += (present_key_value,)
 
         return outputs
+
+
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
+
+
+class Glm4vModelOutputWithPast(Qwen2_5_VLModelOutputWithPast):
+    pass
 
 
 class Glm4vTextModel(Qwen2_5_VLTextModel):
