@@ -16,12 +16,15 @@
 import collections
 import copy
 import datetime
+import io
 import gc
 import inspect
 import random
 import tempfile
 import unittest
 import warnings
+from contextlib import redirect_stdout
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -4984,6 +4987,34 @@ class GenerationIntegrationTests(unittest.TestCase):
         model_inputs = tokenizer("Hello, world!", return_tensors="pt").to(model.device)
         with self.assertRaises(ValueError):
             model.generate(**model_inputs, custom_generate="transformers-community/custom_generate_example")
+
+    def test_custom_generate_local_directory(self):
+        """Tests that custom_generate works with local directories containing importable relative modules"""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            custom_generate_dir = Path(tmp_dir) / "custom_generate"
+            custom_generate_dir.mkdir()
+            with open(custom_generate_dir / "generate.py", "w") as f:
+                f.write(
+                "from .helper import ret_success\n"
+                "def generate(*args, **kwargs):\n"
+                "    return ret_success()\n"
+            )
+            with open(custom_generate_dir / "helper.py", "w") as f:
+                f.write(
+                "def ret_success():\n"
+                "    return \"success\"\n"
+            )
+            model = AutoModelForCausalLM.from_pretrained(
+                "hf-internal-testing/tiny-random-MistralForCausalLM", device_map="auto"
+            )
+            tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+            model_inputs = tokenizer("Hello, world!", return_tensors="pt").to(model.device)
+            value = model.generate(
+                **model_inputs,
+                custom_generate=str(tmp_dir),
+                trust_remote_code=True,
+            )
+            assert value == "success"
 
 
 @require_torch
