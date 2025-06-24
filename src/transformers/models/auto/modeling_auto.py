@@ -356,6 +356,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("yoso", "YosoModel"),
         ("zamba", "ZambaModel"),
         ("zamba2", "Zamba2Model"),
+        ("matchboxnet", "MatchboxNetModel"),
     ]
 )
 
@@ -1425,6 +1426,7 @@ MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("wav2vec2-conformer", "Wav2Vec2ConformerForSequenceClassification"),
         ("wavlm", "WavLMForSequenceClassification"),
         ("whisper", "WhisperForAudioClassification"),
+        ("matchboxnet", "MatchboxNetForAudioClassification"),
     ]
 )
 
