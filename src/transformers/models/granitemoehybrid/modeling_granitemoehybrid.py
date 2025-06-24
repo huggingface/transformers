@@ -238,7 +238,7 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
     """
 
     def __init__(self, config: GraniteMoeHybridConfig, batch_size, dtype=torch.float16, device=None):
-        super().__init__(config, batch_size, dtype, device)
+        super().__init__()
         self.layers_block_type = config.layers_block_type
         self.has_previous_state = False  # only used by mamba
         conv_kernel_size = config.mamba_d_conv
