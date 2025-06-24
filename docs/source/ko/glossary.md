@@ -121,7 +121,7 @@ DataParallel 방식에 대해 더 알아보려면 [여기](perf_train_gpu_many#d
 
 ### 디코더 모델 (decoder models)
 
-오토리그레시브 모델(Autoregressive models)이라고도 불리는 디코더 모델은 인과 언어 모델링(causal language modeling)이라 불리는 사전 학습 작업을 수행합니다. 이 작업에서는 모델이 텍스트를 순서대로 읽고 다음 단어를 예측해야 합니다. 일반적으로 문장의 전체를 읽되, 특정 시점 이후의 토큰은 마스크로 가려 예측하게 합니다.
+자기회귀 모델(Autoregressive models)이라고도 불리는 디코더 모델은 인과 언어 모델링(causal language modeling)이라 불리는 사전 학습 작업을 수행합니다. 이 작업에서는 모델이 텍스트를 순서대로 읽고 다음 단어를 예측해야 합니다. 일반적으로 문장의 전체를 읽되, 특정 시점 이후의 토큰은 마스크로 가려 예측하게 합니다.
 
 <Youtube id="d_ixlCubqQw"/>
 
