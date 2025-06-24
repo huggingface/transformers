@@ -36,7 +36,7 @@ from transformers import KyutaiSpeechToTextProcessor, KyutaiSpeechToTextForCondi
 
 # 1. load the model and the processor
 torch_device = "cuda" if torch.cuda.is_available() else "cpu"
-model_id = "/home/eustache_lebihan/add-moshi-asr/stt-2.6b-en"
+model_id = "kyutai/stt-2.6b-en"
 
 processor = KyutaiSpeechToTextProcessor.from_pretrained(model_id)
 model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
@@ -69,7 +69,7 @@ from transformers import KyutaiSpeechToTextProcessor, KyutaiSpeechToTextForCondi
 
 # 1. load the model and the processor
 torch_device = "cuda" if torch.cuda.is_available() else "cpu"
-model_id = "/home/eustache_lebihan/add-moshi-asr/stt-2.6b-en"
+model_id = "kyutai/stt-2.6b-en"
 
 processor = KyutaiSpeechToTextProcessor.from_pretrained(model_id)
 model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
