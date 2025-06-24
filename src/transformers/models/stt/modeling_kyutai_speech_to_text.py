@@ -151,32 +151,78 @@ class KyutaiSpeechToTextConv1dPaddingCache:
     Hidden states are cached from the previous call to the KyutaiSpeechToTextConv1d forward pass, given the padding size.
     """
 
-    def __init__(self):
-        self.padding_cache: list[torch.Tensor] = []
-
-    def update(
+    def __init__(
         self,
-        padding_states: torch.Tensor,
-        layer_idx: int,
+        num_layers: int,
+        per_layer_padding: list[int],
+        per_layer_padding_mode: list[str],
+        per_layer_in_channels: list[int],
     ):
+        # ensure correct number of layers for each arg
+        from_args_num_layers = {len(per_layer_padding), len(per_layer_padding_mode), len(per_layer_in_channels)}
+
+        if len(from_args_num_layers) != 1 or from_args_num_layers.pop() != num_layers:
+            raise ValueError(
+                f"Expected `num_layers` ({num_layers}) values in `per_layer_padding`, `per_layer_padding_mode` and `per_layer_in_channels`"
+            )
+        elif not all(mode in ["constant", "replicate"] for mode in per_layer_padding_mode):
+            raise NotImplementedError(
+                "`padding_cache` is not supported for convolutions using other than `constant` or `replicate` padding mode"
+            )
+
+        self.per_layer_padding = per_layer_padding
+        self.per_layer_padding_mode = per_layer_padding_mode
+        self.per_layer_in_channels = per_layer_in_channels
+        self.per_layer_is_init = [True] * num_layers
+
+        self.padding_cache = [None] * num_layers
+
+    def update(self, hidden_states: torch.Tensor, layer_idx: int):
         """
         Updates the padding cache with the new padding states for the layer `layer_idx` and returns the current cache.
         If cache was not yet initialized, it is initialized with the padding states and None is returned.
 
         Parameters:
-            padding_states (`torch.Tensor`):
-                The new padding states to cache.
+            hidden_states (`torch.Tensor`):
+                The hidden states to be partially cached.
             layer_idx (`int`):
                 The index of the layer to cache the states for.
         Returns:
             `torch.Tensor` or `None`, the current padding cache.
         """
-        if len(self.padding_cache) <= layer_idx:
-            current_cache = None
-            self.padding_cache.append(padding_states)
+        batch_size, dtype, device = hidden_states.shape[0], hidden_states.dtype, hidden_states.device
+        padding = self.per_layer_padding[layer_idx]
+        padding_mode = self.per_layer_padding_mode[layer_idx]
+        in_channels = self.per_layer_in_channels[layer_idx]
+
+        if self.padding_cache[layer_idx] is None:
+            if padding_mode == "constant":
+                current_cache = torch.zeros(
+                    batch_size,
+                    in_channels,
+                    padding,
+                    device=device,
+                    dtype=dtype,
+                )
+            elif padding_mode == "replicate":
+                current_cache = (
+                    torch.ones(
+                        batch_size,
+                        in_channels,
+                        padding,
+                        device=device,
+                        dtype=dtype,
+                    )
+                    * hidden_states[..., :1]
+                )
         else:
             current_cache = self.padding_cache[layer_idx]
 
+        # update the cache
+        if padding > 0:
+            padding_states = hidden_states[:, :, -padding:]
+        else:
+            padding_states = torch.empty(batch_size, in_channels, padding, dtype=dtype, device=device)
         self.padding_cache[layer_idx] = padding_states
 
         return current_cache
@@ -1254,7 +1300,23 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
             model_kwargs["encoder_past_key_values"] = temporary_model_kwargs["past_key_values"]
 
         # initialize the padding cache for the codec model
-        model_kwargs["padding_cache"] = KyutaiSpeechToTextConv1dPaddingCache()
+        per_layer_padding, per_layer_padding_mode, per_layer_in_channels = [], [], []
+        for layer_name in self.codec_model.encoder._mimiconv1d_layer_names:
+            per_layer_padding.append(self.codec_model.encoder.get_submodule(layer_name).padding_total)
+            per_layer_padding_mode.append(self.codec_model.encoder.get_submodule(layer_name).pad_mode)
+            per_layer_in_channels.append(self.codec_model.encoder.get_submodule(layer_name).in_channels)
+
+        # downsample layer
+        per_layer_padding.append(self.codec_model.downsample.padding_total)
+        per_layer_padding_mode.append(self.codec_model.downsample.pad_mode)
+        per_layer_in_channels.append(self.codec_model.downsample.in_channels)
+
+        model_kwargs["padding_cache"] = KyutaiSpeechToTextConv1dPaddingCache(
+            num_layers=len(self.codec_model.encoder._mimiconv1d_layer_names) + 1,
+            per_layer_padding=per_layer_padding,
+            per_layer_padding_mode=per_layer_padding_mode,
+            per_layer_in_channels=per_layer_in_channels,
+        )
 
         return inputs, input_name, model_kwargs
 
@@ -1360,7 +1422,7 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
 
         # TODO: @eustlb, we should have per-batch-idx values
         # here we do not use padding_mask to be aligned to what's done in the original codebase
-        max_audio_frames = self.codec_model.get_encoded_length(input_values.shape[-1])
+        max_audio_frames = input_values.shape[-1] // self.config.codec_config.frame_size
 
         if max_new_tokens is None or max_new_tokens > max_audio_frames:
             if max_new_tokens is not None:

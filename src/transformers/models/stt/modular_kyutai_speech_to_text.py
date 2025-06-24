@@ -363,7 +363,23 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
             model_kwargs["encoder_past_key_values"] = temporary_model_kwargs["past_key_values"]
 
         # initialize the padding cache for the codec model
-        model_kwargs["padding_cache"] = KyutaiSpeechToTextConv1dPaddingCache()
+        per_layer_padding, per_layer_padding_mode, per_layer_in_channels = [], [], []
+        for layer_name in self.codec_model.encoder._mimiconv1d_layer_names:
+            per_layer_padding.append(self.codec_model.encoder.get_submodule(layer_name).padding_total)
+            per_layer_padding_mode.append(self.codec_model.encoder.get_submodule(layer_name).pad_mode)
+            per_layer_in_channels.append(self.codec_model.encoder.get_submodule(layer_name).in_channels)
+
+        # downsample layer
+        per_layer_padding.append(self.codec_model.downsample.padding_total)
+        per_layer_padding_mode.append(self.codec_model.downsample.pad_mode)
+        per_layer_in_channels.append(self.codec_model.downsample.in_channels)
+
+        model_kwargs["padding_cache"] = KyutaiSpeechToTextConv1dPaddingCache(
+            num_layers=len(self.codec_model.encoder._mimiconv1d_layer_names) + 1,
+            per_layer_padding=per_layer_padding,
+            per_layer_padding_mode=per_layer_padding_mode,
+            per_layer_in_channels=per_layer_in_channels,
+        )
 
         return inputs, input_name, model_kwargs
 
@@ -469,7 +485,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
 
         # TODO: @eustlb, we should have per-batch-idx values
         # here we do not use padding_mask to be aligned to what's done in the original codebase
-        max_audio_frames = self.codec_model.get_encoded_length(input_values.shape[-1])
+        max_audio_frames = input_values.shape[-1] // self.config.codec_config.frame_size
 
         if max_new_tokens is None or max_new_tokens > max_audio_frames:
             if max_new_tokens is not None:
