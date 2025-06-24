@@ -893,15 +893,16 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs, interpolate_pos_encoding=True)
 
-        # verify the logits
-        expected_shape = torch.Size((1, 145, 1024))
+        # (PR 37743 makes `kosmos2` not returning anymore `vision_model_output`)
+        # verify `image_embeds`
+        expected_shape = torch.Size((1, 64, 2048))
 
-        self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
+        self.assertEqual(outputs.image_embeds.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[0.9148, -1.4148, 3.8040], [3.3443, 1.9478, 0.2080], [1.6604, 2.8184, -0.3618]]
+            [[-0.0382,  0.2119,  0.1090], [0.2132, -0.0848, -0.0337], [0.1235, -0.0659,  0.0739]]
         ).to(torch_device)
 
         torch.testing.assert_close(
-            outputs.vision_model_output.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-2, atol=1e-2
+            outputs.image_embeds[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4
         )
