@@ -76,7 +76,6 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
     ):
         processed_images = []
 
-
         # Group images by shape for more efficient batch processing
         grouped_images, grouped_images_index = group_images_by_shape(images)
         resized_images_grouped = {}

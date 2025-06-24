@@ -273,7 +273,7 @@ class MobileViTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         # Test with single image and segmentation map
         image, segmentation_map = prepare_semantic_single_inputs()
-        
+
         encoding_slow = image_processor_slow(image, segmentation_map, return_tensors="pt")
         encoding_fast = image_processor_fast(image, segmentation_map, return_tensors="pt")
         torch.testing.assert_close(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1, rtol=1e-3)
@@ -311,7 +311,7 @@ class MobileViTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         # Test with batched images and segmentation maps
         images, segmentation_maps = prepare_semantic_batch_inputs()
-        
+
         encoding_slow = image_processor_slow(images, segmentation_maps, return_tensors="pt")
         encoding_fast = image_processor_fast(images, segmentation_maps, return_tensors="pt")
 
