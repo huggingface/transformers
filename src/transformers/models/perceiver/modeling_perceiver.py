@@ -45,27 +45,15 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class PerceiverModelOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for Perceiver base model's outputs, with potential hidden states, attentions and cross-attentions.
-
-    Args:
-        logits (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
-            Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
-            plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
-        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-            used to compute the weighted average in the cross-attention heads.
+    """
+)
+class PerceiverModelOutput(ModelOutput):
+    r"""
+    logits (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
+        Classification (or regression if config.num_labels==1) scores (before SoftMax).
     """
 
     logits: Optional[torch.FloatTensor] = None
@@ -76,17 +64,15 @@ class PerceiverModelOutput(ModelOutput):
 
 
 @dataclass
-class PerceiverDecoderOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for Perceiver decoder outputs, with potential cross-attentions.
-
-    Args:
-        logits (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
-            Output of the basic decoder.
-        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-            used to compute the weighted average in the cross-attention heads.
+    """
+)
+class PerceiverDecoderOutput(ModelOutput):
+    r"""
+    logits (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
+        Output of the basic decoder.
     """
 
     logits: Optional[torch.FloatTensor] = None
@@ -94,27 +80,17 @@ class PerceiverDecoderOutput(ModelOutput):
 
 
 @dataclass
-class PerceiverMaskedLMOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for Perceiver's masked language model outputs.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Masked language modeling (MLM) loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
-            plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, num_latents,
-            num_latents)`. Attentions weights after the attention softmax, used to compute the weighted average in the
-            self-attention heads.
-        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-            used to compute the weighted average in the cross-attention heads.
+    """
+)
+class PerceiverMaskedLMOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Masked language modeling (MLM) loss.
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -125,28 +101,18 @@ class PerceiverMaskedLMOutput(ModelOutput):
 
 
 @dataclass
-class PerceiverClassifierOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for Perceiver's outputs of sequence/image classification models, optical flow and multimodal
     autoencoding.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Classification (or regression if config.num_labels==1) loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
-            Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
-            plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
-        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-            used to compute the weighted average in the cross-attention heads.
+    """
+)
+class PerceiverClassifierOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Classification (or regression if config.num_labels==1) loss.
+    logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+        Classification (or regression if config.num_labels==1) scores (before SoftMax).
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -1852,13 +1818,13 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
         r"""
         inputs (`torch.FloatTensor`):
             Inputs to the perceiver. Can be anything: images, text, audio, video, etc.
+        subsampled_output_points (`dict[str, torch.Tensor]`, *optional*):
+            Dictionary of tensors used as queries for the decoder. The decoder maps these queries to the latent
+            representation of the model. Used for subsampled decoding, e.g. when only decoding certain image patches.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        subsampled_output_points (`dict[str, torch.Tensor]`, *optional*):
-            Dictionary of tensors used as queries for the decoder. The decoder maps these queries to the latent
-            representation of the model. Used for subsampled decoding, e.g. when only decoding certain image patches.
 
         Examples:
 
@@ -2533,7 +2499,7 @@ class Conv2dSamePadding(nn.Conv2d):
     """
 
     def __init__(self, *args, **kwargs):
-        super(Conv2dSamePadding, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.zero_pad_2d = nn.ZeroPad2d(
             reduce(__add__, [(k // 2 + (k - 2 * (k // 2)) - 1, k // 2) for k in self.kernel_size[::-1]])
         )

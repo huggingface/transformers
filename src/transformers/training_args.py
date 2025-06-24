@@ -793,6 +793,11 @@ class TrainingArguments:
             It can effectively increase multi-GPU training throughput by ~20% and reduces memory usage by ~60%, works out of the box with
             flash attention, PyTorch FSDP, and Microsoft DeepSpeed. Currently, it supports llama, mistral, mixtral and gemma models.
 
+        liger_kernel_config (`Optional[dict]`, *optional*):
+            Configuration to be used for Liger Kernel. When use_liger_kernel=True, this dict is passed as keyword arguments to the
+            `_apply_liger_kernel_to_instance` function, which specifies which kernels to apply. Available options vary by model but typically
+            include: 'rope', 'swiglu', 'cross_entropy', 'fused_linear_cross_entropy', 'rms_norm', etc. If `None`, use the default kernel configurations.
+
         average_tokens_across_devices (`bool`, *optional*, defaults to `False`):
             Whether or not to average tokens across devices. If enabled, will use all_reduce to synchronize
             num_tokens_in_batch for precise loss calculation. Reference:
@@ -1523,6 +1528,19 @@ class TrainingArguments:
     use_liger_kernel: Optional[bool] = field(
         default=False,
         metadata={"help": "Whether or not to enable the Liger Kernel for model training."},
+    )
+
+    liger_kernel_config: Optional[dict[str, bool]] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Configuration to be used for Liger Kernel. When use_liger_kernel=True, "
+                "this dict is passed as keyword arguments to the `_apply_liger_kernel_to_instance` function, "
+                "which specifies which kernels to apply. Available options vary by model "
+                "but typically include: 'rope', 'swiglu', 'cross_entropy', 'fused_linear_cross_entropy', "
+                "'rms_norm', etc. If None, use the default kernel configurations."
+            )
+        },
     )
 
     eval_use_gather_object: Optional[bool] = field(

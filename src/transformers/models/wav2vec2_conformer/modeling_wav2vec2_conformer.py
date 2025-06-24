@@ -17,6 +17,7 @@ from torch.nn import CrossEntropyLoss
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     CausalLMOutput,
@@ -35,35 +36,28 @@ from .configuration_wav2vec2_conformer import Wav2Vec2ConformerConfig
 
 
 @dataclass
-class Wav2Vec2ConformerForPreTrainingOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Output type of [`Wav2Vec2ConformerForPreTraining`], with potential hidden states and attentions.
-
-    Args:
-        loss (*optional*, returned when `sample_negative_indices` are passed, `torch.FloatTensor` of shape `(1,)`):
-            Total loss as the sum of the contrastive loss (L_m) and the diversity loss (L_d) as stated in the [official
-            paper](https://huggingface.co/papers/2006.11477) . (classification) loss.
-        projected_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
-            Hidden-states of the model projected to *config.proj_codevector_dim* that can be used to predict the masked
-            projected quantized states.
-        projected_quantized_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
-            Quantized extracted feature vectors projected to *config.proj_codevector_dim* representing the positive
-            target vectors for contrastive loss.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        contrastive_loss (*optional*, returned when `sample_negative_indices` are passed, `torch.FloatTensor` of shape `(1,)`):
-            The contrastive loss (L_m) as stated in the [official paper](https://huggingface.co/papers/2006.11477) .
-        diversity_loss (*optional*, returned when `sample_negative_indices` are passed, `torch.FloatTensor` of shape `(1,)`):
-            The diversity loss (L_d) as stated in the [official paper](https://huggingface.co/papers/2006.11477) .
+    """
+)
+class Wav2Vec2ConformerForPreTrainingOutput(ModelOutput):
+    r"""
+    loss (*optional*, returned when `sample_negative_indices` are passed, `torch.FloatTensor` of shape `(1,)`):
+        Total loss as the sum of the contrastive loss (L_m) and the diversity loss (L_d) as stated in the [official
+        paper](https://arxiv.org/pdf/2006.11477.pdf) . (classification) loss.
+    projected_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
+        Hidden-states of the model projected to *config.proj_codevector_dim* that can be used to predict the masked
+        projected quantized states.
+    projected_quantized_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
+        Quantized extracted feature vectors projected to *config.proj_codevector_dim* representing the positive
+        target vectors for contrastive loss.
+    codevector_perplexity (`torch.FloatTensor` of shape `(1,)`):
+        The perplexity of the codevector distribution, used to measure the diversity of the codebook.
+    contrastive_loss (*optional*, returned when `sample_negative_indices` are passed, `torch.FloatTensor` of shape `(1,)`):
+        The contrastive loss (L_m) as stated in the [official paper](https://arxiv.org/pdf/2006.11477.pdf) .
+    diversity_loss (*optional*, returned when `sample_negative_indices` are passed, `torch.FloatTensor` of shape `(1,)`):
+        The diversity loss (L_d) as stated in the [official paper](https://arxiv.org/pdf/2006.11477.pdf) .
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -216,7 +210,7 @@ class Wav2Vec2ConformerRelPositionalEmbedding(nn.Module):
         return relative_position_embeddings
 
 
-class Wav2Vec2ConformerNoLayerNormConvLayer(nn.Module):
+class Wav2Vec2ConformerNoLayerNormConvLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -237,7 +231,7 @@ class Wav2Vec2ConformerNoLayerNormConvLayer(nn.Module):
         return hidden_states
 
 
-class Wav2Vec2ConformerLayerNormConvLayer(nn.Module):
+class Wav2Vec2ConformerLayerNormConvLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -264,7 +258,7 @@ class Wav2Vec2ConformerLayerNormConvLayer(nn.Module):
         return hidden_states
 
 
-class Wav2Vec2ConformerGroupNormConvLayer(nn.Module):
+class Wav2Vec2ConformerGroupNormConvLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -324,13 +318,7 @@ class Wav2Vec2ConformerFeatureEncoder(nn.Module):
             hidden_states.requires_grad = True
 
         for conv_layer in self.conv_layers:
-            if self._requires_grad and self.gradient_checkpointing and self.training:
-                hidden_states = self._gradient_checkpointing_func(
-                    conv_layer.__call__,
-                    hidden_states,
-                )
-            else:
-                hidden_states = conv_layer(hidden_states)
+            hidden_states = conv_layer(hidden_states)
 
         return hidden_states
 
@@ -582,7 +570,7 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
         return scores
 
 
-class Wav2Vec2ConformerEncoderLayer(nn.Module):
+class Wav2Vec2ConformerEncoderLayer(GradientCheckpointingLayer):
     """Conformer block based on https://huggingface.co/papers/2005.08100."""
 
     def __init__(self, config):
@@ -709,21 +697,12 @@ class Wav2Vec2ConformerEncoder(nn.Module):
             skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        layer.__call__,
-                        hidden_states,
-                        attention_mask,
-                        relative_position_embeddings,
-                        output_attentions,
-                    )
-                else:
-                    layer_outputs = layer(
-                        hidden_states,
-                        attention_mask=attention_mask,
-                        relative_position_embeddings=relative_position_embeddings,
-                        output_attentions=output_attentions,
-                    )
+                layer_outputs = layer(
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    relative_position_embeddings=relative_position_embeddings,
+                    output_attentions=output_attentions,
+                )
                 hidden_states = layer_outputs[0]
 
             if skip_the_layer:
@@ -1751,7 +1730,7 @@ class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ConformerPreTrainedMo
 
 class AMSoftmaxLoss(nn.Module):
     def __init__(self, input_dim, num_labels, scale=30.0, margin=0.4):
-        super(AMSoftmaxLoss, self).__init__()
+        super().__init__()
         self.scale = scale
         self.margin = margin
         self.num_labels = num_labels

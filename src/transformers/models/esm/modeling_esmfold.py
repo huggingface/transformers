@@ -53,59 +53,61 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class EsmForProteinFoldingOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Output type of [`EsmForProteinFoldingOutput`].
-
-    Args:
-        frames (`torch.FloatTensor`):
-            Output frames.
-        sidechain_frames (`torch.FloatTensor`):
-            Output sidechain frames.
-        unnormalized_angles (`torch.FloatTensor`):
-            Predicted unnormalized backbone and side chain torsion angles.
-        angles (`torch.FloatTensor`):
-            Predicted backbone and side chain torsion angles.
-        positions (`torch.FloatTensor`):
-            Predicted positions of the backbone and side chain atoms.
-        states (`torch.FloatTensor`):
-            Hidden states from the protein folding trunk.
-        s_s (`torch.FloatTensor`):
-            Per-residue embeddings derived by concatenating the hidden states of each layer of the ESM-2 LM stem.
-        s_z (`torch.FloatTensor`):
-            Pairwise residue embeddings.
-        distogram_logits (`torch.FloatTensor`):
-            Input logits to the distogram used to compute residue distances.
-        lm_logits (`torch.FloatTensor`):
-            Logits output by the ESM-2 protein language model stem.
-        aatype (`torch.FloatTensor`):
-            Input amino acids (AlphaFold2 indices).
-        atom14_atom_exists (`torch.FloatTensor`):
-            Whether each atom exists in the atom14 representation.
-        residx_atom14_to_atom37 (`torch.FloatTensor`):
-            Mapping between atoms in the atom14 and atom37 representations.
-        residx_atom37_to_atom14 (`torch.FloatTensor`):
-            Mapping between atoms in the atom37 and atom14 representations.
-        atom37_atom_exists (`torch.FloatTensor`):
-            Whether each atom exists in the atom37 representation.
-        residue_index (`torch.FloatTensor`):
-            The index of each residue in the protein chain. Unless internal padding tokens are used, this will just be
-            a sequence of integers from 0 to `sequence_length`.
-        lddt_head (`torch.FloatTensor`):
-            Raw outputs from the lddt head used to compute plddt.
-        plddt (`torch.FloatTensor`):
-            Per-residue confidence scores. Regions of low confidence may indicate areas where the model's prediction is
-            uncertain, or where the protein structure is disordered.
-        ptm_logits (`torch.FloatTensor`):
-            Raw logits used for computing ptm.
-        ptm (`torch.FloatTensor`):
-            TM-score output representing the model's high-level confidence in the overall structure.
-        aligned_confidence_probs (`torch.FloatTensor`):
-            Per-residue confidence scores for the aligned structure.
-        predicted_aligned_error (`torch.FloatTensor`):
-            Predicted error between the model's prediction and the ground truth.
-        max_predicted_aligned_error (`torch.FloatTensor`):
-            Per-sample maximum predicted error.
+    """
+)
+class EsmForProteinFoldingOutput(ModelOutput):
+    r"""
+    frames (`torch.FloatTensor`):
+        Output frames.
+    sidechain_frames (`torch.FloatTensor`):
+        Output sidechain frames.
+    unnormalized_angles (`torch.FloatTensor`):
+        Predicted unnormalized backbone and side chain torsion angles.
+    angles (`torch.FloatTensor`):
+        Predicted backbone and side chain torsion angles.
+    positions (`torch.FloatTensor`):
+        Predicted positions of the backbone and side chain atoms.
+    states (`torch.FloatTensor`):
+        Hidden states from the protein folding trunk.
+    s_s (`torch.FloatTensor`):
+        Per-residue embeddings derived by concatenating the hidden states of each layer of the ESM-2 LM stem.
+    s_z (`torch.FloatTensor`):
+        Pairwise residue embeddings.
+    distogram_logits (`torch.FloatTensor`):
+        Input logits to the distogram used to compute residue distances.
+    lm_logits (`torch.FloatTensor`):
+        Logits output by the ESM-2 protein language model stem.
+    aatype (`torch.FloatTensor`):
+        Input amino acids (AlphaFold2 indices).
+    atom14_atom_exists (`torch.FloatTensor`):
+        Whether each atom exists in the atom14 representation.
+    residx_atom14_to_atom37 (`torch.FloatTensor`):
+        Mapping between atoms in the atom14 and atom37 representations.
+    residx_atom37_to_atom14 (`torch.FloatTensor`):
+        Mapping between atoms in the atom37 and atom14 representations.
+    atom37_atom_exists (`torch.FloatTensor`):
+        Whether each atom exists in the atom37 representation.
+    residue_index (`torch.FloatTensor`):
+        The index of each residue in the protein chain. Unless internal padding tokens are used, this will just be
+        a sequence of integers from 0 to `sequence_length`.
+    lddt_head (`torch.FloatTensor`):
+        Raw outputs from the lddt head used to compute plddt.
+    plddt (`torch.FloatTensor`):
+        Per-residue confidence scores. Regions of low confidence may indicate areas where the model's prediction is
+        uncertain, or where the protein structure is disordered.
+    ptm_logits (`torch.FloatTensor`):
+        Raw logits used for computing ptm.
+    ptm (`torch.FloatTensor`):
+        TM-score output representing the model's high-level confidence in the overall structure.
+    aligned_confidence_probs (`torch.FloatTensor`):
+        Per-residue confidence scores for the aligned structure.
+    predicted_aligned_error (`torch.FloatTensor`):
+        Predicted error between the model's prediction and the ground truth.
+    max_predicted_aligned_error (`torch.FloatTensor`):
+        Per-sample maximum predicted error.
     """
 
     frames: Optional[torch.FloatTensor] = None
@@ -133,9 +135,14 @@ class EsmForProteinFoldingOutput(ModelOutput):
     max_predicted_aligned_error: Optional[torch.FloatTensor] = None
 
 
-def is_fp16_enabled():
+def is_fp16_enabled(device_type):
     # Autocast world
-    fp16_enabled = torch.get_autocast_gpu_dtype() == torch.float16
+    autocast_dtype = (
+        torch.get_autocast_dtype(device_type)
+        if hasattr(torch, "get_autocast_dtype")
+        else torch.get_autocast_gpu_dtype()
+    )
+    fp16_enabled = autocast_dtype == torch.float16
     fp16_enabled = fp16_enabled and torch.is_autocast_enabled()
 
     return fp16_enabled
@@ -885,8 +892,9 @@ class EsmFoldTriangleMultiplicativeUpdate(nn.Module):
         b = b * self.sigmoid(self.linear_b_g(z))
         b = b * self.linear_b_p(z)
 
-        if is_fp16_enabled():
-            with torch.cuda.amp.autocast(enabled=False):
+        device_type = a.device.type if a.device.type != "mps" else "cpu"
+        if is_fp16_enabled(device_type):
+            with torch.autocast(device_type=device_type, enabled=False):
                 x = self._combine_projections(a.float(), b.float())
         else:
             x = self._combine_projections(a, b)
@@ -1499,8 +1507,9 @@ class EsmFoldInvariantPointAttention(nn.Module):
             z[0] = z[0].cpu()
 
         # [*, H, N_res, N_res]
-        if is_fp16_enabled():
-            with torch.cuda.amp.autocast(enabled=False):
+        device_type = q.device.type if q.device.type != "mps" else "cpu"
+        if is_fp16_enabled(device_type):
+            with torch.autocast(device_type=device_type, enabled=False):
                 a = torch.matmul(
                     permute_final_dims(q.float(), (1, 0, 2)),  # [*, H, N_res, C_hidden]
                     permute_final_dims(k.float(), (1, 2, 0)),  # [*, H, C_hidden, N_res]

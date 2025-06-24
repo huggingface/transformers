@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -459,9 +460,14 @@ class EsmFlashAttention2(EsmSelfAttention):
         # This might slowdown training & inference so it is recommended to not cast the LayerNorms
         # in fp32.
         input_dtype = query_layer.dtype
+        device_type = query_layer.device.type if query_layer.device.type != "mps" else "cpu"
         if input_dtype == torch.float32:
             if torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_gpu_dtype()
+                target_dtype = (
+                    torch.get_autocast_dtype(device_type)
+                    if hasattr(torch, "get_autocast_dtype")
+                    else torch.get_autocast_gpu_dtype()
+                )
             # Handle the case where the model is quantized
             elif hasattr(self.config, "_pre_quantization_dtype"):
                 target_dtype = self.config._pre_quantization_dtype
@@ -594,7 +600,7 @@ class EsmOutput(nn.Module):
         return hidden_states
 
 
-class EsmLayer(nn.Module):
+class EsmLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -720,27 +726,15 @@ class EsmEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    past_key_value,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    past_key_value,
-                    output_attentions,
-                )
+            layer_outputs = layer_module(
+                hidden_states,
+                attention_mask,
+                layer_head_mask,
+                encoder_hidden_states,
+                encoder_attention_mask,
+                past_key_value,
+                output_attentions,
+            )
 
             hidden_states = layer_outputs[0]
             if use_cache:
