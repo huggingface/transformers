@@ -241,27 +241,6 @@ class Glm4vVisionEmbeddings(nn.Module):
         return embeddings
 
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-def apply_rotary_pos_emb_vision(
-    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
-) -> tuple[torch.Tensor, torch.Tensor]:
-    orig_q_dtype = q.dtype
-    orig_k_dtype = k.dtype
-    q, k = q.float(), k.float()
-    cos, sin = cos.unsqueeze(-2).float(), sin.unsqueeze(-2).float()
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    q_embed = q_embed.to(orig_q_dtype)
-    k_embed = k_embed.to(orig_k_dtype)
-    return q_embed, k_embed
-
-
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -300,6 +279,27 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+def apply_rotary_pos_emb_vision(
+    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
+    orig_q_dtype = q.dtype
+    orig_k_dtype = k.dtype
+    q, k = q.float(), k.float()
+    cos, sin = cos.unsqueeze(-2).float(), sin.unsqueeze(-2).float()
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    q_embed = q_embed.to(orig_q_dtype)
+    k_embed = k_embed.to(orig_k_dtype)
+    return q_embed, k_embed
+
+
 class Glm4vVisionAttention(nn.Module):
     def __init__(self, config: Glm4vVisionConfig) -> None:
         super().__init__()
@@ -325,14 +325,13 @@ class Glm4vVisionAttention(nn.Module):
         cos, sin = position_embeddings
         q, k = apply_rotary_pos_emb_vision(q, k, cos, sin)
 
-        attention_mask = torch.zeros([1, seq_length, seq_length], device=q.device, dtype=torch.bool)
+        attention_mask = torch.zeros([1, 1, seq_length, seq_length], device=q.device, dtype=torch.bool)
         for i in range(1, len(cu_seqlens)):
             attention_mask[..., cu_seqlens[i - 1] : cu_seqlens[i], cu_seqlens[i - 1] : cu_seqlens[i]] = True
 
         q = q.transpose(0, 1).unsqueeze(0)
         k = k.transpose(0, 1).unsqueeze(0)
         v = v.transpose(0, 1).unsqueeze(0)
-        attention_mask = attention_mask.unsqueeze(1)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
