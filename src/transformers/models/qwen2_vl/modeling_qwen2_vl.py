@@ -335,16 +335,15 @@ def eager_attention_forward(
 
 
 class VisionAttention(nn.Module):
-    def __init__(self, dim: int, num_heads: int = 16, config: Qwen2VLVisionConfig = None) -> None:
+    def __init__(self, config: Qwen2VLVisionConfig) -> None:
         super().__init__()
-        self.num_heads = num_heads
-        self.head_dim = dim // num_heads
+        self.dim = config.embed_dim
+        self.num_heads = config.num_heads
+        self.head_dim = self.dim // self.num_heads
         self.num_key_value_groups = 1  # needed for eager attention
-        self.qkv = nn.Linear(dim, dim * 3, bias=True)
-        self.proj = nn.Linear(dim, dim)
+        self.qkv = nn.Linear(self.dim, self.dim * 3, bias=True)
+        self.proj = nn.Linear(self.dim, self.dim)
         self.scaling = math.sqrt(self.head_dim)
-        if config is None:
-            raise ValueError("`config` is a required argument for Qwen2-VL `VisionAttention`")
         self.config = config
 
     def forward(
@@ -419,7 +418,7 @@ class Qwen2VLVisionBlock(nn.Module):
         self.norm2 = LayerNorm(config.embed_dim, eps=1e-6)
         mlp_hidden_dim = int(config.embed_dim * config.mlp_ratio)
 
-        self.attn = VisionAttention(config.embed_dim, num_heads=config.num_heads, config=config)
+        self.attn = VisionAttention(config=config)
         self.mlp = VisionMlp(dim=config.embed_dim, hidden_dim=mlp_hidden_dim, hidden_act=config.hidden_act)
 
     def forward(

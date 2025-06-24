@@ -197,16 +197,15 @@ def eager_attention_forward(
 
 
 class Qwen2_5_VLVisionAttention(nn.Module):
-    def __init__(self, dim: int, num_heads: int = 16, config: Qwen2_5_VLVisionConfig = None) -> None:
+    def __init__(self, config: Qwen2_5_VLVisionConfig) -> None:
         super().__init__()
-        self.num_heads = num_heads
-        self.head_dim = dim // num_heads
+        self.dim = config.hidden_size
+        self.num_heads = config.num_heads
+        self.head_dim = self.dim // self.num_heads
         self.num_key_value_groups = 1  # needed for eager attention
-        self.qkv = nn.Linear(dim, dim * 3, bias=True)
-        self.proj = nn.Linear(dim, dim)
+        self.qkv = nn.Linear(self.dim, self.dim * 3, bias=True)
+        self.proj = nn.Linear(self.dim, self.dim)
         self.scaling = math.sqrt(self.head_dim)
-        if config is None:
-            raise ValueError("`config` is a required argument for Qwen2-VL `Qwen25VLVisionAttention`")
         self.config = config
 
     def forward(
@@ -279,7 +278,7 @@ class Qwen2_5_VLVisionBlock(nn.Module):
         super().__init__()
         self.norm1 = Qwen2RMSNorm(config.hidden_size, eps=1e-6)
         self.norm2 = Qwen2RMSNorm(config.hidden_size, eps=1e-6)
-        self.attn = Qwen2_5_VLVisionAttention(config.hidden_size, num_heads=config.num_heads, config=config)
+        self.attn = Qwen2_5_VLVisionAttention(config=config)
         self.mlp = Qwen2_5_VLMLP(config, bias=True)
 
     def forward(

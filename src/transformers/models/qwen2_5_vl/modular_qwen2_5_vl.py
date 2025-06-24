@@ -140,7 +140,9 @@ class Qwen2_5_VLPatchMerger(PatchMerger):
 
 
 class Qwen2_5_VLVisionAttention(VisionAttention):
-    pass
+    def __init__(self, config: Qwen2_5_VLVisionConfig) -> None:
+        super().__init__()
+        self.dim = config.hidden_size
 
 
 class Qwen2_5_VLVisionBlock(nn.Module):
@@ -148,7 +150,7 @@ class Qwen2_5_VLVisionBlock(nn.Module):
         super().__init__()
         self.norm1 = Qwen2RMSNorm(config.hidden_size, eps=1e-6)
         self.norm2 = Qwen2RMSNorm(config.hidden_size, eps=1e-6)
-        self.attn = Qwen2_5_VLVisionAttention(config.hidden_size, num_heads=config.num_heads, config=config)
+        self.attn = Qwen2_5_VLVisionAttention(config=config)
         self.mlp = Qwen2_5_VLMLP(config, bias=True)
 
     def forward(

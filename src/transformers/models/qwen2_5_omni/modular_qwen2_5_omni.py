@@ -1915,18 +1915,17 @@ def apply_rotary_pos_emb_vision(tensor: torch.Tensor, freqs: torch.Tensor) -> to
 
 
 class Qwen2_5OmniVisionAttention(nn.Module):
-    def __init__(self, dim: int, num_heads: int = 16, config: Qwen2_5OmniVisionEncoderConfig = None) -> None:
+    def __init__(self, config: Qwen2_5OmniVisionEncoderConfig = None) -> None:
         super().__init__()
-        self.num_heads = num_heads
-        self.head_dim = dim // num_heads
-        self.q = nn.Linear(dim, dim, bias=True)
-        self.k = nn.Linear(dim, dim, bias=True)
-        self.v = nn.Linear(dim, dim, bias=True)
-        self.proj = nn.Linear(dim, dim)
+        self.dim = config.hidden_size
+        self.num_heads = config.num_heads
+        self.head_dim = self.dim // self.num_heads
+        self.q = nn.Linear(self.dim, self.dim, bias=True)
+        self.k = nn.Linear(self.dim, self.dim, bias=True)
+        self.v = nn.Linear(self.dim, self.dim, bias=True)
+        self.proj = nn.Linear(self.dim, self.dim)
         self.scaling = math.sqrt(self.head_dim)
         self.num_key_value_groups = 1  # needed for eager attention
-        if config is None:
-            raise ValueError("`config` is a required argument for Qwen2-VL `VisionAttention`")
         self.config = config
 
     def forward(
@@ -1985,7 +1984,7 @@ class Qwen2_5OmniVisionAttention(nn.Module):
 class Qwen2_5OmniVisionBlock(Qwen2_5_VLVisionBlock):
     def __init__(self, config: Qwen2_5OmniVisionEncoderConfig) -> None:
         super().__init__(config, config._attn_implementation)
-        self.attn = Qwen2_5OmniVisionAttention(config.hidden_size, num_heads=config.num_heads, config=config)
+        self.attn = Qwen2_5OmniVisionAttention(config=config)
 
     def forward(
         self,
