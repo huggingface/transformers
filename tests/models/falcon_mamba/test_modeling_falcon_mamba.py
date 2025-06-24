@@ -359,6 +359,8 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 
     def test_initialization(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.rescale_prenorm_residual = True
+        config.initializer_range = 0
 
         for model_class in self.all_model_classes:
             model = model_class(config=config)
@@ -380,6 +382,19 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
                     if param.requires_grad:
                         # check if it's a ones like
                         torch.testing.assert_close(param.data, torch.ones_like(param.data), rtol=1e-5, atol=1e-5)
+                else:
+                    if param.requires_grad:
+                        if (
+                            "mixer.conv1d.weight" in name
+                            or "mixer.dt_proj.weight" in name
+                            or "mixer.out_proj.weight" in name
+                        ):
+                            continue
+                        self.assertIn(
+                            ((param.data.mean() * 1e9).round() / 1e9).item(),
+                            [0.0, 1.0],
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
 
     @slow
     # Ignore copy
