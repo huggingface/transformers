@@ -259,7 +259,7 @@ class DiaProcessor(ProcessorMixin):
             labels[labels == audio_pad_token_id] = -100
             labels[labels == audio_bos_token_id] = -100
 
-            data["labels"] = labels.transpose(1, 2).reshape(batch_size * num_channels, -1)
+            data["labels"] = labels.transpose(1, 2).reshape(batch_size * num_channels, -1).long()
             data["decoder_input_ids"] = data["decoder_input_ids"][:, :-1]
             data["decoder_attention_mask"] = data["decoder_attention_mask"][:, :-1]
 

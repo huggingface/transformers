@@ -472,21 +472,23 @@ class DiaGenerationMixin(GenerationMixin):
         if delay_mask is not None:
             delay_mask = delay_mask.clone()
 
-        output = self._main_generate_loop(
-            inputs=inputs,
-            generation_config=generation_config,
-            logits_processor=logits_processor,
-            stopping_criteria=stopping_criteria,
-            prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
-            synced_gpus=synced_gpus,
-            assistant_model=assistant_model,
-            streamer=streamer,
-            negative_prompt_ids=negative_prompt_ids,
-            negative_prompt_attention_mask=negative_prompt_attention_mask,
-            use_model_defaults=use_model_defaults,
-            custom_generate=custom_generate,
-            **kwargs,
-        )
+        # TODO: is there a bug with generate not turning off requires grad?
+        with torch.no_grad():
+            output = self._main_generate_loop(
+                inputs=inputs,
+                generation_config=generation_config,
+                logits_processor=logits_processor,
+                stopping_criteria=stopping_criteria,
+                prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
+                synced_gpus=synced_gpus,
+                assistant_model=assistant_model,
+                streamer=streamer,
+                negative_prompt_ids=negative_prompt_ids,
+                negative_prompt_attention_mask=negative_prompt_attention_mask,
+                use_model_defaults=use_model_defaults,
+                custom_generate=custom_generate,
+                **kwargs,
+            )
 
         return_dict_in_generate = not isinstance(output, torch.Tensor)
 

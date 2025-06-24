@@ -16,21 +16,102 @@ rendered properly in your Markdown viewer.
 
 # Dia
 
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
+
 ## Overview
 
-The Dia model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+Dia is an opensource text-to-speech (TTS) model (1.6B parameters) developed by [Nari Labs](https://huggingface.co/nari-labs).
+It can generate highly realistic dialogue from transcript including nonverbal communications such as laughter and coughing.
+Furthermore, emotion and tone control is also possible via audio conditioning (voice cloning).
 
-The abstract from the paper is the following:
+**Model Architecture:**
+Dia is an encoder-decoder transformer based on the original transformer architecture. However, some more modern features such as
+rotational positional embeddings (RoPE) are also included. For its text portion (encoder), a byte tokenizer is utilized while
+for the audio portion (decoder), a pretrained codec model [DAC](./dac.md) is used - DAC encodes speech into discrete codebook
+tokens and decodes them back into audio.
 
-*<INSERT PAPER ABSTRACT HERE>*
+## Usage Tips
 
-Tips:
+### Generation with Text
 
-<INSERT TIPS ABOUT MODEL HERE>
+```python
+import torch
+from transformers import AutoProcessor, DiaForConditionalGeneration
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+torch_device = "cuda"
+model_checkpoint = "AntonV/Dia-1.6B"  # TODO: update ckpt
+
+text = ["[S1] Dia is an open weights text to dialogue model. [S2] You get full control over scripts and voices."]
+processor = AutoProcessor.from_pretrained(model_checkpoint)
+inputs = processor(text=text, padding=True, return_tensors="pt").to(torch_device)
+
+model = DiaForConditionalGeneration.from_pretrained(model_checkpoint).to(torch_device)
+outputs = model.generate(**inputs, max_new_tokens=1024)  # corresponds to up to ~12s
+```
+
+### Generation with Text and Audio (Voice Cloning)
+
+```python
+import torch
+from datasets import load_dataset, Audio
+from transformers import AutoProcessor, DiaForConditionalGeneration
+
+torch_device = "cuda"
+model_checkpoint = "AntonV/Dia-1.6B"  # TODO: update ckpt
+
+ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
+ds = ds.cast_column("audio", Audio(sampling_rate=44100))
+audio = ds[-1]["audio"]["array"]
+# text is a transcript of the audio
+text = ["[S1] I know. It's going to save me a lot of money, I hope."]
+
+processor = AutoProcessor.from_pretrained(model_checkpoint)
+inputs = processor(text=text, audio=audio, padding=True, return_tensors="pt").to(torch_device)
+
+model = DiaForConditionalGeneration.from_pretrained(model_checkpoint).to(torch_device)
+outputs = model.generate(**inputs, max_new_tokens=1024)  # corresponds to up to ~12s
+```
+
+### Training
+
+```python
+import torch
+from datasets import load_dataset, Audio
+from transformers import AutoProcessor, DiaForConditionalGeneration
+
+torch_device = "cuda"
+model_checkpoint = "AntonV/Dia-1.6B"  # TODO: update ckpt
+
+ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
+ds = ds.cast_column("audio", Audio(sampling_rate=44100))
+audio = ds[-1]["audio"]["array"]
+# text is a transcript of the audio
+text = ["[S1] I know. It's going to save me a lot of money, I hope."]
+
+processor = AutoProcessor.from_pretrained(model_checkpoint)
+inputs = processor(
+    text=text,
+    audio=audio,
+    generation=False,
+    output_labels=True,
+    padding=True,
+    return_tensors="pt"
+).to(torch_device)
+
+model = DiaForConditionalGeneration.from_pretrained(model_checkpoint).to(torch_device)
+out = model(**inputs)
+out.loss.backward()
+```
+
+
+This model was contributed by [Jaeyong Sung](https://huggingface.co/buttercrab), [Arthur Zucker](https://huggingface.co/ArthurZ),
+and [Anton Vlasjuk](https://huggingface.co/AntonV). The original code can be found [here](https://github.com/nari-labs/dia/).
 
 
 ## DiaConfig
@@ -48,6 +129,7 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 ## DiaTokenizer
 
 [[autodoc]] DiaTokenizer
+    - __call__
 
 ## DiaFeatureExtractor
 
@@ -58,9 +140,8 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] DiaProcessor
     - __call__
+    - batch_decode
     - decode
-    - from_pretrained
-    - save_pretrained
 
 ## DiaModel
 
