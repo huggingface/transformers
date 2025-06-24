@@ -28,8 +28,10 @@ rendered properly in your Markdown viewer.
 
 You can find all the original LLaVA‑NeXT checkpoints under the [LLaVA-NeXT](https://huggingface.co/collections/llava-hf/llava-next-65f75c4afac77fd37dbbe6cf) collection.
 
-> [!TIP]  
-> Click on the LLaVA‑NeXT models in the right sidebar for more examples on OCR, visual question answering, document understanding, and multi-image reasoning.
+> [!TIP]
+> This model was contributed by [nielsr](https://huggingface.co/nielsr).
+>
+> Click on the LLaVA‑NeXT models in the right sidebar for more examples of how to apply Llava-NeXT to different multimodal tasks.
 
 The example below demonstrates how to generate text based on an image with [`pipeline`] or the [`AutoModel`] class.
 
