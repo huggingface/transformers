@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Callable, Optional, Tuple
+from typing import Callable, Optional
 
 import flax
 import flax.linen as nn
@@ -81,8 +81,8 @@ class FlaxBigBirdForPreTrainingOutput(ModelOutput):
 
     prediction_logits: jnp.ndarray = None
     seq_relationship_logits: jnp.ndarray = None
-    hidden_states: Optional[Tuple[jnp.ndarray]] = None
-    attentions: Optional[Tuple[jnp.ndarray]] = None
+    hidden_states: Optional[tuple[jnp.ndarray]] = None
+    attentions: Optional[tuple[jnp.ndarray]] = None
 
 
 @flax.struct.dataclass
@@ -113,8 +113,8 @@ class FlaxBigBirdForQuestionAnsweringModelOutput(ModelOutput):
     start_logits: jnp.ndarray = None
     end_logits: jnp.ndarray = None
     pooled_output: jnp.ndarray = None
-    hidden_states: Optional[Tuple[jnp.ndarray]] = None
-    attentions: Optional[Tuple[jnp.ndarray]] = None
+    hidden_states: Optional[tuple[jnp.ndarray]] = None
+    attentions: Optional[tuple[jnp.ndarray]] = None
 
 
 BIG_BIRD_START_DOCSTRING = r"""
@@ -1647,7 +1647,7 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
             gradient_checkpointing=True,
         )
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
         token_type_ids = jnp.zeros_like(input_ids)
@@ -1725,14 +1725,14 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: Optional[jax.random.PRNGKey] = None,
         indices_rng: Optional[jax.random.PRNGKey] = None,
         train: bool = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        past_key_values: dict = None,
+        past_key_values: Optional[dict] = None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -2442,7 +2442,7 @@ class FlaxBigBirdForQuestionAnswering(FlaxBigBirdPreTrainedModel):
         position_ids=None,
         head_mask=None,
         question_lengths=None,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: Optional[jax.random.PRNGKey] = None,
         indices_rng: Optional[jax.random.PRNGKey] = None,
         train: bool = False,

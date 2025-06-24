@@ -16,7 +16,7 @@
 
 import collections.abc
 from dataclasses import dataclass
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -24,31 +24,25 @@ import torch.utils.checkpoint
 
 from ...activations import ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    can_return_tuple,
-    logging,
-    replace_return_docstrings,
-    torch_int,
-)
+from ...utils import auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging, torch_int
 from ..clip.modeling_clip import CLIPMLP
 from ..janus.modeling_janus import JanusVisionAttention
 from ..llama.modeling_llama import LlamaRMSNorm
-from ..llava.modeling_llava import LlavaCausalLMOutputWithPast, LlavaForConditionalGeneration, LlavaPreTrainedModel
+from ..llava.modeling_llava import (
+    LlavaCausalLMOutputWithPast,
+    LlavaForConditionalGeneration,
+    LlavaModel,
+    LlavaModelOutputWithPast,
+    LlavaPreTrainedModel,
+)
 from .configuration_internvl import InternVLConfig, InternVLVisionConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-_CHECKPOINT_FOR_DOC = "OpenGVLab/InternVL3-1B-hf"
-
-_CONFIG_VISION_FOR_DOC = "InternVLVisionConfig"
 
 
 def eager_attention_forward(
@@ -116,13 +110,7 @@ class InternVLVisionAttention(JanusVisionAttention):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -144,12 +132,8 @@ class InternVLVisionAttention(JanusVisionAttention):
         return outputs
 
 
+@auto_docstring
 class InternVLVisionPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = InternVLVisionConfig
     base_model_prefix = "internvl_vision"
     main_input_name = "pixel_values"
@@ -157,6 +141,8 @@ class InternVLVisionPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["InternVLVisionLayer"]
     _supports_sdpa = True
     _supports_flash_attn_2 = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -185,28 +171,17 @@ class InternVLVisionPreTrainedModel(PreTrainedModel):
 
 
 @dataclass
-class InternVLVisionModelOutputWithPooling(BaseModelOutputWithPooling):
-    """
+@auto_docstring(
+    custom_intro="""
     Class for outputs of [`InternVLVisionModel`].
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
-            Average of the last layer hidden states of the patch tokens (excluding the *[CLS]* token) if
-            *config.use_mean_pooling* is set to True. If set to False, then the final hidden state of the *[CLS]* token
-            will be returned.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    """
+)
+class InternVLVisionModelOutputWithPooling(BaseModelOutputWithPooling):
+    r"""
+    pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+        Average of the last layer hidden states of the patch tokens (excluding the *[CLS]* token) if
+        *config.use_mean_pooling* is set to True. If set to False, then the final hidden state of the *[CLS]* token
+        will be returned.
     """
 
 
@@ -298,8 +273,8 @@ class InternVLVisionEmbeddings(nn.Module):
 
         dim = embeddings.shape[-1]
 
-        new_height = height // self.patch_size
-        new_width = width // self.patch_size
+        new_height = height // self.patch_size[0]
+        new_width = width // self.patch_size[1]
 
         sqrt_num_positions = torch_int(num_positions**0.5)
         patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
@@ -349,7 +324,7 @@ class InternVLVisionMLP(CLIPMLP):
 NORM2FN = {"layer_norm": nn.LayerNorm, "rms_norm": InternVLVisionRMSNorm}
 
 
-class InternVLVisionLayer(nn.Module):
+class InternVLVisionLayer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the timm implementation."""
 
     def __init__(self, config: InternVLVisionConfig) -> None:
@@ -363,15 +338,15 @@ class InternVLVisionLayer(nn.Module):
         self.layernorm_after = NORM2FN[config.norm_type](config.hidden_size, eps=config.layer_norm_eps)
 
         init_values = config.layer_scale_init_value
-        self.lambda_1 = nn.Parameter(init_values * torch.ones((config.hidden_size)), requires_grad=True)
-        self.lambda_2 = nn.Parameter(init_values * torch.ones((config.hidden_size)), requires_grad=True)
+        self.lambda_1 = nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True)
+        self.lambda_2 = nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
+    ) -> Union[tuple[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
         attention_output, attention_weights = self.attention(
             self.layernorm_before(hidden_states),  # in InternVLVision, layernorm is applied before self-attention
             output_attentions=output_attentions,
@@ -418,12 +393,7 @@ class InternVLVisionEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__, hidden_states, output_attentions
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, output_attentions)
+            layer_outputs = layer_module(hidden_states, output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -440,42 +410,7 @@ class InternVLVisionEncoder(nn.Module):
         )
 
 
-_EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
-
-_CONFIG_VISION_FOR_DOC = "InternVLVisionConfig"
-
-
-INTERNVL_VISION_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`InternVLVisionConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-INTERNVL_VISION_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`InternVLVisionImageProcessor.__call__`] for details.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare InternVLVision Model transformer outputting raw hidden-states without any specific head on top.",
-    INTERNVL_VISION_START_DOCSTRING,
-)
+@auto_docstring
 class InternVLVisionModel(InternVLVisionPreTrainedModel):
     def __init__(self, config: InternVLVisionConfig) -> None:
         super().__init__(config)
@@ -495,14 +430,7 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
         return self.embeddings.patch_embeddings
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(INTERNVL_VISION_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=InternVLVisionModelOutputWithPooling,
-        config_class=_CONFIG_VISION_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -534,9 +462,6 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
-
-
-_CONFIG_FOR_DOC = "InternVLConfig"
 
 
 class InternVLPreTrainedModel(LlavaPreTrainedModel):
@@ -573,11 +498,11 @@ class InternVLMultiModalProjector(nn.Module):
         return hidden_states
 
 
-class InternVLCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
+class InternVLModelOutputWithPast(LlavaModelOutputWithPast):
     pass
 
 
-class InternVLForConditionalGeneration(LlavaForConditionalGeneration):
+class InternVLModel(LlavaModel):
     def pixel_shuffle(self, vision_features: torch.Tensor, scale_factor: float = 0.5):
         """Perform pixel shuffle downsampling on vision features.
 
@@ -616,8 +541,8 @@ class InternVLForConditionalGeneration(LlavaForConditionalGeneration):
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        vision_feature_layer: Union[int, List[int]],
-        vision_feature_select_strategy: str,
+        vision_feature_layer: Optional[Union[int, list[int]]] = None,
+        vision_feature_select_strategy: Optional[str] = None,
         **kwargs,
     ):
         """
@@ -626,11 +551,20 @@ class InternVLForConditionalGeneration(LlavaForConditionalGeneration):
         Args:
             pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
                The tensors corresponding to the input images.
-            vision_feature_layer (`int` or `List[int]`):
+            vision_feature_layer (`int` or `list[int]`):
                 Layer index or list of layer indices to extract features from.
         Returns:
             vision_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`.
         """
+        vision_feature_layer = (
+            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
+        )
+        vision_feature_select_strategy = (
+            vision_feature_select_strategy
+            if vision_feature_select_strategy is not None
+            else self.config.vision_feature_select_strategy
+        )
+
         downsample_ratio = self.config.downsample_ratio
         if vision_feature_layer == -1:
             vision_features = self.vision_tower(pixel_values=pixel_values).last_hidden_state
@@ -655,30 +589,104 @@ class InternVLForConditionalGeneration(LlavaForConditionalGeneration):
 
         # Project features through multi-modal projector
         vision_features = self.multi_modal_projector(vision_features)
-
         return vision_features
 
-    @add_start_docstrings_to_model_forward(INTERNVL_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=InternVLCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        pixel_values: torch.FloatTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        vision_feature_layer: Optional[Union[int, list[int]]] = None,
+        vision_feature_select_strategy: Optional[str] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> Union[tuple, InternVLModelOutputWithPast]:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        vision_feature_layer = (
+            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
+        )
+        vision_feature_select_strategy = (
+            vision_feature_select_strategy
+            if vision_feature_select_strategy is not None
+            else self.config.vision_feature_select_strategy
+        )
+
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        if pixel_values is not None:
+            image_features = self.get_image_features(
+                pixel_values=pixel_values,
+                vision_feature_layer=vision_feature_layer,
+                vision_feature_select_strategy=vision_feature_select_strategy,
+            )
+
+            if input_ids is None:
+                special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+                n_image_tokens = (special_image_mask).sum(dim=1).sum(dim=0)[0]
+            else:
+                special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
+                special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+                n_image_tokens = (input_ids == self.config.image_token_id).sum()
+
+            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
+                n_image_tokens = (input_ids == self.config.image_token_id).sum()
+                n_image_features = image_features.shape[0] * image_features.shape[1]
+                raise ValueError(
+                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+                )
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+
+        outputs = self.language_model(
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True,
+            cache_position=cache_position,
+            **kwargs,
+        )
+
+        return InternVLModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            image_hidden_states=image_features if pixel_values is not None else None,
+        )
+
+
+class InternVLCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
+    pass
+
+
+class InternVLForConditionalGeneration(LlavaForConditionalGeneration):
     def forward(**super_kwargs):
         r"""
-        Args:
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-            logits_to_keep (`int` or `torch.Tensor`, *optional*):
-                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
-                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
-                This is useful when using packed tensor format (single dimension for batch and sequence length).
-
-
-        Returns:
-
         Example:
+
         ```python
         >>> import torch
         >>> from transformers import AutoProcessor, AutoModelForImageTextToText
@@ -718,5 +726,6 @@ __all__ = [
     "InternVLVisionPreTrainedModel",
     "InternVLVisionModel",
     "InternVLPreTrainedModel",
+    "InternVLModel",
     "InternVLForConditionalGeneration",
 ]

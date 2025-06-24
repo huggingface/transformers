@@ -22,7 +22,7 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 The SuperPoint model was proposed
-in [SuperPoint: Self-Supervised Interest Point Detection and Description](https://arxiv.org/abs/1712.07629) by Daniel
+in [SuperPoint: Self-Supervised Interest Point Detection and Description](https://huggingface.co/papers/1712.07629) by Daniel
 DeTone, Tomasz Malisiewicz and Andrew Rabinovich.
 
 This model is the result of a self-supervised training of a fully-convolutional network for interest point detection and
@@ -45,7 +45,7 @@ when compared to LIFT, SIFT and ORB.*
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/superpoint_architecture.png"
 alt="drawing" width="500"/>
 
-<small> SuperPoint overview. Taken from the <a href="https://arxiv.org/abs/1712.07629v4">original paper.</a> </small>
+<small> SuperPoint overview. Taken from the <a href="https://huggingface.co/papers/1712.07629v4">original paper.</a> </small>
 
 ## Usage tips
 

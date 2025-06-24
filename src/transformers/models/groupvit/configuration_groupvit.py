@@ -15,7 +15,8 @@
 """GroupViT model configuration"""
 
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Mapping, Optional
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
@@ -137,11 +138,11 @@ class GroupViTVisionConfig(PretrainedConfig):
             Dimensionality of the encoder layers and the pooler layer.
         intermediate_size (`int`, *optional*, defaults to 1536):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        depths (`List[int]`, *optional*, defaults to [6, 3, 3]):
+        depths (`list[int]`, *optional*, defaults to [6, 3, 3]):
             The number of layers in each encoder block.
-        num_group_tokens (`List[int]`, *optional*, defaults to [64, 8, 0]):
+        num_group_tokens (`list[int]`, *optional*, defaults to [64, 8, 0]):
             The number of group tokens for each stage.
-        num_output_groups (`List[int]`, *optional*, defaults to [64, 8, 8]):
+        num_output_groups (`list[int]`, *optional*, defaults to [64, 8, 8]):
             The number of output groups for each stage, 0 means no group.
         num_attention_heads (`int`, *optional*, defaults to 6):
             Number of attention heads for each attention layer in the Transformer encoder.

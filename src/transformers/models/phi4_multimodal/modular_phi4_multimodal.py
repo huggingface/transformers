@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import math
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 import numpy as np
 import torch
@@ -21,11 +21,11 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 
-from transformers.modeling_attn_mask_utils import _prepare_4d_attention_mask
-
 from ...activations import ACT2FN
 from ...cache_utils import DynamicCache
 from ...configuration_utils import PretrainedConfig
+from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
@@ -33,12 +33,7 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import (
-    add_start_docstrings_to_model_forward,
-    can_return_tuple,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import auto_docstring, logging
 from ..phi3.configuration_phi3 import Phi3Config
 from ..phi3.modeling_phi3 import (
     Phi3DecoderLayer,
@@ -309,8 +304,8 @@ class Phi4MultimodalConfig(Phi3Config):
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
             `num_attention_heads`.
         resid_pdrop (`float`, *optional*, defaults to 0.0):
             Dropout probability for mlp outputs.
@@ -494,7 +489,7 @@ class Phi4MultimodalVisionAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
@@ -1119,6 +1114,7 @@ class Phi4MultimodalAudioMeanVarianceNormLayer(nn.Module):
         return (x - self.global_mean) * self.global_invstd
 
 
+@auto_docstring
 class Phi4MultimodalAudioPreTrainedModel(PreTrainedModel):
     config_class = Phi4MultimodalAudioConfig
     supports_gradient_checkpointing = True
@@ -1457,71 +1453,6 @@ class Phi4MultimodalFeatureEmbedding(nn.Module):
         return inputs_embeds
 
 
-PHI4_MULTIMODAL_MODEL_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding indices in `input_values`. Mask values selected in `[0, 1]`:
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-            [What are attention masks?](../glossary#attention-mask)
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.n_positions - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        past_key_values (`Cache`)`, *optional*):
-            Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
-            returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
-            See our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache);
-
-            If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
-            have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
-            of shape `(batch_size, sequence_length)`.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        image_pixel_values (`torch.FloatTensor`, *optional*):
-            If the input contains images, these correspond to the pixel values after transformations (as returned by
-            the Processor)
-        image_sizes (`torch.LongTensor`, *optional*):
-            If the input contains images, these correspond to size of each image.
-        image_attention_mask (`torch.LongTensor`, *optional*):
-            Attention mask for the images.
-        audio_input_features (`torch.FloatTensor`, *optional*):
-            If the input contains audio samples, these correspond to the values after transformation (as returned by
-            the Processor).
-        audio_embed_sizes (`torch.Tensor`, *optional*):
-            Size of the audio inputs.
-        audio_attention_mask (`torch.Tensor, *optional*):
-            Attention mask for the audio inputs.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
-            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
-            the complete sequence length.
-"""
-
-
 class Phi4MultimodalRotaryEmbedding(Phi3RotaryEmbedding):
     pass
 
@@ -1545,12 +1476,6 @@ class Phi4MultimodalPreTrainedModel(Phi3PreTrainedModel):
 
 
 class Phi4MultimodalModel(Phi3Model, nn.Module):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Phi4MultimodalMMDecoderLayer`]
-    Args:
-        config: Phi4MultimodalMMConfig
-    """
-
     def __init__(self, config: Phi4MultimodalConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -1570,14 +1495,12 @@ class Phi4MultimodalModel(Phi3Model, nn.Module):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @can_return_tuple
-    @add_start_docstrings_to_model_forward(PHI4_MULTIMODAL_MODEL_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_pixel_values: Optional[torch.FloatTensor] = None,
         image_sizes: Optional[torch.LongTensor] = None,
@@ -1591,6 +1514,22 @@ class Phi4MultimodalModel(Phi3Model, nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> BaseModelOutputWithPast:
+        r"""
+        image_pixel_values (`torch.FloatTensor`, *optional*):
+            If the input contains images, these correspond to the pixel values after transformations (as returned by
+            the Processor)
+        image_sizes (`torch.LongTensor`, *optional*):
+            If the input contains images, these correspond to size of each image.
+        image_attention_mask (`torch.LongTensor`, *optional*):
+            Attention mask for the images.
+        audio_input_features (`torch.FloatTensor`, *optional*):
+            If the input contains audio samples, these correspond to the values after transformation (as returned by
+            the Processor).
+        audio_embed_sizes (`torch.Tensor`, *optional*):
+            Size of the audio inputs.
+        audio_attention_mask (`torch.Tensor, *optional*):
+            Attention mask for the audio inputs.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1631,8 +1570,13 @@ class Phi4MultimodalModel(Phi3Model, nn.Module):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+        mask_function = create_causal_mask if self.config.sliding_window is None else create_sliding_window_causal_mask
+        causal_mask = mask_function(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
         )
 
         hidden_states = inputs_embeds
@@ -1691,15 +1635,12 @@ class Phi4MultimodalForCausalLM(Phi3ForCausalLM, nn.Module):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @can_return_tuple
-    @add_start_docstrings_to_model_forward(PHI4_MULTIMODAL_MODEL_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=Phi4MultimodalConfig)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_pixel_values: Optional[torch.FloatTensor] = None,
         image_sizes: Optional[torch.LongTensor] = None,
@@ -1716,18 +1657,24 @@ class Phi4MultimodalForCausalLM(Phi3ForCausalLM, nn.Module):
         **kwargs,
     ) -> CausalLMOutputWithPast:
         r"""
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-            logits_to_keep (`int` or `torch.Tensor`, *optional*):
-                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
-                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
-                This is useful when using packed tensor format (single dimension for batch and sequence length).
-        Returns:
+        image_pixel_values (`torch.FloatTensor`, *optional*):
+            If the input contains images, these correspond to the pixel values after transformations (as returned by
+            the Processor)
+        image_sizes (`torch.LongTensor`, *optional*):
+            If the input contains images, these correspond to size of each image.
+        image_attention_mask (`torch.LongTensor`, *optional*):
+            Attention mask for the images.
+        audio_input_features (`torch.FloatTensor`, *optional*):
+            If the input contains audio samples, these correspond to the values after transformation (as returned by
+            the Processor).
+        audio_embed_sizes (`torch.Tensor`, *optional*):
+            Size of the audio inputs.
+        audio_attention_mask (`torch.Tensor, *optional*):
+            Attention mask for the audio inputs.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
         ```python

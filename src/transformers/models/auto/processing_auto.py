@@ -17,7 +17,6 @@
 import importlib
 import inspect
 import json
-import os
 import warnings
 from collections import OrderedDict
 
@@ -28,7 +27,8 @@ from ...feature_extraction_utils import FeatureExtractionMixin
 from ...image_processing_utils import ImageProcessingMixin
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils import TOKENIZER_CONFIG_FILE
-from ...utils import FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, cached_file, logging
+from ...utils import FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, VIDEO_PROCESSOR_NAME, cached_file, logging
+from ...video_processing_utils import BaseVideoProcessor
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
@@ -60,6 +60,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("clipseg", "CLIPSegProcessor"),
         ("clvp", "ClvpProcessor"),
         ("colpali", "ColPaliProcessor"),
+        ("colqwen2", "ColQwen2Processor"),
         ("emu3", "Emu3Processor"),
         ("flava", "FlavaProcessor"),
         ("fuyu", "FuyuProcessor"),
@@ -104,12 +105,14 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("qwen2_audio", "Qwen2AudioProcessor"),
         ("qwen2_vl", "Qwen2VLProcessor"),
         ("sam", "SamProcessor"),
+        ("sam_hq", "SamHQProcessor"),
         ("seamless_m4t", "SeamlessM4TProcessor"),
         ("sew", "Wav2Vec2Processor"),
         ("sew-d", "Wav2Vec2Processor"),
         ("shieldgemma2", "ShieldGemma2Processor"),
         ("siglip", "SiglipProcessor"),
         ("siglip2", "Siglip2Processor"),
+        ("smolvlm", "SmolVLMProcessor"),
         ("speech_to_text", "Speech2TextProcessor"),
         ("speech_to_text_2", "Speech2Text2Processor"),
         ("speecht5", "SpeechT5Processor"),
@@ -168,7 +171,7 @@ class AutoProcessor:
     """
 
     def __init__(self):
-        raise EnvironmentError(
+        raise OSError(
             "AutoProcessor is designed to be instantiated "
             "using the `AutoProcessor.from_pretrained(pretrained_model_name_or_path)` method."
         )
@@ -201,7 +204,7 @@ class AutoProcessor:
             resume_download:
                 Deprecated and ignored. All downloads are now resumed by default when possible.
                 Will be removed in v5 of Transformers.
-            proxies (`Dict[str, str]`, *optional*):
+            proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
             token (`str` or *bool*, *optional*):
@@ -220,7 +223,7 @@ class AutoProcessor:
                 Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
                 should only be set to `True` for repositories you trust and in which you have read the code, as it will
                 execute code present on the Hub on your local machine.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 The values in kwargs of any keys which are feature extractor attributes will be used to override the
                 loaded values. Behavior concerning key/value pairs whose keys are *not* feature extractor attributes is
                 controlled by the `return_unused_kwargs` keyword parameter.
@@ -294,14 +297,31 @@ class AutoProcessor:
                 if "AutoProcessor" in config_dict.get("auto_map", {}):
                     processor_auto_map = config_dict["auto_map"]["AutoProcessor"]
 
-            # If not found, let's check whether the processor class is saved in a feature extractor config
-            if preprocessor_config_file is not None and processor_class is None:
-                config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(
-                    pretrained_model_name_or_path, **kwargs
+            # Saved as video processor
+            if preprocessor_config_file is None:
+                preprocessor_config_file = cached_file(
+                    pretrained_model_name_or_path, VIDEO_PROCESSOR_NAME, **cached_file_kwargs
                 )
-                processor_class = config_dict.get("processor_class", None)
-                if "AutoProcessor" in config_dict.get("auto_map", {}):
-                    processor_auto_map = config_dict["auto_map"]["AutoProcessor"]
+                if preprocessor_config_file is not None:
+                    config_dict, _ = BaseVideoProcessor.get_video_processor_dict(
+                        pretrained_model_name_or_path, **kwargs
+                    )
+                    processor_class = config_dict.get("processor_class", None)
+                    if "AutoProcessor" in config_dict.get("auto_map", {}):
+                        processor_auto_map = config_dict["auto_map"]["AutoProcessor"]
+
+            # Saved as feature extractor
+            if preprocessor_config_file is None:
+                preprocessor_config_file = cached_file(
+                    pretrained_model_name_or_path, FEATURE_EXTRACTOR_NAME, **cached_file_kwargs
+                )
+                if preprocessor_config_file is not None and processor_class is None:
+                    config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(
+                        pretrained_model_name_or_path, **kwargs
+                    )
+                    processor_class = config_dict.get("processor_class", None)
+                    if "AutoProcessor" in config_dict.get("auto_map", {}):
+                        processor_auto_map = config_dict["auto_map"]["AutoProcessor"]
 
         if processor_class is None:
             # Next, let's check whether the processor class is saved in a tokenizer
@@ -333,17 +353,21 @@ class AutoProcessor:
 
         has_remote_code = processor_auto_map is not None
         has_local_code = processor_class is not None or type(config) in PROCESSOR_MAPPING
-        trust_remote_code = resolve_trust_remote_code(
-            trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
-        )
+        if has_remote_code:
+            if "--" in processor_auto_map:
+                upstream_repo = processor_auto_map.split("--")[0]
+            else:
+                upstream_repo = None
+            trust_remote_code = resolve_trust_remote_code(
+                trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
+            )
 
         if has_remote_code and trust_remote_code:
             processor_class = get_class_from_dynamic_module(
                 processor_auto_map, pretrained_model_name_or_path, **kwargs
             )
             _ = kwargs.pop("code_revision", None)
-            if os.path.isdir(pretrained_model_name_or_path):
-                processor_class.register_for_auto_class()
+            processor_class.register_for_auto_class()
             return processor_class.from_pretrained(
                 pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
             )

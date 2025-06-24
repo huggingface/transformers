@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch PaliGemma model."""
 
+import copy
 import unittest
 
 import requests
@@ -20,11 +21,13 @@ import requests
 from transformers import (
     PaliGemmaConfig,
     PaliGemmaForConditionalGeneration,
+    PaliGemmaModel,
     PaliGemmaProcessor,
     is_torch_available,
     is_vision_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_read_token,
     require_torch,
@@ -177,7 +180,14 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     Model tester for `PaliGemmaForConditionalGeneration`.
     """
 
-    all_model_classes = (PaliGemmaForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            PaliGemmaModel,
+            PaliGemmaForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = {"image-text-to-text": PaliGemmaForConditionalGeneration}
     fx_compatible = False
     test_pruning = False
@@ -242,16 +252,17 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
-            _ = model(**input_dict)  # successful forward with no modifications
+            curr_input_dict = copy.deepcopy(input_dict)  # in=place modifications further
+            _ = model(**curr_input_dict)  # successful forward with no modifications
 
             # remove one image but leave the image token in text
-            input_dict["pixel_values"] = input_dict["pixel_values"][-1:, ...]
+            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-1:, ...]
             with self.assertRaises(ValueError):
-                _ = model(**input_dict)
+                _ = model(**curr_input_dict)
 
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
-            input_ids = input_dict["input_ids"][:1]
-            pixel_values = input_dict["pixel_values"][:1]
+            input_ids = curr_input_dict["input_ids"][:1]
+            pixel_values = curr_input_dict["pixel_values"][:1]
             input_ids = torch.cat([input_ids, input_ids], dim=0)
 
             # one image and two image tokens raise an error
@@ -297,7 +308,7 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
         pass
 
     @unittest.skip(
-        reason="PaliGemmma's SigLip encoder uses the same initialization scheme as the Flax original implementation"
+        reason="PaliGemma's SigLip encoder uses the same initialization scheme as the Flax original implementation"
     )
     def test_initialization(self):
         pass
@@ -316,20 +327,8 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="PaliGemma does not support low_cpu_mem_usage.")
-    def test_save_load_low_cpu_mem_usage(self):
-        pass
-
-    @unittest.skip(reason="PaliGemma does not support low_cpu_mem_usage.")
-    def test_save_load_low_cpu_mem_usage_checkpoints(self):
-        pass
-
-    @unittest.skip(reason="PaliGemma does not support low_cpu_mem_usage.")
-    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
-        pass
-
     @unittest.skip(
-        reason="VLMs doen't accept inputs embeds and pixel values at the same time. So if the test passed for bacbone LM, it passes for VLM also"
+        reason="VLMs doesn't accept inputs embeds and pixel values at the same time. So if the test passed for backbone LM, it passes for VLM also"
     )
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
@@ -345,7 +344,8 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
 
@@ -591,7 +591,13 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=20)
 
-        EXPECTED_DECODED_TEXT = "detect shoe\n<loc0051><loc0309><loc0708><loc0646> shoe"  # fmt: skip
+        expected_decoded_texts = Expectations(
+            {
+                ("rocm", (9, 5)): "detect shoe\n<loc0051><loc0309><loc0708><loc0644> shoe",
+                ("cuda", None): "detect shoe\n<loc0051><loc0309><loc0708><loc0646> shoe",
+            }
+        )  # fmt: skip
+        EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
         self.assertEqual(self.processor.decode(output[0], skip_special_tokens=True), EXPECTED_DECODED_TEXT)
 
     def test_paligemma_index_error_bug(self):

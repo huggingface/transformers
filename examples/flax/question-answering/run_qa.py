@@ -60,7 +60,7 @@ from transformers.utils import check_min_version, send_example_telemetry
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.52.0.dev0")
+check_min_version("4.53.0.dev0")
 
 Array = Any
 Dataset = datasets.arrow_dataset.Dataset
@@ -546,7 +546,7 @@ def main():
     # region Tokenizer check: this script requires a fast tokenizer.
     if not isinstance(tokenizer, PreTrainedTokenizerFast):
         raise ValueError(
-            "This example script only works for models that have a fast tokenizer. Checkout the big table of models at"
+            "This example script only works for models that have a fast tokenizer. Check out the big table of models at"
             " https://huggingface.co/transformers/index.html#supported-frameworks to find the model types that meet"
             " this requirement"
         )

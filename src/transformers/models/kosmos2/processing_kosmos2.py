@@ -17,7 +17,7 @@
 import copy
 import math
 import re
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, is_batched
@@ -27,15 +27,15 @@ from ...tokenization_utils_base import BatchEncoding, TextInput
 
 
 BboxInput = Union[
-    List[Tuple[int, int]],
-    List[Tuple[float, float, float, float]],
-    List[List[Tuple[int, int]]],
-    List[List[Tuple[float, float, float]]],
+    list[tuple[int, int]],
+    list[tuple[float, float, float, float]],
+    list[list[tuple[int, int]]],
+    list[list[tuple[float, float, float]]],
 ]
 
 
 class Kosmos2ImagesKwargs(ImagesKwargs, total=False):
-    bboxes: Optional[List[float]]
+    bboxes: Optional[list[float]]
     num_image_tokens: Optional[int]
     first_image_token_id: Optional[int]
 
@@ -84,7 +84,6 @@ class Kosmos2Processor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["num_patch_index_tokens"]
     image_processor_class = ("CLIPImageProcessor", "CLIPImageProcessorFast")
     tokenizer_class = "AutoTokenizer"
 
@@ -136,7 +135,7 @@ class Kosmos2Processor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, List[TextInput]] = None,
+        text: Union[TextInput, list[TextInput]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[Kosmos2ProcessorKwargs],
@@ -150,7 +149,7 @@ class Kosmos2Processor(ProcessorMixin):
         The rest of this documentation shows the arguments specific to `Kosmos2Processor`.
 
         Args:
-            bboxes (`Union[List[Tuple[int]], List[Tuple[float]], List[List[Tuple[int]]], List[List[Tuple[float]]]]`, *optional*):
+            bboxes (`Union[list[tuple[int]], list[tuple[float]], list[list[tuple[int]]], list[list[tuple[float]]]]`, *optional*):
                 The bounding bboxes associated to `texts`.
             num_image_tokens (`int`, *optional* defaults to 64):
                 The number of (consecutive) places that are used to mark the placeholders to store image information.
@@ -342,24 +341,24 @@ class Kosmos2Processor(ProcessorMixin):
 
     def preprocess_examples(
         self,
-        texts: Union[TextInput, List[TextInput]],
+        texts: Union[TextInput, list[TextInput]],
         images: ImageInput = None,
         bboxes: BboxInput = None,
         num_image_tokens: Optional[int] = 64,
-    ) -> Union[str, List[str]]:
+    ) -> Union[str, list[str]]:
         """Add image and bounding box information to `texts` as image and patch index tokens.
 
         Args:
-            texts (`Union[TextInput, List[TextInput]]`): The texts to be processed.
+            texts (`Union[TextInput, list[TextInput]]`): The texts to be processed.
             images (`ImageInput`, *optional*): The images associated to `texts`.
-            bboxes (`Union[List[Tuple[int]], List[Tuple[float]], List[List[Tuple[int]]], List[List[Tuple[float]]]]`, *optional*):
+            bboxes (`Union[list[tuple[int]], list[tuple[float]], list[list[tuple[int]]], list[list[tuple[float]]]]`, *optional*):
                 The bounding bboxes associated to `texts`.
             num_image_tokens (`int`, *optional*, defaults to 64):
                 The number of image tokens (used as latent queries). This should corresponds to the `latent_query_num`
                 attribute in `Kosmos2Config`.
 
         Returns:
-            `Union[TextInput, List[TextInput]]`: The processed texts with image and patch index tokens.
+            `Union[TextInput, list[TextInput]]`: The processed texts with image and patch index tokens.
         """
         # These are fake `<image>` tokens enclosed between (the actual) `<image>` token and `</image>`.
         img_tokens = [self.boi_token] * num_image_tokens
@@ -442,7 +441,7 @@ class Kosmos2Processor(ProcessorMixin):
                 Additional arguments to be passed to the tokenizer's `batch_decode method`.
 
         Returns:
-            `List[str]`: The decoded text.
+            `list[str]`: The decoded text.
         """
         generated_texts = self.batch_decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)
         return [self.post_process_generation(text, cleanup_and_extract=False) for text in generated_texts]
@@ -454,7 +453,7 @@ class Kosmos2Processor(ProcessorMixin):
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
-    def _insert_patch_index_tokens(self, text: str, bboxes: Union[List[Tuple[int]], List[Tuple[float]]]) -> str:
+    def _insert_patch_index_tokens(self, text: str, bboxes: Union[list[tuple[int]], list[tuple[float]]]) -> str:
         if bboxes is None or len(bboxes) == 0:
             return text
 
@@ -500,8 +499,8 @@ class Kosmos2Processor(ProcessorMixin):
         return text
 
     def _convert_bbox_to_patch_index_tokens(
-        self, bbox: Union[Tuple[int, int], Tuple[float, float, float, float]]
-    ) -> Tuple[str, str]:
+        self, bbox: Union[tuple[int, int], tuple[float, float, float, float]]
+    ) -> tuple[str, str]:
         # already computed patch indices
         if len(bbox) == 2:
             idx_1, idx_2 = bbox
@@ -517,17 +516,17 @@ class Kosmos2Processor(ProcessorMixin):
         return token_1, token_2
 
 
-def coordinate_to_patch_index(bbox: Tuple[float, float, float, float], num_patches_per_side: int) -> Tuple[int, int]:
+def coordinate_to_patch_index(bbox: tuple[float, float, float, float], num_patches_per_side: int) -> tuple[int, int]:
     """Convert a bounding box to a pair of patch indices.
 
     Args:
-        bbox (`Tuple[float, float, float, float]`):
+        bbox (`tuple[float, float, float, float]`):
             The 4 coordinates of the bounding box, with the format being (x1, y1, x2, y2) specifying the upper-left and
             lower-right corners of the box. It should have x2 > x1 and y2 > y1.
         num_patches_per_side (`int`): the number of patches along each side.
 
     Returns:
-        `Tuple[int, int]`: A pair of patch indices representing the upper-left patch and lower-right patch.
+        `tuple[int, int]`: A pair of patch indices representing the upper-left patch and lower-right patch.
     """
     (x1, y1, x2, y2) = bbox
 
@@ -559,7 +558,7 @@ def patch_index_to_coordinate(ul_idx: int, lr_idx: int, num_patches_per_side: in
         num_patches_per_side (`int`): the number of patches along each side.
 
     Returns:
-        `Tuple[float]`: the normalized coordinates of the bounding box, in the form (x1, y1, x2, y2).
+        `tuple[float]`: the normalized coordinates of the bounding box, in the form (x1, y1, x2, y2).
     """
     # Compute the size of each cell in the grid
     cell_size = 1.0 / num_patches_per_side

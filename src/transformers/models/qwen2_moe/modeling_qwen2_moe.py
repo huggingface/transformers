@@ -20,7 +20,7 @@
 """PyTorch Qwen2MoE model."""
 
 import math
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -32,6 +32,7 @@ from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
@@ -41,15 +42,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    can_return_tuple,
-    is_torch_flex_attn_available,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
 from .configuration_qwen2_moe import Qwen2MoeConfig
 
 
@@ -63,13 +56,10 @@ if is_torch_flex_attn_available():
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "Qwen/Qwen2-57B-A14B"
-_CONFIG_FOR_DOC = "Qwen2MoeConfig"
-
 
 # Copied from transformers.models.mixtral.modeling_mixtral.load_balancing_loss_func
 def load_balancing_loss_func(
-    gate_logits: Union[torch.Tensor, Tuple[torch.Tensor], None],
+    gate_logits: Union[torch.Tensor, tuple[torch.Tensor], None],
     num_experts: Optional[int] = None,
     top_k=2,
     attention_mask: Optional[torch.Tensor] = None,
@@ -77,7 +67,7 @@ def load_balancing_loss_func(
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
 
-    See Switch Transformer (https://arxiv.org/abs/2101.03961) for more details. This function implements the loss
+    See Switch Transformer (https://huggingface.co/papers/2101.03961) for more details. This function implements the loss
     function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
     experts is too unbalanced.
 
@@ -292,7 +282,7 @@ class Qwen2MoeAttention(nn.Module):
 
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
-        self.head_dim = self.hidden_size // self.num_heads
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.max_position_embeddings = config.max_position_embeddings
@@ -322,8 +312,8 @@ class Qwen2MoeAttention(nn.Module):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)
@@ -401,7 +391,7 @@ class Qwen2MoeFlashAttention2(Qwen2MoeAttention):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
     ):
         bsz, q_len, _ = hidden_states.size()
 
@@ -429,9 +419,14 @@ class Qwen2MoeFlashAttention2(Qwen2MoeAttention):
         # therefore the input hidden states gets silently casted in float32. Hence, we need
         # cast them back in float16 just to be sure everything works as expected.
         input_dtype = query_states.dtype
+        device_type = query_states.device.type if query_states.device.type != "mps" else "cpu"
         if input_dtype == torch.float32:
             if torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_gpu_dtype()
+                target_dtype = (
+                    torch.get_autocast_dtype(device_type)
+                    if hasattr(torch, "get_autocast_dtype")
+                    else torch.get_autocast_gpu_dtype()
+                )
             # Handle the case where the model is quantized
             elif hasattr(self.config, "_pre_quantization_dtype"):
                 target_dtype = self.config._pre_quantization_dtype
@@ -503,8 +498,8 @@ class Qwen2MoeSdpaAttention(Qwen2MoeAttention):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
             logger.warning_once(
@@ -621,10 +616,10 @@ class Qwen2MoeSparseMoeBlock(nn.Module):
         expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
 
         # Loop over all available experts in the model and perform the computation on each expert
-        expert_hitted = (expert_mask.sum(dim=(-1, -2)) > 0).nonzero(as_tuple=True)[0].tolist()
+        expert_hitted = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
         for expert_idx in expert_hitted:
             expert_layer = self.experts[expert_idx]
-            idx, top_x = torch.where(expert_mask[expert_idx])
+            idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
 
             # Index the correct hidden states and compute the expert hidden state for
             # the current expert. We need to make sure to multiply the output hidden
@@ -645,7 +640,7 @@ class Qwen2MoeSparseMoeBlock(nn.Module):
         return final_hidden_states, router_logits
 
 
-class Qwen2MoeDecoderLayer(nn.Module):
+class Qwen2MoeDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Qwen2MoeConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -667,14 +662,14 @@ class Qwen2MoeDecoderLayer(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         output_router_logits: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -692,7 +687,7 @@ class Qwen2MoeDecoderLayer(nn.Module):
             past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
             cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
                 Indices depicting the position of the input sequence tokens in the sequence.
-            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+            position_embeddings (`tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
                 Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
                 with `head_dim` being the embedding dimension of each attention head.
             kwargs (`dict`, *optional*):
@@ -743,27 +738,7 @@ class Qwen2MoeDecoderLayer(nn.Module):
         return outputs
 
 
-QWEN2MOE_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`Qwen2MoeConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare Qwen2MoE Model outputting raw hidden-states without any specific head on top.",
-    QWEN2MOE_START_DOCSTRING,
-)
+@auto_docstring
 class Qwen2MoePreTrainedModel(PreTrainedModel):
     config_class = Qwen2MoeConfig
     base_model_prefix = "model"
@@ -788,96 +763,8 @@ class Qwen2MoePreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-QWEN2MOE_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
-            `past_key_values`).
-
-            If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
-            information on the default strategy.
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.n_positions - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
-            Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
-            returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
-
-            Two formats are allowed:
-            - a [`~cache_utils.Cache`] instance, see our
-            [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache);
-            - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-            shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
-            cache format.
-
-            The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
-            legacy cache format will be returned.
-
-            If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
-            have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
-            of shape `(batch_size, sequence_length)`.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        output_router_logits (`bool`, *optional*):
-            Whether or not to return the logits of all the routers. They are useful for computing the router loss, and
-            should not be returned during inference.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
-            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
-            the complete sequence length.
-"""
-
-
-@add_start_docstrings(
-    "The bare Qwen2MoE Model outputting raw hidden-states without any specific head on top.",
-    QWEN2MOE_START_DOCSTRING,
-)
+@auto_docstring
 class Qwen2MoeModel(Qwen2MoePreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Qwen2MoeDecoderLayer`]
-
-    Args:
-        config: Qwen2MoeConfig
-    """
-
     def __init__(self, config: Qwen2MoeConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -902,13 +789,13 @@ class Qwen2MoeModel(Qwen2MoePreTrainedModel):
         self.embed_tokens = value
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(QWEN2MOE_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -979,31 +866,17 @@ class Qwen2MoeModel(Qwen2MoePreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    causal_mask,
-                    position_ids,
-                    past_key_values,
-                    output_attentions,
-                    output_router_logits,
-                    use_cache,
-                    cache_position,
-                    position_embeddings,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=causal_mask,
-                    position_ids=position_ids,
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    output_router_logits=output_router_logits,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                    position_embeddings=position_embeddings,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                position_ids=position_ids,
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                output_router_logits=output_router_logits,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                position_embeddings=position_embeddings,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -1034,7 +907,7 @@ class Qwen2MoeModel(Qwen2MoePreTrainedModel):
             router_logits=all_router_logits,
         )
 
-    # Copied from transformers.models.phi3.modeling_phi3.Phi3Model._update_causal_mask with Phi3->Qwen2Moe
+    # Copied from transformers.models.phimoe.modeling_phimoe.PhimoeModel._update_causal_mask with Phimoe->Qwen2Moe
     def _update_causal_mask(
         self,
         attention_mask: Union[torch.Tensor, "BlockMask"],
@@ -1122,7 +995,7 @@ class Qwen2MoeModel(Qwen2MoePreTrainedModel):
         return causal_mask
 
     @staticmethod
-    # Copied from transformers.models.mistral.modeling_mistral.MistralModel._prepare_4d_causal_attention_mask_with_cache_position with Mistral->Qwen2Moe
+    # Copied from transformers.models.phimoe.modeling_phimoe.PhimoeModel._prepare_4d_causal_attention_mask_with_cache_position with Phimoe->Qwen2Moe
     def _prepare_4d_causal_attention_mask_with_cache_position(
         attention_mask: torch.Tensor,
         sequence_length: int,
@@ -1166,12 +1039,13 @@ class Qwen2MoeModel(Qwen2MoePreTrainedModel):
             diagonal_attend_mask = torch.arange(target_length, device=cache_position.device) > cache_position.reshape(
                 -1, 1
             )
-            if config.get_text_config().sliding_window is not None:
+            text_config = config.get_text_config()
+            if getattr(text_config, "use_sliding_window", True) and text_config.sliding_window is not None:
                 # if we have sliding window, we should not attend to tokens beyond sliding window length, so we mask them out also
                 # the check is needed to verify is current checkpoint was trained with sliding window or not
                 if not isinstance(past_key_values, SlidingWindowCache) or sequence_length > target_length:
                     sliding_attend_mask = torch.arange(target_length, device=cache_position.device) <= (
-                        cache_position.reshape(-1, 1) - config.get_text_config().sliding_window
+                        cache_position.reshape(-1, 1) - text_config.sliding_window
                     )
                     diagonal_attend_mask.bitwise_or_(sliding_attend_mask)
             causal_mask *= diagonal_attend_mask
@@ -1227,14 +1101,13 @@ class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel, GenerationMixin):
         return self.model
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(QWEN2MOE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MoeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -1246,19 +1119,10 @@ class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel, GenerationMixin):
         **loss_kwargs,
     ) -> MoeCausalLMOutputWithPast:
         r"""
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-            logits_to_keep (`int` or `torch.Tensor`, *optional*):
-                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
-                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
-                This is useful when using packed tensor format (single dimension for batch and sequence length).
-
-        Returns:
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 
@@ -1330,8 +1194,8 @@ class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel, GenerationMixin):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     The Qwen2MoE Model transformer with a sequence classification head on top (linear layer).
 
     [`Qwen2MoeForSequenceClassification`] uses the last token in order to do the classification, as other causal models
@@ -1342,8 +1206,7 @@ class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel, GenerationMixin):
     no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
     padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
     each row of the batch).
-    """,
-    QWEN2MOE_START_DOCSTRING,
+    """
 )
 # Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->Qwen2Moe, LLAMA->QWEN2MOE, BaseModelOutputWithPast->MoeModelOutputWithPast
 class Qwen2MoeForSequenceClassification(Qwen2MoePreTrainedModel):
@@ -1363,7 +1226,7 @@ class Qwen2MoeForSequenceClassification(Qwen2MoePreTrainedModel):
         self.model.embed_tokens = value
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(QWEN2MOE_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1432,13 +1295,7 @@ class Qwen2MoeForSequenceClassification(Qwen2MoePreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    The Qwen2MoE Model transformer with a token classification head on top (a linear layer on top of the hidden-states
-    output) e.g. for Named-Entity-Recognition (NER) tasks.
-    """,
-    QWEN2MOE_START_DOCSTRING,
-)
+@auto_docstring
 # Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with Llama->Qwen2Moe, LLAMA->QWEN2MOE, BaseModelOutputWithPast->MoeModelOutputWithPast
 class Qwen2MoeForTokenClassification(Qwen2MoePreTrainedModel):
     def __init__(self, config):
@@ -1464,12 +1321,7 @@ class Qwen2MoeForTokenClassification(Qwen2MoePreTrainedModel):
         self.model.embed_tokens = value
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(QWEN2MOE_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TokenClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1515,13 +1367,7 @@ class Qwen2MoeForTokenClassification(Qwen2MoePreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-The Qwen2MoE Model transformer with a span classification head on top for extractive question-answering tasks like
-SQuAD (a linear layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
-    """,
-    QWEN2MOE_START_DOCSTRING,
-)
+@auto_docstring
 # Copied from transformers.models.mistral.modeling_mistral.MistralForQuestionAnswering with Mistral->Qwen2Moe, MISTRAL->QWEN2MOE, BaseModelOutputWithPast->MoeModelOutputWithPast
 class Qwen2MoeForQuestionAnswering(Qwen2MoePreTrainedModel):
     base_model_prefix = "model"
@@ -1541,13 +1387,13 @@ class Qwen2MoeForQuestionAnswering(Qwen2MoePreTrainedModel):
         self.model.embed_tokens = value
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(QWEN2MOE_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
@@ -1555,17 +1401,6 @@ class Qwen2MoeForQuestionAnswering(Qwen2MoePreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         **kwargs,
     ) -> QuestionAnsweringModelOutput:
-        r"""
-        start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        """
-
         outputs: MoeModelOutputWithPast = self.model(
             input_ids,
             attention_mask=attention_mask,

@@ -14,11 +14,10 @@
 # limitations under the License.
 """Fast Image processor class for BridgeTower."""
 
-from typing import Dict, Iterable, Optional, Tuple, Union
+from collections.abc import Iterable
+from typing import Optional, Union
 
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
     BatchFeature,
     DefaultFastImageProcessorKwargs,
@@ -31,7 +30,7 @@ from ...image_processing_utils_fast import (
     reorder_images,
 )
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
-from ...utils import add_start_docstrings, is_torch_available, is_torchvision_available, is_torchvision_v2_available
+from ...utils import auto_docstring, is_torch_available, is_torchvision_available, is_torchvision_v2_available
 
 
 if is_torch_available():
@@ -46,7 +45,7 @@ if is_torchvision_available():
 
 def make_pixel_mask(
     image: "torch.Tensor",
-    output_size: Tuple[int, int],
+    output_size: tuple[int, int],
 ) -> "torch.Tensor":
     """
     Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
@@ -54,7 +53,7 @@ def make_pixel_mask(
     Args:
         image (`np.ndarray`):
             Image to make the pixel mask for.
-        output_size (`Tuple[int, int]`):
+        output_size (`tuple[int, int]`):
             Output size of the mask.
     """
     input_height, input_width = image.shape[-2:]
@@ -69,7 +68,7 @@ def get_resize_output_image_size(
     shorter: int = 800,
     longer: int = 1333,
     size_divisor: int = 32,
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     input_height, input_width = input_image.shape[-2:]
     min_size, max_size = shorter, longer
 
@@ -95,22 +94,21 @@ def get_resize_output_image_size(
 
 
 class BridgeTowerFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    size_divisor: Optional[int]
-    do_pad: Optional[bool]
-
-
-@add_start_docstrings(
-    "Constructs a fast BridgeTower image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     """
+    Args:
         size_divisor (`int`, *optional*, defaults to 32):
             The size by which to make sure both the height and width can be divided. Only has an effect if `do_resize`
             is set to `True`. Can be overridden by the `size_divisor` parameter in the `preprocess` method.
         do_pad (`bool`, *optional*, defaults to `True`):
             Whether to pad the image to the `(max_height, max_width)` of the images in the batch. Can be overridden by
             the `do_pad` parameter in the `preprocess` method.
-    """,
-)
+    """
+
+    size_divisor: Optional[int]
+    do_pad: Optional[bool]
+
+
+@auto_docstring
 class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN
@@ -129,17 +127,7 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[BridgeTowerFastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-    @add_start_docstrings(
-        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-        """
-            size_divisor (`int`, *optional*, defaults to 32):
-                The size by which to make sure both the height and width can be divided. Only has an effect if `do_resize`
-                is set to `True`. Can be overridden by the `size_divisor` parameter in the `preprocess` method.
-            do_pad (`bool`, *optional*, defaults to `True`):
-                Whether to pad the image to the `(max_height, max_width)` of the images in the batch. Can be overridden by
-                the `do_pad` parameter in the `preprocess` method.
-        """,
-    )
+    @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[BridgeTowerFastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
@@ -188,7 +176,7 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
     def center_crop(
         self,
         image: "torch.Tensor",
-        size: Dict[str, int],
+        size: dict[str, int],
         **kwargs,
     ) -> "torch.Tensor":
         """
@@ -198,7 +186,7 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
         Args:
             image (`torch.Tensor`):
                 Image to center crop.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Size of the output image in the form `{"height": h, "width": w}`.
         """
         output_size = size.shortest_edge
@@ -211,7 +199,7 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
     def _pad_image(
         self,
         image: "torch.Tensor",
-        output_size: Tuple[int, int],
+        output_size: tuple[int, int],
         constant_values: Union[float, Iterable[float]] = 0,
     ) -> "torch.Tensor":
         """
@@ -235,6 +223,7 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         constant_values: Union[float, Iterable[float]] = 0,
         return_pixel_mask: bool = True,
+        disable_grouping: Optional[bool] = False,
     ) -> tuple:
         """
         Pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width
@@ -247,6 +236,8 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
                 The value to use for the padding if `mode` is `"constant"`.
             return_pixel_mask (`bool`, *optional*, defaults to `True`):
                 Whether to return a pixel mask.
+            disable_grouping (`bool`, *optional*, defaults to `False`):
+                Whether to disable grouping of images by size.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
@@ -257,7 +248,7 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
         """
         pad_size = get_max_height_width(images)
 
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         processed_masks_grouped = {}
         for shape, stacked_images in grouped_images.items():
@@ -295,11 +286,12 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
         do_normalize: bool,
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
+        disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
@@ -311,7 +303,7 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
 
         # Group images by size for further processing
         # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_center_crop:
@@ -326,7 +318,9 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
 
         data = {}
         if do_pad:
-            processed_images, processed_masks = self.pad(processed_images, return_pixel_mask=True)
+            processed_images, processed_masks = self.pad(
+                processed_images, return_pixel_mask=True, disable_grouping=disable_grouping
+            )
             processed_masks = torch.stack(processed_masks, dim=0) if return_tensors else processed_masks
             data["pixel_mask"] = processed_masks
 

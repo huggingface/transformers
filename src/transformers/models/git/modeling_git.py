@@ -17,7 +17,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -27,6 +27,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
@@ -37,10 +38,8 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
+    auto_docstring,
     logging,
-    replace_return_docstrings,
     torch_int,
 )
 from .configuration_git import GitConfig, GitVisionConfig
@@ -48,38 +47,24 @@ from .configuration_git import GitConfig, GitVisionConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "microsoft/git-base"
-_CONFIG_FOR_DOC = "GitConfig"
-
 
 @dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
+    """
+)
 # Copied from transformers.models.clip.modeling_clip.CLIPVisionModelOutput with CLIP->Git
 class GitVisionModelOutput(ModelOutput):
-    """
-    Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
-
-    Args:
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
-            The image embeddings obtained by applying the projection layer to the pooler_output.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    r"""
+    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+        The image embeddings obtained by applying the projection layer to the pooler_output.
     """
 
     image_embeds: Optional[torch.FloatTensor] = None
     last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 class GitEmbeddings(nn.Module):
@@ -178,7 +163,7 @@ class GitSelfAttention(nn.Module):
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         pixel_values_present: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         mixed_query_layer = self.query(hidden_states)
 
         cutoff = self.image_patch_tokens if pixel_values_present else 0
@@ -303,7 +288,7 @@ class GitAttention(nn.Module):
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         pixel_values_present: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         self_outputs = self.self(
             hidden_states,
             attention_mask,
@@ -348,7 +333,7 @@ class GitOutput(nn.Module):
         return hidden_states
 
 
-class GitLayer(nn.Module):
+class GitLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -365,7 +350,7 @@ class GitLayer(nn.Module):
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         pixel_values_present: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attention_outputs = self.attention(
             hidden_states,
@@ -409,13 +394,13 @@ class GitEncoder(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Union[Cache, Tuple[Tuple[torch.FloatTensor]]]] = None,
+        past_key_values: Optional[Union[Cache, tuple[tuple[torch.FloatTensor]]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         pixel_values_present: Optional[bool] = False,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPast]:
+    ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPast]:
         if self.gradient_checkpointing and self.training:
             if use_cache:
                 logger.warning_once(
@@ -446,24 +431,14 @@ class GitEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    past_key_values,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    past_key_values,
-                    output_attentions,
-                    pixel_values_present,
-                )
+            layer_outputs = layer_module(
+                hidden_states,
+                attention_mask,
+                layer_head_mask,
+                past_key_values,
+                output_attentions,
+                pixel_values_present,
+            )
 
             hidden_states = layer_outputs[0]
             if use_cache:
@@ -497,12 +472,8 @@ class GitEncoder(nn.Module):
         )
 
 
+@auto_docstring
 class GitPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = GitConfig
     base_model_prefix = "git"
     supports_gradient_checkpointing = True
@@ -528,90 +499,6 @@ class GitPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-
-GIT_START_DOCSTRING = r"""
-
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`GitConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-GIT_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-
-        position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`CLIPImageProcessor.__call__`] for details.
-
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
-            Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
-            returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
-
-            Two formats are allowed:
-            - a [`~cache_utils.Cache`] instance, see our
-            [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache);
-            - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-            shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
-            cache format.
-
-            The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
-            legacy cache format will be returned.
-
-            If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
-            have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
-            of shape `(batch_size, sequence_length)`.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        interpolate_pos_encoding (`bool`, *optional*, defaults `False`):
-            Whether to interpolate the pre-trained position encodings.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
 
 
 # Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings with CLIP->Git
@@ -765,7 +652,7 @@ class GitVisionAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         causal_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
         batch_size, seq_length, embed_dim = hidden_states.shape
@@ -816,7 +703,7 @@ class GitVisionAttention(nn.Module):
 
 
 # Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIP->GitVision
-class GitVisionEncoderLayer(nn.Module):
+class GitVisionEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: GitVisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -831,7 +718,7 @@ class GitVisionEncoderLayer(nn.Module):
         attention_mask: torch.Tensor,
         causal_attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor]:
+    ) -> tuple[torch.FloatTensor]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -890,7 +777,7 @@ class GitVisionEncoder(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -933,21 +820,12 @@ class GitVisionEncoder(nn.Module):
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    encoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    causal_attention_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask,
-                    causal_attention_mask,
-                    output_attentions=output_attentions,
-                )
+            layer_outputs = encoder_layer(
+                hidden_states,
+                attention_mask,
+                causal_attention_mask,
+                output_attentions=output_attentions,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -964,24 +842,6 @@ class GitVisionEncoder(nn.Module):
         )
 
 
-GIT_VISION_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        interpolate_pos_encoding (`bool`, *optional*, defaults `False`):
-            Whether to interpolate the pre-trained position encodings.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
 class GitVisionTransformer(nn.Module):
     # Copied from transformers.models.altclip.modeling_altclip.AltCLIPVisionTransformer.__init__ with AltCLIPEncoder->GitVisionEncoder, AltCLIP->Git
     def __init__(self, config: GitVisionConfig):
@@ -994,8 +854,7 @@ class GitVisionTransformer(nn.Module):
         self.encoder = GitVisionEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
-    @add_start_docstrings_to_model_forward(GIT_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutput, config_class=GitVisionConfig)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1003,11 +862,7 @@ class GitVisionTransformer(nn.Module):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = False,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
-        r"""
-        Returns:
-
-        """
+    ) -> Union[tuple, BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1041,9 +896,10 @@ class GitVisionTransformer(nn.Module):
         )
 
 
-@add_start_docstrings(
-    """The vision model from CLIP, used in GIT, without any head or projection on top.""",
-    GIT_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The vision model from CLIP, used in GIT, without any head or projection on top.
+    """
 )
 class GitVisionModel(GitPreTrainedModel):
     config_class = GitVisionConfig
@@ -1059,8 +915,7 @@ class GitVisionModel(GitPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
 
-    @add_start_docstrings_to_model_forward(GIT_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutput, config_class=GitVisionConfig)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1068,10 +923,8 @@ class GitVisionModel(GitPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         r"""
-        Returns:
-
         Examples:
 
         ```python
@@ -1114,10 +967,10 @@ class GitProjection(nn.Module):
         return self.visual_projection(embeddings)
 
 
-@add_start_docstrings(
-    "The bare GIT Model transformer consisting of a CLIP image encoder and text decoder outputting raw hidden-states"
-    " without any specific head on top.",
-    GIT_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The bare GIT Model transformer consisting of a CLIP image encoder and text decoder outputting raw hidden-states
+    """
 )
 class GitModel(GitPreTrainedModel):
     def __init__(self, config):
@@ -1209,8 +1062,7 @@ class GitModel(GitPreTrainedModel):
 
         return full_attention_mask
 
-    @add_start_docstrings_to_model_forward(GIT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1219,20 +1071,14 @@ class GitModel(GitPreTrainedModel):
         pixel_values: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPooling]:
+    ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPooling]:
         r"""
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-
-        Returns:
-
         Examples:
 
         ```python
@@ -1383,8 +1229,10 @@ class GitModel(GitPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """GIT Model with a `language modeling` head on top for autoregressive language modeling.""", GIT_START_DOCSTRING
+@auto_docstring(
+    custom_intro="""
+    GIT Model with a `language modeling` head on top for autoregressive language modeling.
+    """
 )
 class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["output.weight"]
@@ -1404,8 +1252,7 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.output = new_embeddings
 
-    @add_start_docstrings_to_model_forward(GIT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1415,24 +1262,19 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.Tensor]]] = None,
+        past_key_values: Optional[Union[Cache, list[torch.Tensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithPast]:
+    ) -> Union[tuple[torch.Tensor], CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
             ignored (masked), the loss is only computed for the tokens with labels n `[0, ..., config.vocab_size]`
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-
-        Returns:
 
         Examples:
 
@@ -1495,7 +1337,7 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
         >>> processor = AutoProcessor.from_pretrained("microsoft/git-base-vatex")
         >>> model = AutoModelForCausalLM.from_pretrained("microsoft/git-base-vatex")
 
-        >>> # set seed for reproducability
+        >>> # set seed for reproducibility
         >>> np.random.seed(45)
 
 
@@ -1504,7 +1346,7 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
         ...     Decode the video with PyAV decoder.
         ...     Args:
         ...         container (`av.container.input.InputContainer`): PyAV container.
-        ...         indices (`List[int]`): List of frame indices to decode.
+        ...         indices (`list[int]`): List of frame indices to decode.
         ...     Returns:
         ...         result (np.ndarray): np array of decoded frames of shape (num_frames, height, width, 3).
         ...     '''
@@ -1528,7 +1370,7 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
         ...         frame_sample_rate (`int`): Sample every n-th frame.
         ...         seg_len (`int`): Maximum allowed index of sample's last frame.
         ...     Returns:
-        ...         indices (`List[int]`): List of sampled frame indices
+        ...         indices (`list[int]`): List of sampled frame indices
         ...     '''
         ...     converted_len = int(clip_len * frame_sample_rate)
         ...     end_idx = np.random.randint(converted_len, seg_len)

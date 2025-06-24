@@ -17,7 +17,7 @@
 import itertools
 import math
 from dataclasses import dataclass
-from typing import Callable, Dict, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 import numpy as np
 import torch
@@ -36,21 +36,11 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_flaubert import FlaubertConfig
 
 
 logger = logging.get_logger(__name__)
-
-_CHECKPOINT_FOR_DOC = "flaubert/flaubert_base_cased"
-_CONFIG_FOR_DOC = "FlaubertConfig"
 
 
 # Copied from transformers.models.xlm.modeling_xlm.create_sinusoidal_embeddings
@@ -207,84 +197,10 @@ class TransformerFFN(nn.Module):
         return x
 
 
-FLAUBERT_START_DOCSTRING = r"""
-
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`FlaubertConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-FLAUBERT_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
-            1]`:
-
-            - 0 corresponds to a *sentence A* token,
-            - 1 corresponds to a *sentence B* token.
-
-            [What are token type IDs?](../glossary#token-type-ids)
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Length of each sentence that can be used to avoid performing attention on padding token indices. You can
-            also use `attention_mask` for the same result (see above), kept here for compatibility. Indices selected in
-            `[0, ..., input_ids.size(-1)]`:
-        cache (`Dict[str, torch.FloatTensor]`, *optional*):
-            Dictionary strings to `torch.FloatTensor` that contains precomputed hidden-states (key and values in the
-            attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
-            decoding. The dictionary object will be modified in-place during the forward pass to add newly computed
-            hidden-states.
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare Flaubert Model transformer outputting raw hidden-states without any specific head on top.",
-    FLAUBERT_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The bare Flaubert Model transformer outputting raw hidden-states without any specific head on top.
+    """
 )
 # Copied from transformers.models.xlm.modeling_xlm.XLMPredLayer with XLM->Flaubert
 class FlaubertPredLayer(nn.Module):
@@ -330,27 +246,28 @@ class FlaubertPredLayer(nn.Module):
 
 
 @dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for outputs of question answering models using a [`~modeling_utils.FlaubertSQuADHead`].
+    """
+)
 # Copied from transformers.models.xlm.modeling_xlm.XLMSquadHeadOutput with XLM->Flaubert
 class FlaubertSquadHeadOutput(ModelOutput):
-    """
-    Base class for outputs of question answering models using a [`~modeling_utils.FlaubertSQuADHead`].
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned if both `start_positions` and `end_positions` are provided):
-            Classification loss as the sum of start token, end token (and is_impossible if provided) classification
-            losses.
-        start_top_log_probs (`torch.FloatTensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
-            Log probabilities for the top config.start_n_top start token possibilities (beam-search).
-        start_top_index (`torch.LongTensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
-            Indices for the top config.start_n_top start token possibilities (beam-search).
-        end_top_log_probs (`torch.FloatTensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
-            Log probabilities for the top `config.start_n_top * config.end_n_top` end token possibilities
-            (beam-search).
-        end_top_index (`torch.LongTensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
-            Indices for the top `config.start_n_top * config.end_n_top` end token possibilities (beam-search).
-        cls_logits (`torch.FloatTensor` of shape `(batch_size,)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
-            Log probabilities for the `is_impossible` label of the answers.
-
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned if both `start_positions` and `end_positions` are provided):
+        Classification loss as the sum of start token, end token (and is_impossible if provided) classification
+        losses.
+    start_top_log_probs (`torch.FloatTensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+        Log probabilities for the top config.start_n_top start token possibilities (beam-search).
+    start_top_index (`torch.LongTensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+        Indices for the top config.start_n_top start token possibilities (beam-search).
+    end_top_log_probs (`torch.FloatTensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+        Log probabilities for the top `config.start_n_top * config.end_n_top` end token possibilities
+        (beam-search).
+    end_top_index (`torch.LongTensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+        Indices for the top `config.start_n_top * config.end_n_top` end token possibilities (beam-search).
+    cls_logits (`torch.FloatTensor` of shape `(batch_size,)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+        Log probabilities for the `is_impossible` label of the answers.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -556,7 +473,7 @@ class FlaubertSQuADHead(nn.Module):
         self.end_logits = FlaubertPoolerEndLogits(config)
         self.answer_class = FlaubertPoolerAnswerClass(config)
 
-    @replace_return_docstrings(output_type=FlaubertSquadHeadOutput, config_class=FlaubertConfig)
+    @auto_docstring
     def forward(
         self,
         hidden_states: torch.FloatTensor,
@@ -566,26 +483,21 @@ class FlaubertSQuADHead(nn.Module):
         is_impossible: Optional[torch.LongTensor] = None,
         p_mask: Optional[torch.FloatTensor] = None,
         return_dict: bool = False,
-    ) -> Union[FlaubertSquadHeadOutput, Tuple[torch.FloatTensor]]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`):
-                Final hidden states of the model on the sequence tokens.
-            start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-                Positions of the first token for the labeled span.
-            end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-                Positions of the last token for the labeled span.
-            cls_index (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-                Position of the CLS token for each sentence in the batch. If `None`, takes the last token.
-            is_impossible (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-                Whether the question has a possible answer in the paragraph or not.
-            p_mask (`torch.FloatTensor` of shape `(batch_size, seq_len)`, *optional*):
-                Mask for tokens at invalid position, such as query and special symbols (PAD, SEP, CLS). 1.0 means token
-                should be masked.
-            return_dict (`bool`, *optional*, defaults to `False`):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-
-        Returns:
+    ) -> Union[FlaubertSquadHeadOutput, tuple[torch.FloatTensor]]:
+        r"""
+        hidden_states (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`):
+            Final hidden states of the model on the sequence tokens.
+        start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Positions of the first token for the labeled span.
+        end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Positions of the last token for the labeled span.
+        cls_index (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Position of the CLS token for each sentence in the batch. If `None`, takes the last token.
+        is_impossible (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Whether the question has a possible answer in the paragraph or not.
+        p_mask (`torch.FloatTensor` of shape `(batch_size, seq_len)`, *optional*):
+            Mask for tokens at invalid position, such as query and special symbols (PAD, SEP, CLS). 1.0 means token
+            should be masked.
         """
         start_logits = self.start_logits(hidden_states, p_mask=p_mask)
 
@@ -754,13 +666,9 @@ class FlaubertSequenceSummary(nn.Module):
         return output
 
 
+@auto_docstring
 # Copied from transformers.models.xlm.modeling_xlm.XLMPreTrainedModel with XLM->Flaubert
 class FlaubertPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = FlaubertConfig
     load_tf_weights = None
     base_model_prefix = "transformer"
@@ -799,6 +707,7 @@ class FlaubertPreTrainedModel(PreTrainedModel):
             )
 
 
+@auto_docstring
 class FlaubertModel(FlaubertPreTrainedModel):
     def __init__(self, config):  # , dico, is_encoder, with_output):
         super().__init__(config)
@@ -890,12 +799,7 @@ class FlaubertModel(FlaubertPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.attentions[layer].prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -904,13 +808,32 @@ class FlaubertModel(FlaubertPreTrainedModel):
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         lengths: Optional[torch.LongTensor] = None,
-        cache: Optional[Dict[str, torch.FloatTensor]] = None,
+        cache: Optional[dict[str, torch.FloatTensor]] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
+        r"""
+        langs (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            A parallel sequence of tokens to be used to indicate the language of each token in the input. Indices are
+            languages ids which can be obtained from the language names by using two conversion mappings provided in
+            the configuration of the model (only provided for multilingual models). More precisely, the *language name
+            to language id* mapping is in `model.config.lang2id` (which is a dictionary string to int) and the
+            *language id to language name* mapping is in `model.config.id2lang` (dictionary int to string).
+
+            See usage examples detailed in the [multilingual documentation](../multilingual).
+        lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Length of each sentence that can be used to avoid performing attention on padding token indices. You can
+            also use `attention_mask` for the same result (see above), kept here for compatibility. Indices selected in
+            `[0, ..., input_ids.size(-1)]`:
+        cache (`dict[str, torch.FloatTensor]`, *optional*):
+            Dictionary strings to `torch.FloatTensor` that contains precomputed hidden-states (key and values in the
+            attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
+            decoding. The dictionary object will be modified in-place during the forward pass to add newly computed
+            hidden-states.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -948,7 +871,7 @@ class FlaubertModel(FlaubertPreTrainedModel):
 
         # Setting the position-ids to the registered buffer in constructor, it helps
         # when tracing the model without passing position-ids, solves
-        # isues similar to issue #5664
+        # issues similar to issue #5664
         if position_ids is None:
             if hasattr(self, "position_ids"):
                 position_ids = self.position_ids[:, :slen]
@@ -1062,14 +985,12 @@ class FlaubertModel(FlaubertPreTrainedModel):
         return BaseModelOutput(last_hidden_state=tensor, hidden_states=hidden_states, attentions=attentions)
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     The Flaubert Model transformer with a language modeling head on top (linear layer with weights tied to the input
     embeddings).
-    """,
-    FLAUBERT_START_DOCSTRING,
+    """
 )
-# Copied transformers.models.xlm.modeling_xlm.XLMWithLMHeadModel with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
 class FlaubertWithLMHeadModel(FlaubertPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["pred_layer.proj.weight"]
 
@@ -1102,13 +1023,7 @@ class FlaubertWithLMHeadModel(FlaubertPreTrainedModel, GenerationMixin):
             langs = None
         return {"input_ids": input_ids, "langs": langs}
 
-    @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=MaskedLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-        mask="<special1>",
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1117,15 +1032,32 @@ class FlaubertWithLMHeadModel(FlaubertPreTrainedModel, GenerationMixin):
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         lengths: Optional[torch.Tensor] = None,
-        cache: Optional[Dict[str, torch.Tensor]] = None,
+        cache: Optional[dict[str, torch.Tensor]] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, MaskedLMOutput]:
+    ) -> Union[tuple, MaskedLMOutput]:
         r"""
+        langs (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            A parallel sequence of tokens to be used to indicate the language of each token in the input. Indices are
+            languages ids which can be obtained from the language names by using two conversion mappings provided in
+            the configuration of the model (only provided for multilingual models). More precisely, the *language name
+            to language id* mapping is in `model.config.lang2id` (which is a dictionary string to int) and the
+            *language id to language name* mapping is in `model.config.id2lang` (dictionary int to string).
+
+            See usage examples detailed in the [multilingual documentation](../multilingual).
+        lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Length of each sentence that can be used to avoid performing attention on padding token indices. You can
+            also use `attention_mask` for the same result (see above), kept here for compatibility. Indices selected in
+            `[0, ..., input_ids.size(-1)]`:
+        cache (`dict[str, torch.FloatTensor]`, *optional*):
+            Dictionary strings to `torch.FloatTensor` that contains precomputed hidden-states (key and values in the
+            attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
+            decoding. The dictionary object will be modified in-place during the forward pass to add newly computed
+            hidden-states.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
@@ -1162,12 +1094,11 @@ class FlaubertWithLMHeadModel(FlaubertPreTrainedModel, GenerationMixin):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     Flaubert Model with a sequence classification/regression head on top (a linear layer on top of the pooled output)
     e.g. for GLUE tasks.
-    """,
-    FLAUBERT_START_DOCSTRING,
+    """
 )
 # Copied from transformers.models.xlm.modeling_xlm.XLMForSequenceClassification with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
 class FlaubertForSequenceClassification(FlaubertPreTrainedModel):
@@ -1182,12 +1113,7 @@ class FlaubertForSequenceClassification(FlaubertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=SequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1196,15 +1122,34 @@ class FlaubertForSequenceClassification(FlaubertPreTrainedModel):
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         lengths: Optional[torch.Tensor] = None,
-        cache: Optional[Dict[str, torch.Tensor]] = None,
+        cache: Optional[dict[str, torch.Tensor]] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SequenceClassifierOutput]:
+    ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
+        langs (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            A parallel sequence of tokens to be used to indicate the language of each token in the input. Indices are
+            languages ids which can be obtained from the language names by using two conversion mappings provided in
+            the configuration of the model (only provided for multilingual models). More precisely, the *language name
+            to language id* mapping is in `model.config.lang2id` (which is a dictionary string to int) and the
+            *language id to language name* mapping is in `model.config.id2lang` (dictionary int to string).
+
+            See usage examples detailed in the [multilingual documentation](../multilingual).
+        lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Length of each sentence that can be used to avoid performing attention on padding token indices. You can
+            also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
+            `[0, ..., input_ids.size(-1)]`.
+        cache (`dict[str, torch.FloatTensor]`, *optional*):
+            Dictionary string to `torch.FloatTensor` that contains precomputed hidden states (key and values in the
+            attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
+            decoding.
+
+            The dictionary object will be modified in-place during the forward pass to add newly computed
+            hidden-states.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
@@ -1265,13 +1210,7 @@ class FlaubertForSequenceClassification(FlaubertPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    Flaubert Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
-    Named-Entity-Recognition (NER) tasks.
-    """,
-    FLAUBERT_START_DOCSTRING,
-)
+@auto_docstring
 # Copied from transformers.models.xlm.modeling_xlm.XLMForTokenClassification with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
 class FlaubertForTokenClassification(FlaubertPreTrainedModel):
     def __init__(self, config):
@@ -1285,12 +1224,7 @@ class FlaubertForTokenClassification(FlaubertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TokenClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1299,15 +1233,34 @@ class FlaubertForTokenClassification(FlaubertPreTrainedModel):
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         lengths: Optional[torch.Tensor] = None,
-        cache: Optional[Dict[str, torch.Tensor]] = None,
+        cache: Optional[dict[str, torch.Tensor]] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, TokenClassifierOutput]:
+    ) -> Union[tuple, TokenClassifierOutput]:
         r"""
+        langs (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            A parallel sequence of tokens to be used to indicate the language of each token in the input. Indices are
+            languages ids which can be obtained from the language names by using two conversion mappings provided in
+            the configuration of the model (only provided for multilingual models). More precisely, the *language name
+            to language id* mapping is in `model.config.lang2id` (which is a dictionary string to int) and the
+            *language id to language name* mapping is in `model.config.id2lang` (dictionary int to string).
+
+            See usage examples detailed in the [multilingual documentation](../multilingual).
+        lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Length of each sentence that can be used to avoid performing attention on padding token indices. You can
+            also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
+            `[0, ..., input_ids.size(-1)]`.
+        cache (`dict[str, torch.FloatTensor]`, *optional*):
+            Dictionary string to `torch.FloatTensor` that contains precomputed hidden states (key and values in the
+            attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
+            decoding.
+
+            The dictionary object will be modified in-place during the forward pass to add newly computed
+            hidden-states.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
@@ -1350,12 +1303,11 @@ class FlaubertForTokenClassification(FlaubertPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     Flaubert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
     layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
-    """,
-    FLAUBERT_START_DOCSTRING,
+    """
 )
 # Copied from transformers.models.xlm.modeling_xlm.XLMForQuestionAnsweringSimple with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
 class FlaubertForQuestionAnsweringSimple(FlaubertPreTrainedModel):
@@ -1368,12 +1320,7 @@ class FlaubertForQuestionAnsweringSimple(FlaubertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=QuestionAnsweringModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1382,7 +1329,7 @@ class FlaubertForQuestionAnsweringSimple(FlaubertPreTrainedModel):
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         lengths: Optional[torch.Tensor] = None,
-        cache: Optional[Dict[str, torch.Tensor]] = None,
+        cache: Optional[dict[str, torch.Tensor]] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         start_positions: Optional[torch.Tensor] = None,
@@ -1390,16 +1337,27 @@ class FlaubertForQuestionAnsweringSimple(FlaubertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, QuestionAnsweringModelOutput]:
+    ) -> Union[tuple, QuestionAnsweringModelOutput]:
         r"""
-        start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
+        langs (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            A parallel sequence of tokens to be used to indicate the language of each token in the input. Indices are
+            languages ids which can be obtained from the language names by using two conversion mappings provided in
+            the configuration of the model (only provided for multilingual models). More precisely, the *language name
+            to language id* mapping is in `model.config.lang2id` (which is a dictionary string to int) and the
+            *language id to language name* mapping is in `model.config.id2lang` (dictionary int to string).
+
+            See usage examples detailed in the [multilingual documentation](../multilingual).
+        lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Length of each sentence that can be used to avoid performing attention on padding token indices. You can
+            also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
+            `[0, ..., input_ids.size(-1)]`.
+        cache (`dict[str, torch.FloatTensor]`, *optional*):
+            Dictionary string to `torch.FloatTensor` that contains precomputed hidden states (key and values in the
+            attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
+            decoding.
+
+            The dictionary object will be modified in-place during the forward pass to add newly computed
+            hidden-states.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1455,45 +1413,29 @@ class FlaubertForQuestionAnsweringSimple(FlaubertPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    Flaubert Model with a beam-search span classification head on top for extractive question-answering tasks like
-    SQuAD (a linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
-    """,
-    FLAUBERT_START_DOCSTRING,
-)
 @dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for outputs of question answering models using a `SquadHead`.
+    """
+)
 # Copied from transformer.models.xlm.modeling_xlm.XLMForQuestionAnsweringOutput with XLM->Flaubert
 class FlaubertForQuestionAnsweringOutput(ModelOutput):
-    """
-    Base class for outputs of question answering models using a `SquadHead`.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned if both `start_positions` and `end_positions` are provided):
-            Classification loss as the sum of start token, end token (and is_impossible if provided) classification
-            losses.
-        start_top_log_probs (`torch.FloatTensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
-            Log probabilities for the top config.start_n_top start token possibilities (beam-search).
-        start_top_index (`torch.LongTensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
-            Indices for the top config.start_n_top start token possibilities (beam-search).
-        end_top_log_probs (`torch.FloatTensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
-            Log probabilities for the top `config.start_n_top * config.end_n_top` end token possibilities
-            (beam-search).
-        end_top_index (`torch.LongTensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
-            Indices for the top `config.start_n_top * config.end_n_top` end token possibilities (beam-search).
-        cls_logits (`torch.FloatTensor` of shape `(batch_size,)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
-            Log probabilities for the `is_impossible` label of the answers.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned if both `start_positions` and `end_positions` are provided):
+        Classification loss as the sum of start token, end token (and is_impossible if provided) classification
+        losses.
+    start_top_log_probs (`torch.FloatTensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+        Log probabilities for the top config.start_n_top start token possibilities (beam-search).
+    start_top_index (`torch.LongTensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+        Indices for the top config.start_n_top start token possibilities (beam-search).
+    end_top_log_probs (`torch.FloatTensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+        Log probabilities for the top `config.start_n_top * config.end_n_top` end token possibilities
+        (beam-search).
+    end_top_index (`torch.LongTensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+        Indices for the top `config.start_n_top * config.end_n_top` end token possibilities (beam-search).
+    cls_logits (`torch.FloatTensor` of shape `(batch_size,)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+        Log probabilities for the `is_impossible` label of the answers.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -1502,10 +1444,11 @@ class FlaubertForQuestionAnsweringOutput(ModelOutput):
     end_top_log_probs: Optional[torch.FloatTensor] = None
     end_top_index: Optional[torch.LongTensor] = None
     cls_logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
+@auto_docstring
 # Copied from transformers.models.xlm.modeling_xlm.XLMForQuestionAnswering with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
 class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
     def __init__(self, config):
@@ -1517,8 +1460,7 @@ class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=FlaubertForQuestionAnsweringOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1527,7 +1469,7 @@ class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         lengths: Optional[torch.Tensor] = None,
-        cache: Optional[Dict[str, torch.Tensor]] = None,
+        cache: Optional[dict[str, torch.Tensor]] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         start_positions: Optional[torch.Tensor] = None,
@@ -1538,16 +1480,27 @@ class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, FlaubertForQuestionAnsweringOutput]:
+    ) -> Union[tuple, FlaubertForQuestionAnsweringOutput]:
         r"""
-        start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
+        langs (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            A parallel sequence of tokens to be used to indicate the language of each token in the input. Indices are
+            languages ids which can be obtained from the language names by using two conversion mappings provided in
+            the configuration of the model (only provided for multilingual models). More precisely, the *language name
+            to language id* mapping is in `model.config.lang2id` (which is a dictionary string to int) and the
+            *language id to language name* mapping is in `model.config.id2lang` (dictionary int to string).
+
+            See usage examples detailed in the [multilingual documentation](../multilingual).
+        lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Length of each sentence that can be used to avoid performing attention on padding token indices. You can
+            also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
+            `[0, ..., input_ids.size(-1)]`.
+        cache (`dict[str, torch.FloatTensor]`, *optional*):
+            Dictionary string to `torch.FloatTensor` that contains precomputed hidden states (key and values in the
+            attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
+            decoding.
+
+            The dictionary object will be modified in-place during the forward pass to add newly computed
+            hidden-states.
         is_impossible (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels whether a question has an answer or no answer (SQuAD 2.0)
         cls_index (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1556,8 +1509,6 @@ class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
         p_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Optional mask of tokens which can't be in answers (e.g. [CLS], [PAD], ...). 1.0 means token should be
             masked. 0.0 mean token is not masked.
-
-        Returns:
 
         Example:
 
@@ -1621,13 +1572,7 @@ class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    Flaubert Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
-    softmax) e.g. for RocStories/SWAG tasks.
-    """,
-    FLAUBERT_START_DOCSTRING,
-)
+@auto_docstring
 # Copied from transformers.models.xlm.modeling_xlm.XLMForMultipleChoice with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
 class FlaubertForMultipleChoice(FlaubertPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
@@ -1640,14 +1585,7 @@ class FlaubertForMultipleChoice(FlaubertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(
-        FLAUBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
-    )
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=MultipleChoiceModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1656,15 +1594,58 @@ class FlaubertForMultipleChoice(FlaubertPreTrainedModel):
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         lengths: Optional[torch.Tensor] = None,
-        cache: Optional[Dict[str, torch.Tensor]] = None,
+        cache: Optional[dict[str, torch.Tensor]] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, MultipleChoiceModelOutput]:
+    ) -> Union[tuple, MultipleChoiceModelOutput]:
         r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        langs (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`, *optional*):
+            A parallel sequence of tokens to be used to indicate the language of each token in the input. Indices are
+            languages ids which can be obtained from the language names by using two conversion mappings provided in
+            the configuration of the model (only provided for multilingual models). More precisely, the *language name
+            to language id* mapping is in `model.config.lang2id` (which is a dictionary string to int) and the
+            *language id to language name* mapping is in `model.config.id2lang` (dictionary int to string).
+
+            See usage examples detailed in the [multilingual documentation](../multilingual).
+        token_type_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
+
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token.
+
+            [What are token type IDs?](../glossary#token-type-ids)
+        position_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
+        lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Length of each sentence that can be used to avoid performing attention on padding token indices. You can
+            also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
+            `[0, ..., input_ids.size(-1)]`.
+        cache (`dict[str, torch.FloatTensor]`, *optional*):
+            Dictionary string to `torch.FloatTensor` that contains precomputed hidden states (key and values in the
+            attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
+            decoding.
+
+            The dictionary object will be modified in-place during the forward pass to add newly computed
+            hidden-states.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See

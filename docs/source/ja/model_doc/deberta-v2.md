@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-DeBERTa モデルは、Pengcheng He、Xiaodong Liu、Jianfeng Gao、Weizhu Chen によって [DeBERTa: Decoding-enhanced BERT with Disentangled Attendant](https://arxiv.org/abs/2006.03654) で提案されました。Google のモデルに基づいています。
+DeBERTa モデルは、Pengcheng He、Xiaodong Liu、Jianfeng Gao、Weizhu Chen によって [DeBERTa: Decoding-enhanced BERT with Disentangled Attendant](https://huggingface.co/papers/2006.03654) で提案されました。Google のモデルに基づいています。
 2018年にリリースされたBERTモデルと2019年にリリースされたFacebookのRoBERTaモデル。
 
 これは、もつれた注意を解きほぐし、使用されるデータの半分を使用して強化されたマスク デコーダ トレーニングを備えた RoBERTa に基づいて構築されています。
@@ -61,7 +61,7 @@ v2 の新機能:
 [kamalkraj](https://huggingface.co/kamalkraj) による投稿。元のコードは [こちら](https://github.com/microsoft/DeBERTa) にあります。
 
 ## Resources
-- [テキスト分類タスクガイド](../tasks/sequence_classification)
+- [テキスト分類タスクガイド(英語版)](../../en/tasks/sequence_classification)
 - [トークン分類タスクガイド](../tasks/token_classification)
 - [質問回答タスク ガイド](../tasks/question_answering)
 - [マスク言語モデリング タスク ガイド](../tasks/masked_language_modeling)

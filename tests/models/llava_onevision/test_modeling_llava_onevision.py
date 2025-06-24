@@ -24,10 +24,12 @@ from transformers import (
     AutoProcessor,
     LlavaOnevisionConfig,
     LlavaOnevisionForConditionalGeneration,
+    LlavaOnevisionModel,
     is_torch_available,
     is_vision_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_bitsandbytes,
     require_torch,
@@ -180,12 +182,25 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
     Model tester for `LlavaOnevisionForConditionalGeneration`.
     """
 
-    all_model_classes = (LlavaOnevisionForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            LlavaOnevisionModel,
+            LlavaOnevisionForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = (
         {"image-text-to-text": LlavaOnevisionForConditionalGeneration} if is_torch_available() else {}
     )
     test_pruning = False
     test_head_masking = False
+    # MP works but offload doesn't work when the MultiheadAttention is offloaded
+    # TODO: One potential solution would be to add to set preload_module_classes = ["Siglip2MultiheadAttentionPoolingHead"]
+    # in the dispatch_model function
+    test_cpu_offload = False
+    test_disk_offload_safetensors = False
+    test_disk_offload_bin = False
     _is_composite = True
 
     def setUp(self):
@@ -258,6 +273,28 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
             torch.testing.assert_close(out_embeds, out_ids)
 
+    def test_odd_sized_image(self):
+        # prepare model configuration
+        config = self.model_tester.get_config()
+
+        # prepare input
+        num_image_tokens = 10
+        pixel_values = floats_tensor([1, 2, 3, config.vision_config.image_size, config.vision_config.image_size])
+        input_ids = ids_tensor([1, 64], config.text_config.vocab_size - 2) + 2
+        input_ids[:, :num_image_tokens] = config.image_token_index
+        attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
+        inputs_dict = {
+            "pixel_values": pixel_values,
+            "image_sizes": torch.tensor([[13, 16]]),  # odd-sized image
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+        }
+
+        # forward with odd-sized image input
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model(**inputs_dict)
+
     @parameterized.expand(
         [
             (-1,),
@@ -281,7 +318,8 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
             model = model_class(config).to(torch_device)
             # We should have the right number of input features,
             # and should be able to run a forward pass without exploding
-            assert model.multi_modal_projector.linear_1.in_features == expected_features
+            base_model = getattr(model, "model", model)
+            assert base_model.multi_modal_projector.linear_1.in_features == expected_features
             model(**input_dict)
 
     @unittest.skip(
@@ -348,7 +386,15 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=100)
-        EXPECTED_DECODED_TEXT = 'user\n\nWhat do you see in this image?\nassistant\nThe image is a radar chart that compares the performance of different models in a specific task, likely related to natural language processing or machine learning. The chart is divided into several axes, each representing a different model or method. The models are color-coded and labeled with their respective names. The axes are labeled with terms such as "VQA," "GQA," "MQA," "VQAv2," "MM-Vet," "LLaVA-Bench," "LLaVA-1'  # fmt: skip
+
+        EXPECTED_DECODED_TEXTS = Expectations(
+            {
+                ("cuda", 7): 'user\n\nWhat do you see in this image?\nassistant\nThe image is a radar chart that compares the performance of different models in a specific task, likely related to natural language processing or machine learning. The chart is divided into several axes, each representing a different model or method. The models are color-coded and labeled with their respective names. The axes are labeled with terms such as "VQA," "GQA," "MQA," "VQAv2," "MM-Vet," "LLaVA-Bench," "LLaVA-1',
+                ("cuda", 8): 'user\n\nWhat do you see in this image?\nassistant\nThe image is a radar chart that compares the performance of different models in a specific task, likely related to natural language processing or machine learning. The chart is divided into several axes, each representing a different model or method. The models are color-coded and labeled with their respective names. The axes are labeled with terms such as "VQA," "GQA," "MQA," "VIZ," "TextVQA," "SQA-IMG," and "MQE." The radar chart shows',
+            }
+        )  # fmt: skip
+        EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
+
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -431,6 +477,33 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @slow
     @require_bitsandbytes
+    def test_small_model_integration_test_multi_image_nested(self):
+        # related to (#34585)
+        model = LlavaOnevisionForConditionalGeneration.from_pretrained(
+            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf",
+            torch_dtype="float16",
+            device_map=torch_device,
+        )
+
+        url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        image = Image.open(requests.get(url, stream=True).raw)
+        prompt = (
+            "user\n<image><image>\nWhat is the difference between these images?<|im_end|>\n<|im_start|>assistant\n"
+        )
+        images_nested = [[self.image, image]]
+        inputs = self.processor(text=prompt, images=images_nested, return_tensors="pt").to(torch_device, torch.float16)
+
+        # verify generation
+        output = model.generate(**inputs, max_new_tokens=40)
+        EXPECTED_DECODED_TEXT = "user\n\nWhat is the difference between these images?\nassistant\nThe first image is a radar chart showing the performance of different models in a specific task, while the second image is a street scene with a stop sign in the foreground."  # fmt: skip
+
+        self.assertEqual(
+            self.processor.decode(output[0], skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
+
+    @slow
+    @require_bitsandbytes
     def test_small_model_integration_test_multi_video(self):
         # related to (#29835)
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
@@ -474,7 +547,10 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=50)
-        EXPECTED_DECODED_TEXT = ['user\n\nWhat do you see in this image?\nassistant\nThe image shows a scene from a wildlife camera, likely a security camera, capturing a moment in a natural setting. It features two deer, one larger and one smaller, grazing on the grass. The environment is foggy, suggesting early morning or late', 'user\n\nWhat do you see in this image?\nassistant\nIn the tranquil setting of this image, two cats are enjoying a peaceful nap on a vibrant pink blanket. The cat on the left, with its gray and black striped fur, is lying on its side, its head comfortably resting on the blanket. Its']  # fmt: skip
+        EXPECTED_DECODED_TEXT = [
+            'user\n\nWhat do you see in this image?\nassistant\nThe image shows a scene of two deer in a grassy area with trees in the background. The weather appears to be foggy, giving the scene a misty and somewhat mysterious atmosphere. The deer are standing close to each other, possibly grazing or',
+            'user\n\nWhat do you see in this image?\nassistant\nIn the tranquil setting of this image, two cats are enjoying a peaceful nap on a vibrant pink blanket. The cat on the left, with its gray and black striped fur, is lying on its side, its head comfortably resting on the blanket. Its',
+        ]  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,

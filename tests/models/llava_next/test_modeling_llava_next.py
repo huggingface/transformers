@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Llava-NeXT model."""
 
+import copy
 import unittest
 
 import requests
@@ -23,6 +24,7 @@ from transformers import (
     AutoProcessor,
     LlavaNextConfig,
     LlavaNextForConditionalGeneration,
+    LlavaNextModel,
     is_torch_available,
     is_vision_available,
 )
@@ -33,6 +35,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils import check_torch_load_is_safe
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -180,7 +183,14 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     Model tester for `LlavaNextForConditionalGeneration`.
     """
 
-    all_model_classes = (LlavaNextForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            LlavaNextModel,
+            LlavaNextForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = {"image-text-to-text": LlavaNextForConditionalGeneration} if is_torch_available() else {}
     test_pruning = False
     test_head_masking = False
@@ -264,18 +274,19 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
-            _ = model(**input_dict)  # successful forward with no modifications
+            curr_input_dict = copy.deepcopy(input_dict)  # in=place modifications further
+            _ = model(**curr_input_dict)  # successful forward with no modifications
 
             # remove one image but leave the image token in text
-            input_dict["pixel_values"] = input_dict["pixel_values"][-1:, ...]
-            input_dict["image_sizes"] = input_dict["image_sizes"][-1:, ...]
+            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-1:, ...]
+            curr_input_dict["image_sizes"] = curr_input_dict["image_sizes"][-1:, ...]
             with self.assertRaises(ValueError):
-                _ = model(**input_dict)
+                _ = model(**curr_input_dict)
 
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
-            input_ids = input_dict["input_ids"][:1]
-            pixel_values = input_dict["pixel_values"][:1]
-            image_sizes = input_dict["image_sizes"][:1]
+            input_ids = curr_input_dict["input_ids"][:1]
+            pixel_values = curr_input_dict["pixel_values"][:1]
+            image_sizes = curr_input_dict["image_sizes"][:1]
             input_ids = torch.cat([input_ids, input_ids], dim=0)
 
             # one image and two image tokens raise an error
@@ -286,6 +297,28 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
             image_sizes = torch.cat([image_sizes, image_sizes], dim=0)
             _ = model(input_ids=input_ids, pixel_values=pixel_values, image_sizes=image_sizes)
+
+    def test_odd_sized_image(self):
+        # prepare model configuration
+        config = self.model_tester.get_config()
+
+        # prepare input
+        num_image_tokens = 24
+        pixel_values = floats_tensor([1, 5, 3, config.vision_config.image_size, config.vision_config.image_size])
+        input_ids = ids_tensor([1, 64], config.text_config.vocab_size - 2) + 2
+        input_ids[:, :num_image_tokens] = config.image_token_index
+        attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
+        inputs_dict = {
+            "pixel_values": pixel_values,
+            "image_sizes": torch.tensor([[13, 16]]),  # odd-sized image
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+        }
+
+        # forward with odd-sized image input
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model(**inputs_dict)
 
     @parameterized.expand(
         [
@@ -310,7 +343,8 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
             model = model_class(config).to(torch_device)
             # We should have the right number of input features,
             # and should be able to run a forward pass without exploding
-            assert model.multi_modal_projector.linear_1.in_features == expected_features
+            base_model = getattr(model, "model", model)
+            assert base_model.multi_modal_projector.linear_1.in_features == expected_features
             model(**input_dict)
 
     @unittest.skip(
@@ -358,7 +392,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
             load_in_4bit=True,
         )
 
-        inputs = self.processor(images=self.image, text=self.prompt, return_tensors="pt")
+        inputs = self.processor(images=self.image, text=self.prompt, return_tensors="pt").to(torch_device)
 
         # verify inputs against original implementation
         filepath = hf_hub_download(
@@ -366,6 +400,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
             filename="llava_1_6_input_ids.pt",
             repo_type="dataset",
         )
+        check_torch_load_is_safe()
         original_input_ids = torch.load(filepath, map_location="cpu", weights_only=True)
         # replace -200 by image_token_index (since we use token ID = 32000 for the image token)
         # remove image token indices because HF impl expands image tokens `image_seq_length` times
@@ -378,12 +413,15 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
             filename="llava_1_6_pixel_values.pt",
             repo_type="dataset",
         )
+        check_torch_load_is_safe()
         original_pixel_values = torch.load(filepath, map_location="cpu", weights_only=True)
-        assert torch.allclose(original_pixel_values, inputs.pixel_values.half())
+        assert torch.allclose(
+            original_pixel_values, inputs.pixel_values.to(device="cpu", dtype=original_pixel_values.dtype)
+        )
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=100)
-        EXPECTED_DECODED_TEXT = '[INST]  \nWhat is shown in this image? [/INST] The image appears to be a radar chart, which is a type of multi-dimensional plot that displays values for multiple quantitative variables represented on axes starting from the same point. This particular radar chart is showing the performance of various models or systems across different metrics or datasets.\n\nThe chart is divided into several sections, each representing a different model or dataset. The axes represent different metrics or datasets, such as "MMM-Vet," "MMM-Bench," "L'  # fmt: skip
+        EXPECTED_DECODED_TEXT = '[INST]  \nWhat is shown in this image? [/INST] The image appears to be a radar chart, which is a type of multi-dimensional plot that displays values for multiple quantitative variables represented on axes starting from the same point. This particular radar chart is showing the performance of various models or systems across different metrics or datasets.\n\nThe chart is divided into several sections, each representing a different model or dataset. The axes represent different metrics or datasets, such as "MMM-Vet," "MMM-Bench," "L'
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -475,7 +513,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=50)
-        EXPECTED_DECODED_TEXT = '[INST]  \nWhat is shown in this image? [/INST] The image shows two deer, likely fawns, in a grassy area with trees in the background. The setting appears to be a forest or woodland, and the time of day seems to be either dawn or dusk, given the soft'  # fmt: skip
+        EXPECTED_DECODED_TEXT = "[INST]  \nWhat is shown in this image? [/INST] The image shows two deer, likely fawns, in a grassy area with trees in the background. The setting appears to be a forest or woodland, and the photo is taken during what seems to be either dawn or dusk, given"
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
