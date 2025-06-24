@@ -1192,7 +1192,7 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
 
         return window_index, cu_window_seqlens
 
-    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
@@ -1247,6 +1247,7 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
                     hidden_states,
                     cu_seqlens=cu_seqlens_now,
                     rotary_pos_emb=rotary_pos_emb,
+                    **kwargs,
                 )
         hidden_states = self.merger(hidden_states)
         reverse_indices = torch.argsort(window_index)
