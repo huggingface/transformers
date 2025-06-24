@@ -51,8 +51,6 @@ logger = logging.get_logger(__name__)
 
 
 class ArceeMLP(nn.Module):
-    """Arcee MLP with configurable activation function (typically relu2)"""
-
     def __init__(self, config):
         super().__init__()
         self.config = config

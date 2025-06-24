@@ -191,8 +191,6 @@ class ArceeConfig(LlamaConfig):
 
 
 class ArceeMLP(NemotronMLP):
-    """Arcee MLP with configurable activation function (typically relu2)"""
-
     pass
 
 
