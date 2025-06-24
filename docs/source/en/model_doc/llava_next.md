@@ -33,7 +33,7 @@ You can find all the original LLaVA‑NeXT checkpoints under the [LLaVA-NeXT](ht
 >
 > Click on the LLaVA‑NeXT models in the right sidebar for more examples of how to apply Llava-NeXT to different multimodal tasks.
 
-The example below demonstrates how to generate text based on an image with [`pipeline`] or the [`AutoModel`] class.
+The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
 
 <hfoptions id="usage">
 
