@@ -1278,6 +1278,7 @@ class BarkFineModel(BarkPreTrainedModel):
             attentions=all_self_attentions,
         )
 
+    @torch.no_grad()
     def generate(
         self,
         coarse_output: torch.Tensor,
