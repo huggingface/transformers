@@ -1091,7 +1091,6 @@ class WhisperModel(WhisperPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        whisper-loss-function-support
         **kwargs,
     ) -> Union[Tuple[torch.Tensor], Seq2SeqModelOutput]:
 
@@ -1265,7 +1264,6 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-       whisper-loss-function-support
         loss_function: Optional[Callable] = None,
         **kwargs,
     ) -> Union[Tuple[torch.Tensor], Seq2SeqLMOutput]:
