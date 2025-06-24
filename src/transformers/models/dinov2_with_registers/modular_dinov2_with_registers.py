@@ -80,7 +80,7 @@ class Dinov2WithRegistersConfig(BackboneConfigMixin, PretrainedConfig):
            Initial value to use for layer scale.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             Stochastic depth rate per sample (when applied in the main path of residual layers).
-        use_swiglu_ffn (`bool`, *optional*, defaults to True):
+        use_swiglu_ffn (`bool`, *optional*, defaults to `False`):
             Whether to use the SwiGLU feedforward neural network.
         num_register_tokens (`int`, *optional*, defaults to 4):
             Number of register tokens to use.

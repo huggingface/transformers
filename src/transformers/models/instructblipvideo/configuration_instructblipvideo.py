@@ -62,7 +62,7 @@ class InstructBlipVideoVisionConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 1e-10):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
+        qkv_bias (`bool`, *optional*, defaults to True):
             Whether to add a bias to the queries and values in the self-attention layers.
 
     Example:

@@ -50,6 +50,7 @@ from check_repo import ignore_undocumented
 from git import Repo
 
 from transformers.utils import direct_transformers_import
+from transformers.utils.import_utils import fetch__all__, _LazyModule
 from transformers.utils.args_doc import (
     ImageProcessorArgs,
     ModelArgs,
@@ -1031,6 +1032,8 @@ def find_matching_model_files(check_all: bool = False):
     potential_files = glob.glob(modeling_glob_pattern)
     image_processing_glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**/image_processing_*_fast.py")
     potential_files += glob.glob(image_processing_glob_pattern)
+    modular_glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**/modular_**")
+    potential_files += glob.glob(modular_glob_pattern)
     exclude_substrings = ["modeling_tf_", "modeling_flax_"]
     matching_files = []
     for file_path in potential_files:
@@ -1484,6 +1487,34 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
                 print(warning)
 
 
+def lazily_import_modular_public_objects():
+    """
+    Return lazily imported modular public classes (to avoid importing dependencies such as torch, torchvision etc...).
+    Doing it this way alllows to easily check the `__doc__` attribute of the imported classes.
+    """
+    modular_glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**/modular_**")
+    modular_files = glob.glob(modular_glob_pattern)
+
+    all_modular_public_classses = []
+    for file in modular_files:
+        with open(file, encoding="utf-8") as f:
+            file_content = f.read()
+        module_name = re.search(rf"(models{os.sep}.*)\.py", file).group(1).replace(os.sep, ".")
+
+        # They may be in __all__, but not in the modular itself (if they are implicitly inherited)
+        public_classes = [obj for obj in fetch__all__(file_content) if f"class {obj}" in file_content and obj not in OBJECTS_TO_IGNORE]
+
+        # Lazily import them (to avoid importing dependencies such as torch etc)
+        requirements = frozenset({"torch", "vision", "torch", "torchvision"})
+        import_structure = {requirements: {module_name: set(public_classes)}}
+        lazy_module = _LazyModule("transformers", file, import_structure)
+        public_class_objects = [getattr(lazy_module, public_class) for public_class in public_classes]
+
+        all_modular_public_classses.extend(public_class_objects)
+    
+    return all_modular_public_classses
+
+
 def check_docstrings(overwrite: bool = False, check_all: bool = False):
     """
     Check docstrings of all public objects that are callables and are documented. By default, only checks the diff.
@@ -1521,17 +1552,6 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
         os.path.relpath(path, start=Path("src").resolve()).replace("/", ".").replace(".py", "")
         for path in modular_files
     ]
-    all_modular_public_classes = []
-    for module_path in modular_modules:
-        module = importlib.import_module(module_path)
-        for name in module.__dict__["__all__"]:
-            # They may be in all, but not in the modular itself (if they are implicitly inherited), so we need to try/catch
-            try:
-                class_ = getattr(module, name)
-                if class_.__name__ not in OBJECTS_TO_IGNORE:
-                    all_modular_public_classes.append(class_)
-            except AttributeError:
-                pass
 
     # Skip objects that are private or not documented.
     all_main_objects = [
@@ -1540,7 +1560,7 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
         if not (name.startswith("_") or ignore_undocumented(name) or name in OBJECTS_TO_IGNORE)
     ]
 
-    all_objects = all_main_objects + all_modular_public_classes
+    all_objects = all_main_objects + lazily_import_modular_public_objects()
     for obj in all_objects:
         if not callable(obj) or not isinstance(obj, type) or getattr(obj, "__doc__", None) is None:
             continue
