@@ -76,13 +76,11 @@ class BagelConfig(PretrainedConfig):
         text_config=None,
         vision_config=None,
         vq_config=None,
-        image_token_id=100581,
         **kwargs,
     ):
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "llama")
+            text_config["model_type"] = text_config.get("model_type", "qwen2")
             self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-
         elif text_config is None:
             logger.info("`text_config` is None. Initializing with default values")
             self.text_config = CONFIG_MAPPING["qwen2"]()
@@ -94,9 +92,12 @@ class BagelConfig(PretrainedConfig):
                 f" Type found: {type(text_config)}"
             )
 
-        if vision_config is None:
+        if isinstance(text_config, dict):
+            vision_config["model_type"] = vision_config.get("model_type", "siglip_vision_model")
+            self.vision_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
+        elif text_config is None:
             logger.info("`vision_config` is None. Initializing with default values")
-            self.vision_config = CONFIG_MAPPING["siglip_vision_model"]
+            self.vision_config = CONFIG_MAPPING["siglip_vision_model"]()
         elif isinstance(vision_config, PretrainedConfig):
             self.vision_config = vision_config
         else:
@@ -118,7 +119,6 @@ class BagelConfig(PretrainedConfig):
                 f" Type found: {type(vq_config)}"
             )
 
-        self.image_token_id = image_token_id
         super().__init__(**kwargs)
 
 
