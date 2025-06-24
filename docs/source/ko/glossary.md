@@ -365,7 +365,7 @@ RNN 모델과 달리 트랜스포머는 각 토큰의 위치 정보를 내부적
 
 입력으로부터 새로운 시퀀스를 생성하는 모델입니다. 예를 들어 번역 모델이나 요약 모델이 이에 해당하며, 대표적인 예로는 [Bart](model_doc/bart)나[T5](model_doc/t5) 모델이 있습니다.
 
-### 샤디드 DDP (Sharded DDP)
+### 분할 DDP (Sharded DDP)
 
 [ZeRO](#zero-redundancy-optimizer-zero) 개념을 기반으로 다양한 구현에서 사용되는 다른 이름으로 불립니다.
 
