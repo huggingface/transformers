@@ -520,12 +520,14 @@ class MimiIntegrationTest(unittest.TestCase):
         We test here the possibility to run Mimi in a streaming manner, i.e. chunk by chunk.
         1. we encode a first time the entire audio
         2. we encode the audio chunk by chunk, each chunk being the smallest size possible for the model (i.e. the frame size)
+
+        This test must be run on CPU since GPU floating point operations accumulate rounding errors that cause test failures.
         """
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
         model_id = "kyutai/mimi"
 
-        model = MimiModel.from_pretrained(model_id, use_cache=True).to(torch_device)
+        model = MimiModel.from_pretrained(model_id, use_cache=True).to("cpu")
         processor = AutoFeatureExtractor.from_pretrained(model_id)
 
         librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
@@ -535,7 +537,7 @@ class MimiIntegrationTest(unittest.TestCase):
             raw_audio=audio_sample,
             sampling_rate=processor.sampling_rate,
             return_tensors="pt",
-        ).to(torch_device)
+        ).to("cpu")
 
         frame_size = model.config.frame_size
         audio_codes = model.encode(inputs["input_values"]).audio_codes
