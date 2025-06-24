@@ -22,8 +22,6 @@ from ..llama.modeling_llama import (
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
-    LlamaModel,
-    LlamaPreTrainedModel,
 )
 from ..nemotron.modeling_nemotron import NemotronMLP
 
@@ -194,6 +192,7 @@ class ArceeConfig(LlamaConfig):
 
 class ArceeMLP(NemotronMLP):
     """Arcee MLP with configurable activation function (typically relu2)"""
+
     pass
 
 
@@ -223,6 +222,6 @@ __all__ = [
     "ArceeForQuestionAnswering",
     "ArceeForSequenceClassification",
     "ArceeForTokenClassification",
-    "ArceeModel",
-    "ArceePreTrainedModel",
+    "ArceeModel",  # noqa: F822
+    "ArceePreTrainedModel",  # noqa: F822
 ]
