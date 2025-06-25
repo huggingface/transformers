@@ -77,25 +77,27 @@ SEAMLESS_M4T_V2_COMMON_CUSTOM_ARGS = r"""
 
 
 @dataclass
-# Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TGenerationOutput with SeamlessM4T->SeamlessM4Tv2
-class SeamlessM4Tv2GenerationOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Class defining the generated outputs from [`SeamlessM4Tv2Model`], [`SeamlessM4Tv2ForTextToText`],
     [`SeamlessM4Tv2ForTextToSpeech`], [`SeamlessM4Tv2ForSpeechToSpeech`] and [`SeamlessM4Tv2ForTextToSpeech`].
-
-    Args:
-        waveform (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            The final audio waveform predicted by the model.
-        waveform_lengths (`torch.IntTensor` of shape `(batch_size,)`, *optional*):
-            The length in samples of each element in the `waveform` batch.
-        sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            The generated translated sequences. This is the output of the text-to-text or the speech-to-text models.
-            The second dimension (sequence_length) is either equal to `max_length` or shorter if all batches finished
-            early due to the `eos_token_id`.
-        unit_sequences (`torch.LongTensor` of shape `(batch_size, unit_sequence_length)`, *optional*):
-            The generated translated unit sequences. This is the output of the text-to-units model. The second
-            dimension (unit_sequence_length) is either equal to `t2u_max_length` or shorter if all batches finished
-            early due to the `t2u_eos_token_id`.
+    """
+)
+# Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TGenerationOutput with SeamlessM4T->SeamlessM4Tv2
+class SeamlessM4Tv2GenerationOutput(ModelOutput):
+    r"""
+    waveform (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        The final audio waveform predicted by the model.
+    waveform_lengths (`torch.IntTensor` of shape `(batch_size,)`, *optional*):
+        The length in samples of each element in the `waveform` batch.
+    sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        The generated translated sequences. This is the output of the text-to-text or the speech-to-text models.
+        The second dimension (sequence_length) is either equal to `max_length` or shorter if all batches finished
+        early due to the `eos_token_id`.
+    unit_sequences (`torch.LongTensor` of shape `(batch_size, unit_sequence_length)`, *optional*):
+        The generated translated unit sequences. This is the output of the text-to-units model. The second
+        dimension (unit_sequence_length) is either equal to `t2u_max_length` or shorter if all batches finished
+        early due to the `t2u_eos_token_id`.
     """
 
     waveform: Optional[torch.FloatTensor] = None
@@ -105,27 +107,16 @@ class SeamlessM4Tv2GenerationOutput(ModelOutput):
 
 
 @dataclass
-class SeamlessM4Tv2TextToUnitDecoderOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Class defining the outputs from [`SeamlessM4Tv2TextToUnitDecoder`].
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
-            for *masked*
+    """
+)
+class SeamlessM4Tv2TextToUnitDecoderOutput(ModelOutput):
+    r"""
+    padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
+        for *masked*
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
@@ -135,46 +126,24 @@ class SeamlessM4Tv2TextToUnitDecoderOutput(ModelOutput):
 
 
 @dataclass
-class SeamlessM4Tv2TextToUnitOutput(ModelOutput):
-    """
-        Class defining the outputs from [`SeamlessM4Tv2TextToUnitForConditionalGeneration`] and
+@auto_docstring(
+    custom_intro="""
+    Class defining the outputs from [`SeamlessM4Tv2TextToUnitForConditionalGeneration`] and
         [`SeamlessM4Tv2TextToUnitModel`].
+    """
+)
+class SeamlessM4Tv2TextToUnitOutput(ModelOutput):
+    r"""
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the decoder of the model.
 
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the decoder of the model.
-
-            If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
-            hidden_size)` is output.
-        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
-            for *masked*
-        decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the decoder at the output of each layer plus the optional initial embedding outputs.
-        decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
-            self-attention heads.
-        encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder of the model.
-        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the encoder at the output of each layer plus the optional initial embedding outputs.
-        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
-            self-attention heads.
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss.
+        If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
+        hidden_size)` is output.
+    padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
+        for *masked*
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss.
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None

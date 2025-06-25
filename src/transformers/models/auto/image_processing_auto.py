@@ -89,6 +89,7 @@ else:
             ("fuyu", ("FuyuImageProcessor",)),
             ("gemma3", ("Gemma3ImageProcessor", "Gemma3ImageProcessorFast")),
             ("git", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
+            ("glm4v", ("Glm4vImageProcessor", "Glm4vImageProcessorFast")),
             ("glpn", ("GLPNImageProcessor",)),
             ("got_ocr2", ("GotOcr2ImageProcessor", "GotOcr2ImageProcessorFast")),
             ("grounding-dino", ("GroundingDinoImageProcessor", "GroundingDinoImageProcessorFast")),

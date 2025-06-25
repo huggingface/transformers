@@ -29,8 +29,6 @@ if is_torch_available():
     import torch
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import DPTImageProcessor
 
     if is_torchvision_available():
@@ -94,24 +92,15 @@ class DPTImageProcessingTester:
 
 # Copied from transformers.tests.models.beit.test_image_processing_beit.prepare_semantic_single_inputs
 def prepare_semantic_single_inputs():
-    dataset = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
-
-    image = Image.open(dataset[0]["file"])
-    map = Image.open(dataset[1]["file"])
-
-    return image, map
+    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+    example = ds[0]
+    return example["image"], example["map"]
 
 
 # Copied from transformers.tests.models.beit.test_image_processing_beit.prepare_semantic_batch_inputs
 def prepare_semantic_batch_inputs():
-    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
-
-    image1 = Image.open(ds[0]["file"])
-    map1 = Image.open(ds[1]["file"])
-    image2 = Image.open(ds[2]["file"])
-    map2 = Image.open(ds[3]["file"])
-
-    return [image1, image2], [map1, map2]
+    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+    return list(ds["image"][:2]), list(ds["map"][:2])
 
 
 @require_torch
@@ -187,7 +176,6 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
             self.assertEqual(list(pixel_values.shape), [1, 3, 512, 672])
 
-    @unittest.skip("temporary to avoid failing on circleci")
     # Copied from transformers.tests.models.beit.test_image_processing_beit.BeitImageProcessingTest.test_call_segmentation_maps
     def test_call_segmentation_maps(self):
         for image_processing_class in self.image_processor_list:
@@ -296,7 +284,6 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(encoding["labels"].min().item() >= 0)
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
-    @unittest.skip("temporary to avoid failing on circleci")
     def test_reduce_labels(self):
         for image_processing_class in self.image_processor_list:
             image_processor = image_processing_class(**self.image_processor_dict)
@@ -319,7 +306,6 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             # Compare with non-reduced label to see if it's reduced by 1
             self.assertEqual(encoding["labels"][first_non_zero_coords].item(), first_non_zero_value - 1)
 
-    @unittest.skip("temporary to avoid failing on circleci")
     def test_slow_fast_equivalence(self):
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
             self.skipTest(reason="Skipping slow/fast equivalence test")
@@ -341,7 +327,6 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         )
         self.assertTrue(torch.allclose(image_encoding_slow.labels, image_encoding_fast.labels, atol=1e-1))
 
-    @unittest.skip("temporary to avoid failing on circleci")
     def test_slow_fast_equivalence_batched(self):
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
             self.skipTest(reason="Skipping slow/fast equivalence test")

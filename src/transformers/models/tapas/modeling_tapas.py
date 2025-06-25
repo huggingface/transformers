@@ -42,26 +42,20 @@ CLOSE_ENOUGH_TO_LOG_ZERO = -10000.0
 
 
 @dataclass
-class TableQuestionAnsweringOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Output type of [`TapasForQuestionAnswering`].
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` (and possibly `answer`, `aggregation_labels`, `numeric_values` and `numeric_values_scale` are provided)):
-            Total loss as the sum of the hierarchical cell selection log-likelihood loss and (optionally) the
-            semi-supervised regression loss and (optionally) supervised loss for aggregations.
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Prediction scores of the cell selection head, for every token.
-        logits_aggregation (`torch.FloatTensor`, *optional*, of shape `(batch_size, num_aggregation_labels)`):
-            Prediction scores of the aggregation head, for every aggregation operator.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
-            plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
+    """
+)
+class TableQuestionAnsweringOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` (and possibly `answer`, `aggregation_labels`, `numeric_values` and `numeric_values_scale` are provided)):
+        Total loss as the sum of the hierarchical cell selection log-likelihood loss and (optionally) the
+        semi-supervised regression loss and (optionally) supervised loss for aggregations.
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        Prediction scores of the cell selection head, for every token.
+    logits_aggregation (`torch.FloatTensor`, *optional*, of shape `(batch_size, num_aggregation_labels)`):
+        Prediction scores of the aggregation head, for every aggregation operator.
     """
 
     loss: Optional[torch.FloatTensor] = None
