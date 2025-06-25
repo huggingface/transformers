@@ -3,12 +3,14 @@
 Universal NeMo FastConformer to HuggingFace Converter
 
 This script converts NeMo models that use FastConformer encoder (Parakeet, Canary, etc.)
-to HuggingFace format. It handles:
-- FastConformer encoder (shared across models)
+to HuggingFace FastConformerModel format. It handles:
+- FastConformer encoder (shared across all NeMo ASR models)
 - Different preprocessors (mel-spectrogram, etc.)
-- Different decoders (CTC, RNN-T, etc.)
-- Proper safetensors creation
-- Model configuration extraction
+- Model configuration extraction and metadata preservation
+- Creates a base FastConformerModel that can be loaded via AutoModel
+
+The converted model serves as the foundation for all FastConformer-based NeMo ASR models
+and can be used for feature extraction or as a base for task-specific models.
 
 Usage:
     python convert_nemo_fastconformer_to_hf.py --model_name nvidia/parakeet-tdt-0.6b-v2 --output_dir ./parakeet-hf
@@ -19,7 +21,7 @@ import argparse
 import json
 import torch
 import nemo.collections.asr as nemo_asr
-from transformers.models.fastconformer.modeling_fastconformer import FastConformerForCTC, FastConformerEncoder, FastConformerModel
+from transformers.models.fastconformer.modeling_fastconformer import FastConformerEncoder, FastConformerModel
 from transformers.models.fastconformer.configuration_fastconformer import FastConformerConfig
 from transformers.models.fastconformer.feature_extraction_fastconformer import FastConformerFeatureExtractor
 from pathlib import Path
@@ -155,7 +157,7 @@ class NeMoFastConformerConverter:
         # Add model-specific metadata
         config_params.update({
             'model_type': 'fastconformer',
-            'architectures': ['FastConformerModel'],  # Encoder-only model
+            'architectures': ['FastConformerModel'],  # Base model for all FastConformer-based models
             'nemo_model_name': self.model_name,
             'nemo_model_type': self.model_info['model_type'],
             'nemo_encoder_type': self.model_info['encoder_type'],
@@ -279,17 +281,17 @@ class NeMoFastConformerConverter:
         return hf_encoder, matched_params
     
     def _create_full_model(self, hf_config: FastConformerConfig, hf_encoder: FastConformerEncoder) -> FastConformerModel:
-        """Create the encoder-only model with the converted encoder."""
-        logger.info("Creating HuggingFace encoder-only model...")
+        """Create the base FastConformer model with the converted encoder."""
+        logger.info("Creating HuggingFace FastConformer base model...")
         
-        # Create encoder-only model (no dummy decoder heads)
+        # Create base FastConformer model 
         hf_model = FastConformerModel(hf_config)
         
         # Replace encoder with converted one
         hf_model.encoder = hf_encoder
         
-        # Note: This model only contains the encoder - perfect for feature extraction
-        # and numerically equivalent to NeMo FastConformer encoders
+        # Note: This is the base model for all FastConformer-based NeMo ASR models
+        # It contains the FastConformer encoder and is numerically equivalent to NeMo's encoder
         
         return hf_model
     
@@ -333,11 +335,12 @@ class NeMoFastConformerConverter:
             "encoder_params_loaded": encoder_params_loaded,
             "encoder_params_total": len(hf_encoder.state_dict()),
             "conversion_success": encoder_params_loaded > 0,
-                         "notes": [
-                 "Encoder weights loaded from NeMo model",
-                 "Encoder-only model (no decoder) - perfect for feature extraction",
-                 "Numerically equivalent to NeMo FastConformer encoder"
-             ]
+            "notes": [
+                "Encoder weights loaded from NeMo model",
+                "Base FastConformer model - supports all FastConformer-based models",
+                "Can be used for feature extraction and as foundation for NeMo ASR models",
+                "Numerically equivalent to NeMo FastConformer encoder"
+            ]
         }
         
         with open(self.output_dir / "conversion_info.json", "w") as f:
@@ -436,8 +439,9 @@ def main():
         
         # Usage example
         logger.info("\nUsage example:")
-        logger.info(f"from transformers.models.fastconformer.modeling_fastconformer import FastConformerModel")
-        logger.info(f"model = FastConformerModel.from_pretrained('{args.output_dir}')")
+        logger.info(f"from transformers import AutoModel, AutoFeatureExtractor")
+        logger.info(f"model = AutoModel.from_pretrained('{args.output_dir}')")
+        logger.info(f"feature_extractor = AutoFeatureExtractor.from_pretrained('{args.output_dir}')")
         logger.info(f"encoder_features = model(input_features).last_hidden_state")
         
     except Exception as e:

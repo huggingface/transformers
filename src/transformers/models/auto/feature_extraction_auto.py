@@ -60,6 +60,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("donut-swin", "DonutFeatureExtractor"),
         ("dpt", "DPTFeatureExtractor"),
         ("encodec", "EncodecFeatureExtractor"),
+        ("fastconformer", "FastConformerFeatureExtractor"),
         ("flava", "FlavaFeatureExtractor"),
         ("gemma3n", "Gemma3nAudioFeatureExtractor"),
         ("glpn", "GLPNFeatureExtractor"),

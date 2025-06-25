@@ -32,9 +32,9 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["feature_extraction_fastconformer"] = ["FastConformerFeatureExtractor"]
     _import_structure["modeling_fastconformer"] = [
+        "FastConformerEncoder",
         "FastConformerModel",
         "FastConformerPreTrainedModel",
-        "FastConformerForCTC",
     ]
 
 
@@ -49,7 +49,7 @@ if TYPE_CHECKING:
     else:
         from .feature_extraction_fastconformer import FastConformerFeatureExtractor
         from .modeling_fastconformer import (
-            FastConformerForCTC,
+            FastConformerEncoder,
             FastConformerModel,
             FastConformerPreTrainedModel,
         )
