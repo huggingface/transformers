@@ -22,7 +22,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Tuple
+from typing import Any, Callable, Optional
 
 import torch
 import torch.nn.functional as F
@@ -30,37 +30,34 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub
-from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging, replace_return_docstrings
+from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from .configuration_aimv2 import Aimv2Config, Aimv2TextConfig, Aimv2VisionConfig
 
 
-logger = logging.get_logger(__name__)
-
-
 @dataclass
+@auto_docstring
 class Aimv2Output(ModelOutput):
-    """
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-            Contrastive loss for image-text similarity.
-        logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
-            The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
-            similarity scores.
-        logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
-            The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
-            similarity scores.
-        text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`Aimv2TextModel`].
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The image embeddings obtained by applying the projection layer to the pooled output of [`Aimv2VisionModel`].
-        text_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`Aimv2TextModel`].
-        vision_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`Aimv2VisionModel`].
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+        Contrastive loss for image-text similarity.
+    logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
+        The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
+        similarity scores.
+    logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
+        The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
+        similarity scores.
+    text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        The text embeddings obtained by applying the projection layer to the pooled output of [`Aimv2TextModel`].
+    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        The image embeddings obtained by applying the projection layer to the pooled output of [`Aimv2VisionModel`].
+    text_model_output (`BaseModelOutputWithPooling`):
+        The output of the [`Aimv2TextModel`].
+    vision_model_output (`BaseModelOutputWithPooling`):
+        The output of the [`Aimv2VisionModel`].
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -71,7 +68,7 @@ class Aimv2Output(ModelOutput):
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
 
-    def to_tuple(self) -> Tuple[Any]:
+    def to_tuple(self) -> tuple[Any]:
         return tuple(
             self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
             for k in self.keys()
@@ -256,8 +253,7 @@ class Aimv2Attention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
         batch_size, seq_length, embed_dim = hidden_states.shape
@@ -272,13 +268,7 @@ class Aimv2Attention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and output_attentions:
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -293,9 +283,6 @@ class Aimv2Attention(nn.Module):
 
         attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
         attn_output = self.out_proj(attn_output)
-
-        if not output_attentions:
-            attn_weights = None
 
         return attn_output, attn_weights
 
@@ -313,11 +300,9 @@ class Aimv2EncoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         norm_hidden_states = self.rms_norm1(hidden_states)
-        attn_output, attn_weights = self.attention(
-            hidden_states=norm_hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
-        )
+        attn_output, attn_weights = self.attention(hidden_states=norm_hidden_states, attention_mask=attention_mask)
 
         hidden_states = hidden_states + attn_output
         norm_hidden_states = self.rms_norm2(hidden_states)
@@ -507,7 +492,6 @@ class Aimv2VisionModel(Aimv2PreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=Aimv2VisionConfig)
     def forward(
         self,
         pixel_values,
@@ -606,9 +590,13 @@ class Aimv2TextModel(Aimv2PreTrainedModel):
         _, seq_len, _ = hidden_states.shape
 
         if attention_mask is not None:
-            mask_converter = AttentionMaskConverter(True)
-            attention_mask = mask_converter.to_4d(
-                attention_mask, key_value_length=seq_len, query_length=seq_len, dtype=hidden_states.dtype
+            cache_position = torch.arange(seq_len, device=hidden_states.device)
+            attention_mask = create_causal_mask(
+                config=self.config,
+                input_embeds=hidden_states,
+                attention_mask=attention_mask,
+                cache_position=cache_position,
+                past_key_values=None,
             )
 
         encoder_outputs = self.encoder(

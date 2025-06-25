@@ -17,7 +17,7 @@ import argparse
 import gc
 import os
 import re
-from typing import Dict, Optional
+from typing import Optional
 
 import torch
 from huggingface_hub import snapshot_download
@@ -90,7 +90,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 }
 
 
-def load_original_state_dict(model_id: str, revision: Optional[str] = None) -> Dict[str, torch.Tensor]:
+def load_original_state_dict(model_id: str, revision: Optional[str] = None) -> dict[str, torch.Tensor]:
     # Download only the model.safetensors file
     directory_path = snapshot_download(
         repo_id=model_id,

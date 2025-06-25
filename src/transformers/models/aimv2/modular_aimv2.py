@@ -16,29 +16,24 @@
 """Pytorch implementation of AIMv2 Model"""
 
 import math
-from typing import Optional, Tuple
+from typing import Optional
 
 import torch
 import torch.nn.functional as F
 from torch import nn
 
-from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     auto_docstring,
     can_return_tuple,
-    logging,
-    replace_return_docstrings,
 )
 from ..clip.modeling_clip import CLIPModel, CLIPTextEmbeddings, _get_vector_norm
 from ..llama.modeling_llama import LlamaMLP, LlamaRMSNorm
 from ..siglip.configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
 from ..siglip.modeling_siglip import SiglipAttention, SiglipEncoder, SiglipOutput
-
-
-logger = logging.get_logger(__name__)
 
 
 class Aimv2VisionConfig(SiglipVisionConfig):
@@ -379,11 +374,9 @@ class Aimv2EncoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         norm_hidden_states = self.rms_norm1(hidden_states)
-        attn_output, attn_weights = self.attention(
-            hidden_states=norm_hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
-        )
+        attn_output, attn_weights = self.attention(hidden_states=norm_hidden_states, attention_mask=attention_mask)
 
         hidden_states = hidden_states + attn_output
         norm_hidden_states = self.rms_norm2(hidden_states)
@@ -497,7 +490,6 @@ class Aimv2VisionModel(Aimv2PreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=Aimv2VisionConfig)
     def forward(
         self,
         pixel_values,
@@ -596,9 +588,13 @@ class Aimv2TextModel(Aimv2PreTrainedModel):
         _, seq_len, _ = hidden_states.shape
 
         if attention_mask is not None:
-            mask_converter = AttentionMaskConverter(True)
-            attention_mask = mask_converter.to_4d(
-                attention_mask, key_value_length=seq_len, query_length=seq_len, dtype=hidden_states.dtype
+            cache_position = torch.arange(seq_len, device=hidden_states.device)
+            attention_mask = create_causal_mask(
+                config=self.config,
+                input_embeds=hidden_states,
+                attention_mask=attention_mask,
+                cache_position=cache_position,
+                past_key_values=None,
             )
 
         encoder_outputs = self.encoder(
