@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Optional
 
 import torch
 
@@ -22,7 +22,7 @@ def flash_attention_forward(
     sliding_window: Optional[int] = None,
     softcap: Optional[float] = None,
     **kwargs,
-) -> Tuple[torch.Tensor, None]:
+) -> tuple[torch.Tensor, None]:
     if kwargs.get("output_attentions", False) or kwargs.get("head_mask", None) is not None:
         logger.warning_once(
             "`flash_attention_2` does not support `output_attentions=True` or `head_mask`."
