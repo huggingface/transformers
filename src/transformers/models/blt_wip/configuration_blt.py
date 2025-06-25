@@ -45,7 +45,12 @@ class BLTLocalEncoderConfig(PretrainedConfig):
     model_type = "blt_local_encoder"
     
     def __init__(
-        self,
+          self,
+        vocab_size=256,
+        cross_attn_all_layers=True,
+        cross_attn_k=2,
+        dim_global=2048,
+        pm_size=0,
         hidden_size=512,
         num_attention_heads=8,
         num_key_value_heads=None,
@@ -59,8 +64,14 @@ class BLTLocalEncoderConfig(PretrainedConfig):
         rope_scaling=None,
         hidden_act="silu",
         multiple_of=256,
+        _attn_implementation="sdpa",
         **kwargs,
     ):
+        self.vocab_size = vocab_size
+        self.cross_attn_all_layers = cross_attn_all_layers
+        self.cross_attn_k = cross_attn_k
+        self.dim_global=dim_global
+        self.pm_size=pm_size
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads or num_attention_heads
@@ -74,10 +85,13 @@ class BLTLocalEncoderConfig(PretrainedConfig):
         self.rope_scaling = rope_scaling or {"rope_type": "default"}
         self.hidden_act = hidden_act
         self.multiple_of = multiple_of
+        self._attn_implementation = _attn_implementation
+        self.decoder_dim_token_emb = 1024
+        self.encoder_dim_token_emb=1024
+        self.encoder_dim_patch_emb=self.hidden_size
         
         super().__init__(**kwargs)
-
-
+    
 class BLTLocalDecoderConfig(PretrainedConfig):
     """
     Configuration class for the BLT Local Decoder component.
@@ -87,6 +101,10 @@ class BLTLocalDecoderConfig(PretrainedConfig):
     
     def __init__(
         self,
+        vocab_size=256,
+        cross_attn_all_layers=True,
+        cross_attn_k=2,
+        dim_global=2048,
         hidden_size=512,
         num_attention_heads=8,
         num_key_value_heads=None,
@@ -100,8 +118,13 @@ class BLTLocalDecoderConfig(PretrainedConfig):
         rope_scaling=None,
         hidden_act="silu",
         multiple_of=256,
+        _attn_implementation="sdpa",
         **kwargs,
     ):
+        self.vocab_size = vocab_size
+        self.cross_attn_all_layers = cross_attn_all_layers
+        self.cross_attn_k = cross_attn_k
+        self.dim_global=dim_global
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads or num_attention_heads
@@ -115,7 +138,10 @@ class BLTLocalDecoderConfig(PretrainedConfig):
         self.rope_scaling = rope_scaling or {"rope_type": "default"}
         self.hidden_act = hidden_act
         self.multiple_of = multiple_of
-        
+        self._attn_implementation = _attn_implementation
+        self.decoder_dim_token_emb=1024
+        self.encoder_dim_token_emb=1024
+
         super().__init__(**kwargs)
 
 
@@ -141,6 +167,7 @@ class BLTGlobalTransformerConfig(PretrainedConfig):
         rope_scaling=None,
         hidden_act="silu",
         multiple_of=256,
+        _attn_implementation="sdpa",
         **kwargs,
     ):
         self.hidden_size = hidden_size
@@ -156,6 +183,7 @@ class BLTGlobalTransformerConfig(PretrainedConfig):
         self.rope_scaling = rope_scaling or {"rope_type": "default"}
         self.hidden_act = hidden_act
         self.multiple_of = multiple_of
+        self._attn_implementation = _attn_implementation
         
         super().__init__(**kwargs)
 
@@ -511,6 +539,7 @@ class BLTConfig(PretrainedConfig):
         rope_use_fp32_in_outer_product=False,
         # Attention configuration
         attn_impl="sdpa",
+        _attn_implementation="sdpa",
         attn_bias_type="causal",
         local_attention_window_len=None,
         use_rope=True,
@@ -537,8 +566,8 @@ class BLTConfig(PretrainedConfig):
         cross_attn_decoder=False,
         cross_attn_window_encoder=None,
         cross_attn_window_decoder=None,
-        cross_attn_k=1,
-        cross_attn_nheads=None,
+        cross_attn_k=2,
+        cross_attn_nheads=16,
         cross_attn_all_layers_decoder=False,
         cross_attn_all_layers_encoder=False,
         cross_attn_use_flex_attention=True,
@@ -610,6 +639,7 @@ class BLTConfig(PretrainedConfig):
 
         # Attention configuration
         self.attn_impl = attn_impl
+        self._attn_implementation = _attn_implementation
         self.attn_bias_type = attn_bias_type
         self.local_attention_window_len = local_attention_window_len
         self.use_rope = use_rope
@@ -675,6 +705,11 @@ class BLTConfig(PretrainedConfig):
 
         # Initialize component configurations
         self.encoder_config = BLTLocalEncoderConfig(
+            vocab_size=vocab_size,
+            cross_attn_all_layers=cross_attn_all_layers_encoder,
+            cross_attn_k=cross_attn_k,
+            dim_global=dim_global,
+            pm_size=pm_size,
             hidden_size=dim_local_encoder,
             num_attention_heads=n_heads_local_encoder,
             num_key_value_heads=n_kv_heads,
@@ -689,6 +724,10 @@ class BLTConfig(PretrainedConfig):
         )
 
         self.decoder_config = BLTLocalDecoderConfig(
+            vocab_size=vocab_size,
+            cross_attn_all_layers=cross_attn_all_layers_decoder,
+            cross_attn_k=cross_attn_k,
+            dim_global=dim_global,
             hidden_size=dim_local_decoder,
             num_attention_heads=n_heads_local_decoder,
             num_key_value_heads=n_kv_heads,
@@ -701,6 +740,7 @@ class BLTConfig(PretrainedConfig):
             hidden_act=hidden_act,
             multiple_of=multiple_of,
         )
+
 
         self.global_config = BLTGlobalTransformerConfig(
             hidden_size=dim_global,
@@ -751,30 +791,9 @@ class BLTConfig(PretrainedConfig):
             **kwargs,
         )
 
-
-    @property
-    def encoder_dim_token_emb(self):
-        if self.dim_token is not None:
-            return self.dim_token
-        elif self.use_local_encoder_transformer:
-            return self.dim_local_encoder
-        else:
-            # Use default patch_size of 8 if not set
-            patch_size = self.patch_size if self.patch_size is not None else 8
-            return self.dim_global // patch_size
-
-    @property
-    def encoder_dim_patch_emb(self):
-        if self.cross_attn_encoder:
-            if self.cross_attn_init_by_pooling:
-                return self.dim_local_encoder
-            else:
-                return self.dim_global
-        return None
-
     @property
     def global_dim_patch_emb(self):
-        dim_token_emb = self.encoder_dim_token_emb
+        dim_token_emb = self.dim_local_encoder
         if self.cross_attn_encoder:
             cross_attn_k = self.cross_attn_k if self.cross_attn_k is not None else 1
             return dim_token_emb * cross_attn_k
@@ -787,16 +806,6 @@ class BLTConfig(PretrainedConfig):
             return dim_token_emb * patch_size
         else:
             return dim_token_emb * sum([pooling in self.downsampling_by_pooling for pooling in ["avg", "min", "max"]])
-
-    @property
-    def decoder_dim_token_emb(self):
-        if self.share_encoder_decoder_emb:
-            return self.encoder_dim_token_emb
-        elif self.dim_token is not None:
-            return self.dim_token
-        else:
-            return self.dim_local_decoder
-
 
 
     def get_init_std_factor(self, depth: int) -> float:
