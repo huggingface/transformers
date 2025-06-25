@@ -294,6 +294,7 @@ if TYPE_CHECKING:
     from .swinv2 import *
     from .switch_transformers import *
     from .t5 import *
+    from .t5gemma import *
     from .table_transformer import *
     from .tapas import *
     from .textnet import *
