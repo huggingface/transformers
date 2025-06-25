@@ -55,6 +55,14 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 # Base objects, independent of any specific backend
 _import_structure = {
+    
+    # MatchboxNet
+    "models.matchboxnet.configuration_matchboxnet": ["MatchboxNetConfig"],
+    "models.matchboxnet.feature_extraction_matchboxnet": ["MatchboxNetFeatureExtractor"],
+    "models.matchboxnet.modeling_matchboxnet": [
+        "MatchboxNet",
+        "MatchboxNetForAudioClassification",
+    ],
     "audio_utils": [],
     "commands": [],
     "configuration_utils": ["PretrainedConfig"],
@@ -553,6 +561,14 @@ else:
 if TYPE_CHECKING:
     # All modeling imports
     from .configuration_utils import PretrainedConfig
+    
+    # MatchboxNet
+    from .models.matchboxnet.configuration_matchboxnet import MatchboxNetConfig
+    from .models.matchboxnet.feature_extraction_matchboxnet import MatchboxNetFeatureExtractor
+    from .models.matchboxnet.modeling_matchboxnet import (
+        MatchboxNet,
+        MatchboxNetForAudioClassification,
+    )
 
     # Data
     from .data import (
@@ -1037,3 +1053,8 @@ if not is_tf_available() and not is_torch_available() and not is_flax_available(
         "Models won't be available and only tokenizers, configuration "
         "and file/data utilities can be used."
     )
+
+
+
+
+
