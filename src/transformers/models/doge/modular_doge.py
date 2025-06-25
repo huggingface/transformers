@@ -613,6 +613,7 @@ class DogePreTrainedModel(LlamaPreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["DogeDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn_3 = False
     _supports_flash_attn_2 = False
     _supports_sdpa = True
     _supports_flex_attn = True
