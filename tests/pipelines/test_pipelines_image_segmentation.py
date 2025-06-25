@@ -601,9 +601,9 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
 
         image_segmenter = pipeline("image-segmentation", model=model, image_processor=image_processor)
 
-        image = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
-        file = image[0]["file"]
-        outputs = image_segmenter(file, threshold=threshold)
+        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+        image = ds[0]["image"].convert("RGB")
+        outputs = image_segmenter(image, threshold=threshold)
 
         # Shortening by hashing
         for o in outputs:
@@ -655,9 +655,9 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
     def test_oneformer(self):
         image_segmenter = pipeline(model="shi-labs/oneformer_ade20k_swin_tiny")
 
-        image = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
-        file = image[0]["file"]
-        outputs = image_segmenter(file, threshold=0.99)
+        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+        image = ds[0]["image"].convert("RGB")
+        outputs = image_segmenter(image, threshold=0.99)
         # Shortening by hashing
         for o in outputs:
             o["mask"] = mask_to_test_readable(o["mask"])
@@ -679,7 +679,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         )
 
         # Different task
-        outputs = image_segmenter(file, threshold=0.99, subtask="instance")
+        outputs = image_segmenter(image, threshold=0.99, subtask="instance")
         # Shortening by hashing
         for o in outputs:
             o["mask"] = mask_to_test_readable(o["mask"])
@@ -701,7 +701,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         )
 
         # Different task
-        outputs = image_segmenter(file, subtask="semantic")
+        outputs = image_segmenter(image, subtask="semantic")
         # Shortening by hashing
         for o in outputs:
             o["mask"] = mask_to_test_readable(o["mask"])

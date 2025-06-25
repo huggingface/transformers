@@ -41,6 +41,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "BambaConfig": [
         "attn_layer_indices",
     ],
+    "Dots1Config": ["max_window_layers"],
     "JambaConfig": [
         "max_position_embeddings",
         "attn_layer_offset",
@@ -275,6 +276,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "attention_chunk_size",
     ],
     "Llama4VisionConfig": ["multi_modal_projector_bias", "norm_eps"],
+    "SmolLM3Config": ["no_rope_layer_interval"],
 }
 
 
