@@ -314,6 +314,7 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         kwargs = {
             "input_ids": input_ids,
             "position_ids": position_ids,
+            "attention_mask": None,
             "cache_position": cache_position,
             "past_key_values": past_key_values,
             "use_cache": True,
