@@ -1082,7 +1082,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, vocab_size=self.config.vocab_size)
+            loss = self.loss_function(logits, labels, vocab_size=self.config.vocab_size, **kwargs)
 
         if self.config._attn_implementation == "flash_attention_2":
             with nullcontext() if self.config.repad_logits_with_grad or labels is None else torch.no_grad():
