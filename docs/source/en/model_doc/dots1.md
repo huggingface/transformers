@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The `dots.llm1` model was proposed in dots.llm1 technical report by rednote-hilab team.
+The `dots.llm1` model was proposed in [dots.llm1 technical report](https://www.arxiv.org/pdf/2506.05767) by rednote-hilab team.
 
 The abstract from the report is the following:
 
