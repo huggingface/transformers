@@ -327,8 +327,7 @@ def flex_attention_forward(
     return attn_output, attention_weights
 
 
-ALL_ATTENTION_FUNCTIONS = AttentionInterface()
-ALL_ATTENTION_FUNCTIONS["flex_attention"] = flex_attention_forward
+ALL_ATTENTION_FUNCTIONS["doge_flex_attention"] = flex_attention_forward
 
 
 class DogeAttention(nn.Module):
