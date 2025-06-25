@@ -168,6 +168,7 @@ class BLTGlobalTransformerConfig(PretrainedConfig):
         hidden_act="silu",
         multiple_of=256,
         _attn_implementation="sdpa",
+        global_dim_patch_emb=None,
         **kwargs,
     ):
         self.hidden_size = hidden_size
@@ -184,6 +185,7 @@ class BLTGlobalTransformerConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.multiple_of = multiple_of
         self._attn_implementation = _attn_implementation
+        self.global_dim_patch_emb = global_dim_patch_emb
         
         super().__init__(**kwargs)
 
@@ -754,6 +756,7 @@ class BLTConfig(PretrainedConfig):
             rope_scaling={"type": "default", "rope_type": "default"},
             hidden_act=hidden_act,
             multiple_of=multiple_of,
+            global_dim_patch_emb=self.global_dim_patch_emb,
         )
 
         # Initialize patcher configuration
@@ -793,19 +796,7 @@ class BLTConfig(PretrainedConfig):
 
     @property
     def global_dim_patch_emb(self):
-        dim_token_emb = self.dim_local_encoder
-        if self.cross_attn_encoder:
-            cross_attn_k = self.cross_attn_k if self.cross_attn_k is not None else 1
-            return dim_token_emb * cross_attn_k
-        elif (
-            self.downsampling_by_pooling is None
-            or not self.downsampling_by_pooling
-            or len(self.downsampling_by_pooling) == 0
-        ):
-            patch_size = self.patch_size if self.patch_size is not None else 8
-            return dim_token_emb * patch_size
-        else:
-            return dim_token_emb * sum([pooling in self.downsampling_by_pooling for pooling in ["avg", "min", "max"]])
+        return self.dim_local_encoder * self.cross_attn_k
 
 
     def get_init_std_factor(self, depth: int) -> float:
