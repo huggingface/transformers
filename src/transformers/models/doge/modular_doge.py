@@ -42,6 +42,7 @@ from ..llama.modeling_llama import (
     LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
+    repeat_kv,
 )
 from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel
 
@@ -351,13 +352,17 @@ class DogeAttention(nn.Module):
             config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )
         # dynamic mask for the QK^T attention weights matrix
-        self.A = nn.Parameter(torch.zeros(config.num_attention_heads))
+        self.A = nn.Parameter(torch.zeros(config.num_key_value_heads))
         self.dt_proj = nn.Linear(
-            config.num_key_value_heads * self.head_dim, config.num_attention_heads, bias=config.attention_bias
+            config.num_key_value_heads * self.head_dim, config.num_key_value_heads, bias=config.attention_bias
         )
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
+        self.q_norm = DogeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
+        self.k_norm = DogeRMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )  # thus post q_norm does not need reshape
 
     def forward(
         self,
@@ -371,8 +376,8 @@ class DogeAttention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
@@ -394,6 +399,7 @@ class DogeAttention(nn.Module):
             keep_window_size=self.keep_window_size,
             attention_mask=attention_mask,
         )
+        attn_mask = repeat_kv(attn_mask, self.num_key_value_groups)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":

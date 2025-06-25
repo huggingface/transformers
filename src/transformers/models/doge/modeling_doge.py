@@ -22,7 +22,6 @@
 # limitations under the License.
 
 import math
-from functools import partial
 from typing import Callable, Optional, Union
 
 import torch
@@ -203,13 +202,17 @@ class DogeAttention(nn.Module):
             config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )
         # dynamic mask for the QK^T attention weights matrix
-        self.A = nn.Parameter(torch.zeros(config.num_attention_heads))
+        self.A = nn.Parameter(torch.zeros(config.num_key_value_heads))
         self.dt_proj = nn.Linear(
-            config.num_key_value_heads * self.head_dim, config.num_attention_heads, bias=config.attention_bias
+            config.num_key_value_heads * self.head_dim, config.num_key_value_heads, bias=config.attention_bias
         )
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
+        self.q_norm = DogeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
+        self.k_norm = DogeRMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )  # thus post q_norm does not need reshape
 
     def forward(
         self,
@@ -223,8 +226,8 @@ class DogeAttention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
@@ -246,6 +249,7 @@ class DogeAttention(nn.Module):
             keep_window_size=self.keep_window_size,
             attention_mask=attention_mask,
         )
+        attn_mask = repeat_kv(attn_mask, self.num_key_value_groups)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -604,32 +608,18 @@ class DogeModel(DogePreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    partial(decoder_layer.__call__, **flash_attn_kwargs),
-                    hidden_states,
-                    causal_mask,
-                    position_ids,
-                    past_key_values,
-                    output_attentions,
-                    output_router_logits,
-                    use_cache,
-                    cache_position,
-                    position_embeddings,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=causal_mask,
-                    position_ids=position_ids,
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    output_router_logits=output_router_logits,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                    position_embeddings=position_embeddings,
-                    **flash_attn_kwargs,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                position_ids=position_ids,
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                output_router_logits=output_router_logits,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                position_embeddings=position_embeddings,
+                **flash_attn_kwargs,
+            )
 
             hidden_states = layer_outputs[0]
 
