@@ -10,7 +10,8 @@ permissions:
 
 jobs:
   style:
-    uses: huggingface/huggingface_hub/.github/workflows/style-bot-action.yml@main
+    # change back to `@style_notify` once https://github.com/huggingface/huggingface_hub/pull/3179 is merged
+    uses: huggingface/huggingface_hub/.github/workflows/style-bot-action.yml@style_notify
     with:
       python_quality_dependencies: "[quality]"
       style_command_type: "default"
