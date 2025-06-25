@@ -1,7 +1,18 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 from transformers.modeling_outputs import SequenceClassifierOutput
+
+from transformers.utils.import_utils import is_torch_available
+
+if is_torch_available():
+    
+    import torch
+    import torchaudio
+    import torch.nn as nn
+    import numpy as np
+    import torch.nn.functional as F
+   
+else:
+    
+    raise ImportError("MatchboxNet requires PyTorch.")
 
 def calc_same_padding(kernel_size, stride=1, dilation=1):
     

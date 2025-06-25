@@ -1,10 +1,20 @@
-import torch
-import torchaudio
-import numpy as np
-import torch.nn.functional as F
 import types
 from transformers import FeatureExtractionMixin
 from transformers.tokenization_utils_base import BatchEncoding
+
+from transformers.utils.import_utils import is_torch_available
+
+if is_torch_available():
+    
+    import torch
+    import torchaudio
+    import numpy as np
+    import torch.nn.functional as F
+   
+else:
+    
+    raise ImportError("MatchboxNet requires PyTorch.")
+  
 
 class MatchboxNetFeatureExtractor(FeatureExtractionMixin):
     model_input_names = ["input_ids"]
