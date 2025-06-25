@@ -22,8 +22,6 @@ from ...test_image_processing_common import ImageProcessingTestMixin, prepare_im
 
 
 if is_pytesseract_available():
-    from PIL import Image
-
     from transformers import LayoutLMv3ImageProcessor
 
     if is_torchvision_available():
@@ -103,17 +101,16 @@ class LayoutLMv3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)
             self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
-    @unittest.skip("temporary to avoid failing on circleci")
     def test_LayoutLMv3_integration_test(self):
         from datasets import load_dataset
 
-        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test", trust_remote_code=True)
+        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test")
 
         # with apply_OCR = True
         for image_processing_class in self.image_processor_list:
             image_processor = image_processing_class()
 
-            image = Image.open(ds[0]["file"]).convert("RGB")
+            image = ds[0]["image"].convert("RGB")
 
             encoding = image_processor(image, return_tensors="pt")
 
