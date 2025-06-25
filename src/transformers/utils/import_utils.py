@@ -1128,6 +1128,24 @@ def is_torch_greater_or_equal(library_version: str, accept_dev: bool = False):
 
 
 @lru_cache
+def is_torch_less_or_equal(library_version: str, accept_dev: bool = False):
+    """
+    Accepts a library version and returns True if the current version of the library is less than or equal to the
+    given version. If `accept_dev` is True, it will also accept development versions (e.g. 2.7.0.dev20250320 matches
+    2.7.0).
+    """
+    if not _is_package_available("torch"):
+        return False
+
+    if accept_dev:
+        return version.parse(version.parse(importlib.metadata.version("torch")).base_version) <= version.parse(
+            library_version
+        )
+    else:
+        return version.parse(importlib.metadata.version("torch")) <= version.parse(library_version)
+
+
+@lru_cache
 def is_huggingface_hub_greater_or_equal(library_version: str, accept_dev: bool = False):
     if not _is_package_available("huggingface_hub"):
         return False

@@ -25,6 +25,7 @@ from .utils.import_utils import is_torch_flex_attn_available, is_torch_greater_o
 
 
 if is_torch_flex_attn_available():
+    from torch.nn.attention.flex_attention import _DEFAULT_SPARSE_BLOCK_SIZE as flex_default_block_size  # noqa: N811
     from torch.nn.attention.flex_attention import BlockMask, create_block_mask
 else:
     # Register a fake type to avoid crashing for annotations and `isinstance` checks
@@ -550,6 +551,11 @@ def flex_attention_mask(
 
     # Potentially add the padding 2D mask
     if attention_mask is not None:
+        # Older torch (2.5.x) cannot handle sequences < 128 (default block size)
+        # Hence we pad with this as a minimum to ensure this
+        if not _is_torch_greater_or_equal_than_2_6:
+            attention_mask = torch.nn.functional.pad(attention_mask, value=0, pad=(0, flex_default_block_size))
+
         padding_mask = prepare_padding_mask(attention_mask, kv_length, kv_offset, _slice=False)
         mask_function = and_masks(mask_function, padding_mask_function(padding_mask))
 
@@ -564,7 +570,7 @@ def flex_attention_mask(
         Q_LEN=q_length,
         KV_LEN=kv_length,
         device=cache_position.device,
-        _compile=True,
+        _compile=_is_torch_greater_or_equal_than_2_6,
     )
     return block_mask
 
