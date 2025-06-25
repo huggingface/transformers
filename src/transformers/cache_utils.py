@@ -877,9 +877,9 @@ class DynamicLayer(CacheLayer):
         """Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be
         negative to remove `max_length` tokens."""
         if max_length < 0:
-            max_length = self.get_seq_length() - abs(max_length)
+            max_length = self.get_seq_length(None)[0] - abs(max_length)
 
-        if self.get_seq_length() <= max_length:
+        if self.get_seq_length(None)[0] <= max_length:
             return None, False
 
         if self.key_cache.numel():
