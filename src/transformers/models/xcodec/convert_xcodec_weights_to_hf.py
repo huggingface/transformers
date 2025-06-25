@@ -15,7 +15,6 @@
 import argparse
 import io
 import re
-from typing import Dict
 
 import torch
 
@@ -75,7 +74,7 @@ MAPPING_QUANTIZER = {
 }
 
 
-def safe_load(path: str) -> Dict[str, torch.Tensor]:
+def safe_load(path: str) -> dict[str, torch.Tensor]:
     """
     Load only the tensor objects from a checkpoint, skipping any BytesIO
     """
@@ -91,8 +90,8 @@ def _rewrite_weight_norm(key: str) -> str:
     return key
 
 
-def convert_old_keys_to_new_keys(original_state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-    converted_checkpoint: Dict[str, torch.Tensor] = {}
+def convert_old_keys_to_new_keys(original_state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+    converted_checkpoint: dict[str, torch.Tensor] = {}
 
     for old_key, value in original_state_dict.items():
         if old_key.startswith("encoder."):

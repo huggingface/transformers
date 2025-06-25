@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -563,7 +563,7 @@ class XcodecModel(XcodecPreTrainedModel):
         bandwidth: Optional[float] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], XcodecOutput]:
+    ) -> Union[tuple[torch.Tensor, torch.Tensor], XcodecOutput]:
         r"""
         Returns:
 

@@ -15,7 +15,7 @@
 """Xcodec model configuration"""
 
 import math
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -107,15 +107,15 @@ class XcodecConfig(PretrainedConfig):
 
     def __init__(
         self,
-        target_bandwidths: Optional[List[float]] = None,
+        target_bandwidths: Optional[list[float]] = None,
         audio_channels: int = 1,
         sample_rate: int = 16000,
         input_channels: int = 768,
         encoder_channels: int = 768,
         kernel_size: int = 3,
-        channel_ratios: List[float] = [1, 1],
-        strides: List[int] = [1, 1],
-        block_dilations: List[int] = [1, 1],
+        channel_ratios: list[float] = [1, 1],
+        strides: list[int] = [1, 1],
+        block_dilations: list[int] = [1, 1],
         unit_kernel_size: int = 3,
         decoder_channels: int = 768,
         output_channels: int = 768,
