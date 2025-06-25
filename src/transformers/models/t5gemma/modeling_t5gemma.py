@@ -1084,7 +1084,6 @@ class T5GemmaEncoderModel(T5GemmaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> BaseModelOutput:
-
         encoder_outputs = self.encoder(
             input_ids=input_ids,
             attention_mask=attention_mask,
