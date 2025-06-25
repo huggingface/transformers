@@ -25,10 +25,7 @@ logger = logging.get_logger(__name__)
 class PerceptionLMConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PerceptionLMForConditionalGeneration`]. It is used to instantiate an
-    PerceptionLM model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the PerceptionLM-9B.
-
-    e.g. [perception_lm-hf/perception_lm-9b](https://huggingface.co/perception_lm-hf/perception_lm-9b)
+    PerceptionLM model according to the specified arguments, defining the model architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -38,6 +35,8 @@ class PerceptionLMConfig(PretrainedConfig):
             The config object or dictionary of the vision backbone.
         text_config (`Union[PretrainedConfig, dict]`, *optional*, defaults to `LlamaConfig()`):
             The config object or dictionary of the text backbone.
+        vision_use_cls_token (`bool`, *optional*, defaults to `True`):
+            Whether CLS token is used in the vision backbone. If used, we remove CLS token embedding from vision output.
         projector_pooling_ratio (`int`, *optional*, defaults to 1):
             The pooling ratio used in the multimodal projector.
         image_token_id (`int`, *optional*, defaults to 128002):
