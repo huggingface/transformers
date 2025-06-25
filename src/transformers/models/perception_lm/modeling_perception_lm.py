@@ -213,37 +213,35 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
         **lm_kwargs,
     ) -> Union[tuple, PerceptionLMCausalLMOutputWithPast]:
         r"""
-            Args:
-                input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                    Indices of input sequence tokens in the vocabulary.
-                pixel_values (`torch.FloatTensor` of shape `(batch_size, num_tiles, channels, height, width)`, *optional*):
-                    Pixel values for input images.
-                pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_frames, channels, height, width)`, *optional*):
-                    Pixel values for input videos.
-                attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                    Mask to avoid performing attention on padding token indices.
-                position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                    Indices of positions of each input sequence token in the position embeddings.
-                past_key_values (`List[torch.FloatTensor]`, *optional*):
-                    List of precomputed key and value hidden states for each layer, used for fast autoregressive generation.
-                inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                    Optionally, instead of passing `input_ids`, you can choose to directly pass an embedded representation.
-                use_cache (`bool`, *optional*):
-                    Whether or not to use past key values to speed up decoding.
-                output_attentions (`bool`, *optional*):
-                    Whether or not to return the attentions tensors of all attention layers.
-                output_hidden_states (`bool`, *optional*):
-                    Whether or not to return the hidden states of all layers.
-                return_dict (`bool`, *optional*):
-                    Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-                cache_position (`torch.LongTensor`, *optional*):
-                    Position indices for cached key/value states, used for efficient generation.
-                logits_to_keep (`int` or `torch.Tensor`, *optional*):
-                    If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
-                    `input_ids` (special case). If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the
-                    sequence length dimension.
-                lm_kwargs:
-                    Additional keyword arguments passed to the language model.
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of input sequence tokens in the vocabulary.
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_tiles, channels, height, width)`, *optional*):
+            Pixel values for input images.
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_frames, channels, height, width)`, *optional*):
+            Pixel values for input videos.
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices.
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence token in the position embeddings.
+        past_key_values (`List[torch.FloatTensor]`, *optional*):
+            List of precomputed key and value hidden states for each layer, used for fast autoregressive generation.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids`, you can choose to directly pass an embedded representation.
+        use_cache (`bool`, *optional*):
+            Whether or not to use past key values to speed up decoding.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers.
+        cache_position (`torch.LongTensor`, *optional*):
+            Position indices for cached key/value states, used for efficient generation.
+        logits_to_keep (`int` or `torch.Tensor`, *optional*):
+            If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
+            `input_ids` (special case). If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the
+            sequence length dimension.
+        lm_kwargs:
+            Additional keyword arguments passed to the language model.
+
         Example:
         (TODO: fix example)
         ```python
