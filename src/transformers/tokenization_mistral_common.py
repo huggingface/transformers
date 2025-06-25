@@ -16,13 +16,15 @@ import os
 import shutil
 import warnings
 from collections.abc import Mapping, Sized
+from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Tuple, Union, overload
+from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Set, Tuple, Union, overload
 
 from mistral_common.protocol.instruct.request import ChatCompletionRequest
 from mistral_common.protocol.instruct.validator import ValidationMode
 from mistral_common.tokens.tokenizers.base import SpecialTokenPolicy
 from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
+from mistral_common.tokens.tokenizers.tekken import Tekkenizer
 from mistral_common.tokens.tokenizers.utils import download_tokenizer_from_hf_hub
 
 from transformers.tokenization_utils_base import (
@@ -141,6 +143,13 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
 """
 
 
+class MistralTokenizerType(str, Enum):
+    """Enum for the different type of tokenizer."""
+
+    spm = "spm"
+    tekken = "tekken"
+
+
 @requires(backends=("mistral-common",))
 class MistralCommonTokenizer(PushToHubMixin):
     """
@@ -232,6 +241,11 @@ class MistralCommonTokenizer(PushToHubMixin):
 
         self._tokenizer_path = Path(tokenizer_path)
         self.tokenizer: MistralTokenizer = MistralTokenizer.from_file(str(self._tokenizer_path), mode=mode)
+        self._tokenizer_type = (
+            MistralTokenizerType.tekken
+            if isinstance(self.tokenizer.instruct_tokenizer.tokenizer, Tekkenizer)
+            else MistralTokenizerType.spm
+        )
         self.truncation_side = truncation_side
         self.padding_side = padding_side
         self.model_max_length = model_max_length
@@ -476,6 +490,14 @@ class MistralCommonTokenizer(PushToHubMixin):
             for seq in sequences
         ]
 
+    def _is_control_token(self, token_id: int) -> bool:
+        if self._tokenizer_type == MistralTokenizerType.spm:
+            return token_id in self.tokenizer.instruct_tokenizer.tokenizer._control_tokens()
+        elif self._tokenizer_type == MistralTokenizerType.tekken:
+            return token_id < self.tokenizer.instruct_tokenizer.tokenizer.num_special_tokens
+        else:
+            raise ValueError(f"Unknown tokenizer type: {self._tokenizer_type}")
+
     @overload
     def convert_ids_to_tokens(self, ids: int, skip_special_tokens: bool = False) -> str: ...
     @overload
@@ -505,7 +527,7 @@ class MistralCommonTokenizer(PushToHubMixin):
 
         tokens: list[str] = []
         for token_id in ids:
-            if self.tokenizer.instruct_tokenizer.tokenizer.is_control_token(token_id) and skip_special_tokens:
+            if self._is_control_token(token_id) and skip_special_tokens:
                 continue
             tokens.append(self.tokenizer.instruct_tokenizer.tokenizer.id_to_piece(token_id))
 
@@ -515,6 +537,18 @@ class MistralCommonTokenizer(PushToHubMixin):
 
             return tokens[0]
         return tokens
+
+    def _piece_to_id(self, piece: str) -> int:
+        if self._tokenizer_type == MistralTokenizerType.spm:
+            return self.tokenizer.instruct_tokenizer.tokenizer._model.piece_to_id(piece)
+        elif self._tokenizer_type == MistralTokenizerType.tekken:
+            pieces = self.tokenizer.instruct_tokenizer.tokenizer._model.encode(
+                piece, allowed_special="all", disallowed_special=set()
+            )
+            assert len(pieces) == 1, f"Expected to decode 1 token, got {len(pieces)}"
+            return pieces[0]
+        else:
+            raise ValueError(f"Unknown tokenizer type: {self._tokenizer_type}")
 
     def convert_tokens_to_ids(self, tokens: Union[str, list[str]]) -> Union[int, list[int]]:
         """
@@ -536,7 +570,7 @@ class MistralCommonTokenizer(PushToHubMixin):
 
         ids: list[int] = []
         for token in tokens:
-            ids.append(self.tokenizer.instruct_tokenizer.tokenizer.piece_to_id(token))
+            ids.append(self._piece_to_id(token))
 
         if one_token:
             return ids[0]
@@ -685,6 +719,14 @@ class MistralCommonTokenizer(PushToHubMixin):
 
         return BatchEncoding(batch_outputs)
 
+    def _all_special_ids(self) -> Set[int]:
+        if self._tokenizer_type == MistralTokenizerType.tekken:
+            return {t["rank"] for t in self.tokenizer.instruct_tokenizer.tokenizer._all_special_tokens}
+        elif self._tokenizer_type == MistralTokenizerType.spm:
+            return self.tokenizer.instruct_tokenizer.tokenizer._control_tokens()
+        else:
+            raise ValueError(f"Unknown tokenizer type: {self._tokenizer_type}")
+
     def get_special_tokens_mask(
         self, token_ids_0: list, token_ids_1: None = None, already_has_special_tokens: bool = False
     ) -> list[int]:
@@ -712,7 +754,7 @@ class MistralCommonTokenizer(PushToHubMixin):
                 "`already_has_special_tokens` is not supported by `MistralCommonTokenizer` and should be `False`."
             )
 
-        all_special_ids = self.tokenizer.instruct_tokenizer.tokenizer.all_special_ids  # cache the property
+        all_special_ids = self._all_special_ids()  # cache the ids
 
         special_tokens_mask = [1 if token in all_special_ids else 0 for token in token_ids_0]
         return special_tokens_mask

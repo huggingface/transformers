@@ -39,6 +39,15 @@ class TestMistralCommonTokenizer(unittest.TestCase):
             for conversation in cls.fixture_conversations
         ]
 
+        cls.ref_special_ids = {t["rank"] for t in cls.ref_tokenizer.instruct_tokenizer.tokenizer._all_special_tokens}
+
+    def _ref_piece_to_id(self, piece: str) -> int:
+        pieces = self.ref_tokenizer.instruct_tokenizer.tokenizer._model.encode(
+            piece, allowed_special="all", disallowed_special=set()
+        )
+        assert len(pieces) == 1, f"Expected to decode 1 token, got {len(pieces)}"
+        return pieces[0]
+
     def test_vocab_size(self):
         self.assertEqual(self.tokenizer.vocab_size, self.ref_tokenizer.instruct_tokenizer.tokenizer.n_words)
 
@@ -223,7 +232,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
 
     def test_convert_tokens_to_ids(self):
         tokens = ["Hello", "world", "!"]
-        expected_ids = [self.ref_tokenizer.instruct_tokenizer.tokenizer.piece_to_id(token) for token in tokens]
+        expected_ids = [self._ref_piece_to_id(token) for token in tokens]
         # Test 1:
         # list of tokens
         ids = self.tokenizer.convert_tokens_to_ids(tokens)
@@ -253,9 +262,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         # Test 1:
         # with skip_special_tokens=False
         ids = self.ref_tokenizer.instruct_tokenizer.tokenizer.encode("Hello world!", bos=True, eos=True)
-        expected_mask = [
-            1 if id in self.ref_tokenizer.instruct_tokenizer.tokenizer.all_special_ids else 0 for id in ids
-        ]
+        expected_mask = [1 if id in self.ref_special_ids else 0 for id in ids]
 
         mask = self.tokenizer.get_special_tokens_mask(ids)
         self.assertEqual(mask, expected_mask)
@@ -1267,13 +1274,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
             self.assertEqual(tokens["attention_mask"], [[1] * min(len(t), 10) for t in expected_tokens])
             self.assertEqual(
                 tokens["special_tokens_mask"],
-                [
-                    [
-                        1 if id in self.ref_tokenizer.instruct_tokenizer.tokenizer.all_special_ids else 0
-                        for id in ids[:10]
-                    ]
-                    for ids in expected_tokens
-                ],
+                [[1 if id in self.ref_special_ids else 0 for id in ids[:10]] for ids in expected_tokens],
             )
 
         # Test 2:
@@ -1313,13 +1314,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
                 )
                 self.assertEqual(
                     tokens["special_tokens_mask"],
-                    [
-                        [
-                            1 if id in self.ref_tokenizer.instruct_tokenizer.tokenizer.all_special_ids else 0
-                            for id in ids[:10]
-                        ]
-                        for ids in expected_tokens
-                    ],
+                    [[1 if id in self.ref_special_ids else 0 for id in ids[:10]] for ids in expected_tokens],
                 )
 
     def test_batch_call_with_padding(self):
@@ -1477,11 +1472,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
                 self.assertEqual(
                     tokens["special_tokens_mask"],
                     [
-                        num_padding[i] * [1]
-                        + [
-                            1 if id in self.ref_tokenizer.instruct_tokenizer.tokenizer.all_special_ids else 0
-                            for id in ids[:10]
-                        ]
+                        num_padding[i] * [1] + [1 if id in self.ref_special_ids else 0 for id in ids[:10]]
                         for i, ids in enumerate(expected_tokens)
                     ],
                 )
@@ -1505,11 +1496,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
                 self.assertEqual(
                     tokens["special_tokens_mask"],
                     [
-                        num_padding[i] * [1]
-                        + [
-                            1 if id in self.ref_tokenizer.instruct_tokenizer.tokenizer.all_special_ids else 0
-                            for id in ids
-                        ]
+                        num_padding[i] * [1] + [1 if id in self.ref_special_ids else 0 for id in ids]
                         for i, ids in enumerate(expected_tokens)
                     ],
                 )
