@@ -19,7 +19,6 @@
 # limitations under the License.
 """PyTorch Qwen2.5-VL model."""
 
-from dataclasses import dataclass
 from typing import Optional, Union
 
 import numpy as np
@@ -41,7 +40,6 @@ from transformers.models.qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLPreTrainedModel,
     VisionAttention,
     VisionRotaryEmbedding,
-    VisionSdpaAttention,
 )
 from transformers.models.qwen2_vl.processing_qwen2_vl import Qwen2VLImagesKwargs, Qwen2VLProcessor
 
@@ -50,6 +48,7 @@ from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...modeling_flash_attention_utils import is_flash_attn_available
+from ...modeling_layers import GradientCheckpointingLayer
 from ...processing_utils import MultiModalData, ProcessingKwargs, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_torchdynamo_compiling, logging
@@ -57,20 +56,10 @@ from ...video_utils import VideoInput
 
 
 if is_flash_attn_available():
-    from ...modeling_flash_attention_utils import apply_rotary_emb, flash_attn_varlen_func
+    pass
 
 
 logger = logging.get_logger(__name__)
-
-
-def apply_rotary_pos_emb_flashatt(
-    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
-) -> tuple[torch.Tensor, torch.Tensor]:
-    cos = cos.chunk(2, dim=-1)[0].contiguous()
-    sin = sin.chunk(2, dim=-1)[0].contiguous()
-    q_embed = apply_rotary_emb(q.float(), cos.float(), sin.float()).type_as(q)
-    k_embed = apply_rotary_emb(k.float(), cos.float(), sin.float()).type_as(k)
-    return q_embed, k_embed
 
 
 class Qwen2_5_VLVisionConfig(PretrainedConfig):
@@ -150,69 +139,18 @@ class Qwen2_5_VLPatchMerger(PatchMerger):
         self.ln_q = Qwen2RMSNorm(context_dim, eps=1e-6)
 
 
-class Qwen2_5_VLVisionFlashAttention2(nn.Module):
-    def __init__(self, dim: int, num_heads: int = 16) -> None:
-        super().__init__()
-        self.num_heads = num_heads
-        self.qkv = nn.Linear(dim, dim * 3, bias=True)
-        self.proj = nn.Linear(dim, dim)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        cu_seqlens: torch.Tensor,
-        rotary_pos_emb: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-    ) -> torch.Tensor:
-        seq_length = hidden_states.shape[0]
-        q, k, v = self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
-        if position_embeddings is None:
-            logger.warning_once(
-                "The attention layers in this model are transitioning from computing the RoPE embeddings internally "
-                "through `rotary_pos_emb` (2D tensor of RoPE theta values), to using externally computed "
-                "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.54 `rotary_pos_emb` will be "
-                "removed and `position_embeddings` will be mandatory."
-            )
-            emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-            cos = emb.cos()
-            sin = emb.sin()
-        else:
-            cos, sin = position_embeddings
-        q, k = apply_rotary_pos_emb_flashatt(q.unsqueeze(0), k.unsqueeze(0), cos, sin)
-        q = q.squeeze(0)
-        k = k.squeeze(0)
-
-        max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
-        attn_output = flash_attn_varlen_func(q, k, v, cu_seqlens, cu_seqlens, max_seqlen, max_seqlen).reshape(
-            seq_length, -1
-        )
-        attn_output = self.proj(attn_output)
-        return attn_output
-
-
 class Qwen2_5_VLVisionAttention(VisionAttention):
-    pass
+    def __init__(self, config: Qwen2_5_VLVisionConfig) -> None:
+        super().__init__()
+        self.dim = config.hidden_size
 
 
-class Qwen2_5_VLVisionSdpaAttention(VisionSdpaAttention):
-    pass
-
-
-QWEN2_5_VL_VISION_ATTENTION_CLASSES = {
-    "eager": Qwen2_5_VLVisionAttention,
-    "flash_attention_2": Qwen2_5_VLVisionFlashAttention2,
-    "sdpa": Qwen2_5_VLVisionSdpaAttention,
-}
-
-
-class Qwen2_5_VLVisionBlock(nn.Module):
+class Qwen2_5_VLVisionBlock(GradientCheckpointingLayer):
     def __init__(self, config, attn_implementation: str = "sdpa") -> None:
         super().__init__()
         self.norm1 = Qwen2RMSNorm(config.hidden_size, eps=1e-6)
         self.norm2 = Qwen2RMSNorm(config.hidden_size, eps=1e-6)
-        self.attn = QWEN2_5_VL_VISION_ATTENTION_CLASSES[attn_implementation](
-            config.hidden_size, num_heads=config.num_heads
-        )
+        self.attn = Qwen2_5_VLVisionAttention(config=config)
         self.mlp = Qwen2_5_VLMLP(config, bias=True)
 
     def forward(
@@ -221,12 +159,14 @@ class Qwen2_5_VLVisionBlock(nn.Module):
         cu_seqlens: torch.Tensor,
         rotary_pos_emb: Optional[torch.Tensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        **kwargs,
     ) -> torch.Tensor:
         hidden_states = hidden_states + self.attn(
             self.norm1(hidden_states),
             cu_seqlens=cu_seqlens,
             rotary_pos_emb=rotary_pos_emb,
             position_embeddings=position_embeddings,
+            **kwargs,
         )
         hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
         return hidden_states
@@ -269,9 +209,7 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         head_dim = config.hidden_size // config.num_heads
         self.rotary_pos_emb = Qwen2_5_VisionRotaryEmbedding(head_dim // 2)
 
-        self.blocks = nn.ModuleList(
-            [Qwen2_5_VLVisionBlock(config, config._attn_implementation) for _ in range(config.depth)]
-        )
+        self.blocks = nn.ModuleList([Qwen2_5_VLVisionBlock(config) for _ in range(config.depth)])
         self.merger = Qwen2_5_VLPatchMerger(
             dim=config.out_hidden_size,
             context_dim=config.hidden_size,
@@ -349,7 +287,7 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
 
         return window_index, cu_window_seqlens
 
-    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
@@ -395,12 +333,9 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
                 cu_seqlens_now = cu_seqlens
             else:
                 cu_seqlens_now = cu_window_seqlens
-            if self.gradient_checkpointing and self.training:
-                hidden_states = self._gradient_checkpointing_func(
-                    blk.__call__, hidden_states, cu_seqlens_now, None, position_embeddings
-                )
-            else:
-                hidden_states = blk(hidden_states, cu_seqlens=cu_seqlens_now, position_embeddings=position_embeddings)
+            hidden_states = blk(
+                hidden_states, cu_seqlens=cu_seqlens_now, position_embeddings=position_embeddings, **kwargs
+            )
 
         hidden_states = self.merger(hidden_states)
         reverse_indices = torch.argsort(window_index)
@@ -409,7 +344,6 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         return hidden_states
 
 
-@dataclass
 class Qwen2_5_VLModelOutputWithPast(Qwen2VLModelOutputWithPast):
     pass
 
@@ -753,7 +687,6 @@ class Qwen2_5_VLModel(Qwen2VLModel):
         return output if return_dict else output.to_tuple()
 
 
-@dataclass
 class Qwen2_5_VLCausalLMOutputWithPast(Qwen2VLCausalLMOutputWithPast):
     pass
 

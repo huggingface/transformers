@@ -367,10 +367,11 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
         do_map_pixels: bool,
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
+        disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
     ) -> "torch.Tensor":
         # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
@@ -380,7 +381,7 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
 
         # Group images by size for further processing
         # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_center_crop:
@@ -432,6 +433,7 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
         codebook_do_normalize: Optional[bool],
         codebook_image_mean: Optional[Union[float, list[float]]],
         codebook_image_std: Optional[Union[float, list[float]]],
+        disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> BatchFeature:
@@ -448,6 +450,7 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
             do_map_pixels=False,
             image_mean=image_mean,
             image_std=image_std,
+            disable_grouping=disable_grouping,
             return_tensors=return_tensors,
         )
         data = {
@@ -468,6 +471,7 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
                 do_map_pixels=codebook_do_map_pixels,
                 image_mean=codebook_image_mean,
                 image_std=codebook_image_std,
+                disable_grouping=disable_grouping,
                 return_tensors=return_tensors,
             )
             data["codebook_pixel_values"] = codebook_processed_images
