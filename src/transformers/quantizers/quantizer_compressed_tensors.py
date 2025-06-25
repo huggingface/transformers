@@ -134,7 +134,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
                     quant_targets.update(group.targets)
 
         # Disable gradient computation for quantized int modules
-        for _, module in model.named_modules():
+        for module in model.modules():
             if type(module).__name__ in quant_targets:
                 for param in module.parameters():
                     param.requires_grad = False
