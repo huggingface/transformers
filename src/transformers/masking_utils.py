@@ -552,9 +552,10 @@ def flex_attention_mask(
     # Potentially add the padding 2D mask
     if attention_mask is not None:
         # Older torch (2.5.x) cannot handle sequences < 128 (default block size)
-        # Hence we pad with this as a minimum to ensure this
-        if not _is_torch_greater_or_equal_than_2_6:
-            attention_mask = torch.nn.functional.pad(attention_mask, value=0, pad=(0, flex_default_block_size))
+        # Hence we pad to this as a minimum to ensure this
+        pad_len = max(0, flex_default_block_size - attention_mask.shape[1])
+        if not _is_torch_greater_or_equal_than_2_6 and pad_len > 0:
+            attention_mask = torch.nn.functional.pad(attention_mask, value=0, pad=(0, pad_len))
 
         padding_mask = prepare_padding_mask(attention_mask, kv_length, kv_offset, _slice=False)
         mask_function = and_masks(mask_function, padding_mask_function(padding_mask))
