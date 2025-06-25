@@ -15,7 +15,7 @@
 """Fast Image processor class for OWLv2."""
 
 import warnings
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
