@@ -35,7 +35,6 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import LossKwargs, logging
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -67,9 +66,6 @@ class CohereLayerNorm(nn.Module):
         hidden_states = (hidden_states - mean) * torch.rsqrt(variance + self.variance_epsilon)
         hidden_states = self.weight.to(torch.float32) * hidden_states
         return hidden_states.to(input_dtype)
-
-
-ALL_LAYERNORM_LAYERS.append(CohereLayerNorm)
 
 
 class CohereRotaryEmbedding(LlamaRotaryEmbedding):

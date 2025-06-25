@@ -19,10 +19,12 @@ from unittest.util import safe_repr
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, FalconMambaConfig, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
+    cleanup,
     require_bitsandbytes,
     require_torch,
     require_torch_accelerator,
-    require_torch_bf16_gpu,
+    require_torch_large_accelerator,
     require_torch_multi_accelerator,
     slow,
     torch_device,
@@ -429,16 +431,30 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         self.text = "Hello today"
 
-    @require_torch_bf16_gpu
-    def test_generation_bf16(self):
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        cleanup(torch_device, gc_collect=True)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    # On T4, get `NotImplementedError: Cannot copy out of meta tensor; no data!`
+    @require_torch_large_accelerator
+    def test_generation_fp16(self):
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.float16, device_map="auto")
 
         inputs = self.tokenizer(self.text, return_tensors="pt").to(torch_device)
         out = model.generate(**inputs, max_new_tokens=20, do_sample=False)
 
+        EXPECTED_OUTPUTS = Expectations(
+            {
+                ("cuda", 7): "Hello today I am going to show you how to make a simple and easy to make paper plane.\nStep",
+                ("cuda", 8): 'Hello today Iava,\n\nI am writing to you today to discuss the importance of maintaining a healthy lifestyle',
+            }
+        )  # fmt: skip
+        EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
+
         self.assertEqual(
             self.tokenizer.batch_decode(out, skip_special_tokens=False)[0],
-            "Hello today Iava,\n\nI'm sorry to hear that you're having trouble with the ",
+            EXPECTED_OUTPUT,
         )
 
     @require_bitsandbytes
@@ -453,11 +469,11 @@ class FalconMambaIntegrationTests(unittest.TestCase):
 
         self.assertEqual(
             self.tokenizer.batch_decode(out, skip_special_tokens=False)[0],
-            """Hello today Iava,\n\nI'm sorry to hear that you're having trouble with the """,
+            "Hello today Iava,\n\nI'm sorry to hear that you're having trouble with the ",
         )
 
     def test_generation_torch_compile(self):
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.float16).to(torch_device)
         model = torch.compile(model)
 
         inputs = self.tokenizer(self.text, return_tensors="pt").to(torch_device)
@@ -466,8 +482,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
 
         self.assertEqual(
             self.tokenizer.batch_decode(out, skip_special_tokens=False)[0],
-            # "Hello today Iava,\n\nI'm sorry to hear that you're having trouble with the ", # Ampere GPUs
-            "Hello today Iava,\n\nI am writing to you to discuss the importance of maintaining a healthy lifestyle.",
+            "Hello today Iava,\n\nI am writing to you today to discuss the importance of maintaining a healthy lifestyle",
         )
 
     def test_batched_generation(self):
@@ -477,17 +492,22 @@ class FalconMambaIntegrationTests(unittest.TestCase):
 
         texts = ["Hello today", "Hello my name is Younes and today"]
 
-        EXPECTED_OUTPUT = [
-            # These are valid for Ampere, Comp. Capability >= 8.0 GPUs
-            # "Hello today I am going to be talking about the 3D printing and how it is used in the medical",
-            # "Hello my name is Younes and today I'm going to show you how to make a paper plane.\nStep 1: The",
-            # These are valid for Turing, Comp. Capability >= 7.5 GPUs
-            "Hello today I'm going to show you how to make a simple 3D model of a car.",
-            "Hello my name is Younes and today I will be talking about the “Theory of the firm” and the “Theory",
-        ]
+        EXPECTED_OUTPUTS = Expectations(
+            {
+                ("cuda", 7): [
+                    'Hello today I will be talking about the “Theory of Relativity” by Albert Einstein.\nThe',
+                    'Hello my name is Younes and today I will be talking about the importance of the internet in our lives.\nThe internet is a global',
+                ],
+                ("cuda", 8): [
+                    'Hello today I am going to talk about the “Theory of Relativity” by Albert Einstein.\n',
+                    'Hello my name is Younes and today I will be talking about the importance of the internet in our lives.\nThe internet is a global',
+                ],
+            }
+        )  # fmt: skip
+        EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
 
         inputs = tok(texts, return_tensors="pt", padding=True, return_token_type_ids=False).to(torch_device)
-        model = AutoModelForCausalLM.from_pretrained(model_id, device_map=0, torch_dtype=torch.bfloat16)
+        model = AutoModelForCausalLM.from_pretrained(model_id, device_map=0, torch_dtype=torch.float16)
 
         out = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         out = tok.batch_decode(out, skip_special_tokens=True)
@@ -502,8 +522,19 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         out = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         out = tok.batch_decode(out, skip_special_tokens=True)
 
-        # Remove the prefix of the expected output
-        EXPECTED_OUTPUT = [EXPECTED_OUTPUT[i][len(texts[i]) :] for i in range(len(texts))]
+        EXPECTED_OUTPUTS = Expectations(
+            {
+                ("cuda", 7): [
+                    ' I will be talking about the “Theory of Relativity” by Albert Einstein.\nThe',
+                    ' I will be talking about the importance of the internet in our lives.\nThe internet is a global',
+                ],
+                ("cuda", 8): [
+                    ' I am going to talk about the “Theory of Relativity” by Albert Einstein.\n',
+                    ' I will be talking about the importance of the internet in our lives.\nThe internet is a global'
+                ],
+            }
+        )  # fmt: skip
+        EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
         self.assertListEqual(out, EXPECTED_OUTPUT)
 
     @require_torch_multi_accelerator
@@ -511,7 +542,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         model_id = "tiiuae/falcon-mamba-7b"
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", torch_dtype=torch.bfloat16)
+        model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", torch_dtype=torch.float16)
         tokenizer.pad_token_id = tokenizer.eos_token_id
 
         text = "Hello today"

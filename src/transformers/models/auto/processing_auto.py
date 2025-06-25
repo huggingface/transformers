@@ -27,13 +27,7 @@ from ...feature_extraction_utils import FeatureExtractionMixin
 from ...image_processing_utils import ImageProcessingMixin
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils import TOKENIZER_CONFIG_FILE
-from ...utils import (
-    FEATURE_EXTRACTOR_NAME,
-    PROCESSOR_NAME,
-    VIDEO_PROCESSOR_NAME,
-    cached_file,
-    logging,
-)
+from ...utils import FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, VIDEO_PROCESSOR_NAME, cached_file, logging
 from ...video_processing_utils import BaseVideoProcessor
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
@@ -72,6 +66,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("fuyu", "FuyuProcessor"),
         ("gemma3", "Gemma3Processor"),
         ("git", "GitProcessor"),
+        ("glm4v", "Glm4vProcessor"),
         ("got_ocr2", "GotOcr2Processor"),
         ("granite_speech", "GraniteSpeechProcessor"),
         ("grounding-dino", "GroundingDinoProcessor"),
@@ -118,9 +113,11 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("shieldgemma2", "ShieldGemma2Processor"),
         ("siglip", "SiglipProcessor"),
         ("siglip2", "Siglip2Processor"),
+        ("smolvlm", "SmolVLMProcessor"),
         ("speech_to_text", "Speech2TextProcessor"),
         ("speech_to_text_2", "Speech2Text2Processor"),
         ("speecht5", "SpeechT5Processor"),
+        ("stt", "KyutaiSpeechToTextProcessor"),
         ("trocr", "TrOCRProcessor"),
         ("tvlt", "TvltProcessor"),
         ("tvp", "TvpProcessor"),
