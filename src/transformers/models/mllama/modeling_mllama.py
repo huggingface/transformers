@@ -1396,7 +1396,7 @@ class MllamaTextModel(MllamaPreTrainedModel):
             # or cached cross attention states.
             is_cross_attention_layer = idx in self.cross_attention_layers
             is_cross_attention_cache_empty = past_key_values is None or (
-                past_key_values is not None and past_key_values.get_seq_length() == 0
+                past_key_values is not None and past_key_values.get_seq_length(idx) == 0
             )
 
             if is_cross_attention_layer and cross_attention_states is None and is_cross_attention_cache_empty:

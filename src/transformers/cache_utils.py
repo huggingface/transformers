@@ -417,6 +417,8 @@ class Cache:
 
     def get_seq_length(self, layer_idx: int = 0) -> int:
         """Returns the sequence length of the cache for the given layer. TODO: deprecate in favor of cache_position"""
+        if layer_idx >= len(self.layers):
+            return 0
         return self.layers[layer_idx].get_seq_length(None)[0]
 
     def get_mask_sizes(self, cache_position: torch.Tensor, layer_idx: int) -> tuple[int, int]:
@@ -869,10 +871,10 @@ class DynamicLayer(CacheLayer):
 
     def reorder_cache(self, state, beam_idx: torch.LongTensor) -> tuple[None, bool]:
         """Reorders the cache for beam search, given the selected beam indices."""
-        if self.key_cache.numel():
+        if self.key_cache is not None and self.key_cache.numel():
             device = self.key_cache.device
             self.key_cache = self.key_cache.index_select(0, beam_idx.to(device))
-        if self.value_cache.numel():
+        if self.value_cache is not None and self.value_cache.numel():
             device = self.value_cache.device
             self.value_cache = self.value_cache.index_select(0, beam_idx.to(device))
         return None, False
