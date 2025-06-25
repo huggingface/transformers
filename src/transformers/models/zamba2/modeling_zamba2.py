@@ -113,7 +113,6 @@ class Zamba2HybridDynamicCache(Cache):
 
     key_cache = None
     value_cache = None
-    has_previous_state = None
 
     def __init__(
         self, config: Zamba2Config, batch_size: int, dtype: torch.dtype = torch.float16, device: Optional[str] = None
