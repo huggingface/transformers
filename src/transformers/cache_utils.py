@@ -245,6 +245,7 @@ class Cache:
         - Uses `sliding_window_pattern` (default: 2) to determine layer alternation if pattern not specified
         - SlidingWindow layers are limited to sliding window size, Static layers use full max_cache_len
     """
+
     layers = None
     pattern_block = ()  # Subclasses can define their layer pattern statically
 
@@ -369,9 +370,7 @@ class Cache:
                 return len(self.key_cache)
             return 0
         dynamic_empty = (
-            len(self.layers) == 1
-            and isinstance(self.layers[0], DynamicLayer)
-            and self.layers[0].key_cache is None
+            len(self.layers) == 1 and isinstance(self.layers[0], DynamicLayer) and self.layers[0].key_cache is None
         )
         return len(self.layers) if not dynamic_empty else 0
 
