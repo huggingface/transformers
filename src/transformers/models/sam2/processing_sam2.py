@@ -42,12 +42,14 @@ class Sam2Processor(ProcessorMixin):
     Constructs a SAM2 processor which wraps a SAM2 image processor and an 2D points & Bounding boxes processor into a
     single processor.
 
-    [`Sam2Processor`] offers all the functionalities of [`Sam2ImageProcessor`]. See the docstring of
-    [`~Sam2ImageProcessor.__call__`] for more information.
+    [`Sam2Processor`] offers all the functionalities of [`Sam2ImageProcessor`] and [`Sam2VideoProcessor`]. See the docstring of
+    [`~Sam2ImageProcessor.__call__`] and [`~Sam2VideoProcessor.__call__`] for more information.
 
     Args:
-        image_processor (`Sam2ImageProcessor`):
+        image_processor ([`Sam2ImageProcessor`], *optional*):
             An instance of [`Sam2ImageProcessor`]. The image processor is a required input.
+        video_processor ([`Sam2VideoProcessor`], *optional*):
+            An instance of [`Sam2VideoProcessor`]. The video processor is a required input.
     """
 
     attributes = ["image_processor", "video_processor"]
