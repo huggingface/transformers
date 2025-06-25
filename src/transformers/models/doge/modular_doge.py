@@ -327,6 +327,7 @@ def flex_attention_forward(
     return attn_output, attention_weights
 
 
+ALL_ATTENTION_FUNCTIONS = AttentionInterface()
 ALL_ATTENTION_FUNCTIONS["doge_flex_attention"] = flex_attention_forward
 
 
@@ -358,10 +359,8 @@ class DogeAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.q_norm = DogeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
-        self.k_norm = DogeRMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )  # thus post q_norm does not need reshape
+        self.q_norm = DogeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.k_norm = DogeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
