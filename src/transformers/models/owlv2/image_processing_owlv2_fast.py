@@ -201,7 +201,9 @@ class Owlv2ImageProcessorFast(BaseImageProcessorFast):
         if do_pad:
             processed_images = self.pad(processed_images, disable_grouping=disable_grouping)
 
-        grouped_images, grouped_images_index = group_images_by_shape(processed_images, disable_grouping=disable_grouping)
+        grouped_images, grouped_images_index = group_images_by_shape(
+            processed_images, disable_grouping=disable_grouping
+        )
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
