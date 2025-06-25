@@ -1084,9 +1084,6 @@ class T5GemmaEncoderModel(T5GemmaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> BaseModelOutput:
-        r"""
-        **flash_attn_kwargs: flash attention related parameters.
-        """
 
         encoder_outputs = self.encoder(
             input_ids=input_ids,
@@ -1162,7 +1159,6 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, decoder_sequence_length)`, *optional*):
             Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the range `[0,
             config.decoder.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
-
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -1230,7 +1226,7 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
 @auto_docstring
 class T5GemmaForSequenceClassification(T5GemmaPreTrainedModel):
     def __init__(self, config: T5GemmaConfig, is_encoder_decoder: Optional[bool] = None):
-        """
+        r"""
         is_encoder_decoder (`Optional`, *optional*):
             Whether use encoder_decoder for sequence classification. When set to False, only encoder is used.
         """
@@ -1282,7 +1278,6 @@ class T5GemmaForSequenceClassification(T5GemmaPreTrainedModel):
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, decoder_sequence_length)`, *optional*):
             Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the range `[0,
             config.decoder.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
-
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
@@ -1378,7 +1373,7 @@ class T5GemmaForSequenceClassification(T5GemmaPreTrainedModel):
 @auto_docstring
 class T5GemmaForTokenClassification(T5GemmaPreTrainedModel):
     def __init__(self, config: T5GemmaConfig, is_encoder_decoder: Optional[bool] = None):
-        """
+        r"""
         is_encoder_decoder (`Optional`, *optional*):
             Whether use encoder_decoder for token classification. When set to False, only encoder is used.
         """
@@ -1431,7 +1426,6 @@ class T5GemmaForTokenClassification(T5GemmaPreTrainedModel):
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, decoder_sequence_length)`, *optional*):
             Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the range `[0,
             config.decoder.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
-
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
