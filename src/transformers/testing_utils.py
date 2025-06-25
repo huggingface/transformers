@@ -86,6 +86,7 @@ from .utils import (
     is_faiss_available,
     is_fbgemm_gpu_available,
     is_flash_attn_2_available,
+    is_flash_attn_3_available,
     is_flax_available,
     is_flute_available,
     is_fsdp_available,
@@ -158,6 +159,7 @@ from .utils import (
     is_torch_xpu_available,
     is_torchao_available,
     is_torchaudio_available,
+    is_torchcodec_available,
     is_torchdynamo_available,
     is_torchvision_available,
     is_vision_available,
@@ -570,6 +572,15 @@ def require_flash_attn(test_case):
     return unittest.skipUnless(is_flash_attn_2_available(), "test requires Flash Attention")(test_case)
 
 
+def require_flash_attn_3(test_case):
+    """
+    Decorator marking a test that requires Flash Attention 3.
+
+    These tests are skipped when Flash Attention 3 isn't installed.
+    """
+    return unittest.skipUnless(is_flash_attn_3_available(), "test requires Flash Attention 3")(test_case)
+
+
 def require_torch_sdpa(test_case):
     """
     Decorator marking a test that requires PyTorch's SDPA.
@@ -632,6 +643,16 @@ def require_torchvision(test_case):
 
     """
     return unittest.skipUnless(is_torchvision_available(), "test requires Torchvision")(test_case)
+
+
+def require_torchcodec(test_case):
+    """
+    Decorator marking a test that requires Torchcodec.
+
+    These tests are skipped when Torchcodec isn't installed.
+
+    """
+    return unittest.skipUnless(is_torchcodec_available(), "test requires Torchvision")(test_case)
 
 
 def require_torch_or_tf(test_case):
@@ -3334,9 +3355,18 @@ class Expectations(UserDict[PackedDeviceProperties, Any]):
 
     def find_expectation(self, properties: DeviceProperties = (None, None, None)) -> Any:
         """
-        Find best matching expectation based on provided device properties.
+        Find best matching expectation based on provided device properties. We score each expectation, and to
+        distinguish between expectations with the same score, we use the major and minor version numbers, prioritizing
+        most recent versions.
         """
-        (result_key, result) = max(self.unpacked(), key=lambda x: Expectations.score(properties, x[0]))
+        (result_key, result) = max(
+            self.unpacked(),
+            key=lambda x: (
+                Expectations.score(properties, x[0]),  # x[0] is a device properties tuple (device_type, major, minor)
+                x[0][1] if x[0][1] is not None else -1,  # This key is the major version, -1 if major is None
+                x[0][2] if x[0][2] is not None else -1,  # This key is the minor version, -1 if minor is None
+            ),
+        )
 
         if Expectations.score(properties, result_key) == 0:
             raise ValueError(f"No matching expectation found for {properties}")

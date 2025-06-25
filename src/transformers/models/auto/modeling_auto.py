@@ -35,6 +35,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("albert", "AlbertModel"),
         ("align", "AlignModel"),
         ("altclip", "AltCLIPModel"),
+        ("arcee", "ArceeModel"),
         ("aria", "AriaModel"),
         ("aria_text", "AriaTextModel"),
         ("audio-spectrogram-transformer", "ASTModel"),
@@ -104,6 +105,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("dinov2_with_registers", "Dinov2WithRegistersModel"),
         ("distilbert", "DistilBertModel"),
         ("donut-swin", "DonutSwinModel"),
+        ("dots1", "Dots1Model"),
         ("dpr", "DPRQuestionEncoder"),
         ("dpt", "DPTModel"),
         ("efficientformer", "EfficientFormerModel"),
@@ -132,6 +134,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("git", "GitModel"),
         ("glm", "GlmModel"),
         ("glm4", "Glm4Model"),
+        ("glm4v", "Glm4vModel"),
+        ("glm4v_text", "Glm4vTextModel"),
         ("glpn", "GLPNModel"),
         ("got_ocr2", "GotOcr2Model"),
         ("gpt-sw3", "GPT2Model"),
@@ -299,6 +303,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("squeezebert", "SqueezeBertModel"),
         ("stablelm", "StableLmModel"),
         ("starcoder2", "Starcoder2Model"),
+        ("stt", "KyutaiSpeechToTextModel"),
         ("superglue", "SuperGlueForKeypointMatching"),
         ("swiftformer", "SwiftFormerModel"),
         ("swin", "SwinModel"),
@@ -306,6 +311,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("swinv2", "Swinv2Model"),
         ("switch_transformers", "SwitchTransformersModel"),
         ("t5", "T5Model"),
+        ("t5gemma", "T5GemmaModel"),
         ("table-transformer", "TableTransformerModel"),
         ("tapas", "TapasModel"),
         ("textnet", "TextNetModel"),
@@ -426,6 +432,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("squeezebert", "SqueezeBertForMaskedLM"),
         ("switch_transformers", "SwitchTransformersForConditionalGeneration"),
         ("t5", "T5ForConditionalGeneration"),
+        ("t5gemma", "T5GemmaForConditionalGeneration"),
         ("tapas", "TapasForMaskedLM"),
         ("transfo-xl", "TransfoXLLMHeadModel"),
         ("tvlt", "TvltForPreTraining"),
@@ -520,6 +527,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("squeezebert", "SqueezeBertForMaskedLM"),
         ("switch_transformers", "SwitchTransformersForConditionalGeneration"),
         ("t5", "T5ForConditionalGeneration"),
+        ("t5gemma", "T5GemmaForConditionalGeneration"),
         ("tapas", "TapasForMaskedLM"),
         ("transfo-xl", "TransfoXLLMHeadModel"),
         ("wav2vec2", "Wav2Vec2ForMaskedLM"),
@@ -536,6 +544,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
+        ("arcee", "ArceeForCausalLM"),
         ("aria_text", "AriaTextForCausalLM"),
         ("bamba", "BambaForCausalLM"),
         ("bart", "BartForCausalLM"),
@@ -559,6 +568,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("dbrx", "DbrxForCausalLM"),
         ("deepseek_v3", "DeepseekV3ForCausalLM"),
         ("diffllama", "DiffLlamaForCausalLM"),
+        ("dots1", "Dots1ForCausalLM"),
         ("electra", "ElectraForCausalLM"),
         ("emu3", "Emu3ForCausalLM"),
         ("ernie", "ErnieForCausalLM"),
@@ -893,6 +903,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("fuyu", "FuyuForCausalLM"),
         ("gemma3", "Gemma3ForConditionalGeneration"),
         ("git", "GitForCausalLM"),
+        ("glm4v", "Glm4vForConditionalGeneration"),
         ("got_ocr2", "GotOcr2ForConditionalGeneration"),
         ("idefics", "IdeficsForVisionText2Text"),
         ("idefics2", "Idefics2ForConditionalGeneration"),
@@ -1038,6 +1049,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("seamless_m4t_v2", "SeamlessM4Tv2ForTextToText"),
         ("switch_transformers", "SwitchTransformersForConditionalGeneration"),
         ("t5", "T5ForConditionalGeneration"),
+        ("t5gemma", "T5GemmaForConditionalGeneration"),
         ("umt5", "UMT5ForConditionalGeneration"),
         ("xlm-prophetnet", "XLMProphetNetForConditionalGeneration"),
     ]
@@ -1053,6 +1065,7 @@ MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
         ("speech-encoder-decoder", "SpeechEncoderDecoderModel"),
         ("speech_to_text", "Speech2TextForConditionalGeneration"),
         ("speecht5", "SpeechT5ForSpeechToText"),
+        ("stt", "KyutaiSpeechToTextForConditionalGeneration"),
         ("whisper", "WhisperForConditionalGeneration"),
     ]
 )
@@ -1061,6 +1074,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Sequence Classification mapping
         ("albert", "AlbertForSequenceClassification"),
+        ("arcee", "ArceeForSequenceClassification"),
         ("bart", "BartForSequenceClassification"),
         ("bert", "BertForSequenceClassification"),
         ("big_bird", "BigBirdForSequenceClassification"),
@@ -1148,6 +1162,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("stablelm", "StableLmForSequenceClassification"),
         ("starcoder2", "Starcoder2ForSequenceClassification"),
         ("t5", "T5ForSequenceClassification"),
+        ("t5gemma", "T5GemmaForSequenceClassification"),
         ("tapas", "TapasForSequenceClassification"),
         ("transfo-xl", "TransfoXLForSequenceClassification"),
         ("umt5", "UMT5ForSequenceClassification"),
@@ -1166,6 +1181,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
         # Model for Question Answering mapping
         ("albert", "AlbertForQuestionAnswering"),
+        ("arcee", "ArceeForQuestionAnswering"),
         ("bart", "BartForQuestionAnswering"),
         ("bert", "BertForQuestionAnswering"),
         ("big_bird", "BigBirdForQuestionAnswering"),
@@ -1268,6 +1284,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Token Classification mapping
         ("albert", "AlbertForTokenClassification"),
+        ("arcee", "ArceeForTokenClassification"),
         ("bert", "BertForTokenClassification"),
         ("big_bird", "BigBirdForTokenClassification"),
         ("biogpt", "BioGptForTokenClassification"),
@@ -1339,6 +1356,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("stablelm", "StableLmForTokenClassification"),
         ("starcoder2", "Starcoder2ForTokenClassification"),
         ("t5", "T5ForTokenClassification"),
+        ("t5gemma", "T5GemmaForTokenClassification"),
         ("umt5", "UMT5ForTokenClassification"),
         ("xlm", "XLMForTokenClassification"),
         ("xlm-roberta", "XLMRobertaForTokenClassification"),
@@ -1572,6 +1590,7 @@ MODEL_FOR_TEXT_ENCODING_MAPPING_NAMES = OrderedDict(
         ("roformer", "RoFormerModel"),
         ("squeezebert", "SqueezeBertModel"),
         ("t5", "T5EncoderModel"),
+        ("t5gemma", "T5GemmaEncoderModel"),
         ("umt5", "UMT5EncoderModel"),
         ("xlm", "XLMModel"),
         ("xlm-roberta", "XLMRobertaModel"),

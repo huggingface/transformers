@@ -23,6 +23,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -272,7 +273,7 @@ class PixtralRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class PixtralAttentionLayer(nn.Module):
+class PixtralAttentionLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.attention_norm = PixtralRMSNorm(config.hidden_size, eps=1e-5)
@@ -374,22 +375,13 @@ class PixtralTransformer(nn.Module):
         for encoder_layer in self.layers:
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    encoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    position_embeddings,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask,
-                    position_embeddings=position_embeddings,
-                    output_attentions=output_attentions,
-                    **kwargs,
-                )
+            layer_outputs = encoder_layer(
+                hidden_states,
+                attention_mask,
+                position_embeddings=position_embeddings,
+                output_attentions=output_attentions,
+                **kwargs,
+            )
 
             hidden_states = layer_outputs[0]
 
