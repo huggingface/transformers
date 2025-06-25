@@ -775,9 +775,9 @@ def token_type_ids_mask_function(token_type_ids: Optional[torch.Tensor], tokens_
     """
 )
 class Gemma3Model(Gemma3PreTrainedModel):
+    _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
-    _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
 
     def __init__(self, config: Gemma3Config):
         super().__init__(config)
