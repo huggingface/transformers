@@ -26,7 +26,7 @@ import re
 import shutil
 import tempfile
 import warnings
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
@@ -5774,9 +5774,9 @@ class AttentionInterface(GeneralInterface):
 ALL_ATTENTION_FUNCTIONS: AttentionInterface = AttentionInterface()
 
 
-class PreTrainedAudioTokenizerBase(ABC):
+class PreTrainedAudioTokenizerBase(PreTrainedModel):
     """
-    Abstract class that defines the behavior of any `audio_tokenizer` to be added.
+    Class that additionally defines the behavior of any `audio_tokenizer` to be added.
     Characteristic for any of them:
         1. Encode raw audio into discrete audio codebooks (with x channels)
         2. Decode from discrete audio codebooks back to raw audio
@@ -5786,7 +5786,9 @@ class PreTrainedAudioTokenizerBase(ABC):
 
     @abstractmethod
     def encode(self, input_values: torch.Tensor, *args, **kwargs):
-        """Encode raw audio into discrete audio codebooks (with x channels)"""
+        """
+        Encode raw audio retrieved from a respective `FeatureExtractor` into discrete audio codebooks (with x channels)
+        """
         pass
 
     @abstractmethod
