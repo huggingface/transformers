@@ -701,10 +701,15 @@ class PretrainedConfig(PushToHubMixin):
             else:
                 # Load config dict
                 config_dict = cls._dict_from_json_file(resolved_config_file)
-
-            config_dict["_commit_hash"] = commit_hash
         except (json.JSONDecodeError, UnicodeDecodeError):
             raise OSError(f"It looks like the config file at '{resolved_config_file}' is not a valid JSON file.")
+
+        # When config.json files originate from different repositories than transformers,
+        # the transformers config can be instantiated from the `transformers_config` key within it.
+        if "transformers_config" in config_dict:
+            config_dict = config_dict["transformers_config"]
+
+        config_dict["_commit_hash"] = commit_hash
 
         if is_local:
             logger.info(f"loading configuration file {resolved_config_file}")
@@ -792,6 +797,12 @@ class PretrainedConfig(PushToHubMixin):
 
         """
         config_dict = cls._dict_from_json_file(json_file)
+
+        # When config.json files originate from different repositories than transformers,
+        # the transformers config can be instantiated from the `transformers_config` key within it.
+        if "transformers_config" in config_dict:
+            config_dict = config_dict["transformers_config"]
+
         return cls(**config_dict)
 
     @classmethod
