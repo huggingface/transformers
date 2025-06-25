@@ -75,6 +75,7 @@ def flash_attention_forward(
         softcap=softcap,
         use_top_left_mask=_use_top_left_mask,
         target_dtype=target_dtype,
+        attn_implementation=module.config._attn_implementation,
         **kwargs,
     )
 
