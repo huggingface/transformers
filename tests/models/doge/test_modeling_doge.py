@@ -359,10 +359,10 @@ class DogeIntegrationTest(unittest.TestCase):
         """
         An integration test for Doge-20M. It tests against a long output to ensure the subtle numerical differences
         """
-        EXPECTED_TEXT = "Here's everything I know about dogs. Dogs is the best animal in the world, and it's a great way to learn about the world around us. Dogs are a great"
+        EXPECTED_TEXT = "Here's everything I know about dogs. Dogs is the best animal in the world. It is a very popular and popular breed for dogs. Dogs are known for their unique personalities"
 
-        tokenizer = AutoTokenizer.from_pretrained("JingzeShi/Doge-20M")
-        model = DogeForCausalLM.from_pretrained("JingzeShi/Doge-20M", device_map="auto", torch_dtype=torch.bfloat16)
+        tokenizer = AutoTokenizer.from_pretrained("SmallDoge/Doge-20M")
+        model = DogeForCausalLM.from_pretrained("SmallDoge/Doge-20M", device_map="auto", torch_dtype=torch.bfloat16)
         input_text = ["Here's everything I know about dogs. Dogs is the best animal in the"]
         set_seed(0)
         model_inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
