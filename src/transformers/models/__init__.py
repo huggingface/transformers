@@ -96,6 +96,7 @@ if TYPE_CHECKING:
     from .distilbert import *
     from .dit import *
     from .donut import *
+    from .dots1 import *
     from .dpr import *
     from .dpt import *
     from .efficientnet import *
@@ -294,6 +295,7 @@ if TYPE_CHECKING:
     from .swinv2 import *
     from .switch_transformers import *
     from .t5 import *
+    from .t5gemma import *
     from .table_transformer import *
     from .tapas import *
     from .textnet import *
