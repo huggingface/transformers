@@ -10,9 +10,9 @@
 # an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 # specific language governing permissions and limitations under the License.
 
+import inspect
 import logging
 from typing import Callable, Optional
-
 
 import torch
 
@@ -307,14 +307,12 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
             The adapter matches the model's forward signature with that in `executorch/extension/llm/runner`,
             ensuring that the exported model can be executed in `ExecuTorch` out-of-the-box.
         """
-        _, seqlen = input_ids.shape
         position_ids = cache_position.unsqueeze(0)
         past_key_values = self.static_cache
         model_params = inspect.signature(self.model.forward).parameters
 
         kwargs = {
             "input_ids": input_ids,
-            "attention_mask": attn_mask,
             "position_ids": position_ids,
             "cache_position": cache_position,
             "past_key_values": past_key_values,
