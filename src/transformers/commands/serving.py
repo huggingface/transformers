@@ -13,11 +13,19 @@
 # limitations under the License.
 
 import json
+import re
 import time
 from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass, field
 from threading import Thread
-from typing import Dict, Optional
+from typing import Any, Optional
+
+from huggingface_hub import (
+    ChatCompletionStreamOutputChoice,
+    ChatCompletionStreamOutputDelta,
+    ChatCompletionStreamOutputDeltaToolCall,
+    ChatCompletionStreamOutputFunction,
+)
 
 from transformers.utils.import_utils import is_fastapi_available, is_pydantic_available, is_uvicorn_available
 
@@ -55,7 +63,7 @@ if is_pydantic_available() and is_fastapi_available() and is_uvicorn_available()
         stream: Optional[bool] = False
         model: Optional[str] = None
         request_id: Optional[str] = None
-        extra_body: Optional[Dict] = None
+        extra_body: Optional[dict] = None
         frequency_penalty: Optional[float] = None
         logit_bias: Optional[list[float]] = None
         max_tokens: Optional[int] = None
@@ -68,7 +76,7 @@ if is_pydantic_available() and is_fastapi_available() and is_uvicorn_available()
         # that aren't yet supported here.
 
         # logprobs: Optional[bool] = None
-        # tools: Any = None
+        tools: Any = None
         # n: Optional[int] = None
         # presence_penalty: Optional[float] = None
         # response_format: Optional[ChatCompletionInputGrammarType] = None
@@ -203,7 +211,14 @@ class ServeCommand(BaseTransformersCLICommand):
         cb_logger = logging.get_logger("transformers.generation.continuous_batching")
         cb_logger.setLevel(logging.log_levels[self.args.log_level.lower()])
 
-    def build_chunk(self, content: str, request_id: str, finish_reason: Optional[str] = None) -> str:
+    def build_chunk(
+        self,
+        content: str,
+        request_id: str,
+        role: Optional[str] = None,
+        finish_reason: Optional[str] = None,
+        tool_calls: Optional[list[ChatCompletionStreamOutputDeltaToolCall]] = None,
+    ) -> str:
         payload = {
             "object": "chat.completion.chunk",
             "id": request_id,
@@ -211,12 +226,16 @@ class ServeCommand(BaseTransformersCLICommand):
             "model": self.args.model_name_or_path,
             "system_fingerprint": "",
             "choices": [
-                {
-                    "index": 0,
-                    "delta": {"role": "assistant", "content": content, "tool_calls": []},
-                    "logprobs": None,
-                    "finish_reason": finish_reason,
-                }
+                ChatCompletionStreamOutputChoice(
+                    delta=ChatCompletionStreamOutputDelta(
+                        role=role,
+                        content=content,
+                        tool_calls=tool_calls,
+                    ),
+                    index=0,
+                    logprobs=None,
+                    finish_reason=finish_reason,
+                ),
             ],
         }
         return f"data: {json.dumps(payload)}\n\n"
@@ -265,7 +284,6 @@ class ServeCommand(BaseTransformersCLICommand):
                 try:
                     max_new_tokens = req.max_tokens or generation_config.max_new_tokens or 256
                     request_id = manager.add_request(_inputs, request_id=req.request_id, max_new_tokens=max_new_tokens)
-                    print(request_id)
                     queue_is_flushed = False
 
                     for result in manager:
@@ -294,7 +312,9 @@ class ServeCommand(BaseTransformersCLICommand):
             if not req.stream:
                 return {"error": "Only streaming mode is supported."}
 
-            text = self.tokenizer.apply_chat_template(req.messages, add_generation_prompt=True, tokenize=False)
+            text = self.tokenizer.apply_chat_template(
+                req.messages, add_generation_prompt=True, tokenize=False, tools=req.tools
+            )
 
             inputs = self.tokenizer(text, return_tensors="pt").to(self.model.device)["input_ids"]
             request_id = req.request_id if req.request_id is not None else "req_0"
@@ -319,9 +339,83 @@ class ServeCommand(BaseTransformersCLICommand):
 
                 try:
                     thread.start()
+                    has_tool_name_defined = False
+                    inside_tool_call = False
+                    arg_nesting_level = 0
+                    buffer = ""
 
                     for result in streamer:
-                        yield self.build_chunk(result, _request_id)
+                        # Start of a tool call: reset state variables, set `inside_tool_call`
+                        if result.strip() == "<tool_call>":
+                            inside_tool_call = True
+                            has_tool_name_defined = False
+                            arg_nesting_level = 0
+                            buffer = ""
+                            continue
+
+                        # End of tool call: reset `inside_tool_call`, emit a `finish_reason`
+                        if result.strip() == "</tool_call>":
+                            inside_tool_call = False
+                            yield self.build_chunk("", _request_id, role=None, finish_reason="tool_calls")
+                            continue
+
+                        # Inside a tool call
+                        if inside_tool_call:
+                            buffer += result
+
+                            # First step: extract the tool name (may need several tokens, and we can't emit a delta
+                            # until we have the full name)
+                            if not has_tool_name_defined:
+                                tool_name = re.search(r"\"name\": \"(.*?)\"", buffer)
+                                if tool_name is None:
+                                    continue
+                                else:
+                                    tool_name = tool_name.group(1)
+                                has_tool_name_defined = True
+                                tool = ChatCompletionStreamOutputDeltaToolCall(
+                                    function=ChatCompletionStreamOutputFunction(
+                                        name=tool_name,
+                                        arguments=None,
+                                    ),
+                                    index=0,
+                                    type="function",
+                                    id=_request_id + "_tool_call",  # Only the first tool call delta has an id
+                                )
+
+                            # Second step: extract tool arguments. The tool arguments can be seen as a json string
+                            # within the tool json string. We emit a delta for the arguments.
+                            else:
+                                # Empty text: skip
+                                if result == "":
+                                    continue
+                                # Until we see the `"arguments": {` in the buffer, we skip
+                                # TODO: other models will likely need more elaborate processing here
+                                if '"arguments": {' not in buffer:
+                                    continue
+
+                                # Handle nesting. We want to exclude the last } from the emitted arguments (it's
+                                # closing the outermost nesting level, outside the arguments block)
+                                if "{" in result:
+                                    arg_nesting_level += result.count("{")
+                                if "}" in result:
+                                    arg_nesting_level -= result.count("}")
+                                if arg_nesting_level < 0:
+                                    result = "".join(result.split("}")[:-2]) + "}"  # e.g. "4}}\n" -> "4}"
+
+                                tool = ChatCompletionStreamOutputDeltaToolCall(
+                                    function=ChatCompletionStreamOutputFunction(
+                                        arguments=result,
+                                    ),
+                                    index=0,
+                                    type="function",
+                                    id=None,
+                                )
+
+                            yield self.build_chunk(None, _request_id, role=None, tool_calls=[tool])
+                            continue
+
+                        # All non-tool related tokens are emitted as assistant messages
+                        yield self.build_chunk(result, _request_id, role="assistant")
                     yield "data: [DONE]\n\n"
 
                     thread.join()
