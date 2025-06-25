@@ -86,6 +86,7 @@ from .utils import (
     is_faiss_available,
     is_fbgemm_gpu_available,
     is_flash_attn_2_available,
+    is_flash_attn_3_available,
     is_flax_available,
     is_flute_available,
     is_fsdp_available,
@@ -158,6 +159,7 @@ from .utils import (
     is_torch_xpu_available,
     is_torchao_available,
     is_torchaudio_available,
+    is_torchcodec_available,
     is_torchdynamo_available,
     is_torchvision_available,
     is_vision_available,
@@ -570,6 +572,15 @@ def require_flash_attn(test_case):
     return unittest.skipUnless(is_flash_attn_2_available(), "test requires Flash Attention")(test_case)
 
 
+def require_flash_attn_3(test_case):
+    """
+    Decorator marking a test that requires Flash Attention 3.
+
+    These tests are skipped when Flash Attention 3 isn't installed.
+    """
+    return unittest.skipUnless(is_flash_attn_3_available(), "test requires Flash Attention 3")(test_case)
+
+
 def require_torch_sdpa(test_case):
     """
     Decorator marking a test that requires PyTorch's SDPA.
@@ -632,6 +643,16 @@ def require_torchvision(test_case):
 
     """
     return unittest.skipUnless(is_torchvision_available(), "test requires Torchvision")(test_case)
+
+
+def require_torchcodec(test_case):
+    """
+    Decorator marking a test that requires Torchcodec.
+
+    These tests are skipped when Torchcodec isn't installed.
+
+    """
+    return unittest.skipUnless(is_torchcodec_available(), "test requires Torchvision")(test_case)
 
 
 def require_torch_or_tf(test_case):

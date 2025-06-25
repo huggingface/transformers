@@ -363,6 +363,8 @@
     - sections:
       - local: model_doc/albert
         title: ALBERT
+      - local: model_doc/arcee
+        title: Arcee
       - local: model_doc/bamba
         title: Bamba
       - local: model_doc/bart
@@ -431,6 +433,8 @@
         title: DiffLlama
       - local: model_doc/distilbert
         title: DistilBERT
+      - local: model_doc/dots1
+        title: dots1
       - local: model_doc/dpr
         title: DPR
       - local: model_doc/electra
@@ -653,6 +657,8 @@
         title: SwitchTransformers
       - local: model_doc/t5
         title: T5
+      - local: model_doc/t5gemma
+        title: T5Gemma
       - local: model_doc/t5v1.1
         title: T5v1.1
       - local: model_doc/tapex
@@ -841,6 +847,8 @@
         title: GraniteSpeech
       - local: model_doc/hubert
         title: Hubert
+      - local: model_doc/kyutai_speech_to_text
+        title: Kyutai Speech-To-Text
       - local: model_doc/mctct
         title: MCTCT
       - local: model_doc/mimi
@@ -951,6 +959,8 @@
         title: Gemma3
       - local: model_doc/git
         title: GIT
+      - local: model_doc/glm4v
+        title: glm4v
       - local: model_doc/got_ocr2
         title: GOT-OCR2
       - local: model_doc/granitevision
@@ -1043,6 +1053,8 @@
         title: SigLIP
       - local: model_doc/siglip2
         title: SigLIP2
+      - local: model_doc/smollm3
+        title: SmolLM3
       - local: model_doc/smolvlm
         title: SmolVLM
       - local: model_doc/speech-encoder-decoder
