@@ -65,7 +65,7 @@ class PoolFormerDropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
 class PoolFormerEmbeddings(nn.Module):
@@ -142,10 +142,10 @@ class PoolFormerLayer(nn.Module):
         self.use_layer_scale = config.use_layer_scale
         if config.use_layer_scale:
             self.layer_scale_1 = nn.Parameter(
-                config.layer_scale_init_value * torch.ones((num_channels)), requires_grad=True
+                config.layer_scale_init_value * torch.ones(num_channels), requires_grad=True
             )
             self.layer_scale_2 = nn.Parameter(
-                config.layer_scale_init_value * torch.ones((num_channels)), requires_grad=True
+                config.layer_scale_init_value * torch.ones(num_channels), requires_grad=True
             )
 
     def forward(self, hidden_states):

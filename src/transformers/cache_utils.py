@@ -1001,7 +1001,7 @@ def _flatten_dynamic_cache_for_fx(cache, spec):
         "key_cache": [layer.key_cache for layer in cache.layers if layer.key_cache is not None],
         "value_cache": [layer.value_cache for layer in cache.layers if layer.value_cache is not None],
     }
-    return torch.utils._pytree.tree_flatten(dictionary)[0]
+    return torch.fx._pytree._dict_flatten_spec(dictionary, spec)
 
 
 if is_torch_greater_or_equal("2.3"):
