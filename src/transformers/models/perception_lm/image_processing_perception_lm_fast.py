@@ -86,7 +86,8 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
     def _find_supported_aspect_ratios(self):
         """
         This function computes all the allowed aspect ratios for a fixed
-        number of input chunks.
+        number of input chunks. The order of returned items matters for the result of `_fit_image_to_canvas` function.
+        If tie exists in `_fit_image_to_canvas`, the latter in `_find_supported_aspect_ratios` wins.
 
         For example, with `num_tiles=5`, it will return:
         {
