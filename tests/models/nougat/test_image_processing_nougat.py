@@ -86,8 +86,12 @@ class NougatImageProcessingTester:
         return self.num_channels, self.size["height"], self.size["width"]
 
     def prepare_dummy_image(self):
+        revision = "ec57bf8c8b1653a209c13f6e9ee66b12df0fc2db"
         filepath = hf_hub_download(
-            repo_id="hf-internal-testing/fixtures_docvqa", filename="nougat_pdf.png", repo_type="dataset"
+            repo_id="hf-internal-testing/fixtures_docvqa",
+            filename="nougat_pdf.png",
+            repo_type="dataset",
+            revision=revision,
         )
         image = Image.open(filepath).convert("RGB")
         return image
@@ -136,7 +140,6 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42)
         self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
-    @unittest.skip("temporary to avoid failing on circleci")
     def test_expected_output(self):
         dummy_image = self.image_processor_tester.prepare_dummy_image()
         image_processor = self.image_processor
@@ -180,13 +183,16 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual((3, 100, 200), aligned_image.shape)
 
     def prepare_dummy_np_image(self):
+        revision = "ec57bf8c8b1653a209c13f6e9ee66b12df0fc2db"
         filepath = hf_hub_download(
-            repo_id="hf-internal-testing/fixtures_docvqa", filename="nougat_pdf.png", repo_type="dataset"
+            repo_id="hf-internal-testing/fixtures_docvqa",
+            filename="nougat_pdf.png",
+            repo_type="dataset",
+            revision=revision,
         )
         image = Image.open(filepath).convert("RGB")
         return np.array(image)
 
-    @unittest.skip("temporary to avoid failing on circleci")
     def test_crop_margin_equality_cv2_python(self):
         image = self.prepare_dummy_np_image()
         image_processor = self.image_processor

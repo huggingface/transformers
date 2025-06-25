@@ -179,7 +179,7 @@ class AudioClassificationPipelineTests(unittest.TestCase):
         model = "superb/wav2vec2-base-superb-ks"
 
         audio_classifier = pipeline("audio-classification", model=model)
-        dataset = datasets.load_dataset("anton-l/superb_dummy", "ks", split="test", trust_remote_code=True)
+        dataset = datasets.load_dataset("anton-l/superb_dummy", "ks", split="test")
 
         audio = np.array(dataset[3]["speech"], dtype=np.float32)
         output = audio_classifier(audio, top_k=4)
