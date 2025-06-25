@@ -565,12 +565,9 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         if is_peft_available and self._hf_peft_config_loaded:
             # state dict is only adapter, should keep the same
             return state_dict
-        adapter_name = self._get_adapter_name()
         # rename back the base model state dict
         return {
-            self._fix_state_dict_key_on_save(key)[0]: value
-            for key, value in state_dict.items()
-            if adapter_name not in key
+            self._fix_state_dict_key_on_save(key)[0]: value for key, value in state_dict.items() if ".lora_" not in key
         }
 
     def _get_adapter_name(self):
