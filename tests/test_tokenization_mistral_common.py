@@ -640,7 +640,9 @@ class TestMistralCommonTokenizer(unittest.TestCase):
             {"role": "assistant", "content": "Paris"},
         ]
 
-        expected_tokenized = self.ref_tokenizer.encode_chat_completion(ChatCompletionRequest.from_openai(conversation))
+        expected_tokenized = self.ref_tokenizer.encode_chat_completion(
+            ChatCompletionRequest.from_openai(conversation, continue_final_message=True)
+        )
 
         self.assertEqual(
             self.tokenizer.apply_chat_template(conversation, tokenize=False, continue_final_message=True),
@@ -754,12 +756,10 @@ class TestMistralCommonTokenizer(unittest.TestCase):
 
         # Test 3:
         # assert truncation is boolean
-        self.assertRaises(
-            ValueError,
+        with self.assertRaises(ValueError):
             self.tokenizer.apply_chat_template(
                 conversation, tokenize=True, truncation=TruncationStrategy.LONGEST_FIRST, max_length=20
-            ),
-        )
+            )
 
     def test_batch_apply_chat_template(self):
         conversations = [
@@ -827,7 +827,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         ]
 
         expected_tokenized = [
-            self.ref_tokenizer.encode_chat_completion(ChatCompletionRequest.from_openai(conversation))
+            self.ref_tokenizer.encode_chat_completion(ChatCompletionRequest.from_openai(conversation, tools=tools))
             for conversation in conversations
         ]
 
@@ -858,8 +858,12 @@ class TestMistralCommonTokenizer(unittest.TestCase):
             ],
         ]
 
+        # Test 1:
+        # with continue_final_message
         expected_tokenized = [
-            self.ref_tokenizer.encode_chat_completion(ChatCompletionRequest.from_openai(conversation))
+            self.ref_tokenizer.encode_chat_completion(
+                ChatCompletionRequest.from_openai(conversation, continue_final_message=True)
+            )
             for conversation in conversations
         ]
 
@@ -868,10 +872,18 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         for output, expected in zip(token_outputs, expected_tokenized, strict=True):
             self.assertEqual(output, expected.tokens)
 
-        with self.assertRaises(
-            InvalidMessageStructureException,
-            msg="The last message in the conversation is not an assistant message.",
-        ):
+        # Test 2:
+        # without continue_final_message
+        with self.assertRaises(InvalidMessageStructureException):
+            self.tokenizer.apply_chat_template(
+                conversations,
+                tokenize=False,
+                continue_final_message=False,
+            )
+
+        # Test 3:
+        # with continue_final_message and last role is not assistant
+        with self.assertRaises(InvalidMessageStructureException):
             self.tokenizer.apply_chat_template(
                 conversation=[
                     [
@@ -880,7 +892,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
                     ]
                 ],
                 tokenize=True,
-                continue_final_message=False,
+                continue_final_message=True,
             )
 
     def test_batch_apply_chat_template_with_truncation(
@@ -898,19 +910,17 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         # Test 2:
         # without truncation
         token_outputs = self.tokenizer.apply_chat_template(
-            self.fixture_conversations, tokenize=True, truncation=True, max_length=20
+            self.fixture_conversations, tokenize=True, truncation=False, max_length=20
         )
         for output, expected in zip(token_outputs, self.tokenized_fixture_conversations, strict=True):
             self.assertEqual(output, expected.tokens)
 
         # Test 3:
         # assert truncation is boolean
-        self.assertRaises(
-            ValueError,
+        with self.assertRaises(ValueError):
             self.tokenizer.apply_chat_template(
                 self.fixture_conversations, tokenize=True, truncation=TruncationStrategy.LONGEST_FIRST, max_length=20
-            ),
-        )
+            )
 
     def test_batch_apply_chat_template_with_padding(
         self,
