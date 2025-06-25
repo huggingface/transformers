@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Optional
 
 import torch
 
@@ -22,7 +22,7 @@ def flash_attention_forward(
     sliding_window: Optional[int] = None,
     softcap: Optional[float] = None,
     **kwargs,
-) -> Tuple[torch.Tensor, None]:
+) -> tuple[torch.Tensor, None]:
     if kwargs.get("output_attentions", False) or kwargs.get("head_mask", None) is not None:
         logger.warning_once(
             "`flash_attention_2` does not support `output_attentions=True` or `head_mask`."
@@ -31,6 +31,13 @@ def flash_attention_forward(
 
     # This is before the transpose
     seq_len = query.shape[2]
+
+    if any(dim == 0 for dim in query.shape):
+        raise ValueError(
+            "Tensor query has shape  with a zero dimension.\n"
+            "FlashAttention does not support inputs with dim=0.\n"
+            "Please check your input shapes or use SDPA instead."
+        )
 
     # FA2 uses non-transposed inputs
     query = query.transpose(1, 2)

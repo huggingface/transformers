@@ -37,6 +37,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "BambaConfig": [
         "attn_layer_indices",
     ],
+    "Dots1Config": ["max_window_layers"],
     "JambaConfig": [
         "max_position_embeddings",
         "attn_layer_offset",
