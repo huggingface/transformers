@@ -97,9 +97,10 @@ class Owlv2ImageProcessorFast(BaseImageProcessorFast):
     def pad(
         self,
         images: list["torch.Tensor"],
+        disable_grouping: Optional[bool],
         constant_value: float = 0.5,
     ) -> list["torch.Tensor"]:
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             stacked_images = self._pad_image(
@@ -180,11 +181,12 @@ class Owlv2ImageProcessorFast(BaseImageProcessorFast):
         do_normalize: bool,
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
+        disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
 
         for shape, stacked_images in grouped_images.items():
@@ -197,9 +199,9 @@ class Owlv2ImageProcessorFast(BaseImageProcessorFast):
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
         if do_pad:
-            processed_images = self.pad(processed_images)
+            processed_images = self.pad(processed_images, disable_grouping=disable_grouping)
 
-        grouped_images, grouped_images_index = group_images_by_shape(processed_images)
+        grouped_images, grouped_images_index = group_images_by_shape(processed_images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
@@ -216,7 +218,7 @@ class Owlv2ImageProcessorFast(BaseImageProcessorFast):
 
         # Group images by size for further processing
         # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             # Fused rescale and normalize
