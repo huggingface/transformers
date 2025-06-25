@@ -91,7 +91,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("sew-d", "Wav2Vec2FeatureExtractor"),
         ("speech_to_text", "Speech2TextFeatureExtractor"),
         ("speecht5", "SpeechT5FeatureExtractor"),
-        ("stt", "KyutaiSpeechToTextFeatureExtractor"),
+        ("kyutai_speech_to_text", "KyutaiSpeechToTextFeatureExtractor"),
         ("swiftformer", "ViTFeatureExtractor"),
         ("swin", "ViTFeatureExtractor"),
         ("swinv2", "ViTFeatureExtractor"),
