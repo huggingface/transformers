@@ -359,8 +359,8 @@ class DogeAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.q_norm = DogeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.k_norm = DogeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.q_norm = DogeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = DogeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -618,7 +618,7 @@ class DogePreTrainedModel(LlamaPreTrainedModel):
     _supports_flex_attn = True
     _supports_cache_class = True
     _supports_quantized_cache = True
-    _supports_static_cache = True
+    _supports_static_cache = False
     _supports_attention_backend = True
 
     def _init_weights(self, module):
@@ -626,11 +626,9 @@ class DogePreTrainedModel(LlamaPreTrainedModel):
         super()._init_weights(module)
 
         if isinstance(module, DogeAttention):
-            # Initialize A parameter to zeros for dynamic mask
             if hasattr(module, "A"):
                 module.A.data.zero_()
         elif isinstance(module, DogeDecoderLayer):
-            # Initialize residual parameters to ones
             if hasattr(module, "input_residual"):
                 module.input_residual.data.fill_(1.0)
             if hasattr(module, "post_attention_residual"):
