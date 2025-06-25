@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from transformers.modeling_outputs import SequenceClassifierOutput
 
 def calc_same_padding(kernel_size, stride=1, dilation=1):
     
@@ -333,6 +334,9 @@ class MatchboxNetForAudioClassification(PreTrainedModel):
             nn.init.xavier_uniform_(module.weight)
             if module.bias is not None:
                 nn.init.zeros_(module.bias)
+                
+    def _initialize_weights(self, module):
+        return self._init_weights(module)
 
     def forward(self, input_ids=None, labels=None, **kwargs):
         
@@ -353,8 +357,11 @@ class MatchboxNetForAudioClassification(PreTrainedModel):
         
         logits = self.matchbox(input_ids)  # (B, num_classes)
 
-        output = {"logits": logits}
+        loss = None
         if labels is not None:
             loss = self.loss_fn(logits, labels)
-            output["loss"] = loss
-        return output
+
+        return SequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+        )

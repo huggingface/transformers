@@ -32,8 +32,16 @@ class MatchboxNetConfig(PretrainedConfig):
         self.target_sr = target_sr
         self.n_mfcc = n_mfcc
         self.fixed_length = fixed_length
-        self.label2id = label2id or {}
-        self.id2label = id2label or {}
+        
+        if label2id is None or id2label is None:
+           # id2label : {0: "0", 1: "1", ..., num_classes-1: "num_classes-1"}
+           self.id2label = {i: i for i in range(self.num_classes)}
+           # label2id inverse
+           self.label2id = {v: k for k, v in self.id2label.items()}
+           
+        else:
+           self.label2id = label2id
+           self.id2label = id2label
 
     @classmethod
     def from_json_string(cls, json_string, **kwargs):
