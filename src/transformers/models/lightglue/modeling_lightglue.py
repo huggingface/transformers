@@ -18,7 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from dataclasses import dataclass
-from typing import Callable, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 import numpy as np
 import torch
@@ -36,36 +36,38 @@ from .configuration_lightglue import LightGlueConfig
 
 
 @dataclass
-class LightGlueKeypointMatchingOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for outputs of LightGlue keypoint matching models. Due to the nature of keypoint detection and matching,
     the number of keypoints is not fixed and can vary from image to image, which makes batching non-trivial. In the
     batch of images, the maximum number of matches is set as the dimension of the matches and matching scores. The mask
     tensor is used to indicate which values in the keypoints, matches, matching_scores and prune tensors are keypoint
     matching information.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
-            Loss computed during training.
-        matches (`torch.FloatTensor` of shape `(batch_size, 2, num_matches)`):
-            Index of keypoint matched in the other image.
-        matching_scores (`torch.FloatTensor` of shape `(batch_size, 2, num_matches)`):
-            Scores of predicted matches.
-        keypoints (`torch.FloatTensor` of shape `(batch_size, num_keypoints, 2)`):
-            Absolute (x, y) coordinates of predicted keypoints in a given image.
-        prune (`torch.IntTensor` of shape `(batch_size, num_keypoints)`):
-            Pruning mask indicating which keypoints are removed and at which layer.
-        mask (`torch.BoolTensor` of shape `(batch_size, num_keypoints)`):
-            Mask indicating which values in matches, matching_scores, keypoints and prune are keypoint matching
-            information.
-        hidden_states (`Tuple[torch.FloatTensor, ...]`, *optional*):
-            Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(batch_size, 2, num_channels,
-            num_keypoints)` returned when `output_hidden_states=True` is passed or when
-            `config.output_hidden_states=True`
-        attentions (`Tuple[torch.FloatTensor, ...]`, *optional*):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, 2, num_heads, num_keypoints,
-            num_keypoints)` returned when `output_attentions=True` is passed or when
-            `config.output_attentions=True`
+    """
+)
+class LightGlueKeypointMatchingOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
+        Loss computed during training.
+    matches (`torch.FloatTensor` of shape `(batch_size, 2, num_matches)`):
+        Index of keypoint matched in the other image.
+    matching_scores (`torch.FloatTensor` of shape `(batch_size, 2, num_matches)`):
+        Scores of predicted matches.
+    keypoints (`torch.FloatTensor` of shape `(batch_size, num_keypoints, 2)`):
+        Absolute (x, y) coordinates of predicted keypoints in a given image.
+    prune (`torch.IntTensor` of shape `(batch_size, num_keypoints)`):
+        Pruning mask indicating which keypoints are removed and at which layer.
+    mask (`torch.BoolTensor` of shape `(batch_size, num_keypoints)`):
+        Mask indicating which values in matches, matching_scores, keypoints and prune are keypoint matching
+        information.
+    hidden_states (`Tuple[torch.FloatTensor, ...]`, *optional*):
+        Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(batch_size, 2, num_channels,
+        num_keypoints)` returned when `output_hidden_states=True` is passed or when
+        `config.output_hidden_states=True`
+    attentions (`Tuple[torch.FloatTensor, ...]`, *optional*):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, 2, num_heads, num_keypoints,
+        num_keypoints)` returned when `output_attentions=True` is passed or when
+        `config.output_attentions=True`
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -74,8 +76,8 @@ class LightGlueKeypointMatchingOutput(ModelOutput):
     keypoints: Optional[torch.FloatTensor] = None
     prune: Optional[torch.IntTensor] = None
     mask: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 class LightGluePositionalEncoder(nn.Module):
@@ -85,7 +87,7 @@ class LightGluePositionalEncoder(nn.Module):
 
     def forward(
         self, keypoints: torch.Tensor, output_hidden_states: Optional[bool] = False
-    ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
+    ) -> Union[tuple[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
         projected_keypoints = self.projector(keypoints)
         embeddings = projected_keypoints.repeat_interleave(2, dim=-1)
         cosines = torch.cos(embeddings)
@@ -200,12 +202,12 @@ class LightGlueAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -274,7 +276,7 @@ class LightGlueTransformerLayer(nn.Module):
         attention_mask: torch.Tensor,
         output_hidden_states: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor]], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[tuple[torch.Tensor]], Optional[tuple[torch.Tensor]]]:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
@@ -435,7 +437,7 @@ class LightGluePreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-def get_matches_from_scores(scores: torch.Tensor, threshold: float) -> Tuple[torch.Tensor, torch.Tensor]:
+def get_matches_from_scores(scores: torch.Tensor, threshold: float) -> tuple[torch.Tensor, torch.Tensor]:
     """obtain matches from a score matrix [Bx M+1 x N+1]"""
     batch_size, _, _ = scores.shape
     # For each keypoint, get the best match
@@ -514,16 +516,15 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
 
         self.keypoint_detector = AutoModelForKeypointDetection.from_config(config.keypoint_detector_config)
 
+        self.keypoint_detector_descriptor_dim = config.keypoint_detector_config.descriptor_decoder_dim
         self.descriptor_dim = config.descriptor_dim
         self.num_layers = config.num_hidden_layers
         self.filter_threshold = config.filter_threshold
         self.depth_confidence = config.depth_confidence
         self.width_confidence = config.width_confidence
 
-        if self.descriptor_dim != config.keypoint_detector_config.descriptor_decoder_dim:
-            self.input_projection = nn.Linear(
-                config.keypoint_detector_config.descriptor_decoder_dim, self.descriptor_dim, bias=True
-            )
+        if self.descriptor_dim != self.keypoint_detector_descriptor_dim:
+            self.input_projection = nn.Linear(self.keypoint_detector_descriptor_dim, self.descriptor_dim, bias=True)
         else:
             self.input_projection = nn.Identity()
 
@@ -548,7 +549,7 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
 
     def _keypoint_processing(
         self, descriptors: torch.Tensor, keypoints: torch.Tensor, output_hidden_states: Optional[bool] = False
-    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         descriptors = descriptors.detach().contiguous()
         projected_descriptors = self.input_projection(descriptors)
         keypoint_encoding_output = self.positional_encoder(keypoints, output_hidden_states=output_hidden_states)
@@ -659,7 +660,7 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
         matches: torch.Tensor,
         matching_scores: torch.Tensor,
         num_keypoints: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         # (batch_size, num_keypoints) -> (batch_size // 2, 2, num_keypoints) -> 2 * (batch_size // 2, num_keypoints) to
         # have tensors from
         batch_size, _ = indices.shape
@@ -699,7 +700,7 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
         mask: torch.Tensor = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Tuple, Tuple]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, tuple, tuple]:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
@@ -719,7 +720,7 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
         # (batch_size, 2, num_keypoints, 2) -> (batch_size * 2, num_keypoints, 2)
         keypoints = keypoints.reshape(batch_size * 2, initial_num_keypoints, 2)
         mask = mask.reshape(batch_size * 2, initial_num_keypoints) if mask is not None else None
-        descriptors = descriptors.reshape(batch_size * 2, initial_num_keypoints, self.descriptor_dim)
+        descriptors = descriptors.reshape(batch_size * 2, initial_num_keypoints, self.keypoint_detector_descriptor_dim)
         image_indices = torch.arange(batch_size * 2, device=device)
         # Keypoint normalization
         keypoints = normalize_keypoints(keypoints, height, width)
@@ -797,22 +798,18 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
                     # Remove image pairs that have been early stopped from the forward pass
                     num_points_per_pair = num_points_per_pair[~early_stopped_pairs]
                     descriptors, keypoints_0, keypoint_1, mask, image_indices = tuple(
-                        (
-                            tensor[~early_stops]
-                            for tensor in [descriptors, keypoints[0], keypoints[1], mask, image_indices]
-                        )
+                        tensor[~early_stops]
+                        for tensor in [descriptors, keypoints[0], keypoints[1], mask, image_indices]
                     )
                     keypoints = (keypoints_0, keypoint_1)
                     if do_keypoint_pruning:
                         pruned_keypoints_indices, pruned_keypoints_iterations, keypoint_confidences = tuple(
-                            (
-                                tensor[~early_stops]
-                                for tensor in [
-                                    pruned_keypoints_indices,
-                                    pruned_keypoints_iterations,
-                                    keypoint_confidences,
-                                ]
-                            )
+                            tensor[~early_stops]
+                            for tensor in [
+                                pruned_keypoints_indices,
+                                pruned_keypoints_iterations,
+                                keypoint_confidences,
+                            ]
                         )
                 # If all pairs of images are early stopped, we stop the forward pass through the transformer
                 # layers for all pairs of images.
@@ -875,7 +872,7 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-    ) -> Union[Tuple, LightGlueKeypointMatchingOutput]:
+    ) -> Union[tuple, LightGlueKeypointMatchingOutput]:
         loss = None
         if labels is not None:
             raise ValueError("LightGlue is not trainable, no labels should be provided.")
@@ -894,7 +891,7 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
 
         keypoints, _, descriptors, mask = keypoint_detections[:4]
         keypoints = keypoints.reshape(batch_size, 2, -1, 2).to(pixel_values)
-        descriptors = descriptors.reshape(batch_size, 2, -1, self.descriptor_dim).to(pixel_values)
+        descriptors = descriptors.reshape(batch_size, 2, -1, self.keypoint_detector_descriptor_dim).to(pixel_values)
         mask = mask.reshape(batch_size, 2, -1)
 
         absolute_keypoints = keypoints.clone()

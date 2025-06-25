@@ -39,6 +39,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("albert", "AlbertConfig"),
         ("align", "AlignConfig"),
         ("altclip", "AltCLIPConfig"),
+        ("arcee", "ArceeConfig"),
         ("aria", "AriaConfig"),
         ("aria_text", "AriaTextConfig"),
         ("audio-spectrogram-transformer", "ASTConfig"),
@@ -321,6 +322,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("squeezebert", "SqueezeBertConfig"),
         ("stablelm", "StableLmConfig"),
         ("starcoder2", "Starcoder2Config"),
+        ("stt", "KyutaiSpeechToTextConfig"),
         ("superglue", "SuperGlueConfig"),
         ("superpoint", "SuperPointConfig"),
         ("swiftformer", "SwiftFormerConfig"),
@@ -395,6 +397,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("albert", "ALBERT"),
         ("align", "ALIGN"),
         ("altclip", "AltCLIP"),
+        ("arcee", "Arcee"),
         ("aria", "Aria"),
         ("aria_text", "AriaText"),
         ("audio-spectrogram-transformer", "Audio Spectrogram Transformer"),
@@ -705,6 +708,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("squeezebert", "SqueezeBERT"),
         ("stablelm", "StableLm"),
         ("starcoder2", "Starcoder2"),
+        ("stt", "KyutaiSpeechToText"),
         ("superglue", "SuperGlue"),
         ("superpoint", "SuperPoint"),
         ("swiftformer", "SwiftFormer"),
@@ -1096,7 +1100,7 @@ class AutoConfig:
             resume_download:
                 Deprecated and ignored. All downloads are now resumed by default when possible.
                 Will be removed in v5 of Transformers.
-            proxies (`Dict[str, str]`, *optional*):
+            proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             revision (`str`, *optional*, defaults to `"main"`):

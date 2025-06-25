@@ -17,7 +17,7 @@
 import math
 import warnings
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -48,31 +48,26 @@ _HIDDEN_STATES_START_POSITION = 2
 
 
 @dataclass
-class UniSpeechSatForPreTrainingOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Output type of [`UniSpeechSatForPreTrainingOutput`], with potential hidden states and attentions.
-
-    Args:
-        loss (*optional*, returned when model is in train mode, `torch.FloatTensor` of shape `(1,)`):
-            Total loss as the sum of the contrastive loss (L_m) and the diversity loss (L_d) as stated in the [official
-            paper](https://huggingface.co/papers/2006.11477) . (classification) loss.
-        projected_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
-            Hidden-states of the model projected to *config.proj_codevector_dim* that can be used to predict the masked
-            projected quantized states.
-        projected_quantized_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
-            Quantized extracted feature vectors projected to *config.proj_codevector_dim* representing the positive
-            target vectors for contrastive loss.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    """
+)
+class UniSpeechSatForPreTrainingOutput(ModelOutput):
+    r"""
+    loss (*optional*, returned when model is in train mode, `torch.FloatTensor` of shape `(1,)`):
+        Total loss as the sum of the contrastive loss (L_m) and the diversity loss (L_d) as stated in the [official
+        paper](https://arxiv.org/pdf/2006.11477.pdf) . (classification) loss.
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`, *optional*):
+        Prediction scores of the contrastive loss model, i.e. the output of the model before the final softmax.
+    projected_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
+        Hidden-states of the model projected to *config.proj_codevector_dim* that can be used to predict the masked
+        projected quantized states.
+    projected_quantized_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
+        Quantized extracted feature vectors projected to *config.proj_codevector_dim* representing the positive
+        target vectors for contrastive loss.
+    codevector_perplexity (`torch.FloatTensor` of shape `(1,)`):
+        The perplexity of the codevector distribution, used to measure the diversity of the codebook.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -80,8 +75,8 @@ class UniSpeechSatForPreTrainingOutput(ModelOutput):
     projected_states: Optional[torch.FloatTensor] = None
     projected_quantized_states: Optional[torch.FloatTensor] = None
     codevector_perplexity: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 class UniSpeechSatPositionalConvEmbedding(Wav2Vec2PositionalConvEmbedding):
@@ -261,7 +256,7 @@ class UniSpeechSatModel(UniSpeechSatPreTrainedModel, Wav2Vec2Model):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, UniSpeechSatBaseModelOutput]:
+    ) -> Union[tuple, UniSpeechSatBaseModelOutput]:
         r"""
         mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
@@ -387,7 +382,7 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, UniSpeechSatForPreTrainingOutput]:
+    ) -> Union[tuple, UniSpeechSatForPreTrainingOutput]:
         r"""
         Example:
 
