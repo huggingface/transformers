@@ -29,7 +29,6 @@ from transformers.testing_utils import (
     is_pipeline_test,
     is_torch_available,
     nested_simplify,
-    require_tf,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -821,26 +820,6 @@ class TokenClassificationPipelineTests(unittest.TestCase):
         self.assertEqual(
             [(entity["word"], entity["is_subword"]) for entity in pre_entities],
             [("▁I", False), ("▁play", False), ("▁the", False), ("▁there", False), ("min", True)],
-        )
-
-    @require_tf
-    def test_tf_only(self):
-        model_name = "hf-internal-testing/tiny-random-bert-tf-only"  # This model only has a TensorFlow version
-        # We test that if we don't specify framework='tf', it gets detected automatically
-        token_classifier = pipeline(task="ner", model=model_name)
-        self.assertEqual(token_classifier.framework, "tf")
-
-    @require_tf
-    def test_small_model_tf(self):
-        model_name = "hf-internal-testing/tiny-bert-for-token-classification"
-        token_classifier = pipeline(task="token-classification", model=model_name, framework="tf")
-        outputs = token_classifier("This is a test !")
-        self.assertEqual(
-            nested_simplify(outputs),
-            [
-                {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
-                {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
-            ],
         )
 
     @require_torch

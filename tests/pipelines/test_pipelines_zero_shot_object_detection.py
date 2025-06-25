@@ -23,7 +23,6 @@ from transformers import (
 from transformers.testing_utils import (
     is_pipeline_test,
     nested_simplify,
-    require_tf,
     require_torch,
     require_vision,
     slow,
@@ -89,11 +88,6 @@ class ZeroShotObjectDetectionPipelineTests(unittest.TestCase):
                 for i in range(n)
             ],
         )
-
-    @require_tf
-    @unittest.skip(reason="Zero Shot Object Detection not implemented in TF")
-    def test_small_model_tf(self):
-        pass
 
     @require_torch
     def test_small_model_pt(self):
@@ -200,11 +194,6 @@ class ZeroShotObjectDetectionPipelineTests(unittest.TestCase):
                 ],
             ],
         )
-
-    @require_tf
-    @unittest.skip(reason="Zero Shot Object Detection not implemented in TF")
-    def test_large_model_tf(self):
-        pass
 
     @require_torch
     @slow
