@@ -851,6 +851,28 @@ def is_torch_hpu_available():
 
         torch.Tensor.masked_fill_ = patched_masked_fill_
 
+    # We patch torch.gather for int64 tensors to avoid a bug on Gaudi
+    # Graph compile failed with synStatus 26 [Generic failure]
+    # This can be removed once bug is fixed but for now we need it.
+    original_gather = torch.Tensor.gather
+
+    def patched_gather(input: torch.Tensor, dim: int, index: torch.LongTensor) -> torch.Tensor:
+        if input.dtype == torch.int64 and input.device.type == "hpu":
+            logger.warning_once(
+                "torch.gather is not supported for int64 tensors on Gaudi. "
+                "This operation will be performed patched_gather using indexing."
+            )
+
+            idx = [torch.arange(size, device=input.device, dtype=input.dtype) for size in input.shape]
+            idx[dim] = index
+            idx = tuple(idx)
+            output = input[idx]
+            return output
+        else:
+            return original_gather(input, dim, index)
+
+    torch.Tensor.gather = patched_gather
+
     # IlyasMoutawwakil: we patch torch.compile to use the HPU backend by default
     # https://github.com/huggingface/transformers/pull/38790#discussion_r2157043944
     # This is necessary for cases where torch.compile is used as a decorator (defaulting to inductor)
