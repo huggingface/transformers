@@ -58,13 +58,13 @@ from transformers.testing_utils import (
     is_staging_test,
     require_accelerate,
     require_flax,
+    require_non_hpu,
     require_read_token,
     require_safetensors,
     require_tf,
     require_torch,
     require_torch_accelerator,
     require_torch_multi_accelerator,
-    require_usr_bin_time,
     slow,
     torch_device,
 )
@@ -77,6 +77,7 @@ from transformers.utils import (
 )
 from transformers.utils.import_utils import (
     is_flash_attn_2_available,
+    is_flash_attn_3_available,
     is_flax_available,
     is_tf_available,
     is_torch_npu_available,
@@ -676,6 +677,9 @@ class ModelUtilsTest(TestCasePlus):
         if is_flash_attn_available():
             attn_implementation_available.append("flash_attention_2")
 
+        if is_flash_attn_3_available():
+            attn_implementation_available.append("flash_attention_3")
+
         for requested_attn_implementation in attn_implementation_available:
             model = AutoModelForCausalLM.from_pretrained(
                 TINY_MISTRAL, attn_implementation=requested_attn_implementation
@@ -699,6 +703,9 @@ class ModelUtilsTest(TestCasePlus):
 
         if is_flash_attn_available():
             attn_implementation_available.append("flash_attention_2")
+
+        if is_flash_attn_3_available():
+            attn_implementation_available.append("flash_attention_3")
 
         for requested_attn_implementation in attn_implementation_available:
             config = AutoConfig.from_pretrained(TINY_MISTRAL, attn_implementation=requested_attn_implementation)
@@ -1003,57 +1010,7 @@ class ModelUtilsTest(TestCasePlus):
 
         self.assertIsNotNone(model)
 
-    @require_accelerate
-    @mark.accelerate_tests
-    def test_from_pretrained_low_cpu_mem_usage_functional(self):
-        # test that we can use `from_pretrained(..., low_cpu_mem_usage=True)` with normal and
-        # sharded models
-
-        mnames = [
-            "hf-internal-testing/tiny-random-bert-sharded",
-            "hf-internal-testing/tiny-random-bert",
-        ]
-        for mname in mnames:
-            _ = BertModel.from_pretrained(mname, low_cpu_mem_usage=True)
-
-    @slow
-    @require_usr_bin_time
-    @require_accelerate
-    @mark.accelerate_tests
-    def test_from_pretrained_low_cpu_mem_usage_equal(self):
-        # Before this would test that `from_pretrained(..., low_cpu_mem_usage=True)` uses less cpu memory than default
-        # Now though these should be around the same.
-        # TODO: Look for good bounds to check that their timings are near the same
-
-        mname = "HuggingFaceTB/SmolLM-135M"
-
-        preamble = "from transformers import AutoModel"
-        one_liner_str = f'{preamble}; AutoModel.from_pretrained("{mname}", low_cpu_mem_usage=False)'
-        # Save this output as `max_rss_normal` if testing memory results
-        max_rss_normal = self.python_one_liner_max_rss(one_liner_str)
-
-        one_liner_str = f'{preamble};  AutoModel.from_pretrained("{mname}", low_cpu_mem_usage=True)'
-        # Save this output as `max_rss_low_mem` if testing memory results
-        max_rss_low_mem = self.python_one_liner_max_rss(one_liner_str)
-
-        # Should be within 5MBs of each other (overhead)
-        self.assertAlmostEqual(
-            max_rss_normal / 1024 / 1024,
-            max_rss_low_mem / 1024 / 1024,
-            delta=5,
-            msg="using `low_cpu_mem_usage` should incur the same memory usage in both cases.",
-        )
-
-        # if you want to compare things manually, let's first look at the size of the model in bytes
-        # model = AutoModel.from_pretrained(mname, low_cpu_mem_usage=False)
-        # total_numel = sum(dict((p.data_ptr(), p.numel()) for p in model.parameters()).values())
-        # total_bytes = total_numel * 4
-        # Now the diff_bytes should be very close to total_bytes, but the reports are inconsistent.
-        # The easiest way to test this is to switch the model and torch.load to do all the work on
-        # gpu - that way one can measure exactly the total and peak memory used. Perhaps once we add
-        # functionality to load models directly on gpu, this test can be rewritten to use torch's
-        # cuda memory tracking and then we should be able to do a much more precise test.
-
+    @require_non_hpu
     @require_accelerate
     @mark.accelerate_tests
     @require_torch_multi_accelerator
@@ -1537,7 +1494,6 @@ class ModelUtilsTest(TestCasePlus):
                 config=model_config,
                 ignore_mismatched_sizes=True,
                 torch_dtype=torch.float16,
-                low_cpu_mem_usage=True,
             )
             model_ref = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path=model_id)
 
@@ -1779,16 +1735,6 @@ class ModelUtilsTest(TestCasePlus):
 
         model_loaded = BertModel.from_pretrained(
             pretrained_model_name_or_path=None, config=config, state_dict=state_dict
-        )
-        self.assertTrue(check_models_equal(model, model_loaded))
-
-    def test_load_model_with_state_dict_only_low_cpu_mem_usage(self):
-        model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
-        state_dict = model.state_dict()
-        config = model.config
-
-        model_loaded = BertModel.from_pretrained(
-            pretrained_model_name_or_path=None, config=config, state_dict=state_dict, low_cpu_mem_usage=True
         )
         self.assertTrue(check_models_equal(model, model_loaded))
 

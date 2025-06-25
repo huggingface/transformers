@@ -15,9 +15,6 @@ on:
       slack_report_channel:
         required: true
         type: string
-      runner:
-        required: true
-        type: string
       docker:
         required: true
         type: string
@@ -62,6 +59,7 @@ jobs:
     outputs:
       folder_slices: ${{ steps.set-matrix.outputs.folder_slices }}
       slice_ids: ${{ steps.set-matrix.outputs.slice_ids }}
+      runner_map: ${{ steps.set-matrix.outputs.runner_map }}
       quantization_matrix: ${{ steps.set-matrix-quantization.outputs.quantization_matrix }}
     steps:
       - name: Update clone
@@ -88,6 +86,7 @@ jobs:
           if [ "${{ inputs.job }}" = "run_models_gpu" ]; then
             echo "folder_slices=$(python3 ../utils/split_model_tests.py --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
             echo "slice_ids=$(python3 -c 'd = list(range(${{ env.NUM_SLICES }})); print(d)')" >> $GITHUB_OUTPUT
+            echo "runner_map=$(python3 ../utils/get_runner_map.py)" >> $GITHUB_OUTPUT
           elif [ "${{ inputs.job }}" = "run_trainer_and_fsdp_gpu" ]; then
             echo "folder_slices=[['trainer'], ['fsdp']]" >> $GITHUB_OUTPUT
             echo "slice_ids=[0, 1]" >> $GITHUB_OUTPUT
@@ -111,14 +110,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [aws-g4dn-4xlarge-cache, aws-g4dn-12xlarge-cache]
+        machine_type: [single-gpu, multi-gpu]
         slice_id: ${{ fromJSON(needs.setup.outputs.slice_ids) }}
     uses: ./.github/workflows/model_jobs.yml
     with:
       folder_slices: ${{ needs.setup.outputs.folder_slices }}
       machine_type: ${{ matrix.machine_type }}
       slice_id: ${{ matrix.slice_id }}
-      runner: ${{ inputs.runner }}
+      runner_map: ${{ needs.setup.outputs.runner_map }}
       docker: ${{ inputs.docker }}
     secrets: inherit
 
@@ -136,7 +135,6 @@ jobs:
       folder_slices: ${{ needs.setup.outputs.folder_slices }}
       machine_type: ${{ matrix.machine_type }}
       slice_id: ${{ matrix.slice_id }}
-      runner: ${{ inputs.runner }}
       docker: ${{ inputs.docker }}
       report_name_prefix: run_trainer_and_fsdp_gpu
     secrets: inherit

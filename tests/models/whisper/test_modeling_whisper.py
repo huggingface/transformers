@@ -1645,9 +1645,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large-v3")
         model.to(torch_device)
 
-        ds = load_dataset(
-            "facebook/multilingual_librispeech", "german", split="test", streaming=True, trust_remote_code=True
-        )
+        ds = load_dataset("facebook/multilingual_librispeech", "german", split="test", streaming=True)
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
 
         input_speech = next(iter(ds))["audio"]["array"]
@@ -1714,11 +1712,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         token = os.getenv("HF_HUB_READ_TOKEN", True)
         ds = load_dataset(
-            "mozilla-foundation/common_voice_6_1",
+            "hf-internal-testing/fixtures_common_voice",
             "ja",
             split="test",
             streaming=True,
-            trust_remote_code=True,
             token=token,
         )
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
@@ -1728,7 +1725,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             torch_device
         )
 
-        EXPECTED_TRANSCRIPTS = ["木村さんに電話を貸してもらいました", " Kimura-san called me."]
+        EXPECTED_TRANSCRIPTS = [
+            "夏の時期の時期でした",
+            " It was the time of day and all of the pens left during the summer.",
+        ]
 
         generated_ids = model.generate(
             input_features.repeat(2, 1, 1),
@@ -2431,7 +2431,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         torch_dtype = torch.float16 if (torch.cuda.is_available() or is_torch_xpu_available()) else torch.float32
         model_id = "openai/whisper-large-v2"
         model = WhisperForConditionalGeneration.from_pretrained(
-            model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
+            model_id, torch_dtype=torch_dtype, use_safetensors=True
         )
         model.to(torch_device)
 
@@ -2439,7 +2439,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         assistant_model_id = "distil-whisper/distil-large-v2"
         assistant_model = WhisperForCausalLM.from_pretrained(
-            assistant_model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
+            assistant_model_id, torch_dtype=torch_dtype, use_safetensors=True
         )
         assistant_model.to(torch_device)
 
@@ -2481,7 +2481,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         torch_dtype = torch.float16 if torch_device in ["cuda", "xpu"] else torch.float32
         model_id = "openai/whisper-large-v2"
         model = WhisperForConditionalGeneration.from_pretrained(
-            model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
+            model_id, torch_dtype=torch_dtype, use_safetensors=True
         )
         model.to(torch_device)
 
@@ -2489,7 +2489,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         assistant_model_id = "openai/whisper-tiny"
         assistant_model = WhisperForConditionalGeneration.from_pretrained(
-            assistant_model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
+            assistant_model_id, torch_dtype=torch_dtype, use_safetensors=True
         )
         assistant_model.to(torch_device)
 

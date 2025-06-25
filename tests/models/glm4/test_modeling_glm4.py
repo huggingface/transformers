@@ -104,9 +104,7 @@ class Glm4IntegrationTest(unittest.TestCase):
         )
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
 
-        model = AutoModelForCausalLM.from_pretrained(
-            self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16
-        ).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.float16).to(torch_device)
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
@@ -121,7 +119,7 @@ class Glm4IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): [
                     "Hello I am doing a project on the history of the internet and I need to know what the first website was and what",
-                    "Hi today I am going to tell you about the most common disease in the world. This disease is called diabetes",
+                    "Hi today I am going to tell you about the most common mistakes that people make when they are learning English.",
                 ],
                 ("cuda", 7): [],
                 ("cuda", 8): [
@@ -132,9 +130,7 @@ class Glm4IntegrationTest(unittest.TestCase):
         )
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
 
-        model = AutoModelForCausalLM.from_pretrained(
-            self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
-        ).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(torch_device)
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
@@ -162,7 +158,6 @@ class Glm4IntegrationTest(unittest.TestCase):
 
         model = AutoModelForCausalLM.from_pretrained(
             self.model_id,
-            low_cpu_mem_usage=True,
             torch_dtype=torch.bfloat16,
             attn_implementation="eager",
         )
@@ -182,7 +177,7 @@ class Glm4IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): [
                     "Hello I am doing a project on the history of the internet and I need to know what the first website was and what",
-                    "Hi today I am going to tell you about the most common disease in the world. This disease is called diabetes",
+                    "Hi today I am going to tell you about the most common mistakes that people make when they are learning English.",
                 ],
                 ("cuda", 7): [],
                 ("cuda", 8): [
@@ -195,7 +190,6 @@ class Glm4IntegrationTest(unittest.TestCase):
 
         model = AutoModelForCausalLM.from_pretrained(
             self.model_id,
-            low_cpu_mem_usage=True,
             torch_dtype=torch.bfloat16,
             attn_implementation="sdpa",
         )
@@ -226,7 +220,6 @@ class Glm4IntegrationTest(unittest.TestCase):
 
         model = AutoModelForCausalLM.from_pretrained(
             self.model_id,
-            low_cpu_mem_usage=True,
             torch_dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
         )
