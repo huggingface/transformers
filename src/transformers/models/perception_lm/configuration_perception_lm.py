@@ -13,89 +13,13 @@
 # limitations under the License.
 """PerceptionLM model configuration"""
 
-from transformers.configuration_utils import PretrainedConfig
-
+from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
+from ..timm_wrapper.configuration_timm_wrapper import TimmWrapperConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-class PerceptionEncoderConfig(PretrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`PerceptionEncoder`]. It is used to instantiate a
-    PerceptionEncoder model according to the specified arguments, defining the model architecture.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        use_cls_token (`bool`, *optional*, defaults to `True`):
-            Whether to use a CLS token.
-        architecture (`str`, *optional*, defaults to `"vit_pe_core_large_patch14_336"`):
-            The architecture of the model.
-        width (`int`, *optional*, defaults to 1024):
-            The width (hidden size) of the model.
-        img_size (`List[int]`, *optional*, defaults to `[448, 448]`):
-            The size of the input image as [height, width].
-        depth (`int`, *optional*, defaults to 23):
-            The number of layers in the model.
-        num_classes (`int`, *optional*, defaults to 0):
-            The number of classes for classification.
-        global_pool (`str`, *optional*, defaults to `""`):
-            The global pooling strategy.
-        use_post_transformer_norm (`bool`, *optional*, defaults to `False`):
-            Whether to use post-transformer normalization.
-        init_values (`float`, *optional*, defaults to 0.1):
-            The initialization value for LayerScale.
-        ref_feat_shape (`List[int]`, *optional*, defaults to `[32, 32]`):
-            The shape of the reference feature as [height, width].
-
-    Example:
-
-    ```python
-    >>> from transformers import PerceptionEncoder, PerceptionEncoderConfig
-
-    >>> # Initializing a PerceptionEncoder configuration
-    >>> configuration = PerceptionEncoderConfig()
-
-    >>> # Initializing a model from the configuration
-    >>> model = PerceptionEncoder(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```
-    """
-
-    model_type = "perception_encoder"
-
-    def __init__(
-        self,
-        use_cls_token=True,
-        architecture="vit_pe_core_large_patch14_336",
-        width=1024,
-        img_size=[448, 448],
-        depth=23,
-        num_classes=0,
-        global_pool="",
-        use_post_transformer_norm=False,
-        init_values=0.1,
-        ref_feat_shape=[32, 32],
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.use_cls_token = use_cls_token
-        self.architecture = architecture
-        self.width = width
-        self.img_size = img_size
-        self.depth = depth
-        self.num_classes = num_classes
-        self.global_pool = global_pool
-        self.use_post_transformer_norm = use_post_transformer_norm
-        self.init_values = init_values
-        self.ref_feat_shape = ref_feat_shape
-
 
 class PerceptionLMConfig(PretrainedConfig):
     r"""
@@ -109,7 +33,7 @@ class PerceptionLMConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vision_config (`Union[PerceptionEncoderConfig, dict]`, *optional*, defaults to `PerceptionEncoderConfig()`):
+        vision_config (`Union[TimmWrapperConfig, dict]`, *optional*, defaults to `TimmWrapperConfig()`):
             The config object or dictionary of the vision backbone.
         text_config (`Union[PretrainedConfig, dict]`, *optional*, defaults to `LlamaConfig()`):
             The config object or dictionary of the text backbone.
@@ -123,10 +47,10 @@ class PerceptionLMConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import PerceptionLMForConditionalGeneration, PerceptionLMConfig, PerceptionEncoderConfig, LlamaConfig
+    >>> from transformers import PerceptionLMForConditionalGeneration, PerceptionLMConfig, TimmWrapperConfig, LlamaConfig
 
     >>> # Initializing a PerceptionEncoder config
-    >>> vision_config = PerceptionEncoderConfig()
+    >>> vision_config = TimmWrapperConfig()
 
     >>> # Initializing a Llama config
     >>> text_config = LlamaConfig()
@@ -142,12 +66,13 @@ class PerceptionLMConfig(PretrainedConfig):
     ```"""
 
     model_type = "perception_lm"
-    sub_configs = {"text_config": AutoConfig, "vision_config": PerceptionEncoderConfig}
+    sub_configs = {"text_config": AutoConfig, "vision_config": TimmWrapperConfig}
 
     def __init__(
         self,
         vision_config=None,
         text_config=None,
+        vision_use_cls_token=True,
         projector_pooling_ratio=1,
         image_token_id=128002,
         video_token_id=128003,
@@ -156,12 +81,13 @@ class PerceptionLMConfig(PretrainedConfig):
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
         if isinstance(vision_config, dict):
-            vision_config = PerceptionEncoderConfig(**vision_config)
-        elif isinstance(vision_config, PerceptionEncoderConfig):
+            vision_config = TimmWrapperConfig(**vision_config)
+        elif isinstance(vision_config, TimmWrapperConfig):
             vision_config = vision_config
         elif vision_config is None:
-            vision_config = PerceptionEncoderConfig()
+            vision_config = TimmWrapperConfig()
         self.vision_config = vision_config
+        self.vision_use_cls_token = vision_use_cls_token
 
         if isinstance(text_config, dict):
             text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "llama"

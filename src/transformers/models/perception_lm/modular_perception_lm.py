@@ -38,7 +38,7 @@ from ..llava.modeling_llava import (
     LlavaModel,
     LlavaPreTrainedModel,
 )
-from .configuration_perception_lm import PerceptionEncoderConfig, PerceptionLMConfig
+from .configuration_perception_lm import PerceptionLMConfig
 
 
 logger = logging.get_logger(__name__)
@@ -47,30 +47,6 @@ _CONFIG_FOR_DOC = "PerceptionLMConfig"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "facebook/Perception-LM-1B"
-
-
-class PerceptionEncoder(PreTrainedModel):
-    def __init__(self, config: PerceptionEncoderConfig):
-        super().__init__(config)
-        self.use_cls_token = config.use_cls_token
-        self.eva_pe = timm.create_model(
-            config.architecture,
-            img_size=config.img_size,
-            depth=config.depth,
-            num_classes=config.num_classes,
-            global_pool=config.global_pool,
-            use_post_transformer_norm=config.use_post_transformer_norm,
-            init_values=config.init_values,
-            ref_feat_shape=config.ref_feat_shape,
-            embed_dim=config.width,
-        )
-
-    def forward(self, x):
-        x = self.eva_pe(x)
-        if self.use_cls_token:
-            return x[:, 1:, :]
-        else:
-            return x
 
 
 class AdaptiveAvgPooling(nn.Module):
@@ -95,7 +71,7 @@ class AdaptiveAvgPooling(nn.Module):
 class PerceptionLMMultiModalProjector(nn.Module):
     def __init__(self, config: PerceptionLMConfig):
         super().__init__()
-        input_size = config.vision_config.width
+        input_size = config.vision_config.model_args["embed_dim"]
         output_size = config.text_config.hidden_size
         self.projector = nn.ModuleList(
             [
@@ -153,6 +129,9 @@ class PerceptionLMModel(LlavaModel):
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_tiles, num_patches, embed_dim)`).
         """
         image_outputs = self.vision_tower(pixel_values.flatten(0, 1))
+        image_outputs = image_outputs.last_hidden_state
+        if self.config.vision_use_cls_token:
+            image_outputs = image_outputs[:, 1:, :]
         image_features = self.multi_modal_projector(image_outputs)
         return image_features
 
