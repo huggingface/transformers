@@ -163,7 +163,7 @@ class GraniteSpeechConformerAttention(nn.Module):
         # rel_pos_emb_expanded = rel_pos_emb.view([1, 1, 1] + list(rel_pos_emb.shape))
         # pos_attn = torch.sum(query_states.unsqueeze(-2) * rel_pos_emb_expanded, dim=-1) * self.scale
         # einsum gives x30 speedup:
-        pos_attn = torch.einsum('b m h c d, c r d -> b m h c r', query_states, rel_pos_emb) * self.scale
+        pos_attn = torch.einsum("b m h c d, c r d -> b m h c r", query_states, rel_pos_emb) * self.scale
 
         if remainder > 0:
             # masked attention in the extended block
@@ -559,15 +559,19 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
     @staticmethod
     def _fix_state_dict_key_on_save(key) -> tuple[str, bool]:
         # save the model with the original weights format
-        return key.replace(".base_layer",""), False
+        return key.replace(".base_layer", ""), False
 
     def _fix_state_dict_keys_on_save(self, state_dict):
         if is_peft_available and self._hf_peft_config_loaded:
-            return state_dict # state dict is only adapter, should keep the same
+            # state dict is only adapter, should keep the same
+            return state_dict 
         adapter_name = self._get_adapter_name()
         # rename back the base model state dict
-        return {self._fix_state_dict_key_on_save(key)[0]: value
-                for key, value in state_dict.items() if adapter_name not in key}
+        return {
+            self._fix_state_dict_key_on_save(key)[0]: value
+            for key, value in state_dict.items()
+            if adapter_name not in key
+        }
 
     def _get_adapter_name(self):
         return list(self.peft_config.keys())[0]
