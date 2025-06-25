@@ -14,7 +14,7 @@
 
 import math
 from functools import reduce
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -115,7 +115,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
 
     def _get_image_height_width(
         self, image_width: int, image_height: int, target_width: int, target_height: int
-    ) -> Tuple[int, int]:
+    ) -> tuple[int, int]:
         """
         Given image width, height and target width, height for the canvas, return the dimensions of how the image would be resized
         with aspect ratio preservation.
@@ -194,7 +194,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
                         optimal_image_width_height = image_width_height
         return optimal_canvas
 
-    def _find_closest_aspect_ratio(self, img_width: int, img_height: int, tile_size: int) -> Tuple:
+    def _find_closest_aspect_ratio(self, img_width: int, img_height: int, tile_size: int) -> tuple:
         """
         Given an image width, height and target number of chunks
         this function will find the closest supported aspect ratio.
@@ -251,7 +251,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: List["torch.Tensor"],
+        images: list["torch.Tensor"],
         do_resize: bool,
         do_rescale: Optional[bool],
         rescale_factor: Optional[Union[int, float]],
@@ -275,7 +275,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
                     )
                     image_tiles = self._split(images_for_tiling, tiles_w, tiles_h)
                     stacked_images = torch.cat([thumbnails.unsqueeze(1), image_tiles], dim=1)
-                else: # vanilla single tile for low memory devices
+                else:  # vanilla single tile for low memory devices
                     stacked_images, _ = self.resize(stacked_images, tile_size, max_num_tiles=1)
 
             resized_images_grouped[shape] = stacked_images

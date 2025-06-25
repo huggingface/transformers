@@ -14,9 +14,8 @@
 """PyTorch PerceptionLM model."""
 
 import math
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
-import timm
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
@@ -25,7 +24,6 @@ from torch import nn
 from transformers.generation.utils import GenerationMixin
 
 # from ...generation import GenerationMixin
-from ...modeling_utils import PreTrainedModel
 from ...utils import (
     auto_docstring,
     logging,
@@ -150,7 +148,7 @@ class PerceptionLMModel(LlavaModel):
         pixel_values_videos: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -159,7 +157,7 @@ class PerceptionLMModel(LlavaModel):
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **lm_kwargs,
-    ) -> Union[Tuple, PerceptionLMCausalLMOutputWithPast]:
+    ) -> Union[tuple, PerceptionLMCausalLMOutputWithPast]:
         r"""
             Args:
                 input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -329,7 +327,7 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
         pixel_values_videos: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -339,7 +337,7 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **lm_kwargs,
-    ) -> Union[Tuple, PerceptionLMCausalLMOutputWithPast]:
+    ) -> Union[tuple, PerceptionLMCausalLMOutputWithPast]:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -413,5 +411,4 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
 __all__ = [
     "PerceptionLMForConditionalGeneration",
     "PerceptionLMPreTrainedModel",
-    "PerceptionEncoder",
 ]

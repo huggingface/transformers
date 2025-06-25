@@ -470,4 +470,4 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
         )
 
 
-__all__ = ["PerceptionLMForConditionalGeneration", "PerceptionLMPreTrainedModel", "PerceptionEncoder"]
+__all__ = ["PerceptionLMForConditionalGeneration", "PerceptionLMPreTrainedModel"]

@@ -285,45 +285,31 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
 
-    @unittest.skip(
-        "ViT PE cannot be tested with meta device"
-    )
+    @unittest.skip("ViT PE cannot be tested with meta device")
     def test_can_be_initialized_on_meta(self):
         pass
 
-    @unittest.skip(
-        "ViT PE cannot be tested with meta device"
-    )
+    @unittest.skip("ViT PE cannot be tested with meta device")
     def test_can_load_with_meta_device_context_manager(self):
         pass
 
-    @unittest.skip(
-        "Specifying both inputs_embeds and pixel_values are not supported for PerceptionLM"
-    )
+    @unittest.skip("Specifying both inputs_embeds and pixel_values are not supported for PerceptionLM")
     def test_generate_from_inputs_embeds_0_greedy(self):
         pass
 
-    @unittest.skip(
-        "Specifying both inputs_embeds and pixel_values are not supported for PerceptionLM"
-    )        
+    @unittest.skip("Specifying both inputs_embeds and pixel_values are not supported for PerceptionLM")
     def test_generate_from_inputs_embeds_1_beam_search(self):
         pass
 
-    @unittest.skip(
-        "Specifying both inputs_embeds and pixel_values are not supported for PerceptionLM"
-    )
+    @unittest.skip("Specifying both inputs_embeds and pixel_values are not supported for PerceptionLM")
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
-    @unittest.skip(
-        "We don't support initializing all missing weights, only finetuning is supported."
-    )
+    @unittest.skip("We don't support initializing all missing weights, only finetuning is supported.")
     def test_can_init_all_missing_weights(self):
         pass
 
-    @unittest.skip(
-        "We don't support initializing all missing weights, only finetuning is supported."
-    )
+    @unittest.skip("We don't support initializing all missing weights, only finetuning is supported.")
     def test_initialization(self):
         pass
 

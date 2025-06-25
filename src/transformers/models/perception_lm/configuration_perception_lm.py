@@ -21,6 +21,7 @@ from ..timm_wrapper.configuration_timm_wrapper import TimmWrapperConfig
 
 logger = logging.get_logger(__name__)
 
+
 class PerceptionLMConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PerceptionLMForConditionalGeneration`]. It is used to instantiate an
@@ -100,4 +101,4 @@ class PerceptionLMConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
-__all__ = ["PerceptionLMConfig", "PerceptionEncoderConfig"]
+__all__ = ["PerceptionLMConfig"]

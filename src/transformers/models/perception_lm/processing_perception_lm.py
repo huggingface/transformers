@@ -16,7 +16,7 @@
 Processor class for PerceptionLM.
 """
 
-from typing import Iterable, List, Union
+from typing import Iterable, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, get_image_size, to_numpy_array
@@ -85,7 +85,7 @@ class PerceptionLMProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos: VideoInput = None,
         **kwargs: Unpack[PerceptionLMProcessorKwargs],
