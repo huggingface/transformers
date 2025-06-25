@@ -213,6 +213,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         min_frames: Optional[int] = None,
         max_frames: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
+        device: Optional["torch.Tensor"] = None,
         **kwargs,
     ):
         if do_sample_frames:
@@ -229,6 +230,11 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
                 )
                 for video, metadata in zip(videos, video_metadata)
             ]
+
+        # We need to sample frames first before moving to device, if `do_sample_frames=True`. Otherwise
+        # moving the whole video incurs high GPU mem usage for long videos
+        if device is not None:
+            videos = [video.to(device) for video in videos]
 
         # Group videos by size for batched resizing
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)

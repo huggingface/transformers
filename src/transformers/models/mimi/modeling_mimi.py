@@ -172,6 +172,8 @@ class MimiEncoderOutput(ModelOutput):
 
         If `past_key_values` are used, the user can optionally input only the last `audio_values` or `audio_codes (those that don't
         have their past key value states given to this model).
+    padding_cache (<fill_type>):
+        <fill_docstring>
     """
 
     audio_codes: Optional[torch.LongTensor] = None
