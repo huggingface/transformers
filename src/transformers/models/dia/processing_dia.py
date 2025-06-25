@@ -331,7 +331,7 @@ class DiaProcessor(ProcessorMixin):
             for i in range(start_of_generation_idx.shape[0]):
                 output_i = output_sequences[i, :, start_of_generation_idx[i] : end_of_generation_idx[i]][None, ...]
                 output_i = output_i.to(self.audio_tokenizer.device)
-                audio_i = self.audio_tokenizer.decode(audio_codes=output_i).audio_values.cpu()
+                audio_i = self.audio_tokenizer.decode(audio_codes=output_i).audio_values.cpu().squeeze()
                 audios.append(audio_i)
 
         return audios

@@ -41,52 +41,59 @@ tokens and decodes them back into audio.
 ### Generation with Text
 
 ```python
-import torch
 from transformers import AutoProcessor, DiaForConditionalGeneration
 
 torch_device = "cuda"
-model_checkpoint = "AntonV/Dia-1.6B"  # TODO: update ckpt
+model_checkpoint = "buttercrab/dia-v1-1.6b"
 
-text = ["[S1] Dia is an open weights text to dialogue model. [S2] You get full control over scripts and voices."]
+text = ["[S1] Dia is an open weights text to dialogue model."]
 processor = AutoProcessor.from_pretrained(model_checkpoint)
 inputs = processor(text=text, padding=True, return_tensors="pt").to(torch_device)
 
 model = DiaForConditionalGeneration.from_pretrained(model_checkpoint).to(torch_device)
-outputs = model.generate(**inputs, max_new_tokens=1024)  # corresponds to up to ~12s
+outputs = model.generate(**inputs, max_new_tokens=256)  # corresponds to around ~2s
+
+# save audio to a file
+outputs = processor.batch_decode(outputs)
+processor.save_audio(outputs, "example.wav")
+
 ```
 
 ### Generation with Text and Audio (Voice Cloning)
 
 ```python
-import torch
 from datasets import load_dataset, Audio
 from transformers import AutoProcessor, DiaForConditionalGeneration
 
 torch_device = "cuda"
-model_checkpoint = "AntonV/Dia-1.6B"  # TODO: update ckpt
+model_checkpoint = "buttercrab/dia-v1-1.6b"
 
 ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
 ds = ds.cast_column("audio", Audio(sampling_rate=44100))
 audio = ds[-1]["audio"]["array"]
-# text is a transcript of the audio
-text = ["[S1] I know. It's going to save me a lot of money, I hope."]
+# text is a transcript of the audio + additional text you want as new audio
+text = ["[S1] I know. It's going to save me a lot of money, I hope. [S2] I sure hope so for you."]
 
 processor = AutoProcessor.from_pretrained(model_checkpoint)
 inputs = processor(text=text, audio=audio, padding=True, return_tensors="pt").to(torch_device)
+prompt_len = processor.get_audio_prompt_len(inputs["decoder_attention_mask"])
 
 model = DiaForConditionalGeneration.from_pretrained(model_checkpoint).to(torch_device)
-outputs = model.generate(**inputs, max_new_tokens=1024)  # corresponds to up to ~12s
+outputs = model.generate(**inputs, max_new_tokens=256)  # corresponds to around ~2s
+
+# retrieve actually generated audio and save to a file
+outputs = processor.batch_decode(outputs, audio_prompt_len=prompt_len)
+processor.save_audio(outputs, "example_with_audio.wav")
 ```
 
 ### Training
 
 ```python
-import torch
 from datasets import load_dataset, Audio
 from transformers import AutoProcessor, DiaForConditionalGeneration
 
 torch_device = "cuda"
-model_checkpoint = "AntonV/Dia-1.6B"  # TODO: update ckpt
+model_checkpoint = "buttercrab/dia-v1-1.6b"
 
 ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
 ds = ds.cast_column("audio", Audio(sampling_rate=44100))
