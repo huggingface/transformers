@@ -144,9 +144,9 @@ def _upad_input(
             Value state with padding. Shape: (total_source_length, num_key_value_heads, head_dim).
         indices_q (`torch.Tensor`):
             The indices of non-masked tokens from the flattened input target sequence.
-        (cu_seqlens_q, cu_seqlens_k) (`Tuple[int]`):
+        (cu_seqlens_q, cu_seqlens_k) (`tuple[int]`):
             The cumulative sequence lengths for the target (query) and source (key, value), used to index into ragged (unpadded) tensors. `cu_seqlens` shape is (batch_size + 1,).
-        (max_seqlen_in_batch_q, max_seqlen_in_batch_k) (`Tuple[int]`):
+        (max_seqlen_in_batch_q, max_seqlen_in_batch_k) (`tuple[int]`):
             Maximum sequence length in batch (`max_seqlen_in_batch_q` for the target sequence i.e. query, `max_seqlen_in_batch_k` for the source sequence i.e. key/value).
     """
     indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
@@ -216,9 +216,9 @@ def prepare_fa2_from_position_ids(query, key, value, position_ids):
             Value state with padding. Shape: (total_source_length, num_key_value_heads, head_dim).
         indices_q (`torch.Tensor`):
             The indices of non-masked tokens from the flattened input target sequence.
-        (cu_seqlens_q, cu_seqlens_k) (`Tuple[int]`):
+        (cu_seqlens_q, cu_seqlens_k) (`tuple[int]`):
             The cumulative sequence lengths for the target (query) and source (key, value), used to index into ragged (unpadded) tensors. `cu_seqlens` shape is (batch_size + 1,).
-        (max_seqlen_in_batch_q, max_seqlen_in_batch_k) (`Tuple[int]`):
+        (max_seqlen_in_batch_q, max_seqlen_in_batch_k) (`tuple[int]`):
             Maximum sequence length in batch (`max_seqlen_in_batch_q` for the target sequence i.e. query, `max_seqlen_in_batch_k` for the source sequence i.e. key/value).
     """
     query = query.view(-1, query.size(-2), query.size(-1))
@@ -385,8 +385,10 @@ def _flash_attention_forward(
     # If position_ids is provided and check all examples do not contain only 1 sequence, If tensor in increasing
     # then we probably have one sequence, otherwise it is packed. Additionally check we are in pre-fill/training stage.
     # Use `flash_attn_varlen_func` to prevent cross-example attention and also allow padding free approach
-    elif position_ids is not None and (
-        max_length_q is not None or (query_length != 1 and not (torch.diff(position_ids, dim=-1) >= 0).all())
+    elif (
+        position_ids is not None
+        and query_states.shape[0] == 1
+        and (max_length_q is not None or (query_length != 1 and not (torch.diff(position_ids, dim=-1) >= 0).all()))
     ):
         batch_size = query_states.size(0)
 
