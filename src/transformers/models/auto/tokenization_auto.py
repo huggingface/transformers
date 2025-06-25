@@ -375,16 +375,19 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         (
             "mistral",
             (
-                "LlamaTokenizer" if is_sentencepiece_available() else None,
-                "LlamaTokenizerFast" if is_tokenizers_available() else None,
+                "MistralCommonTokenizer"
+                if is_mistral_common_available()
+                else ("LlamaTokenizer" if is_sentencepiece_available() else None),
+                "LlamaTokenizerFast" if is_tokenizers_available() and not is_mistral_common_available() else None,
             ),
         ),
-        ("mistral-common", ("MistralCommonTokenizer" if is_mistral_common_available() else None, None)),
         (
             "mixtral",
             (
-                "LlamaTokenizer" if is_sentencepiece_available() else None,
-                "LlamaTokenizerFast" if is_tokenizers_available() else None,
+                "MistralCommonTokenizer"
+                if is_mistral_common_available()
+                else ("LlamaTokenizer" if is_sentencepiece_available() else None),
+                "LlamaTokenizerFast" if is_tokenizers_available() and not is_mistral_common_available() else None,
             ),
         ),
         ("mllama", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
@@ -709,7 +712,7 @@ def tokenizer_class_from_name(class_name: str) -> Union[type[Any], None]:
     for module_name, tokenizers in TOKENIZER_MAPPING_NAMES.items():
         if class_name in tokenizers:
             module_name = model_type_to_module_name(module_name)
-            if module_name == "mistral_common":
+            if module_name in ["mistral", "mixtral"] and class_name == "MistralCommonTokenizer":
                 module = importlib.import_module(".tokenization_mistral_common", "transformers")
             else:
                 module = importlib.import_module(f".{module_name}", "transformers.models")
