@@ -22,7 +22,7 @@
 import collections.abc
 import math
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 import numpy as np
 import torch
@@ -31,6 +31,7 @@ from torch import Tensor, nn
 
 from ...activations import ACT2FN
 from ...file_utils import ModelOutput, is_scipy_available, requires_backends
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import auto_docstring, can_return_tuple, is_accelerate_available, logging
 from .configuration_eomt import EomtConfig
@@ -48,40 +49,42 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class EomtForUniversalSegmentationOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Class for outputs of [`EomtForUniversalSegmentationOutput`].
 
-    This output can be directly passed to [`~EomtFormerImageProcessor.post_process_semantic_segmentation`] or
-    [`~EomtFormerImageProcessor.post_process_instance_segmentation`] or
-    [`~EomtFormerImageProcessor.post_process_panoptic_segmentation`] to compute final segmentation maps. Please, see
-    [`~EomtFormerImageProcessor] for details regarding usage.
-
-    Args:
-        loss (`torch.Tensor`, *optional*):
-            The computed loss, returned when labels are present.
-        class_queries_logits (`torch.FloatTensor`):
-            A tensor of shape `(batch_size, num_queries, num_labels + 1)` representing the proposed classes for each
-            query. Note the `+ 1` is needed because we incorporate the null class.
-        masks_queries_logits (`torch.FloatTensor`):
-            A tensor of shape `(batch_size, num_queries, height, width)` representing the proposed masks for each
-            query.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Last hidden states (final feature map) of the last layer.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states all layers of the model.
-        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `tuple(torch.FloatTensor)` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Self and Cross Attentions weights from transformer decoder.
+    This output can be directly passed to [`~EomtImageProcessor.post_process_semantic_segmentation`] or
+    [`~EomtImageProcessor.post_process_instance_segmentation`] or
+    [`~EomtImageProcessor.post_process_panoptic_segmentation`] to compute final segmentation maps. Please, see
+    [`~EomtImageProcessor] for details regarding usage.
+    """
+)
+class EomtForUniversalSegmentationOutput(ModelOutput):
+    r"""
+    loss (`torch.Tensor`, *optional*):
+        The computed loss, returned when labels are present.
+    class_queries_logits (`torch.FloatTensor`):
+        A tensor of shape `(batch_size, num_queries, num_labels + 1)` representing the proposed classes for each
+        query. Note the `+ 1` is needed because we incorporate the null class.
+    masks_queries_logits (`torch.FloatTensor`):
+        A tensor of shape `(batch_size, num_queries, height, width)` representing the proposed masks for each
+        query.
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        Last hidden states (final feature map) of the last layer.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+        shape `(batch_size, sequence_length, hidden_size)`. Hidden-states all layers of the model.
+    attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `tuple(torch.FloatTensor)` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`. Self and Cross Attentions weights from transformer decoder.
     """
 
     loss: Optional[torch.FloatTensor] = None
     class_queries_logits: Optional[torch.FloatTensor] = None
     masks_queries_logits: Optional[torch.FloatTensor] = None
     last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 # Adapted from https://github.com/facebookresearch/detectron2/blob/main/projects/PointRend/point_rend/point_features.py
@@ -208,7 +211,7 @@ class EomtHungarianMatcher(nn.Module):
         class_queries_logits: torch.Tensor,
         mask_labels: torch.Tensor,
         class_labels: torch.Tensor,
-    ) -> List[Tuple[Tensor]]:
+    ) -> list[tuple[Tensor]]:
         """
         Params:
             masks_queries_logits (`torch.Tensor`):
@@ -222,14 +225,14 @@ class EomtHungarianMatcher(nn.Module):
                 A tensor of dim `num_target_boxes, height, width` containing the target masks.
 
         Returns:
-            matched_indices (`List[Tuple[Tensor]]`): A list of size batch_size, containing tuples of (index_i, index_j)
+            matched_indices (`list[tuple[Tensor]]`): A list of size batch_size, containing tuples of (index_i, index_j)
             where:
                 - index_i is the indices of the selected predictions (in order)
                 - index_j is the indices of the corresponding selected labels (in order)
             For each batch element, it holds:
                 len(index_i) = len(index_j) = min(num_queries, num_target_boxes).
         """
-        indices: List[Tuple[np.array]] = []
+        indices: list[tuple[np.array]] = []
 
         # iterate through batch size
         batch_size = masks_queries_logits.shape[0]
@@ -263,7 +266,7 @@ class EomtHungarianMatcher(nn.Module):
             cost_matrix = torch.maximum(cost_matrix, torch.tensor(-1e10))
             cost_matrix = torch.nan_to_num(cost_matrix, 0)
             # do the assignment using the hungarian algorithm in scipy
-            assigned_indices: Tuple[np.array] = linear_sum_assignment(cost_matrix.cpu())
+            assigned_indices: tuple[np.array] = linear_sum_assignment(cost_matrix.cpu())
             indices.append(assigned_indices)
 
         # It could be stacked in one tensor
@@ -324,7 +327,7 @@ def sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Tensor, num_m
 
 # Adapted from https://github.com/facebookresearch/Eomt/blob/main/eomt/modeling/criterion.py
 class EomtLoss(nn.Module):
-    def __init__(self, config: EomtConfig, weight_dict: Dict[str, float]):
+    def __init__(self, config: EomtConfig, weight_dict: dict[str, float]):
         """
         The Eomt Loss. The loss is computed very similar to DETR. The process happens in two steps: 1) we
         compute hungarian assignment between ground truth masks and the outputs of the model 2) we supervise each pair
@@ -333,7 +336,7 @@ class EomtLoss(nn.Module):
         Args:
             config (`EomtConfig`):
                 The configuration for Eomt model also containing loss calculation specific parameters.
-            weight_dict (`Dict[str, float]`):
+            weight_dict (`dict[str, float]`):
                 A dictionary of weights to be applied to the different losses.
         """
         super().__init__()
@@ -359,7 +362,7 @@ class EomtLoss(nn.Module):
             num_points=self.num_points,
         )
 
-    def _max_by_axis(self, sizes: List[List[int]]) -> List[int]:
+    def _max_by_axis(self, sizes: list[list[int]]) -> list[int]:
         maxes = sizes[0]
         for sublist in sizes[1:]:
             for index, item in enumerate(sublist):
@@ -367,7 +370,7 @@ class EomtLoss(nn.Module):
         return maxes
 
     # Adapted from nested_tensor_from_tensor_list() in original implementation
-    def _pad_images_to_max_in_batch(self, tensors: List[Tensor]) -> Tuple[Tensor, Tensor]:
+    def _pad_images_to_max_in_batch(self, tensors: list[Tensor]) -> tuple[Tensor, Tensor]:
         # get the maximum size in the batch
         max_size = self._max_by_axis([list(tensor.shape) for tensor in tensors])
         # compute final size
@@ -385,20 +388,20 @@ class EomtLoss(nn.Module):
         return padded_tensors, padding_masks
 
     def loss_labels(
-        self, class_queries_logits: Tensor, class_labels: List[Tensor], indices: Tuple[np.array]
-    ) -> Dict[str, Tensor]:
+        self, class_queries_logits: Tensor, class_labels: list[Tensor], indices: tuple[np.array]
+    ) -> dict[str, Tensor]:
         """Compute the losses related to the labels using cross entropy.
 
         Args:
             class_queries_logits (`torch.Tensor`):
                 A tensor of shape `batch_size, num_queries, num_labels`
-            class_labels (`List[torch.Tensor]`):
+            class_labels (`list[torch.Tensor]`):
                 List of class labels of shape `(labels)`.
-            indices (`Tuple[np.array])`:
+            indices (`tuple[np.array])`:
                 The indices computed by the Hungarian matcher.
 
         Returns:
-            `Dict[str, Tensor]`: A dict of `torch.Tensor` containing the following key:
+            `dict[str, Tensor]`: A dict of `torch.Tensor` containing the following key:
             - **loss_cross_entropy** -- The loss computed using cross entropy on the predicted and ground truth labels.
         """
         pred_logits = class_queries_logits
@@ -421,10 +424,10 @@ class EomtLoss(nn.Module):
     def loss_masks(
         self,
         masks_queries_logits: torch.Tensor,
-        mask_labels: List[torch.Tensor],
-        indices: Tuple[np.array],
+        mask_labels: list[torch.Tensor],
+        indices: tuple[np.array],
         num_masks: int,
-    ) -> Dict[str, torch.Tensor]:
+    ) -> dict[str, torch.Tensor]:
         """Compute the losses related to the masks using sigmoid_cross_entropy_loss and dice loss.
 
         Args:
@@ -432,13 +435,13 @@ class EomtLoss(nn.Module):
                 A tensor of shape `(batch_size, num_queries, height, width)`.
             mask_labels (`torch.Tensor`):
                 List of mask labels of shape `(labels, height, width)`.
-            indices (`Tuple[np.array])`:
+            indices (`tuple[np.array])`:
                 The indices computed by the Hungarian matcher.
             num_masks (`int)`:
                 The number of masks, used for normalization.
 
         Returns:
-            losses (`Dict[str, Tensor]`): A dict of `torch.Tensor` containing two keys:
+            losses (`dict[str, Tensor]`): A dict of `torch.Tensor` containing two keys:
             - **loss_mask** -- The loss computed using sigmoid cross entropy loss on the predicted and ground truth.
               masks.
             - **loss_dice** -- The loss computed using dice loss on the predicted on the predicted and ground truth,
@@ -568,10 +571,10 @@ class EomtLoss(nn.Module):
         self,
         masks_queries_logits: torch.Tensor,
         class_queries_logits: torch.Tensor,
-        mask_labels: List[torch.Tensor],
-        class_labels: List[torch.Tensor],
-        auxiliary_predictions: Optional[Dict[str, torch.Tensor]] = None,
-    ) -> Dict[str, torch.Tensor]:
+        mask_labels: list[torch.Tensor],
+        class_labels: list[torch.Tensor],
+        auxiliary_predictions: Optional[dict[str, torch.Tensor]] = None,
+    ) -> dict[str, torch.Tensor]:
         """
         This performs the loss computation.
 
@@ -582,14 +585,14 @@ class EomtLoss(nn.Module):
                 A tensor of shape `(batch_size, num_queries, num_labels)`.
             mask_labels (`torch.Tensor`):
                 List of mask labels of shape `(labels, height, width)`.
-            class_labels (`List[torch.Tensor]`):
+            class_labels (`list[torch.Tensor]`):
                 List of class labels of shape `(labels)`.
-            auxiliary_predictions (`Dict[str, torch.Tensor]`, *optional*):
+            auxiliary_predictions (`dict[str, torch.Tensor]`, *optional*):
                 if `use_auxiliary_loss` was set to `true` in [`EomtConfig`], then it contains the logits from
                 the inner layers of the EomtMaskedAttentionDecoder.
 
         Returns:
-            losses (`Dict[str, Tensor]`): A dict of `torch.Tensor` containing three keys:
+            losses (`dict[str, Tensor]`): A dict of `torch.Tensor` containing three keys:
             - **loss_cross_entropy** -- The loss computed using cross entropy on the predicted and ground truth labels.
             - **loss_mask** -- The loss computed using sigmoid cross_entropy loss on the predicted and ground truth
               masks.
@@ -604,7 +607,7 @@ class EomtLoss(nn.Module):
         # compute the average number of target masks for normalization purposes
         num_masks = self.get_num_masks(class_labels, device=class_labels[0].device)
         # get all the losses
-        losses: Dict[str, Tensor] = {
+        losses: dict[str, Tensor] = {
             **self.loss_masks(masks_queries_logits, mask_labels, indices, num_masks),
             **self.loss_labels(class_queries_logits, class_labels, indices),
         }
@@ -756,7 +759,7 @@ class EomtAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
         batch_size, seq_length, embed_dim = hidden_states.shape
@@ -839,7 +842,7 @@ class EomtDropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
 class EomtMLP(nn.Module):
@@ -878,7 +881,7 @@ class EomtSwiGLUFFN(nn.Module):
         return self.weights_out(hidden)
 
 
-class EomtLayer(nn.Module):
+class EomtLayer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the original implementation."""
 
     def __init__(self, config: EomtConfig) -> None:
@@ -902,7 +905,7 @@ class EomtLayer(nn.Module):
         hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         self_attention_outputs = self.attention(
             self.norm1(hidden_states),  # in Eomt, layernorm is applied before self-attention
             head_mask,
@@ -1058,7 +1061,7 @@ class EomtForUniversalSegmentation(EomtPreTrainedModel):
         self.class_predictor = nn.Linear(config.hidden_size, config.num_labels + 1)
 
         self.grid_size = (config.image_size // config.patch_size, config.image_size // config.patch_size)
-        self.weight_dict: Dict[str, float] = {
+        self.weight_dict: dict[str, float] = {
             "loss_cross_entropy": config.class_weight,
             "loss_mask": config.mask_weight,
             "loss_dice": config.dice_weight,
@@ -1076,9 +1079,9 @@ class EomtForUniversalSegmentation(EomtPreTrainedModel):
         class_queries_logits: Tensor,
         mask_labels: Tensor,
         class_labels: Tensor,
-        auxiliary_predictions: Dict[str, Tensor],
-    ) -> Dict[str, Tensor]:
-        loss_dict: Dict[str, Tensor] = self.criterion(
+        auxiliary_predictions: dict[str, Tensor],
+    ) -> dict[str, Tensor]:
+        loss_dict: dict[str, Tensor] = self.criterion(
             masks_queries_logits=masks_queries_logits,
             class_queries_logits=class_queries_logits,
             mask_labels=mask_labels,
@@ -1094,7 +1097,7 @@ class EomtForUniversalSegmentation(EomtPreTrainedModel):
 
         return loss_dict
 
-    def get_loss(self, loss_dict: Dict[str, Tensor]) -> Tensor:
+    def get_loss(self, loss_dict: dict[str, Tensor]) -> Tensor:
         return sum(loss_dict.values())
 
     @auto_docstring
@@ -1102,8 +1105,8 @@ class EomtForUniversalSegmentation(EomtPreTrainedModel):
     def forward(
         self,
         pixel_values: Tensor,
-        mask_labels: Optional[List[Tensor]] = None,
-        class_labels: Optional[List[Tensor]] = None,
+        mask_labels: Optional[list[Tensor]] = None,
+        class_labels: Optional[list[Tensor]] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
     ) -> EomtForUniversalSegmentationOutput:

@@ -15,7 +15,7 @@
 """Image processor class for EoMT."""
 
 import math
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -57,7 +57,7 @@ if is_torch_available():
 # Adapted from transformers.models.maskformer.image_processing_maskformer.convert_segmentation_map_to_binary_masks
 def convert_segmentation_map_to_binary_masks(
     segmentation_map: "np.ndarray",
-    instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
+    instance_id_to_semantic_id: Optional[dict[int, int]] = None,
     ignore_index: Optional[int] = None,
 ):
     if ignore_index is not None:
@@ -92,7 +92,7 @@ def convert_segmentation_map_to_binary_masks(
     return binary_masks.astype(np.float32), labels.astype(np.int64)
 
 
-def get_size_with_aspect_ratio(image_size, size, max_size=None) -> Tuple[int, int]:
+def get_size_with_aspect_ratio(image_size, size, max_size=None) -> tuple[int, int]:
     """
     Computes the output image size given the input image size and the desired output size.
 
@@ -149,7 +149,7 @@ def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_
     Raises:
         `ValueError`: Raised when the first dimension doesn't match in all input tensors.
     Returns:
-        `Tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`]`: The `masks`, `scores` and `labels` without the region
+        `tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`]`: The `masks`, `scores` and `labels` without the region
         < `object_mask_threshold`.
     """
     if not (masks.shape[0] == scores.shape[0] == labels.shape[0]):
@@ -189,13 +189,13 @@ def compute_segments(
     stuff_classes,
     mask_threshold: float = 0.5,
     overlap_mask_area_threshold: float = 0.8,
-    target_size: Optional[Tuple[int, int]] = None,
+    target_size: Optional[tuple[int, int]] = None,
 ):
     height = mask_probs.shape[1] if target_size is None else target_size[0]
     width = mask_probs.shape[2] if target_size is None else target_size[1]
 
     segmentation = torch.zeros((height, width), dtype=torch.long, device=mask_probs.device) - 1
-    segments: List[Dict] = []
+    segments: list[dict] = []
 
     # Compute per-pixel assignment based on weighted mask scores
     mask_probs = mask_probs.sigmoid()
@@ -203,7 +203,7 @@ def compute_segments(
 
     # Keep track of instances of each class
     current_segment_id = 0
-    stuff_memory_list: Dict[str, int] = {}
+    stuff_memory_list: dict[str, int] = {}
 
     for k in range(pred_labels.shape[0]):
         pred_class = pred_labels[k].item()
@@ -236,7 +236,7 @@ def compute_segments(
     return segmentation, segments
 
 
-def get_target_size(size_dict: Dict[str, int]) -> Tuple[int, int]:
+def get_target_size(size_dict: dict[str, int]) -> tuple[int, int]:
     """Returns the height and width from a size dict."""
     target_height = size_dict["shortest_edge"]
     target_width = size_dict.get("longest_edge", None) or target_height
@@ -295,15 +295,15 @@ class EomtImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255,
         do_normalize: bool = True,
         do_split_image: bool = False,
         do_pad: bool = False,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         ignore_index: Optional[int] = None,
         num_labels: Optional[int] = None,
         **kwargs,
@@ -329,7 +329,7 @@ class EomtImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict,
+        size: dict,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format=None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -364,7 +364,7 @@ class EomtImageProcessor(BaseImageProcessor):
 
         return image
 
-    def _split_image(self, image: ImageInput, size: Dict, image_index: int) -> Tuple[List, List]:
+    def _split_image(self, image: ImageInput, size: dict, image_index: int) -> tuple[list, list]:
         """Slices an image into overlapping patches for semantic segmentation."""
 
         patches, patch_offsets = [], []
@@ -391,7 +391,7 @@ class EomtImageProcessor(BaseImageProcessor):
 
         return patches, patch_offsets
 
-    def _pad(self, image: ImageInput, size: Dict) -> np.ndarray:
+    def _pad(self, image: ImageInput, size: dict) -> np.ndarray:
         """Pads the image to the target size using zero padding."""
         height, width = get_image_size(image)
 
@@ -409,15 +409,15 @@ class EomtImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_split_image: Optional[bool] = None,
         do_pad: Optional[bool] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
@@ -470,7 +470,7 @@ class EomtImageProcessor(BaseImageProcessor):
         segmentation_map: ImageInput,
         do_resize: Optional[bool] = False,
         do_pad: Optional[bool] = False,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = None,
         data_format: Union[str, ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -506,18 +506,18 @@ class EomtImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        segmentation_maps: Optional[Union[List[Dict[int, int]], Dict[int, int]]] = None,
-        instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
+        segmentation_maps: Optional[Union[list[dict[int, int]], dict[int, int]]] = None,
+        instance_id_to_semantic_id: Optional[dict[int, int]] = None,
         do_split_image: Optional[bool] = None,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
         do_pad: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         ignore_index: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
@@ -646,9 +646,9 @@ class EomtImageProcessor(BaseImageProcessor):
 
     def encode_inputs(
         self,
-        pixel_values_list: List[ImageInput],
+        pixel_values_list: list[ImageInput],
         segmentation_maps: ImageInput = None,
-        instance_id_to_semantic_id: Optional[Union[List[Dict[int, int]], Dict[int, int]]] = None,
+        instance_id_to_semantic_id: Optional[Union[list[dict[int, int]], dict[int, int]]] = None,
         ignore_index: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -739,10 +739,10 @@ class EomtImageProcessor(BaseImageProcessor):
     def merge_image_patches(
         self,
         segmentation_logits: torch.Tensor,
-        patch_offsets: List[Tuple[int, int, int]],
-        original_image_sizes: List[Tuple[int, int]],
-        size: Dict[str, int],
-    ) -> List[torch.Tensor]:
+        patch_offsets: list[tuple[int, int, int]],
+        original_image_sizes: list[tuple[int, int]],
+        size: dict[str, int],
+    ) -> list[torch.Tensor]:
         """
         Reconstructs full-size semantic segmentation logits from patch predictions.
 
@@ -796,9 +796,9 @@ class EomtImageProcessor(BaseImageProcessor):
     def unpad_image(
         self,
         segmentation_logits: torch.Tensor,
-        original_image_sizes: List[Tuple[int, int]],
-        size: Dict[str, int],
-    ) -> List[torch.Tensor]:
+        original_image_sizes: list[tuple[int, int]],
+        size: dict[str, int],
+    ) -> list[torch.Tensor]:
         """Restores panoptic segmentation logits to their original image resolutions."""
 
         resized_logits = []
@@ -817,9 +817,9 @@ class EomtImageProcessor(BaseImageProcessor):
     def post_process_semantic_segmentation(
         self,
         outputs,
-        patch_offsets: List[Tuple[int, int, int]],
-        original_image_sizes: List[Tuple[int, int]],
-        size: Optional[Dict[str, int]] = None,
+        patch_offsets: list[tuple[int, int, int]],
+        original_image_sizes: list[tuple[int, int]],
+        size: Optional[dict[str, int]] = None,
     ) -> np.ndarray:
         """Post-processes model outputs into final semantic segmentation prediction."""
 
@@ -849,12 +849,12 @@ class EomtImageProcessor(BaseImageProcessor):
     def post_process_panoptic_segmentation(
         self,
         outputs,
-        original_image_sizes: List[Tuple[int, int]],
+        original_image_sizes: list[tuple[int, int]],
         threshold: float = 0.8,
         mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
-        stuff_classes: Optional[List[int]] = None,
-        size: Optional[Dict[str, int]] = None,
+        stuff_classes: Optional[list[int]] = None,
+        size: Optional[dict[str, int]] = None,
     ):
         """Post-processes model outputs into final panoptic segmentation prediction."""
 
@@ -876,7 +876,7 @@ class EomtImageProcessor(BaseImageProcessor):
         mask_probs_batch = self.unpad_image(masks_queries_logits, original_image_sizes, size)
         pred_scores_batch, pred_labels_batch = class_queries_logits.softmax(dim=-1).max(-1)
 
-        results: List = []
+        results: list = []
 
         for i in range(batch_size):
             mask_probs, pred_scores, pred_labels = remove_low_and_no_objects(
@@ -906,9 +906,9 @@ class EomtImageProcessor(BaseImageProcessor):
     def post_process_instance_segmentation(
         self,
         outputs,
-        original_image_sizes: List[Tuple[int, int]],
+        original_image_sizes: list[tuple[int, int]],
         threshold: float = 0.5,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
     ):
         """Post-processes model outputs into Instance Segmentation Predictions."""
 

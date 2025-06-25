@@ -1,3 +1,18 @@
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Testing suite for the PyTorch EoMT Image Processor."""
+
 import unittest
 
 import numpy as np
@@ -88,23 +103,14 @@ class EomtImageProcessingTester:
 
 
 def prepare_semantic_single_inputs():
-    dataset = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
-
-    image = Image.open(dataset[0]["file"])
-    map = Image.open(dataset[1]["file"])
-
-    return image, map
+    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+    example = ds[0]
+    return example["image"], example["map"]
 
 
 def prepare_semantic_batch_inputs():
-    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
-
-    image1 = Image.open(ds[0]["file"])
-    map1 = Image.open(ds[1]["file"])
-    image2 = Image.open(ds[2]["file"])
-    map2 = Image.open(ds[3]["file"])
-
-    return [image1, image2], [map1, map2]
+    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+    return list(ds["image"][:2]), list(ds["map"][:2])
 
 
 @require_torch

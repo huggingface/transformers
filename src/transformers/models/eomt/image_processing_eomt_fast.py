@@ -15,7 +15,7 @@
 """Fast Image processor class for EoMT."""
 
 import math
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -82,7 +82,7 @@ class EomtImageProcessorFastKwargs(DefaultFastImageProcessorKwargs):
     ignore_index: Optional[int] = None
 
 
-def get_target_size(size_dict: Dict[str, int]) -> Tuple[int, int]:
+def get_target_size(size_dict: dict[str, int]) -> tuple[int, int]:
     """Returns the height and width from a size dict."""
     target_height = size_dict["shortest_edge"]
     target_width = size_dict["longest_edge"] or target_height
@@ -91,8 +91,8 @@ def get_target_size(size_dict: Dict[str, int]) -> Tuple[int, int]:
 
 
 def reorder_patches_and_offsets(
-    patches: List[torch.Tensor], offsets: List[List[int]]
-) -> Tuple[List[torch.Tensor], List[List[int]]]:
+    patches: list[torch.Tensor], offsets: list[list[int]]
+) -> tuple[list[torch.Tensor], list[list[int]]]:
     """Sorts patches and offsets according to the original image index."""
 
     combined = list(zip(offsets, patches))
@@ -120,7 +120,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[EomtImageProcessorFastKwargs]):
         super().__init__(**kwargs)
 
-    def _split_image(self, images: torch.Tensor, size: Dict, image_indices: int) -> Tuple[List, List]:
+    def _split_image(self, images: torch.Tensor, size: dict, image_indices: int) -> tuple[list, list]:
         """Slices an image into overlapping patches for semantic segmentation."""
 
         patches, patch_offsets = [], []
@@ -148,7 +148,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
 
         return patches, patch_offsets
 
-    def _pad(self, images: torch.Tensor, size: Dict) -> torch.Tensor:
+    def _pad(self, images: torch.Tensor, size: dict) -> torch.Tensor:
         """Pads the image to the target size using zero padding."""
         _, _, height, width = images.shape
 
@@ -162,7 +162,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: List["torch.Tensor"],
+        images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
         interpolation: Optional["F.InterpolationMode"],
@@ -171,15 +171,16 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
         do_normalize: bool,
         do_split_image: bool,
         do_pad: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
+        disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ):
         """Preprocesses the input images and masks if provided."""
         processed_images, patch_offsets = [], []
 
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
 
         for shape, stacked_images in grouped_images.items():
@@ -189,7 +190,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
         images = reorder_images(resized_images_grouped, grouped_images_index)
 
         # Group images by size for batched resizing, Needed in case do_resize is False.
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
 
         for shape, stacked_images in grouped_images.items():
@@ -212,7 +213,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
         if do_pad:
             images = reorder_images(processed_images_grouped, grouped_images_index)
 
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
 
         for shape, stacked_images in grouped_images.items():
@@ -230,7 +231,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
         """Preprocesses the input images."""
         return self._preprocess(images, **kwargs)
 
-    def _preprocess_masks(self, segmentation_maps: List[torch.Tensor], **kwargs):
+    def _preprocess_masks(self, segmentation_maps: list[torch.Tensor], **kwargs):
         """Preprocesses segmentation maps."""
         processed_segmentation_maps = []
         for segmentation_map in segmentation_maps:
@@ -260,8 +261,8 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        segmentation_maps: Optional[List[torch.Tensor]] = None,
-        instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
+        segmentation_maps: Optional[list[torch.Tensor]] = None,
+        instance_id_to_semantic_id: Optional[dict[int, int]] = None,
         **kwargs: Unpack[EomtImageProcessorFastKwargs],
     ) -> BatchFeature:
         r"""
@@ -346,10 +347,10 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
     def merge_image_patches(
         self,
         segmentation_logits: torch.Tensor,
-        patch_offsets: List[Tuple[int, int, int]],
-        original_image_sizes: List[Tuple[int, int]],
-        size: Dict[str, int],
-    ) -> List[torch.Tensor]:
+        patch_offsets: list[tuple[int, int, int]],
+        original_image_sizes: list[tuple[int, int]],
+        size: dict[str, int],
+    ) -> list[torch.Tensor]:
         """
         Reconstructs full-size semantic segmentation logits from patch predictions.
 
@@ -403,9 +404,9 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
     def unpad_image(
         self,
         segmentation_logits: torch.Tensor,
-        original_image_sizes: List[Tuple[int, int]],
-        size: Dict[str, int],
-    ) -> List[torch.Tensor]:
+        original_image_sizes: list[tuple[int, int]],
+        size: dict[str, int],
+    ) -> list[torch.Tensor]:
         """Restores panoptic segmentation logits to their original image resolutions."""
 
         resized_logits = []
@@ -424,9 +425,9 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
     def post_process_semantic_segmentation(
         self,
         outputs,
-        patch_offsets: List[Tuple[int, int, int]],
-        original_image_sizes: List[Tuple[int, int]],
-        size: Optional[Dict[str, int]] = None,
+        patch_offsets: list[tuple[int, int, int]],
+        original_image_sizes: list[tuple[int, int]],
+        size: Optional[dict[str, int]] = None,
     ) -> np.ndarray:
         """Post-processes model outputs into final semantic segmentation prediction."""
 
@@ -456,12 +457,12 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
     def post_process_panoptic_segmentation(
         self,
         outputs,
-        original_image_sizes: List[Tuple[int, int]],
+        original_image_sizes: list[tuple[int, int]],
         threshold: float = 0.8,
         mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
-        stuff_classes: Optional[List[int]] = None,
-        size: Optional[Dict[str, int]] = None,
+        stuff_classes: Optional[list[int]] = None,
+        size: Optional[dict[str, int]] = None,
     ):
         """Post-processes model outputs into final panoptic segmentation prediction."""
 
@@ -483,7 +484,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
         mask_probs_batch = self.unpad_image(masks_queries_logits, original_image_sizes, size)
         pred_scores_batch, pred_labels_batch = class_queries_logits.softmax(dim=-1).max(-1)
 
-        results: List = []
+        results: list = []
 
         for i in range(batch_size):
             mask_probs, pred_scores, pred_labels = remove_low_and_no_objects(
@@ -513,9 +514,9 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
     def post_process_instance_segmentation(
         self,
         outputs,
-        original_image_sizes: List[Tuple[int, int]],
+        original_image_sizes: list[tuple[int, int]],
         threshold: float = 0.8,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
     ):
         """Post-processes model outputs into Instance Segmentation Predictions."""
 
