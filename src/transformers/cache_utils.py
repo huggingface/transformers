@@ -415,6 +415,10 @@ class Cache:
 
         return propagate_to_layers
 
+    def get_seq_length(self, layer_idx: int = 0) -> int:
+        """Returns the sequence length of the cache for the given layer. TODO: deprecate in favor of cache_position"""
+        return self.layers[layer_idx].get_seq_length(None)[0]
+
     def get_mask_sizes(self, cache_position: torch.Tensor, layer_idx: int) -> tuple[int, int]:
         """
         Return a tuple (kv_length, kv_offset) corresponding to the length and offset that will be returned for
