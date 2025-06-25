@@ -1974,6 +1974,18 @@ class ModelUtilsTest(TestCasePlus):
             self.assertTrue(explicit_transformers_weights not in os.listdir(tmpdirname))
             self.assertTrue("model.safetensors.index.json" in os.listdir(tmpdirname))
 
+    def test_explicit_transformers_config(self):
+        """
+        Transformers supports loading from repos where the config file is explicitly set in the config.
+        When loading a config file, transformers will see whether `transformers_config` is defined in the config.
+        If so, it will load from that dict instead.
+        """
+        model = BertModel.from_pretrained("hf-internal-testing/explicit_transformers_config")
+        self.assertEqual(model.config.hidden_act, "gelu")
+        self.assertEqual(model.config.hidden_dropout_prob, 0.1)
+        self.assertEqual(model.config.hidden_size, 32)
+        self.assertListEqual(model.config.architectures, ["BertLMHeadModel"])
+
 
 @slow
 @require_torch
