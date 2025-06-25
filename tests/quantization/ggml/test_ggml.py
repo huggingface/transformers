@@ -973,4 +973,3 @@ class GgufModelTests(unittest.TestCase):
 
         EXPECTED_TEXT = "HelloED\nI need to find the value of the"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
-
