@@ -33,7 +33,7 @@ from typing import TYPE_CHECKING, Any, Literal, Optional, Union
 
 import numpy as np
 import packaging.version
-import os
+
 
 if os.getenv("WANDB_MODE") == "offline":
     print("⚙️  Running in WANDB offline mode")
