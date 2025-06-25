@@ -123,27 +123,16 @@ def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
 
 
 @dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for text model's outputs that also contains a pooling of the last hidden states.
+    """
+)
 # Copied from transformers.models.clip.modeling_clip.CLIPTextModelOutput with CLIP->Clap
 class ClapTextModelOutput(ModelOutput):
-    """
-    Base class for text model's outputs that also contains a pooling of the last hidden states.
-
-    Args:
-        text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
-            The text embeddings obtained by applying the projection layer to the pooler_output.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    r"""
+    text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+        The text embeddings obtained by applying the projection layer to the pooler_output.
     """
 
     text_embeds: Optional[torch.FloatTensor] = None
@@ -153,26 +142,15 @@ class ClapTextModelOutput(ModelOutput):
 
 
 @dataclass
-class ClapAudioModelOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     ClapAudio model output to mimic the output of the original implementation.
-
-    Args:
-        audio_embeds (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
-            The Audio embeddings obtained by applying the projection layer to the pooler_output.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+    """
+)
+class ClapAudioModelOutput(ModelOutput):
+    r"""
+    audio_embeds (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+        The Audio embeddings obtained by applying the projection layer to the pooler_output.
     """
 
     audio_embeds: Optional[torch.FloatTensor] = None
@@ -182,26 +160,26 @@ class ClapAudioModelOutput(ModelOutput):
 
 
 @dataclass
+@auto_docstring
 # Copied from transformers.models.clip.modeling_clip.CLIPOutput with CLIP->Clap, vision->audio, Vision->Audio, image->audio
 class ClapOutput(ModelOutput):
-    """
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-            Contrastive loss for audio-text similarity.
-        logits_per_audio (`torch.FloatTensor` of shape `(audio_batch_size, text_batch_size)`):
-            The scaled dot product scores between `audio_embeds` and `text_embeds`. This represents the audio-text
-            similarity scores.
-        logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, audio_batch_size)`):
-            The scaled dot product scores between `text_embeds` and `audio_embeds`. This represents the text-audio
-            similarity scores.
-        text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`ClapTextModel`].
-        audio_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The audio embeddings obtained by applying the projection layer to the pooled output of [`ClapAudioModel`].
-        text_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`ClapTextModel`].
-        audio_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`ClapAudioModel`].
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+        Contrastive loss for audio-text similarity.
+    logits_per_audio (`torch.FloatTensor` of shape `(audio_batch_size, text_batch_size)`):
+        The scaled dot product scores between `audio_embeds` and `text_embeds`. This represents the audio-text
+        similarity scores.
+    logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, audio_batch_size)`):
+        The scaled dot product scores between `text_embeds` and `audio_embeds`. This represents the text-audio
+        similarity scores.
+    text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        The text embeddings obtained by applying the projection layer to the pooled output of [`ClapTextModel`].
+    audio_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        The audio embeddings obtained by applying the projection layer to the pooled output of [`ClapAudioModel`].
+    text_model_output (`BaseModelOutputWithPooling`):
+        The output of the [`ClapTextModel`].
+    audio_model_output (`BaseModelOutputWithPooling`):
+        The output of the [`ClapAudioModel`].
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -1794,11 +1772,11 @@ class ClapModel(ClapPreTrainedModel):
         input_features (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Input audio features. This should be returned by the [`ClapFeatureExtractor`] class that you can also
             retrieve from [`AutoFeatureExtractor`]. See [`ClapFeatureExtractor.__call__`] for details.
-        return_loss (`bool`, *optional*):
-            Whether or not to return the contrastive loss.
         is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):
             Whether the audio clip is longer than `max_length`. If `True`, a feature fusion will be enabled to enhance
             the features.
+        return_loss (`bool`, *optional*):
+            Whether or not to return the contrastive loss.
 
         Examples:
 

@@ -49,26 +49,26 @@ def clipseg_loss(similarity: torch.Tensor) -> torch.Tensor:
 
 
 @dataclass
+@auto_docstring
 # Copied from transformers.models.clip.modeling_clip.CLIPOutput with CLIP->CLIPSeg
 class CLIPSegOutput(ModelOutput):
-    """
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-            Contrastive loss for image-text similarity.
-        logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
-            The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
-            similarity scores.
-        logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
-            The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
-            similarity scores.
-        text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`CLIPSegTextModel`].
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The image embeddings obtained by applying the projection layer to the pooled output of [`CLIPSegVisionModel`].
-        text_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`CLIPSegTextModel`].
-        vision_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`CLIPSegVisionModel`].
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+        Contrastive loss for image-text similarity.
+    logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
+        The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
+        similarity scores.
+    logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
+        The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
+        similarity scores.
+    text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        The text embeddings obtained by applying the projection layer to the pooled output of [`CLIPSegTextModel`].
+    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        The image embeddings obtained by applying the projection layer to the pooled output of [`CLIPSegVisionModel`].
+    text_model_output (`BaseModelOutputWithPooling`):
+        The output of the [`CLIPSegTextModel`].
+    vision_model_output (`BaseModelOutputWithPooling`):
+        The output of the [`CLIPSegVisionModel`].
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -87,18 +87,11 @@ class CLIPSegOutput(ModelOutput):
 
 
 @dataclass
+@auto_docstring
 class CLIPSegDecoderOutput(ModelOutput):
-    """
-    Args:
-        logits (`torch.FloatTensor` of shape `(batch_size, height, width)`):
-            Classification scores for each pixel.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
+    r"""
+    logits (`torch.FloatTensor` of shape `(batch_size, height, width)`):
+        Classification scores for each pixel.
     """
 
     logits: Optional[torch.FloatTensor] = None
@@ -107,14 +100,21 @@ class CLIPSegDecoderOutput(ModelOutput):
 
 
 @dataclass
+@auto_docstring
 class CLIPSegImageSegmentationOutput(ModelOutput):
-    """
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-            Contrastive loss for image-text similarity.
-        ...
-        vision_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`CLIPSegVisionModel`].
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Binary cross entropy loss for segmentation.
+    logits (`torch.FloatTensor` of shape `(batch_size, height, width)`):
+        Classification scores for each pixel.
+    conditional_embeddings (`torch.FloatTensor` of shape `(batch_size, projection_dim)`):
+        Conditional embeddings used for segmentation.
+    pooled_output (`torch.FloatTensor` of shape `(batch_size, embed_dim)`):
+        Pooled output of the [`CLIPSegVisionModel`].
+    vision_model_output (`BaseModelOutputWithPooling`):
+        The output of the [`CLIPSegVisionModel`].
+    decoder_output (`CLIPSegDecoderOutput`):
+        The output of the [`CLIPSegDecoder`].
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -1259,15 +1259,15 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, CLIPSegOutput]:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         conditional_pixel_values (`torch.FloatTensor`, *optional*):
             The pixel values of the conditional images.
         conditional_embeddings (`torch.FloatTensor` of shape `(batch_size, config.projection_dim)`, *optional*):
             The conditional embeddings for the query images. If provided, the model will use this instead of computing
             the embeddings from the conditional_pixel_values.
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
         Examples:
 

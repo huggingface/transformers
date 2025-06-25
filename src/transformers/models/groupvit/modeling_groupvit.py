@@ -259,38 +259,37 @@ class GroupViTTokenAssign(nn.Module):
 
 
 @dataclass
+@auto_docstring
 class GroupViTModelOutput(ModelOutput):
-    """
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-            Contrastive loss for image-text similarity.
-        logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
-            The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
-            similarity scores.
-        logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
-            The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
-            similarity scores.
-        segmentation_logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels, logits_height, logits_width)`):
-            Classification scores for each pixel.
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+        Contrastive loss for image-text similarity.
+    logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
+        The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
+        similarity scores.
+    logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
+        The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
+        similarity scores.
+    segmentation_logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels, logits_height, logits_width)`):
+        Classification scores for each pixel.
 
-            <Tip warning={true}>
+        <Tip warning={true}>
 
-            The logits returned do not necessarily have the same size as the `pixel_values` passed as inputs. This is
-            to avoid doing two interpolations and lose some quality when a user needs to resize the logits to the
-            original image size as post-processing. You should always check your logits shape and resize as needed.
+        The logits returned do not necessarily have the same size as the `pixel_values` passed as inputs. This is
+        to avoid doing two interpolations and lose some quality when a user needs to resize the logits to the
+        original image size as post-processing. You should always check your logits shape and resize as needed.
 
-            </Tip>
-
-        text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of
-            [`GroupViTTextModel`].
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The image embeddings obtained by applying the projection layer to the pooled output of
-            [`GroupViTVisionModel`].
-        text_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`GroupViTTextModel`].
-        vision_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`GroupViTVisionModel`].
+        </Tip>
+    text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        The text embeddings obtained by applying the projection layer to the pooled output of
+        [`GroupViTTextModel`].
+    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        The image embeddings obtained by applying the projection layer to the pooled output of
+        [`GroupViTVisionModel`].
+    text_model_output (`BaseModelOutputWithPooling`):
+        The output of the [`GroupViTTextModel`].
+    vision_model_output (`BaseModelOutputWithPooling`):
+        The output of the [`GroupViTVisionModel`].
     """
 
     loss: Optional[torch.FloatTensor] = None
