@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 # SmolLM3
 
-SmolLM3 is [TODO]
+SmolLM3 is a fully open, compact language model designed for efficient deployment while maintaining strong performance. It uses a Transformer decoder architecture with Grouped Query Attention (GQA) to reduce the kv cache, and no RoPE, enabling improved performance on long-context tasks. It is trained using a multi-stage training approach on high-quality public datasets across web, code, and math domains. The model is multilingual and supports very large context lengths. The instruct variant is optimized for reasoning and tool use.
 
 > [!TIP]
 > Click on the SmolLM3 models in the right sidebar for more examples of how to apply SmolLM3 to different language tasks.
