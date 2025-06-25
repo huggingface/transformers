@@ -29,6 +29,7 @@ from transformers.models.colpali.configuration_colpali import ColPaliConfig
 from transformers.models.colpali.modeling_colpali import ColPaliForRetrieval, ColPaliForRetrievalOutput
 from transformers.models.colpali.processing_colpali import ColPaliProcessor
 from transformers.testing_utils import (
+    backend_empty_cache,
     require_torch,
     require_vision,
     slow,
@@ -167,7 +168,6 @@ class ColPaliForRetrievalModelTester:
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "labels": input_ids,
-            "token_type_ids": torch.zeros_like(input_ids),
         }
         return config, inputs_dict
 
@@ -303,7 +303,7 @@ class ColPaliModelIntegrationTest(unittest.TestCase):
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
 
     @slow
     def test_model_integration_test(self):
@@ -332,7 +332,7 @@ class ColPaliModelIntegrationTest(unittest.TestCase):
         scores = self.processor.score_retrieval(
             query_embeddings=query_embeddings,
             passage_embeddings=image_embeddings,
-        )  # (len(qs), len(ps))
+        )  # (num_queries, num_passages)
 
         assert scores.ndim == 2, f"Expected 2D tensor, got {scores.ndim}"
         assert scores.shape == (len(ds), len(ds)), f"Expected shape {(len(ds), len(ds))}, got {scores.shape}"

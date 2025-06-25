@@ -821,6 +821,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("rocm", None): 'Today is a nice day and we can do this again."\n\nDana said that she will',
+                ("rocm", (9, 5)): "Today is a nice day and if you don't know anything about the state of play during your holiday",
                 ("cuda", None): "Today is a nice day and if you don't know anything about the state of play during your holiday",
             }
         )  # fmt: skip
