@@ -272,6 +272,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "attention_chunk_size",
     ],
     "Llama4VisionConfig": ["multi_modal_projector_bias", "norm_eps"],
+    "SmolLM3Config": ["no_rope_layer_interval"],
 }
 
 
