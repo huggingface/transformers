@@ -159,10 +159,11 @@ class GraniteSpeechConformerAttention(nn.Module):
         # shaw's relative positional embedding
         dist = attention_dists.to(hidden_states.device)
         rel_pos_emb = self.rel_pos_emb(dist)
-        # faster implementation, equivalent to:
+        # alternative computation of `pos_attn` - for readability
         # rel_pos_emb_expanded = rel_pos_emb.view([1, 1, 1] + list(rel_pos_emb.shape))
         # pos_attn = torch.sum(query_states.unsqueeze(-2) * rel_pos_emb_expanded, dim=-1) * self.scale
-        # einsum gives x30 speedup:
+        # einsum implementation of pos_attn - gives x30 speedup over the alternative
+        # TODO (@avihu111) find a fast alternative to einsum
         pos_attn = torch.einsum("b m h c d, c r d -> b m h c r", query_states, rel_pos_emb) * self.scale
 
         if remainder > 0:
