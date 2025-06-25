@@ -553,17 +553,33 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
                 self.disable_adapters()
         return super().generate(*args, input_features=input_features, **kwargs)
 
-    def save_pretrained(self, *args, **kwargs):
+    def save_pretrained(self, save_directory, *args, **kwargs):
         # overwrite save_pretrained to first save the adapter if we have one
-        # NOTE - this will use the base model path we are exporting in the lora
-        # adapter, which may not necessarily be the best behavior, but for now
-        # we keep this for portability, since using the local dir causes problems
-        # if the model is loaded from outside of the current working dir.
         if is_peft_available and self._hf_peft_config_loaded:
-            super().save_pretrained(*args, **kwargs)
+            adapter_name = self._get_adapter_name()
+            self.peft_config[adapter_name].base_model_name_or_path = save_directory
+            super().save_pretrained(save_directory, *args, **kwargs)
         # Then save the base model afterwards
+        prev_val = self._hf_peft_config_loaded
         self._hf_peft_config_loaded = False
-        super().save_pretrained(*args, **kwargs)
+        super().save_pretrained(save_directory, *args, **kwargs)
+        self._hf_peft_config_loaded = prev_val
+
+    @staticmethod
+    def _fix_state_dict_key_on_save(key) -> Tuple[str, bool]:
+        # save the model with the original weights format
+        return key.replace(".base_layer",""), False
+
+    def _fix_state_dict_keys_on_save(self, state_dict):
+        if is_peft_available and self._hf_peft_config_loaded:
+            return state_dict # state dict is only adapter, should keep the same
+        adapter_name = self._get_adapter_name()
+        # rename back the base model state dict
+        return {self._fix_state_dict_key_on_save(key)[0]: value 
+                for key, value in state_dict.items() if adapter_name not in key}
+
+    def _get_adapter_name(self):
+        return list(self.peft_config.keys())[0]
 
 
 __all__ = [
