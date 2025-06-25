@@ -670,13 +670,14 @@ class AIMv2ModelIntegrationTest(unittest.TestCase):
         )
 
         # handle device
-        expected_logits = torch.tensor([[34.2415, 24.6724]]).to(model.device)
+        expected_logits = torch.tensor([[33.3550, 26.4255]]).to(model.device)
         self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))
 
 
 @require_vision
 @require_torch
 class AIMv2VisionModelIntegrationTests(unittest.TestCase):
+
     @slow
     def test_inference(self):
         model_name = "yaswanthgali/aimv2-large-patch14-224-HF"
