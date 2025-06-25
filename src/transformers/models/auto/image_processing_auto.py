@@ -94,8 +94,8 @@ else:
             ("groupvit", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("hiera", ("BitImageProcessor", "BitImageProcessorFast")),
             ("idefics", ("IdeficsImageProcessor",)),
-            ("idefics2", ("Idefics2ImageProcessor",)),
-            ("idefics3", ("Idefics3ImageProcessor",)),
+            ("idefics2", ("Idefics2ImageProcessor", "Idefics2ImageProcessorFast")),
+            ("idefics3", ("Idefics3ImageProcessor", "Idefics3ImageProcessorFast")),
             ("ijepa", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("imagegpt", ("ImageGPTImageProcessor",)),
             ("instructblip", ("BlipImageProcessor", "BlipImageProcessorFast")),
@@ -147,6 +147,7 @@ else:
             ("shieldgemma2", ("Gemma3ImageProcessor", "Gemma3ImageProcessorFast")),
             ("siglip", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
             ("siglip2", ("Siglip2ImageProcessor", "Siglip2ImageProcessorFast")),
+            ("smolvlm", ("SmolVLMImageProcessor", "SmolVLMImageProcessorFast")),
             ("superglue", ("SuperGlueImageProcessor",)),
             (
                 "superpoint",

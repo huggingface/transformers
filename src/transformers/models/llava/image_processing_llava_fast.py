@@ -16,9 +16,7 @@
 
 from typing import Optional, Union
 
-from ...image_processing_utils import (
-    BatchFeature,
-)
+from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
@@ -147,10 +145,11 @@ class LlavaImageProcessorFast(BaseImageProcessorFast):
         do_normalize: bool,
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
+        disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
     ) -> BatchFeature:
         # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_pad:
@@ -162,7 +161,7 @@ class LlavaImageProcessorFast(BaseImageProcessorFast):
 
         # Group images by size for batched resizing
         # Needed in case do_pad is False, or padding returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(padded_images)
+        grouped_images, grouped_images_index = group_images_by_shape(padded_images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
@@ -172,7 +171,7 @@ class LlavaImageProcessorFast(BaseImageProcessorFast):
 
         # Group images by size for further processing
         # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_center_crop:
