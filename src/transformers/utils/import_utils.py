@@ -1827,6 +1827,11 @@ RICH_IMPORT_ERROR = """
 rich`. Please note that you may need to restart your runtime after installation.
 """
 
+MISTRAL_COMMON_IMPORT_ERROR = """
+{0} requires the mistral-common library but it was not found in your environment. You can install it with pip: `pip install mistral-common`. Please note that you may need to restart your runtime after installation.
+"""
+
+
 BACKENDS_MAPPING = OrderedDict(
     [
         ("av", (is_av_available, AV_IMPORT_ERROR)),
@@ -1875,6 +1880,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("yt_dlp", (is_yt_dlp_available, YT_DLP_IMPORT_ERROR)),
         ("rich", (is_rich_available, RICH_IMPORT_ERROR)),
         ("keras_nlp", (is_keras_nlp_available, KERAS_NLP_IMPORT_ERROR)),
+        ("mistral-common", (is_mistral_common_available, MISTRAL_COMMON_IMPORT_ERROR)),
     ]
 )
 
