@@ -26,11 +26,12 @@ from .args_doc import (
     ClassDocstring,
     ImageProcessorArgs,
     ModelArgs,
+    ModelOutputArgs,
     auto_class_docstring,
     auto_docstring,
+    get_args_doc_from_source,
     parse_docstring,
     set_min_indent,
-    source_args_doc,
 )
 from .backbone_utils import BackboneConfigMixin, BackboneMixin
 from .chat_template_utils import DocstringParsingException, TypeHintParsingException, get_json_schema
@@ -152,6 +153,7 @@ from .import_utils import (
     is_faiss_available,
     is_fbgemm_gpu_available,
     is_flash_attn_2_available,
+    is_flash_attn_3_available,
     is_flash_attn_greater_or_equal,
     is_flash_attn_greater_or_equal_2_10,
     is_flax_available,
@@ -179,6 +181,7 @@ from .import_utils import (
     is_librosa_available,
     is_liger_kernel_available,
     is_lomo_available,
+    is_matplotlib_available,
     is_mlx_available,
     is_natten_available,
     is_ninja_available,
@@ -252,6 +255,7 @@ from .import_utils import (
     is_torch_xpu_available,
     is_torchao_available,
     is_torchaudio_available,
+    is_torchcodec_available,
     is_torchdistx_available,
     is_torchdynamo_available,
     is_torchdynamo_compiling,

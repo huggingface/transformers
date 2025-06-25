@@ -31,7 +31,7 @@ from enum import Enum
 from functools import lru_cache
 from itertools import chain
 from types import ModuleType
-from typing import Any, Dict, FrozenSet, List, Optional, Set, Tuple, Union
+from typing import Any, Optional, Union
 
 from packaging import version
 
@@ -42,7 +42,7 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
 # TODO: This doesn't work for all packages (`bs4`, `faiss`, etc.) Talk to Sylvain to see how to do with it better.
-def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[Tuple[bool, str], bool]:
+def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[tuple[bool, str], bool]:
     # Check if the package spec exists and grab its version to avoid importing a local directory
     package_exists = importlib.util.find_spec(pkg_name) is not None
     package_version = "N/A"
@@ -119,6 +119,7 @@ _aqlm_available = _is_package_available("aqlm")
 _vptq_available, _vptq_version = _is_package_available("vptq", return_version=True)
 _av_available = importlib.util.find_spec("av") is not None
 _decord_available = importlib.util.find_spec("decord") is not None
+_torchcodec_available = importlib.util.find_spec("torchcodec") is not None
 _bitsandbytes_available = _is_package_available("bitsandbytes")
 _eetq_available = _is_package_available("eetq")
 _fbgemm_gpu_available = _is_package_available("fbgemm_gpu")
@@ -225,6 +226,7 @@ _triton_available = _is_package_available("triton")
 _spqr_available = _is_package_available("spqr_quant")
 _rich_available = _is_package_available("rich")
 _kernels_available = _is_package_available("kernels")
+_matplotlib_available = _is_package_available("matplotlib")
 
 _torch_version = "N/A"
 _torch_available = False
@@ -589,7 +591,7 @@ def is_torch_bf16_available():
     return is_torch_bf16_gpu_available()
 
 
-@lru_cache()
+@lru_cache
 def is_torch_fp16_available_on_device(device):
     if not is_torch_available():
         return False
@@ -621,7 +623,7 @@ def is_torch_fp16_available_on_device(device):
     return True
 
 
-@lru_cache()
+@lru_cache
 def is_torch_bf16_available_on_device(device):
     if not is_torch_available():
         return False
@@ -730,14 +732,14 @@ def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False):
     return True
 
 
-@lru_cache()
+@lru_cache
 def is_torch_neuroncore_available(check_device=True):
     if importlib.util.find_spec("torch_neuronx") is not None:
         return is_torch_xla_available()
     return False
 
 
-@lru_cache()
+@lru_cache
 def is_torch_npu_available(check_device=False):
     "Checks if `torch_npu` is installed and potentially if a NPU is in the environment"
     if not _torch_available or importlib.util.find_spec("torch_npu") is None:
@@ -756,7 +758,7 @@ def is_torch_npu_available(check_device=False):
     return hasattr(torch, "npu") and torch.npu.is_available()
 
 
-@lru_cache()
+@lru_cache
 def is_torch_mlu_available(check_device=False):
     """
     Checks if `mlu` is available via an `cndev-based` check which won't trigger the drivers and leave mlu
@@ -781,7 +783,7 @@ def is_torch_mlu_available(check_device=False):
     return available
 
 
-@lru_cache()
+@lru_cache
 def is_torch_musa_available(check_device=False):
     "Checks if `torch_musa` is installed and potentially if a MUSA is in the environment"
     if not _torch_available or importlib.util.find_spec("torch_musa") is None:
@@ -814,8 +816,8 @@ def is_torch_hpu_available():
     ):
         return False
 
-    torch_hpu_min_version = "1.5.0"
-    if _accelerate_available and version.parse(_accelerate_version) < version.parse(torch_hpu_min_version):
+    torch_hpu_min_accelerate_version = "1.5.0"
+    if _accelerate_available and version.parse(_accelerate_version) < version.parse(torch_hpu_min_accelerate_version):
         return False
 
     import torch
@@ -848,6 +850,46 @@ def is_torch_hpu_available():
                 original_masked_fill_(self, mask, value)
 
         torch.Tensor.masked_fill_ = patched_masked_fill_
+
+    # We patch torch.gather for int64 tensors to avoid a bug on Gaudi
+    # Graph compile failed with synStatus 26 [Generic failure]
+    # This can be removed once bug is fixed but for now we need it.
+    original_gather = torch.Tensor.gather
+
+    def patched_gather(input: torch.Tensor, dim: int, index: torch.LongTensor) -> torch.Tensor:
+        if input.dtype == torch.int64 and input.device.type == "hpu":
+            logger.warning_once(
+                "torch.gather is not supported for int64 tensors on Gaudi. "
+                "This operation will be performed patched_gather using indexing."
+            )
+
+            idx = [torch.arange(size, device=input.device, dtype=input.dtype) for size in input.shape]
+            idx[dim] = index
+            idx = tuple(idx)
+            output = input[idx]
+            return output
+        else:
+            return original_gather(input, dim, index)
+
+    torch.Tensor.gather = patched_gather
+
+    # IlyasMoutawwakil: we patch torch.compile to use the HPU backend by default
+    # https://github.com/huggingface/transformers/pull/38790#discussion_r2157043944
+    # This is necessary for cases where torch.compile is used as a decorator (defaulting to inductor)
+    # https://github.com/huggingface/transformers/blob/af6120b3eb2470b994c21421bb6eaa76576128b0/src/transformers/models/modernbert/modeling_modernbert.py#L204
+    original_compile = torch.compile
+
+    def hpu_backend_compile(*args, **kwargs):
+        if kwargs.get("backend", None) not in ["hpu_backend", "eager"]:
+            logger.warning(
+                f"Calling torch.compile with backend={kwargs.get('backend', None)} on a Gaudi device is not supported. "
+                "We will override the backend with 'hpu_backend' to avoid errors."
+            )
+            kwargs["backend"] = "hpu_backend"
+
+        return original_compile(*args, **kwargs)
+
+    torch.compile = hpu_backend_compile
 
     return True
 
@@ -957,6 +999,10 @@ def is_decord_available():
     return _decord_available
 
 
+def is_torchcodec_available():
+    return _torchcodec_available
+
+
 def is_ninja_available():
     r"""
     Code comes from *torch.utils.cpp_extension.is_ninja_available()*. Returns `True` if the
@@ -1019,7 +1065,7 @@ def is_torch_xpu_available(check_device=False):
     return hasattr(torch, "xpu") and torch.xpu.is_available()
 
 
-@lru_cache()
+@lru_cache
 def is_bitsandbytes_available(check_library_only=False) -> bool:
     if not _bitsandbytes_available:
         return False
@@ -1075,6 +1121,25 @@ def is_flash_attn_2_available():
 
 
 @lru_cache()
+def is_flash_attn_3_available():
+    if not is_torch_available():
+        return False
+
+    if not _is_package_available("flash_attn_3"):
+        return False
+
+    import torch
+
+    if not torch.cuda.is_available():
+        return False
+
+    # TODO: Check for a minimum version when FA3 is stable
+    # return version.parse(importlib.metadata.version("flash_attn_3")) >= version.parse("3.0.0")
+
+    return True
+
+
+@lru_cache
 def is_flash_attn_greater_or_equal_2_10():
     if not _is_package_available("flash_attn"):
         return False
@@ -1082,7 +1147,7 @@ def is_flash_attn_greater_or_equal_2_10():
     return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.1.0")
 
 
-@lru_cache()
+@lru_cache
 def is_flash_attn_greater_or_equal(library_version: str):
     if not _is_package_available("flash_attn"):
         return False
@@ -1090,7 +1155,7 @@ def is_flash_attn_greater_or_equal(library_version: str):
     return version.parse(importlib.metadata.version("flash_attn")) >= version.parse(library_version)
 
 
-@lru_cache()
+@lru_cache
 def is_torch_greater_or_equal(library_version: str, accept_dev: bool = False):
     """
     Accepts a library version and returns True if the current version of the library is greater than or equal to the
@@ -1108,7 +1173,7 @@ def is_torch_greater_or_equal(library_version: str, accept_dev: bool = False):
         return version.parse(importlib.metadata.version("torch")) >= version.parse(library_version)
 
 
-@lru_cache()
+@lru_cache
 def is_huggingface_hub_greater_or_equal(library_version: str, accept_dev: bool = False):
     if not _is_package_available("huggingface_hub"):
         return False
@@ -1443,6 +1508,10 @@ def is_rich_available():
     return _rich_available
 
 
+def is_matplotlib_available():
+    return _matplotlib_available
+
+
 def check_torch_load_is_safe():
     if not is_torch_greater_or_equal("2.6"):
         raise ValueError(
@@ -1475,6 +1544,14 @@ DECORD_IMPORT_ERROR = """
 {0} requires the PyAv library but it was not found in your environment. You can install it with:
 ```
 pip install decord
+```
+Please note that you may need to restart your runtime after installation.
+"""
+
+TORCHCODEC_IMPORT_ERROR = """
+{0} requires the TorchCodec (https://github.com/pytorch/torchcodec) library, but it was not found in your environment. You can install it with:
+```
+pip install torchcodec
 ```
 Please note that you may need to restart your runtime after installation.
 """
@@ -1859,6 +1936,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("tokenizers", (is_tokenizers_available, TOKENIZERS_IMPORT_ERROR)),
         ("torch", (is_torch_available, PYTORCH_IMPORT_ERROR)),
         ("torchvision", (is_torchvision_available, TORCHVISION_IMPORT_ERROR)),
+        ("torchcodec", (is_torchcodec_available, TORCHCODEC_IMPORT_ERROR)),
         ("vision", (is_vision_available, VISION_IMPORT_ERROR)),
         ("scipy", (is_scipy_available, SCIPY_IMPORT_ERROR)),
         ("accelerate", (is_accelerate_available, ACCELERATE_IMPORT_ERROR)),
@@ -1924,8 +2002,8 @@ def is_torch_fx_proxy(x):
     return False
 
 
-BACKENDS_T = FrozenSet[str]
-IMPORT_STRUCTURE_T = Dict[BACKENDS_T, Dict[str, Set[str]]]
+BACKENDS_T = frozenset[str]
+IMPORT_STRUCTURE_T = dict[BACKENDS_T, dict[str, set[str]]]
 
 
 class _LazyModule(ModuleType):
@@ -1941,8 +2019,8 @@ class _LazyModule(ModuleType):
         module_file: str,
         import_structure: IMPORT_STRUCTURE_T,
         module_spec: Optional[importlib.machinery.ModuleSpec] = None,
-        extra_objects: Optional[Dict[str, object]] = None,
-        explicit_import_shortcut: Optional[Dict[str, List[str]]] = None,
+        extra_objects: Optional[dict[str, object]] = None,
+        explicit_import_shortcut: Optional[dict[str, list[str]]] = None,
     ):
         super().__init__(name)
 
@@ -2155,8 +2233,8 @@ class VersionComparison(Enum):
         return string_to_operator[version_string]
 
 
-@lru_cache()
-def split_package_version(package_version_str) -> Tuple[str, str, str]:
+@lru_cache
+def split_package_version(package_version_str) -> tuple[str, str, str]:
     pattern = r"([a-zA-Z0-9_-]+)([!<>=~]+)([0-9.]+)"
     match = re.match(pattern, package_version_str)
     if match:
@@ -2270,7 +2348,7 @@ def fetch__all__(file_content):
         return _all
 
 
-@lru_cache()
+@lru_cache
 def create_import_structure_from_path(module_path):
     """
     This method takes the path to a file/a folder and returns the import structure.
@@ -2598,7 +2676,7 @@ def spread_import_structure(nested_import_structure):
     return flattened_import_structure
 
 
-@lru_cache()
+@lru_cache
 def define_import_structure(module_path: str, prefix: Optional[str] = None) -> IMPORT_STRUCTURE_T:
     """
     This method takes a module_path as input and creates an import structure digestible by a _LazyModule.

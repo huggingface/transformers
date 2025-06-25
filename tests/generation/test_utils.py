@@ -34,6 +34,7 @@ from transformers.testing_utils import (
     is_flaky,
     require_accelerate,
     require_flash_attn,
+    require_flash_attn_3,
     require_optimum_quanto,
     require_read_token,
     require_torch,
@@ -2292,6 +2293,7 @@ class GenerationTesterMixin:
         support_flag = {
             "sdpa": "_supports_sdpa",
             "flash_attention_2": "_supports_flash_attn_2",
+            "flash_attention_3": "_supports_flash_attn_3",
         }
 
         for model_class in self.all_generative_model_classes:
@@ -2368,6 +2370,14 @@ class GenerationTesterMixin:
     def test_eager_matches_fa2_generate(self):
         """Tests that generate has equivalent outputs with FA2 and eager attention implementations."""
         self._test_attention_implementation("flash_attention_2")
+
+    @pytest.mark.flash_attn_3_test
+    @require_flash_attn_3
+    @require_torch_gpu
+    @slow
+    def test_eager_matches_fa3_generate(self):
+        """Tests that generate has equivalent outputs with FA3 and eager attention implementations."""
+        self._test_attention_implementation("flash_attention_3")
 
     def _check_generate_outputs(self, output, config, use_cache=False, num_return_sequences=1, num_beams=1):
         input_batch_size = int(output.sequences.shape[0] / num_return_sequences)
@@ -4892,7 +4902,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         # If the generate doesn't infer the DECODER device map correctly, this will fail
         _ = model.generate(**inputs, max_new_tokens=2, do_sample=False)
 
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_cpu_offload_doesnt_compile(self):
         """Test that CPU offload doesn't trigger compilation"""
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
