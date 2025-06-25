@@ -15,11 +15,11 @@ rendered properly in your Markdown viewer.
 
 # Tensor parallelism in transformers
 
-[Tensor parallelism](./perf_train_gpu_many#tensor-parallelism) shards a model onto multiple GPUs and parallelizes computations such as matrix multiplication. It enables fitting larger model sizes into memory and is faster because each GPU can process a tensor slice.
+[Tensor parallelism](./perf_train_gpu_many#tensor-parallelism) shards a model onto multiple accelerators(e.g. CUDA GPU, Intel XPU) and parallelizes computations such as matrix multiplication. It enables fitting larger model sizes into memory and is faster because each accelerator can process a tensor slice.
 This document assumes that you are already familiar with the basics of tensor parallelism. If you are not, please refer to the [Ultra-Scale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook?section=tensor_parallelism) section on tensor parallelism.
 
 > [!TIP]
-> Tensor parallelism is very communication intensive, therefore it is reccomended to use it on a single machine with multiple GPUs, utilizing fast intra-node communication. For multi-node training, methods as pipeline or data parallelism are more efficient (depending on your use case).
+> Tensor parallelism is very communication intensive, therefore it is reccomended to use it on a single machine with multiple accelerators, utilizing fast intra-node communication. For multi-node training, methods as pipeline or data parallelism are more efficient (depending on your use case).
 
 Tensor parallelism requires slight changes to the model parameters, therefore in transformers, we support some of the popular models out of the box.
 
@@ -94,6 +94,7 @@ We provide two ways to shard a model, first one is to use `auto` tensor parallel
 
 ```python
 from transformers import AutoModelForCausalLM
+import torch
 
 # model_id = "meta-llama/Meta-Llama-3-8B-Instruct" # better for smaller number of GPUs
 model_id = "meta-llama/Llama-4-Scout-17B-16E-Instruct" # better to visualize all the possible strategies
@@ -275,7 +276,7 @@ inputs = tokenizer(prompt, return_tensors="pt").input_ids.to(model.device)
 outputs = model(inputs)
 ```
 
-Launch the inference script above on [torchrun](https://pytorch.org/docs/stable/elastic/run.html) with 4 processes per GPU.
+Launch the inference script above on [torchrun](https://pytorch.org/docs/stable/elastic/run.html) with 4 processes per machine.
 
 ```bash
 torchrun --nproc-per-node 4 demo.py
