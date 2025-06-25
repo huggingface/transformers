@@ -124,6 +124,21 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         elif not self.quantization_config.is_quantization_compressed:
             apply_quantization_config(model, ct_quantization_config)
 
+        # Identify quantized modules with integer weights/activations
+        quant_targets = set()
+        if ct_quantization_config:
+            for group in ct_quantization_config.config_groups.values():
+                if group.weights.type.startswith("int") or (
+                    group.input_activations and group.input_activations.type.startswith("int")
+                ):
+                    quant_targets.update(group.targets)
+
+        # Disable gradient computation for quantized int modules
+        for _, module in model.named_modules():
+            if type(module).__name__ in quant_targets:
+                for param in module.parameters():
+                    param.requires_grad = False
+
     def _process_model_after_weight_loading(self, model, **kwargs):
         """Decompress loaded model if necessary - need for qat"""
 
