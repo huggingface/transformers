@@ -1093,8 +1093,6 @@ class WhisperModel(WhisperPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> Union[Tuple[torch.Tensor], Seq2SeqModelOutput]:
-
-        main
         r"""
         input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
             Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained by
@@ -1267,8 +1265,6 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
         loss_function: Optional[Callable] = None,
         **kwargs,
     ) -> Union[Tuple[torch.Tensor], Seq2SeqLMOutput]:
-
-        main
         r"""
         input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
             Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained by
