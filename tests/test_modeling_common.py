@@ -84,6 +84,7 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_deepspeed,
     require_flash_attn,
+    require_non_hpu,
     require_safetensors,
     require_torch,
     require_torch_accelerator,
@@ -92,6 +93,7 @@ from transformers.testing_utils import (
     require_torch_multi_accelerator,
     require_torch_multi_gpu,
     require_torch_sdpa,
+    run_first,
     run_test_using_subprocess,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
@@ -2797,6 +2799,7 @@ class ModelTesterMixin:
                     else:
                         torch.testing.assert_close(base_output[0], new_output[0], rtol=1e-5, atol=1e-5)
 
+    @require_non_hpu
     @require_accelerate
     @mark.accelerate_tests
     @require_torch_multi_accelerator
@@ -3563,7 +3566,11 @@ class ModelTesterMixin:
             # TODO: if we can also check with `batch_size=1` without being flaky?
             for batch_size in [7]:
                 # musicgen decoder models; TODO: find better abstraction
-                if hasattr(self.model_tester, "num_codebooks") and not hasattr(model_eager, "text_encoder"):
+                if (
+                    model.__class__.__name__.startswith("Musicgen")
+                    and hasattr(self.model_tester, "num_codebooks")
+                    and not hasattr(model_eager, "text_encoder")
+                ):
                     input_data_batch_size = batch_size * self.model_tester.num_codebooks
                 else:
                     input_data_batch_size = batch_size
@@ -3623,7 +3630,7 @@ class ModelTesterMixin:
 
                 if is_encoder_decoder:
                     # musicgen encoder-decoder models; TODO: find better abstraction
-                    if hasattr(self.model_tester, "num_codebooks"):
+                    if model.__class__.__name__.startswith("Musicgen") and hasattr(self.model_tester, "num_codebooks"):
                         input_data_batch_size = batch_size * self.model_tester.num_codebooks
                     else:
                         input_data_batch_size = batch_size
@@ -3727,6 +3734,9 @@ class ModelTesterMixin:
                 if torch_device in ["cpu", "cuda"]:
                     atol = atols[torch_device, enable_kernels, torch_dtype]
                     rtol = rtols[torch_device, enable_kernels, torch_dtype]
+                elif torch_device == "hpu":
+                    atol = atols["cuda", enable_kernels, torch_dtype]
+                    rtol = rtols["cuda", enable_kernels, torch_dtype]
                 elif torch_device == "xpu":
                     # As of PyTorch 2.5 XPU backend supports only torch.nn.attention.SDPBackend.MATH
                     # which is implemented on PyTorch level using aten operators and is
@@ -3794,6 +3804,10 @@ class ModelTesterMixin:
             if config.model_type in ["paligemma"]:
                 self.skipTest(
                     "PaliGemma-like models currently (transformers==4.41.0) requires an attention_mask input"
+                )
+            if config.model_type in ["modernbert", "gemma3"]:
+                self.skipTest(
+                    reason=f"{config.model_type} currently (transformers==4.52.0) automatically adds an attention_mask input"
                 )
             if config.model_type in ["idefics", "idefics2", "idefics3"]:
                 self.skipTest(reason="Idefics currently (transformers==4.39.1) requires an image_attention_mask input")
@@ -4067,6 +4081,45 @@ class ModelTesterMixin:
                     _ = model(dummy_input)
                     # with attention mask
                     _ = model(dummy_input, attention_mask=dummy_attention_mask)
+
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_can_compile_with_attention_mask_None_without_graph_break(self):
+        if version.parse(torch.__version__) < version.parse("2.3"):
+            self.skipTest(reason="This test requires torch >= 2.3 to run.")
+
+        if not hasattr(self, "_torch_compile_train_cls"):
+            self.skipTest(f"{self.__class__.__name__} doesn't have the attribute `_torch_compile_train_cls`.")
+
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        if not is_torch_fp16_available_on_device(torch_device):
+            self.skipTest(f"float16 not supported on {torch_device} (on the specific device currently used)")
+
+        torch.compiler.reset()
+        torch_dtype = torch.float16
+
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config._attn_implementation = "flash_attention_2"
+        cls = self._torch_compile_train_cls
+        model = cls(config).to(device=torch_device, dtype=torch_dtype)
+
+        inputs = {
+            "input_ids": torch.randint(low=1, high=model.config.vocab_size, size=(2, 10), device=torch_device),
+            "labels": torch.randint(low=1, high=model.config.vocab_size, size=(2, 10), device=torch_device),
+        }
+
+        model = torch.compile(model, fullgraph=True)
+        # forward compilation
+        set_seed(42)
+        loss = model(**inputs).loss
+        # backward compilation
+        loss.backward()
+
+        assert not loss.isnan().any()
 
     @require_flash_attn
     @require_torch_gpu
@@ -4662,6 +4715,7 @@ class ModelTesterMixin:
 
     # Here we need to run with a subprocess as otherwise setting back the default device to the default value ("cpu")
     # may bring unwanted consequences on other tests. See PR #37553
+    @run_first
     @run_test_using_subprocess
     @require_torch_accelerator
     def test_can_load_with_global_device_set(self):

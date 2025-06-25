@@ -26,11 +26,12 @@ from .args_doc import (
     ClassDocstring,
     ImageProcessorArgs,
     ModelArgs,
+    ModelOutputArgs,
     auto_class_docstring,
     auto_docstring,
+    get_args_doc_from_source,
     parse_docstring,
     set_min_indent,
-    source_args_doc,
 )
 from .backbone_utils import BackboneConfigMixin, BackboneMixin
 from .chat_template_utils import DocstringParsingException, TypeHintParsingException, get_json_schema
@@ -253,6 +254,7 @@ from .import_utils import (
     is_torch_xpu_available,
     is_torchao_available,
     is_torchaudio_available,
+    is_torchcodec_available,
     is_torchdistx_available,
     is_torchdynamo_available,
     is_torchdynamo_compiling,

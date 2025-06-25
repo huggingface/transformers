@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from .albert import *
     from .align import *
     from .altclip import *
+    from .arcee import *
     from .aria import *
     from .audio_spectrogram_transformer import *
     from .auto import *
@@ -284,6 +285,7 @@ if TYPE_CHECKING:
     from .squeezebert import *
     from .stablelm import *
     from .starcoder2 import *
+    from .stt import *
     from .superglue import *
     from .superpoint import *
     from .swiftformer import *
@@ -292,6 +294,7 @@ if TYPE_CHECKING:
     from .swinv2 import *
     from .switch_transformers import *
     from .t5 import *
+    from .t5gemma import *
     from .table_transformer import *
     from .tapas import *
     from .textnet import *
