@@ -26,6 +26,7 @@ from huggingface_hub import (
     ChatCompletionStreamOutputDeltaToolCall,
     ChatCompletionStreamOutputFunction,
 )
+from outlines.types import JsonSchema  # TODO: add import guards
 
 from transformers.utils.import_utils import is_fastapi_available, is_pydantic_available, is_uvicorn_available
 
@@ -89,6 +90,21 @@ if is_pydantic_available() and is_fastapi_available() and is_uvicorn_available()
 logger = logging.get_logger(__name__)
 
 
+# Possible tokens that indicate the start/end of a tool call
+# TODO (joao, matt): streamline tool token detection logic
+_TOOL_CALL_TOKENS = {
+    "qwen": {
+        "start": "<tool_call>",
+        "end": "</tool_call>",
+    },
+    "llama": {  # TODO
+        "start": "<tool_call>",
+        "end": "</tool_call>",
+    },
+}
+_MODELS_WITH_TOOL_SUPPORT = list(_TOOL_CALL_TOKENS.keys())
+
+
 def serve_command_factory(args: Namespace):
     """
     Factory function used to instantiate serving server from provided command line arguments.
@@ -123,6 +139,19 @@ def create_generation_config_from_req(req: "ChatCompletionInput"):
         torch.manual_seed(req.seed)
 
     return generation_config
+
+
+class ToolState:
+    """Class to keep track of the tool call state."""
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.inside_tool_call = False
+        self.has_tool_name_defined = False
+        self.arg_nesting_level = 0
+        self.buffer = ""
 
 
 @dataclass
@@ -325,6 +354,30 @@ class ServeCommand(BaseTransformersCLICommand):
             max_new_tokens = req.max_tokens or generation_config.max_new_tokens or 256
             generation_config.max_new_tokens = max_new_tokens
 
+            # ====== TOOL PREPROCESSING LOGIC ======
+            tool_model_family = None
+            for supported_model_families in _MODELS_WITH_TOOL_SUPPORT:
+                if supported_model_families in self.model.config.architectures[0].lower():
+                    tool_model_family = supported_model_families
+                    break
+            if tool_model_family is not None:
+                # type of `req.tools[i]["function"]["parameters"]`: BaseModel ? double-check it
+                tool_schemas = {
+                    req.tools[i]["function"]["name"]: JsonSchema(req.tools[i]["function"]["parameters"])
+                    for i in range(len(req.tools))
+                }
+                tool_names = list(tool_schemas.keys())
+
+                # we set the tool call start token as a EOS to halt generation. We do this so we can trigger
+                # constrained generation for tool calls, which require invoking `generate` with specific parameters
+                if generation_config.eos_token_id is None:
+                    generation_config.eos_token_id = self.model.generation_config.eos_token_id
+                if not isinstance(generation_config.eos_token_id, list):
+                    generation_config.eos_token_id = [generation_config.eos_token_id]
+                tool_start_token_id = self.tokenizer.encode(_TOOL_CALL_TOKENS[tool_model_family]["start"])[0]
+                generation_config.eos_token_id.append(tool_start_token_id)
+            # ====== END OF TOOL PREPROCESSING LOGIC ======
+
             print(generation_config)
 
             generation_kwargs = {
@@ -339,39 +392,34 @@ class ServeCommand(BaseTransformersCLICommand):
 
                 try:
                     thread.start()
-                    has_tool_name_defined = False
-                    inside_tool_call = False
-                    arg_nesting_level = 0
-                    buffer = ""
+                    tool_state = ToolState()
 
                     for result in streamer:
+                        # ====== TOOL CALL LOGIC ======
                         # Start of a tool call: reset state variables, set `inside_tool_call`
-                        if result.strip() == "<tool_call>":
-                            inside_tool_call = True
-                            has_tool_name_defined = False
-                            arg_nesting_level = 0
-                            buffer = ""
+                        if result.strip() == _TOOL_CALL_TOKENS[tool_model_family]["start"]:
+                            tool_state.inside_tool_call = True
                             continue
 
                         # End of tool call: reset `inside_tool_call`, emit a `finish_reason`
-                        if result.strip() == "</tool_call>":
-                            inside_tool_call = False
+                        if result.strip() == _TOOL_CALL_TOKENS[tool_model_family]["end"]:
+                            tool_state.reset()
                             yield self.build_chunk("", _request_id, role=None, finish_reason="tool_calls")
                             continue
 
                         # Inside a tool call
-                        if inside_tool_call:
-                            buffer += result
+                        if tool_state.inside_tool_call:
+                            tool_state.buffer += result
 
                             # First step: extract the tool name (may need several tokens, and we can't emit a delta
                             # until we have the full name)
-                            if not has_tool_name_defined:
-                                tool_name = re.search(r"\"name\": \"(.*?)\"", buffer)
+                            if not tool_state.has_tool_name_defined:
+                                tool_name = re.search(r"\"name\": \"(.*?)\"", tool_state.buffer)
                                 if tool_name is None:
                                     continue
                                 else:
                                     tool_name = tool_name.group(1)
-                                has_tool_name_defined = True
+                                tool_state.has_tool_name_defined = True
                                 tool = ChatCompletionStreamOutputDeltaToolCall(
                                     function=ChatCompletionStreamOutputFunction(
                                         name=tool_name,
@@ -390,16 +438,14 @@ class ServeCommand(BaseTransformersCLICommand):
                                     continue
                                 # Until we see the `"arguments": {` in the buffer, we skip
                                 # TODO: other models will likely need more elaborate processing here
-                                if '"arguments": {' not in buffer:
+                                if '"arguments": {' not in tool_state.buffer:
                                     continue
 
                                 # Handle nesting. We want to exclude the last } from the emitted arguments (it's
                                 # closing the outermost nesting level, outside the arguments block)
-                                if "{" in result:
-                                    arg_nesting_level += result.count("{")
-                                if "}" in result:
-                                    arg_nesting_level -= result.count("}")
-                                if arg_nesting_level < 0:
+                                tool_state.arg_nesting_level += result.count("{")
+                                tool_state.arg_nesting_level -= result.count("}")
+                                if tool_state.arg_nesting_level < 0:
                                     result = "".join(result.split("}")[:-2]) + "}"  # e.g. "4}}\n" -> "4}"
 
                                 tool = ChatCompletionStreamOutputDeltaToolCall(
@@ -413,6 +459,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
                             yield self.build_chunk(None, _request_id, role=None, tool_calls=[tool])
                             continue
+                        # ====== END OF TOOL CALL LOGIC ======
 
                         # All non-tool related tokens are emitted as assistant messages
                         yield self.build_chunk(result, _request_id, role="assistant")
