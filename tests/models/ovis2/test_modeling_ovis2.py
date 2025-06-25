@@ -205,7 +205,7 @@ class Ovis2VisionText2TextModelTester:
 
 
 @require_torch
-class Ovis2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class Ovis2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
     Model tester for `Ovis2ForConditionalGeneration`.
     """
@@ -292,55 +292,13 @@ class Ovis2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
             torch.testing.assert_close(out_embeds, out_ids)
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, SiglipVisionModel does not support standalone training"
-    )
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, SiglipVisionModel does not support standalone training"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, SiglipVisionModel does not support standalone training"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip("FlashAttention only support fp16 and bf16 data type")
-    def test_flash_attn_2_fp32_ln(self):
-        pass
-
-    @unittest.skip(
-        "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
-    )
-    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
-        pass
-
-    @unittest.skip("Ovis2 has dynamic control flow in unpadding")
-    def test_generate_compile_model_forward(self):
-        pass
-
     @unittest.skip(reason="We cannot configure to output a smaller model.")
     def test_model_is_small(self):
         pass
 
-    @unittest.skip(
-        reason="VLMs can't generate from inputs embeds and pixels. This can be tested as part of bacbone LM, no need to run the tes for VLMs"
-    )
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip(reason="Can't compile fullgraph due to dynamic control flow in `prepare_inputs_for_generate`")
-    def test_generate_compile_fullgraph(self):
-        pass
-
 
 @require_torch
-class Ovis2ForConditionalGenerationIntegrationTest(unittest.TestCase):
+class Ovis2IntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained(
             "thisisiron/Ovis2-2B-hf",
