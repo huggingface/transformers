@@ -16,18 +16,16 @@
 Processor class for SAM2.
 """
 
-from collections import OrderedDict
 from copy import deepcopy
-from pathlib import Path
 from typing import Any, Optional, Union
 
 import numpy as np
-import torch.nn as nn
-from torchvision.transforms import Normalize, ToTensor
 
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import TensorType, is_tf_available, is_torch_available, logging
+from ...video_utils import VideoInput
+from .modeling_sam2 import Sam2VideoSessionState
 
 
 logger = logging.get_logger(__name__)
@@ -36,7 +34,7 @@ if is_torch_available():
     import torch
 
 if is_tf_available():
-    import tensorflow as tf
+    pass
 
 
 class Sam2Processor(ProcessorMixin):
@@ -52,17 +50,16 @@ class Sam2Processor(ProcessorMixin):
             An instance of [`Sam2ImageProcessor`]. The image processor is a required input.
     """
 
-    attributes = ["image_processor"]
-    image_processor_class = "Sam2ImageProcessor"
+    attributes = ["image_processor", "video_processor"]
+    image_processor_class = "Sam2ImageProcessorFast"
+    video_processor_class = "Sam2VideoProcessor"
 
-    def __init__(self, image_processor):
-        super().__init__(image_processor)
-        self.current_processor = self.image_processor
-        self.point_pad_value = -10
-        self.target_size = self.image_processor.size["longest_edge"]
-
-        # Video inference state
-        self.inference_state = None
+    def __init__(
+        self, image_processor, video_processor, target_size: Optional[int] = None, point_pad_value: int = -10, **kwargs
+    ):
+        super().__init__(image_processor, video_processor, **kwargs)
+        self.point_pad_value = point_pad_value
+        self.target_size = target_size if target_size is not None else self.image_processor.size["height"]
 
     def __call__(
         self,
@@ -107,6 +104,15 @@ class Sam2Processor(ProcessorMixin):
         )
 
         return encoding_image_processor
+
+    def init_video_session(self, video: VideoInput):
+        processed_video = self.video_processor(videos=video, return_tensors="pt").to("cuda")
+        inference_state = Sam2VideoSessionState(
+            processed_video.pixel_values_videos[0],
+            video_height=processed_video.original_sizes[0][0],
+            video_width=processed_video.original_sizes[0][1],
+        )
+        return inference_state
 
     def _normalize_and_convert(
         self,
@@ -155,30 +161,19 @@ class Sam2Processor(ProcessorMixin):
                 input_boxes = torch.from_numpy(input_boxes)
                 # boxes batch size of 1 by default
                 input_boxes = input_boxes.unsqueeze(1) if len(input_boxes.shape) != 3 else input_boxes
-            elif return_tensors == "tf":
-                input_boxes = tf.convert_to_tensor(input_boxes)
-                # boxes batch size of 1 by default
-                input_boxes = tf.expand_dims(input_boxes, 1) if len(input_boxes.shape) != 3 else input_boxes
+
             encoding_image_processor.update({"input_boxes": input_boxes})
         if input_points is not None:
             if return_tensors == "pt":
                 input_points = torch.from_numpy(input_points)
                 # point batch size of 1 by default
                 input_points = input_points.unsqueeze(1) if len(input_points.shape) != 4 else input_points
-            elif return_tensors == "tf":
-                input_points = tf.convert_to_tensor(input_points)
-                # point batch size of 1 by default
-                input_points = tf.expand_dims(input_points, 1) if len(input_points.shape) != 4 else input_points
             encoding_image_processor.update({"input_points": input_points})
         if input_labels is not None:
             if return_tensors == "pt":
                 input_labels = torch.from_numpy(input_labels)
                 # point batch size of 1 by default
                 input_labels = input_labels.unsqueeze(1) if len(input_labels.shape) != 3 else input_labels
-            elif return_tensors == "tf":
-                input_labels = tf.convert_to_tensor(input_labels)
-                # point batch size of 1 by default
-                input_labels = tf.expand_dims(input_labels, 1) if len(input_labels.shape) != 3 else input_labels
             encoding_image_processor.update({"input_labels": input_labels})
 
         return encoding_image_processor
@@ -267,172 +262,12 @@ class Sam2Processor(ProcessorMixin):
 
         return input_points, input_labels, input_boxes
 
-    @property
-    def model_input_names(self):
-        image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(image_processor_input_names))
-
     def post_process_masks(self, *args, **kwargs):
         return self.image_processor.post_process_masks(*args, **kwargs)
 
-    def init_state(
+    def process_new_points_or_box(
         self,
-        video_path: Union[str, Path],
-        offload_video_to_cpu: bool = False,
-        offload_state_to_cpu: bool = False,
-        async_loading_frames: bool = False,
-        device: Optional[torch.device] = None,
-    ) -> None:
-        """Initialize video inference state."""
-        if not is_torch_available():
-            raise ImportError("Video inference requires PyTorch to be installed")
-
-        if device is None:
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-        # Load video frames
-        images, video_height, video_width = self._load_video_frames(
-            video_path=video_path,
-            offload_video_to_cpu=offload_video_to_cpu,
-            async_loading_frames=async_loading_frames,
-            device=device,
-        )
-
-        # Initialize inference state
-        self.inference_state = {
-            "images": images,
-            "num_frames": len(images),
-            "offload_video_to_cpu": offload_video_to_cpu,
-            "offload_state_to_cpu": offload_state_to_cpu,
-            "video_height": video_height,
-            "video_width": video_width,
-            "device": device,
-            "storage_device": torch.device("cpu") if offload_state_to_cpu else device,
-            # Input tracking
-            "point_inputs_per_obj": {},
-            "mask_inputs_per_obj": {},
-            # Visual features cache
-            "cached_features": {},
-            "constants": {},
-            # Object management
-            "obj_id_to_idx": OrderedDict(),
-            "obj_idx_to_id": OrderedDict(),
-            "obj_ids": [],
-            # Output tracking
-            "output_dict_per_obj": {},
-            "temp_output_dict_per_obj": {},
-            "frames_tracked_per_obj": {},
-        }
-
-        logger.info(f"Initialized video state with {len(images)} frames at resolution {video_height}x{video_width}")
-
-    def reset_state(self) -> None:
-        """Reset the video inference state."""
-        if self.inference_state is not None:
-            # Clear all state
-            self.inference_state["point_inputs_per_obj"].clear()
-            self.inference_state["mask_inputs_per_obj"].clear()
-            self.inference_state["cached_features"].clear()
-            self.inference_state["constants"].clear()
-            self.inference_state["obj_id_to_idx"].clear()
-            self.inference_state["obj_idx_to_id"].clear()
-            self.inference_state["obj_ids"].clear()
-            self.inference_state["output_dict_per_obj"].clear()
-            self.inference_state["temp_output_dict_per_obj"].clear()
-            self.inference_state["frames_tracked_per_obj"].clear()
-
-        self.inference_state = None
-        logger.info("Reset video inference state")
-
-    def _load_video_frames(
-        self,
-        video_path: Union[str, Path],
-        offload_video_to_cpu: bool = False,
-        async_loading_frames: bool = False,
-        device: torch.device = None,
-    ) -> tuple[list[torch.Tensor], int, int]:
-        """Load video frames from a directory of images."""
-        video_path = Path(video_path)
-
-        if not video_path.exists():
-            raise ValueError(f"Video path {video_path} does not exist")
-
-        # Get image files
-        image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"}
-        image_files = [f for f in video_path.iterdir() if f.suffix.lower() in image_extensions]
-
-        if not image_files:
-            raise ValueError(f"No image files found in {video_path}")
-
-        # Sort files by name (assuming frame order)
-        image_files.sort(key=lambda x: x.name)
-
-        # Load first image to get dimensions
-        from PIL import Image
-
-        first_image = Image.open(image_files[0])
-        video_width, video_height = first_image.size
-
-        # Process images using image processor
-        images = []
-        for img_path in image_files:
-            image = Image.open(img_path)
-            # Convert to RGB if needed
-            if image.mode != "RGB":
-                image = image.convert("RGB")
-
-            # Process image
-            image = image.resize((1024, 1024))
-            IMAGENET_DEFAULT_MEAN = [0.485, 0.456, 0.406]
-            IMAGENET_DEFAULT_STD = [0.229, 0.224, 0.225]
-            to_tensor = ToTensor()
-            transforms = torch.jit.script(
-                nn.Sequential(
-                    Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD),
-                )
-            )
-            # processed = self.image_processor(image, return_tensors="pt")
-            # image_tensor = processed["pixel_values"].squeeze(0)  # Remove batch dim
-            image_tensor = transforms(to_tensor(image))
-            if not offload_video_to_cpu and device is not None:
-                image_tensor = image_tensor.to(device)
-
-            images.append(image_tensor)
-
-        return images, video_height, video_width
-
-    def _obj_id_to_idx(self, obj_id: int) -> int:
-        """Map client-side object id to model-side object index."""
-        if self.inference_state is None:
-            raise ValueError("Video state not initialized. Call init_state() first.")
-
-        obj_idx = self.inference_state["obj_id_to_idx"].get(obj_id, None)
-        if obj_idx is not None:
-            return obj_idx
-
-        # Add new object
-        obj_idx = len(self.inference_state["obj_id_to_idx"])
-        self.inference_state["obj_id_to_idx"][obj_id] = obj_idx
-        self.inference_state["obj_idx_to_id"][obj_idx] = obj_id
-        self.inference_state["obj_ids"] = list(self.inference_state["obj_id_to_idx"])
-
-        # Set up input and output structures for this object
-        self.inference_state["point_inputs_per_obj"][obj_idx] = {}
-        self.inference_state["mask_inputs_per_obj"][obj_idx] = {}
-        self.inference_state["output_dict_per_obj"][obj_idx] = {
-            "cond_frame_outputs": {},  # dict containing {frame_idx: <out>}
-            "non_cond_frame_outputs": {},  # dict containing {frame_idx: <out>}
-        }
-        self.inference_state["temp_output_dict_per_obj"][obj_idx] = {
-            "cond_frame_outputs": {},  # dict containing {frame_idx: <out>}
-            "non_cond_frame_outputs": {},  # dict containing {frame_idx: <out>}
-        }
-        self.inference_state["frames_tracked_per_obj"][obj_idx] = {}
-
-        return obj_idx
-
-    def add_new_points_or_box(
-        self,
+        inference_state: Sam2VideoSessionState,
         frame_idx: int,
         obj_id: int,
         points: Optional[list[list[float]]] = None,
@@ -442,15 +277,9 @@ class Sam2Processor(ProcessorMixin):
         box: Optional[list[float]] = None,
     ) -> dict[str, Any]:
         """Add new points or box to a frame and return preprocessed inputs for model."""
-        if self.inference_state is None:
-            raise ValueError("Video state not initialized. Call init_state() first.")
-
-        if not is_torch_available():
-            raise ImportError("Video inference requires PyTorch to be installed")
-
-        obj_idx = self._obj_id_to_idx(obj_id)
-        point_inputs_per_frame = self.inference_state["point_inputs_per_obj"][obj_idx]
-        mask_inputs_per_frame = self.inference_state["mask_inputs_per_obj"][obj_idx]
+        obj_idx = inference_state._obj_id_to_idx(obj_id)
+        point_inputs_per_frame = inference_state.point_inputs_per_obj[obj_idx]
+        mask_inputs_per_frame = inference_state.mask_inputs_per_obj[obj_idx]
 
         # Validate inputs
         if (points is not None) != (labels is not None):
@@ -458,7 +287,7 @@ class Sam2Processor(ProcessorMixin):
         if points is None and box is None:
             raise ValueError("at least one of points or box must be provided as input")
 
-        device = self.inference_state["device"]
+        device = inference_state.device
 
         # Process points
         if points is None:
@@ -496,8 +325,8 @@ class Sam2Processor(ProcessorMixin):
 
         # Normalize coordinates
         if normalize_coords:
-            video_H = self.inference_state["video_height"]
-            video_W = self.inference_state["video_width"]
+            video_H = inference_state.video_height
+            video_W = inference_state.video_width
             points = points / torch.tensor([video_W, video_H]).to(points.device)
 
         # Scale by model's internal image size
@@ -523,7 +352,7 @@ class Sam2Processor(ProcessorMixin):
         mask_inputs_per_frame.pop(frame_idx, None)  # Clear any mask inputs
 
         # Determine frame type and tracking direction
-        obj_frames_tracked = self.inference_state["frames_tracked_per_obj"][obj_idx]
+        obj_frames_tracked = inference_state.frames_tracked_per_obj[obj_idx]
         is_init_cond_frame = frame_idx not in obj_frames_tracked
 
         if is_init_cond_frame:
@@ -544,22 +373,17 @@ class Sam2Processor(ProcessorMixin):
 
     def add_new_mask(
         self,
+        inference_state: Sam2VideoSessionState,
         frame_idx: int,
         obj_id: int,
         mask: Union[np.ndarray, torch.Tensor],
     ) -> dict[str, Any]:
         """Add new mask to a frame and return preprocessed inputs for model."""
-        if self.inference_state is None:
-            raise ValueError("Video state not initialized. Call init_state() first.")
+        obj_idx = inference_state._obj_id_to_idx(obj_id)
+        point_inputs_per_frame = inference_state.point_inputs_per_obj[obj_idx]
+        mask_inputs_per_frame = inference_state.mask_inputs_per_obj[obj_idx]
 
-        if not is_torch_available():
-            raise ImportError("Video inference requires PyTorch to be installed")
-
-        obj_idx = self._obj_id_to_idx(obj_id)
-        point_inputs_per_frame = self.inference_state["point_inputs_per_obj"][obj_idx]
-        mask_inputs_per_frame = self.inference_state["mask_inputs_per_obj"][obj_idx]
-
-        device = self.inference_state["device"]
+        device = inference_state.device
 
         # Process mask
         if not isinstance(mask, torch.Tensor):
@@ -586,7 +410,7 @@ class Sam2Processor(ProcessorMixin):
         point_inputs_per_frame.pop(frame_idx, None)  # Clear any point inputs
 
         # Determine frame type and tracking direction
-        obj_frames_tracked = self.inference_state["frames_tracked_per_obj"][obj_idx]
+        obj_frames_tracked = inference_state.frames_tracked_per_obj[obj_idx]
         is_init_cond_frame = frame_idx not in obj_frames_tracked
 
         if is_init_cond_frame:

@@ -54,6 +54,7 @@ else:
             ("qwen2_5_omni", "Qwen2VLVideoProcessor"),
             ("qwen2_5_vl", "Qwen2VLVideoProcessor"),
             ("qwen2_vl", "Qwen2VLVideoProcessor"),
+            ("sam2", "Sam2VideoProcessor"),
             ("smolvlm", "SmolVLMVideoProcessor"),
             ("video_llava", "VideoLlavaVideoProcessor"),
             ("vjepa2", "VJEPA2VideoProcessor"),

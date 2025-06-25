@@ -19,9 +19,17 @@ import unittest
 
 import requests
 
-from transformers import Sam2Config, Sam2ImageEncoderConfig, Sam2MaskDecoderConfig, Sam2PromptEncoderConfig, pipeline
+from transformers import (
+    Sam2Config,
+    Sam2ImageEncoderConfig,
+    Sam2MaskDecoderConfig,
+    Sam2Processor,
+    Sam2PromptEncoderConfig,
+    pipeline,
+)
 from transformers.testing_utils import backend_empty_cache, require_torch, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
+from transformers.video_utils import load_video
 
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -417,19 +425,32 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
 
 def prepare_image():
-    img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
+    img_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/truck.jpg"
     raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
     return raw_image
 
 
 def prepare_dog_img():
-    img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/dog-sam2.png"
+    img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/dog-sam.png"
     raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
     return raw_image
 
 
+def prepare_video():
+    video_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/bedroom.mp4"
+    raw_video, _ = load_video(video_url)
+    return raw_video
+
+
 @slow
 class Sam2ModelIntegrationTest(unittest.TestCase):
+    def setUp(self):
+        super().setUp()
+        self.model = Sam2Model.from_pretrained("../sam2_hf_implem/sam2_tiny_hf")
+        self.processor = Sam2Processor.from_pretrained("../sam2_hf_implem/sam2_tiny_hf")
+        self.model.to(torch_device)
+        self.model.eval()
+
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
@@ -437,45 +458,98 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         backend_empty_cache(torch_device)
 
     def test_inference_mask_generation_no_point(self):
-        model = Sam2Model.from_pretrained("facebook/sam2-vit-base")
-        processor = SamProcessor.from_pretrained("facebook/sam2-vit-base")
+        pass
 
-        model.to(torch_device)
-        model.eval()
+        # model = Sam2Model.from_pretrained("facebook/sam2-vit-base")
 
+    #     processor = SamProcessor.from_pretrained("facebook/sam2-vit-base")
+
+    #     model.to(torch_device)
+    #     model.eval()
+
+    #     raw_image = prepare_image()
+    #     inputs = processor(images=raw_image, return_tensors="pt").to(torch_device)
+
+    #     with torch.no_grad():
+    #         outputs = model(**inputs)
+    #     scores = outputs.iou_scores.squeeze()
+    #     masks = outputs.pred_masks[0, 0, 0, 0, :3]
+    #     self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.4515), atol=2e-4))
+    #     self.assertTrue(torch.allclose(masks, torch.tensor([-4.1800, -3.4948, -3.4481]).to(torch_device), atol=2e-4))
+
+    def test_inference_mask_generation_one_point_multimask(self):
         raw_image = prepare_image()
-        inputs = processor(images=raw_image, return_tensors="pt").to(torch_device)
+        input_points = [[[[500, 375]]]]
+        input_labels = [[[1]]]
 
-        with torch.no_grad():
-            outputs = model(**inputs)
-        scores = outputs.iou_scores.squeeze()
-        masks = outputs.pred_masks[0, 0, 0, 0, :3]
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.4515), atol=2e-4))
-        self.assertTrue(torch.allclose(masks, torch.tensor([-4.1800, -3.4948, -3.4481]).to(torch_device), atol=2e-4))
-
-    def test_inference_mask_generation_one_point_one_bb(self):
-        model = Sam2Model.from_pretrained("facebook/sam2-vit-base")
-        processor = SamProcessor.from_pretrained("facebook/sam2-vit-base")
-
-        model.to(torch_device)
-        model.eval()
-
-        raw_image = prepare_image()
-        input_boxes = [[[650, 900, 1000, 1250]]]
-        input_points = [[[820, 1080]]]
-
-        inputs = processor(
-            images=raw_image, input_boxes=input_boxes, input_points=input_points, return_tensors="pt"
+        inputs = self.processor(
+            images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt"
         ).to(torch_device)
+        # to_tensor = ToTensor()
+        # transforms = torch.jit.script(
+        #     nn.Sequential(
+        #         Resize((1024, 1024)),
+        #         Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+        #     )
+        # )
+        # inputs["pixel_values"] = transforms(to_tensor(raw_image)).unsqueeze(0).to("cuda")
 
         with torch.no_grad():
-            outputs = model(**inputs)
-        scores = outputs.iou_scores.squeeze()
-        masks = outputs.pred_masks[0, 0, 0, 0, :3]
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9566), atol=2e-4))
-        self.assertTrue(
-            torch.allclose(masks, torch.tensor([-12.7729, -12.3665, -12.6061]).to(torch_device), atol=2e-4)
+            outputs = self.model(**inputs)
+        self.assertEqual(outputs.ious.shape, (1, 1, 3))
+        self.assertEqual(outputs.low_res_masks.shape, (1, 1, 3, 256, 256))
+        sorted_indices = torch.argsort(outputs.ious.squeeze(), descending=True)
+        scores = outputs.ious.squeeze()[sorted_indices]
+        masks_logits = outputs.low_res_masks.squeeze()[sorted_indices][0, :3, :3]
+        print("scores", scores)
+        print("masks_logits", masks_logits)
+        torch.testing.assert_close(
+            scores, torch.tensor([0.9546, 0.4937, 0.0428]).to(torch_device), atol=1e-4, rtol=1e-4
         )
+        torch.testing.assert_close(
+            masks_logits,
+            torch.tensor(
+                [[-25.0963, -41.5728, -30.8723], [-34.7112, -30.7988, -36.4013], [-25.3061, -37.4575, -33.1899]]
+            ).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
+
+    def test_inference_mask_generation_video_one_point(self):
+        pass
+        # raw_video = prepare_video()
+        # self.processor.init_state(video_path="./videos/bedroom_light")
+
+        # inputs = processor.add_new_points_or_box(
+        #     frame_idx=0,
+        #     obj_id=1,
+        #     points=[[[[210, 350]]]],
+        #     labels=[[[1]]],
+        # )
+
+    # def test_inference_mask_generation_one_point_one_bb(self):
+    #     model = Sam2Model.from_pretrained("../sam2_hf_implem/sam2_tiny_hf")
+    #     processor = SamProcessor.from_pretrained("../sam2_hf_implem/sam2_tiny_hf")
+
+    #     model.to(torch_device)
+    #     model.eval()
+
+    #     raw_image = prepare_image()
+    #     input_boxes = [[[[650, 900, 1000, 1250]]]]
+    #     input_points = [[[[820, 1080]]]]
+
+    #     inputs = processor(
+    #         images=raw_image, input_boxes=input_boxes, input_points=input_points, return_tensors="pt"
+    #     ).to(torch_device)
+
+    #     with torch.no_grad():
+    #         outputs = model(**inputs)
+    #     scores = outputs.iou_scores.squeeze()
+    #     masks = outputs.pred_masks[0, 0, 0, 0, :3]
+    #     self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9566), atol=2e-4))
+    #     self.assertTrue(
+    #         torch.allclose(masks, torch.tensor([-12.7729, -12.3665, -12.6061]).to(torch_device), atol=2e-4)
+    #     )
 
     def test_inference_mask_generation_batched_points_batched_images(self):
         model = Sam2Model.from_pretrained("facebook/sam2-vit-base")

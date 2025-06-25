@@ -30,13 +30,14 @@ from PIL import Image
 from transformers import (
     Sam2Config,
     Sam2ImageEncoderConfig,
-    Sam2ImageProcessor,
+    Sam2ImageProcessorFast,
     Sam2MaskDecoderConfig,
     Sam2MemoryAttentionConfig,
     Sam2MemoryEncoderConfig,
     Sam2Model,
     Sam2Processor,
     Sam2PromptEncoderConfig,
+    Sam2VideoProcessor,
 )
 
 
@@ -54,13 +55,28 @@ def get_config(model_name):
         memory_attention_config = Sam2MemoryAttentionConfig()
         memory_encoder_config = Sam2MemoryEncoderConfig()
     elif "sam2.1_hiera_base_plus" in model_name:
-        image_encoder_config = Sam2ImageEncoderConfig(hidden_size=112, num_heads=2, stages=(2, 3, 16, 3), global_attention_blocks=(12, 16, 20), window_positional_embedding_background_size=(14, 14), backbone_channel_list=[896, 448, 224, 112])
+        image_encoder_config = Sam2ImageEncoderConfig(
+            hidden_size=112,
+            num_heads=2,
+            stages=(2, 3, 16, 3),
+            global_attention_blocks=(12, 16, 20),
+            window_positional_embedding_background_size=(14, 14),
+            backbone_channel_list=[896, 448, 224, 112],
+        )
         prompt_encoder_config = Sam2PromptEncoderConfig()
         mask_decoder_config = Sam2MaskDecoderConfig()
         memory_attention_config = Sam2MemoryAttentionConfig()
         memory_encoder_config = Sam2MemoryEncoderConfig()
     elif "sam2.1_hiera_large" in model_name:
-        image_encoder_config = Sam2ImageEncoderConfig(hidden_size=144, num_heads=2, stages=(2, 6, 36, 4), global_attention_blocks=(23, 33, 43), window_positional_embedding_background_size=(7, 7), window_spec=(8, 4, 16, 8), backbone_channel_list=[1152, 576, 288, 144])
+        image_encoder_config = Sam2ImageEncoderConfig(
+            hidden_size=144,
+            num_heads=2,
+            stages=(2, 6, 36, 4),
+            global_attention_blocks=(23, 33, 43),
+            window_positional_embedding_background_size=(7, 7),
+            window_spec=(8, 4, 16, 8),
+            backbone_channel_list=[1152, 576, 288, 144],
+        )
         prompt_encoder_config = Sam2PromptEncoderConfig()
         mask_decoder_config = Sam2MaskDecoderConfig()
         memory_attention_config = Sam2MemoryAttentionConfig()
@@ -197,8 +213,9 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
     state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
     state_dict = replace_keys(state_dict)
 
-    image_processor = Sam2ImageProcessor()
-    processor = Sam2Processor(image_processor=image_processor)
+    image_processor = Sam2ImageProcessorFast()
+    video_processor = Sam2VideoProcessor()
+    processor = Sam2Processor(image_processor=image_processor, video_processor=video_processor)
     hf_model = Sam2Model(config)
     hf_model.eval()
 
@@ -292,6 +309,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     hf_model_name = args.model_name.replace("_", "-")
-    checkpoint_path = hf_hub_download(f"facebook/{hf_model_name}", f"{args.model_name}.pt") if args.checkpoint_path is None else args.checkpoint_path
+    checkpoint_path = (
+        hf_hub_download(f"facebook/{hf_model_name}", f"{args.model_name}.pt")
+        if args.checkpoint_path is None
+        else args.checkpoint_path
+    )
 
     convert_sam2_checkpoint(args.model_name, checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub)
