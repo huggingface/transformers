@@ -291,10 +291,7 @@ class SmolLM3Attention(LlamaAttention):
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
-            if self.use_rope:
-                cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            else:
-                cache_kwargs = {"cache_position": cache_position}
+            cache_kwargs = {"cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
