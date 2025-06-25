@@ -14,6 +14,7 @@
 
 import inspect
 import os
+import warnings
 from typing import Optional, TypedDict
 
 import torch
@@ -302,7 +303,7 @@ def _upad_input(
     )
 
 
-def prepare_fa2_from_position_ids(query, key, value, position_ids):
+def _prepare_flash_attention_from_position_ids(query, key, value, position_ids):
     """
     This function returns necessary arguments to call `flash_attn_varlen_func`.
     All three query, key, value states will be flattened.
@@ -350,6 +351,14 @@ def prepare_fa2_from_position_ids(query, key, value, position_ids):
     max_length = position_ids.max() + 1
 
     return (query, key, value, indices_q, (cu_seq_lens, cu_seq_lens), (max_length, max_length))
+
+
+def prepare_fa2_from_position_ids(*args, **kwargs):
+    warnings.warn(
+        "The function `prepare_fa2_from_position_ids` in `transformers.modeling_flash_attention_utils` is deprecated and will be removed in a future version. Please use `_prepare_flash_attention_from_position_ids` instead.",
+        FutureWarning,
+    )
+    return _prepare_flash_attention_from_position_ids(*args, **kwargs)
 
 
 def fa_peft_integration_check(
@@ -532,7 +541,7 @@ def _flash_attention_forward(
 
         if cu_seq_lens_q is None or cu_seq_lens_k is None:
             query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = (
-                prepare_fa2_from_position_ids(query_states, key_states, value_states, position_ids)
+                _prepare_flash_attention_from_position_ids(query_states, key_states, value_states, position_ids)
             )
 
             cu_seq_lens_q, cu_seq_lens_k = cu_seq_lens
