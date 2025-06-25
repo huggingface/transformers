@@ -5781,7 +5781,7 @@ class PreTrainedAudioTokenizerBase(ABC):
         1. Encode raw audio into discrete audio codebooks (with x channels)
         2. Decode from discrete audio codebooks back to raw audio
     It is possible that they can decode in different ways given a different representation
-    but they are forced to support 1. nonetheless, e.g. see `DAC`.
+    but they are forced to support 2. nonetheless, e.g. see `DAC`.
     """
 
     @abstractmethod
