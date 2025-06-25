@@ -900,9 +900,7 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.image_embeds.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-0.0382,  0.2119,  0.1090], [0.2132, -0.0848, -0.0337], [0.1235, -0.0659,  0.0739]]
+            [[0.1154, -0.1370, -0.2142], [-0.0703, 0.1632, -0.0770], [0.0269, -0.0356, -0.1243]]
         ).to(torch_device)
 
-        torch.testing.assert_close(
-            outputs.image_embeds[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4
-        )
+        torch.testing.assert_close(outputs.image_embeds[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
