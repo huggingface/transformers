@@ -26,39 +26,29 @@ from torch import Tensor, nn
 
 from ...activations import ACT2FN
 from ...file_utils import ModelOutput
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
-from ...utils import torch_int
+from ...utils import auto_docstring, torch_int
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_maskformer_swin import MaskFormerSwinConfig
 
 
 @dataclass
-class MaskFormerSwinModelOutputWithPooling(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Class for MaskFormerSwinModel's outputs that also contains the spatial dimensions of the hidden states.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
-            Last layer hidden-state after a mean pooling operation.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        hidden_states_spatial_dimensions (`tuple(tuple(int, int))`, *optional*):
-            A tuple containing the spatial dimension of each `hidden_state` needed to reshape the `hidden_states` to
-            `batch, channels, height, width`. Due to padding, their spatial size cannot be inferred before the
-            `forward` method.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    """
+)
+class MaskFormerSwinModelOutputWithPooling(ModelOutput):
+    r"""
+    pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+        Last layer hidden-state after a mean pooling operation.
+    hidden_states_spatial_dimensions (`tuple(tuple(int, int))`, *optional*):
+        A tuple containing the spatial dimension of each `hidden_state` needed to reshape the `hidden_states` to
+        `batch, channels, height, width`. Due to padding, their spatial size cannot be inferred before the
+        `forward` method.
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
@@ -69,28 +59,17 @@ class MaskFormerSwinModelOutputWithPooling(ModelOutput):
 
 
 @dataclass
-class MaskFormerSwinBaseModelOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Class for SwinEncoder's outputs.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        hidden_states_spatial_dimensions (`tuple(tuple(int, int))`, *optional*):
-            A tuple containing the spatial dimension of each `hidden_state` needed to reshape the `hidden_states` to
-            `batch, channels, height, width`. Due to padding, their spatial size cannot inferred before the `forward`
-            method.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    """
+)
+class MaskFormerSwinBaseModelOutput(ModelOutput):
+    r"""
+    hidden_states_spatial_dimensions (`tuple(tuple(int, int))`, *optional*):
+        A tuple containing the spatial dimension of each `hidden_state` needed to reshape the `hidden_states` to
+        `batch, channels, height, width`. Due to padding, their spatial size cannot inferred before the `forward`
+        method.
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
@@ -629,7 +608,7 @@ class MaskFormerSwinLayer(nn.Module):
         return outputs
 
 
-class MaskFormerSwinStage(nn.Module):
+class MaskFormerSwinStage(GradientCheckpointingLayer):
     # Copied from transformers.models.swin.modeling_swin.SwinStage.__init__ with Swin->MaskFormerSwin
     def __init__(self, config, dim, input_resolution, depth, num_heads, drop_path, downsample):
         super().__init__()
@@ -729,21 +708,13 @@ class MaskFormerSwinEncoder(nn.Module):
         for i, layer_module in enumerate(self.layers):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_hidden_states, output_dimensions, layer_all_hidden_states = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    layer_head_mask,
-                    output_attentions,
-                )
-            else:
-                layer_hidden_states, output_dimensions, layer_all_hidden_states = layer_module(
-                    hidden_states,
-                    input_dimensions,
-                    layer_head_mask,
-                    output_attentions,
-                    output_hidden_states,
-                )
+            layer_hidden_states, output_dimensions, layer_all_hidden_states = layer_module(
+                hidden_states,
+                input_dimensions,
+                layer_head_mask,
+                output_attentions,
+                output_hidden_states,
+            )
 
             input_dimensions = (output_dimensions[-2], output_dimensions[-1])
             all_input_dimensions += (input_dimensions,)
@@ -766,12 +737,8 @@ class MaskFormerSwinEncoder(nn.Module):
         )
 
 
+@auto_docstring
 class MaskFormerSwinPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = MaskFormerSwinConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"

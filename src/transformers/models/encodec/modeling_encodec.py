@@ -38,13 +38,13 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
+@auto_docstring
 class EncodecOutput(ModelOutput):
-    """
-    Args:
-        audio_codes (`torch.LongTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
-            Discret code embeddings computed using `model.encode`.
-        audio_values (`torch.FlaotTensor` of shape `(batch_size, sequence_length)`, *optional*)
-            Decoded audio values, obtained using the decoder part of Encodec.
+    r"""
+    audio_codes (`torch.LongTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
+        Discret code embeddings computed using `model.encode`.
+    audio_values (`torch.FloatTensor`  of shape `(batch_size, segment_length)`, *optional*):
+        Decoded audio values, obtained using the decoder part of Encodec.
     """
 
     audio_codes: Optional[torch.LongTensor] = None
@@ -52,13 +52,13 @@ class EncodecOutput(ModelOutput):
 
 
 @dataclass
+@auto_docstring
 class EncodecEncoderOutput(ModelOutput):
-    """
-    Args:
-        audio_codes (`torch.LongTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
-            Discret code embeddings computed using `model.encode`.
-        audio_scales (`torch.Tensor` of shape `(batch_size, nb_chunks)`, *optional*):
-            Scaling factor for each `audio_codes` input. This is used to unscale each chunk of audio when decoding.
+    r"""
+    audio_codes (`torch.LongTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
+        Discret code embeddings computed using `model.encode`.
+    audio_scales (`torch.Tensor` of shape `(batch_size, nb_chunks)`, *optional*):
+        Scaling factor for each `audio_codes` input. This is used to unscale each chunk of audio when decoding.
     """
 
     audio_codes: Optional[torch.LongTensor] = None
@@ -66,11 +66,11 @@ class EncodecEncoderOutput(ModelOutput):
 
 
 @dataclass
+@auto_docstring
 class EncodecDecoderOutput(ModelOutput):
-    """
-    Args:
-        audio_values (`torch.FloatTensor`  of shape `(batch_size, segment_length)`, *optional*):
-            Decoded audio values, obtained using the decoder part of Encodec.
+    r"""
+    audio_values (`torch.FloatTensor`  of shape `(batch_size, segment_length)`, *optional*):
+        Decoded audio values, obtained using the decoder part of Encodec.
     """
 
     audio_values: Optional[torch.FloatTensor] = None
