@@ -195,6 +195,7 @@ class HybridMambaAttentionDynamicCache(Cache):
     while `conv_states` represents the convolution state and has a shape of `(batch_size, d_inner, d_conv)`,
     and `ssm_states` represents the ssm state and has a shape of `(batch_size, d_inner, d_state)`.
     """
+
     key_cache = None
     value_cache = None
 
