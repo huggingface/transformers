@@ -196,10 +196,6 @@ class Ovis2VisualEmbeddingTable(nn.Embedding):
             return super().forward(visual_tokens)
         return torch.matmul(visual_tokens, self.weight)
 
-    def reset_parameters(self, mean=0.0, std=1.0) -> None:
-        nn.init.normal_(self.weight, mean=mean, std=std)
-        self._fill_padding_idx_with_zero()
-
 
 class Ovis2VisionModel(nn.Module):
     def __init__(self, config: Ovis2VisionConfig):
@@ -215,16 +211,6 @@ class Ovis2VisionModel(nn.Module):
         )
         self.head_norm = nn.LayerNorm(self.vocab_size - self.num_visual_indicator_tokens)
 
-    def get_prob_token(self, logits):
-        tokenize_functions = {
-            "gumbel_argmax": lambda x: gumbel_softmax(x, dim=-1, hard=True),
-            "st_argmax": lambda x: hard_softmax(x, dim=-1),
-            "softmax": lambda x: nn.functional.softmax(x, dim=-1),
-        }
-
-        tokenize_fn = tokenize_functions.get(self.config.tokenize_function, tokenize_functions["softmax"])
-
-        return tokenize_fn(logits)
 
     def forward(self, pixel_values: torch.FloatTensor) -> tuple[torch.Tensor, torch.Tensor]:
         outputs = self.transformer(pixel_values)
@@ -253,7 +239,13 @@ class Ovis2VisionModel(nn.Module):
 
         logits = self.head_linear(selected_image_feature)
         logits = self.head_norm(logits)
-        prob_token = self.get_prob_token(logits)
+
+        if self.config.tokenize_function == "gumbel_argmax":
+            prob_token = gumbel_softmax(logits, dim=-1, hard=True)
+        elif self.config.tokenize_function == "st_argmax":
+            prob_token = hard_softmax(logits, dim=-1)
+        elif self.config.tokenize_function == "softmax":
+            prob_token = nn.functional.softmax(logits, dim=-1)
 
         return prob_token
 
@@ -300,7 +292,9 @@ class Ovis2PreTrainedModel(PreTrainedModel):
             if hasattr(module, "bias") and module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, Ovis2VisualEmbeddingTable):
-            module.reset_parameters()
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
 
 class Ovis2Model(LlavaModel):
@@ -422,12 +416,6 @@ class Ovis2Model(LlavaModel):
 
 @auto_docstring
 class Ovis2ForConditionalGeneration(LlavaForConditionalGeneration, GenerationMixin):
-    _checkpoint_conversion_mapping = {
-        "^language_model.model": "model.language_model",
-        "^vision_tower": "model.vision_tower",
-        "^language_model.lm_head": "lm_head",
-    }
-
     def __init__(self, config: Ovis2Config):
         super().__init__(config)
         self.model = Ovis2Model(config)
