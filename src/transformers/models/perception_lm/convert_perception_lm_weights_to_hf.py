@@ -30,15 +30,14 @@ from transformers import (
     PreTrainedTokenizerFast,
 )
 from transformers.convert_slow_tokenizer import TikTokenConverter
+from transformers.models.auto.modeling_auto import AutoModel
 from transformers.models.perception_lm.configuration_perception_lm import (
-    PerceptionEncoderConfig,
     PerceptionLMConfig,
 )
 from transformers.models.perception_lm.image_processing_perception_lm_fast import (
     PerceptionLMImageProcessorFast,
 )
 from transformers.models.perception_lm.modeling_perception_lm import (
-    PerceptionEncoder,
     PerceptionLMForConditionalGeneration,
 )
 from transformers.models.perception_lm.processing_perception_lm import (
@@ -47,6 +46,7 @@ from transformers.models.perception_lm.processing_perception_lm import (
 from transformers.models.perception_lm.video_processing_perception_lm import (
     PerceptionLMVideoProcessor,
 )
+from transformers.models.timm_wrapper.configuration_timm_wrapper import TimmWrapperConfig
 
 
 try:
@@ -324,24 +324,25 @@ def write_model(
                 f"Unsupported PE config: {vision_params['layers']} layers and {vision_params['width']} width"
             )
 
-        vision_config = PerceptionEncoderConfig(
-            use_cls_token=vision_params["use_cls_token"],
-            width=vision_params["width"],
-            architecture=architecture,
-            img_size=(vision_params["image_size"], vision_params["image_size"]),
-            depth=vision_params["layers"],
-            num_classes=0,
-            global_pool="",
-            use_post_transformer_norm=vision_params["use_ln_post"],
-            init_values=vision_params["ls_init_value"],
-            ref_feat_shape=(
-                vision_params["image_size"] // vision_params["patch_size"],
-                vision_params["image_size"] // vision_params["patch_size"],
-            ),
+        vision_config = TimmWrapperConfig.from_pretrained(
+            f"timm/{architecture}.fb",
+            model_args={
+                "embed_dim": vision_params["width"],
+                "depth": vision_params["layers"],
+                "img_size": (vision_params["image_size"], vision_params["image_size"]),
+                "global_pool": "",
+                "use_post_transformer_norm": vision_params["use_ln_post"],
+                "init_values": vision_params["ls_init_value"],
+                "ref_feat_shape": (
+                    vision_params["image_size"] // vision_params["patch_size"],
+                    vision_params["image_size"] // vision_params["patch_size"],
+                ),
+            },
         )
-        perception_encoder = PerceptionEncoder(vision_config)
-        state_dict = checkpoint_filter_fn(state_dict, perception_encoder.eva_pe)
-        state_dict = {"model.vision_tower.eva_pe." + k: v for k, v in state_dict.items()}
+
+        perception_encoder = AutoModel.from_config(vision_config)
+        state_dict = checkpoint_filter_fn(state_dict, perception_encoder)
+        state_dict = {"model.vision_tower.timm_model." + k: v for k, v in state_dict.items()}
         for k, v in state_dict.items():
             index_dict["weight_map"][k] = filename
             param_count += v.numel()
@@ -388,6 +389,7 @@ def write_model(
         config = PerceptionLMConfig(
             text_config=text_config.to_dict(),
             vision_config=vision_config.to_dict(),
+            vision_tower_config=vision_params["use_cls_token"],
             projector_pooling_ratio=projector_pooling_ratio,
             image_token_id=image_token_id,
         )

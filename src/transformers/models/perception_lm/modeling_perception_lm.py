@@ -20,9 +20,8 @@
 
 import math
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
-import timm
 import torch
 import torch.nn.functional as F
 from torch import nn
@@ -35,31 +34,7 @@ from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, can_return_tuple
 from ..auto import AutoModel
-from .configuration_perception_lm import PerceptionEncoderConfig, PerceptionLMConfig
-
-
-class PerceptionEncoder(PreTrainedModel):
-    def __init__(self, config: PerceptionEncoderConfig):
-        super().__init__(config)
-        self.use_cls_token = config.use_cls_token
-        self.eva_pe = timm.create_model(
-            config.architecture,
-            img_size=config.img_size,
-            depth=config.depth,
-            num_classes=config.num_classes,
-            global_pool=config.global_pool,
-            use_post_transformer_norm=config.use_post_transformer_norm,
-            init_values=config.init_values,
-            ref_feat_shape=config.ref_feat_shape,
-            embed_dim=config.width,
-        )
-
-    def forward(self, x):
-        x = self.eva_pe(x)
-        if self.use_cls_token:
-            return x[:, 1:, :]
-        else:
-            return x
+from .configuration_perception_lm import PerceptionLMConfig
 
 
 class AdaptiveAvgPooling(nn.Module):
@@ -84,7 +59,7 @@ class AdaptiveAvgPooling(nn.Module):
 class PerceptionLMMultiModalProjector(nn.Module):
     def __init__(self, config: PerceptionLMConfig):
         super().__init__()
-        input_size = config.vision_config.width
+        input_size = config.vision_config.model_args["embed_dim"]
         output_size = config.text_config.hidden_size
         self.projector = nn.ModuleList(
             [
@@ -144,42 +119,33 @@ class PerceptionLMPreTrainedModel(PreTrainedModel):
 
 
 @dataclass
-class PerceptionLMCausalLMOutputWithPast(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for PerceptionLM causal language model (or autoregressive) outputs.
+    """
+)
+class PerceptionLMCausalLMOutputWithPast(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
 
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss (for next-token prediction).
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-            `past_key_values` input) to speed up sequential decoding.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        image_hidden_states (`torch.FloatTensor`, *optional*):
-            A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-            image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    image_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    past_key_values: Optional[list[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[torch.FloatTensor] = None
 
 
@@ -200,6 +166,12 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
+    def set_decoder(self, decoder):
+        self.language_model = decoder
+
+    def get_decoder(self):
+        return self.language_model
+
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -215,6 +187,9 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_tiles, num_patches, embed_dim)`).
         """
         image_outputs = self.vision_tower(pixel_values.flatten(0, 1))
+        image_outputs = image_outputs.last_hidden_state
+        if self.config.vision_use_cls_token:
+            image_outputs = image_outputs[:, 1:, :]
         image_features = self.multi_modal_projector(image_outputs)
         return image_features
 
@@ -227,7 +202,7 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
         pixel_values_videos: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -236,39 +211,39 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **lm_kwargs,
-    ) -> Union[Tuple, PerceptionLMCausalLMOutputWithPast]:
+    ) -> Union[tuple, PerceptionLMCausalLMOutputWithPast]:
         r"""
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of input sequence tokens in the vocabulary.
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_tiles, channels, height, width)`, *optional*):
-            Pixel values for input images.
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_frames, channels, height, width)`, *optional*):
-            Pixel values for input videos.
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices.
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence token in the position embeddings.
-        past_key_values (`List[torch.FloatTensor]`, *optional*):
-            List of precomputed key and value hidden states for each layer, used for fast autoregressive generation.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids`, you can choose to directly pass an embedded representation.
-        use_cache (`bool`, *optional*):
-            Whether or not to use past key values to speed up decoding.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        cache_position (`torch.LongTensor`, *optional*):
-            Position indices for cached key/value states, used for efficient generation.
-        logits_to_keep (`int` or `torch.Tensor`, *optional*):
-            If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
-            `input_ids` (special case). If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the
-            sequence length dimension.
-        lm_kwargs:
-            Additional keyword arguments passed to the language model.
-
+            Args:
+                input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                    Indices of input sequence tokens in the vocabulary.
+                pixel_values (`torch.FloatTensor` of shape `(batch_size, num_tiles, channels, height, width)`, *optional*):
+                    Pixel values for input images.
+                pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_frames, channels, height, width)`, *optional*):
+                    Pixel values for input videos.
+                attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                    Mask to avoid performing attention on padding token indices.
+                position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                    Indices of positions of each input sequence token in the position embeddings.
+                past_key_values (`List[torch.FloatTensor]`, *optional*):
+                    List of precomputed key and value hidden states for each layer, used for fast autoregressive generation.
+                inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+                    Optionally, instead of passing `input_ids`, you can choose to directly pass an embedded representation.
+                use_cache (`bool`, *optional*):
+                    Whether or not to use past key values to speed up decoding.
+                output_attentions (`bool`, *optional*):
+                    Whether or not to return the attentions tensors of all attention layers.
+                output_hidden_states (`bool`, *optional*):
+                    Whether or not to return the hidden states of all layers.
+                return_dict (`bool`, *optional*):
+                    Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+                cache_position (`torch.LongTensor`, *optional*):
+                    Position indices for cached key/value states, used for efficient generation.
+                logits_to_keep (`int` or `torch.Tensor`, *optional*):
+                    If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
+                    `input_ids` (special case). If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the
+                    sequence length dimension.
+                lm_kwargs:
+                    Additional keyword arguments passed to the language model.
         Example:
         (TODO: fix example)
         ```python
@@ -414,7 +389,7 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
         pixel_values_videos: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -424,7 +399,7 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **lm_kwargs,
-    ) -> Union[Tuple, PerceptionLMCausalLMOutputWithPast]:
+    ) -> Union[tuple, PerceptionLMCausalLMOutputWithPast]:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,

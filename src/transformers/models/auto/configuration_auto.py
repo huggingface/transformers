@@ -267,7 +267,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("pegasus", "PegasusConfig"),
         ("pegasus_x", "PegasusXConfig"),
         ("perceiver", "PerceiverConfig"),
-        ("perception_encoder", "PerceptionEncoderConfig"),
+        ("perception_encoder", "TimmWrapperConfig"),
         ("perception_lm", "PerceptionLMConfig"),
         ("persimmon", "PersimmonConfig"),
         ("phi", "PhiConfig"),
