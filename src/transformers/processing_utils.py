@@ -34,7 +34,6 @@ from .audio_utils import load_audio
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
 from .image_utils import ChannelDimension, is_valid_image, is_vision_available, load_image
-from .models.auto.modeling_auto import MODEL_FOR_AUDIO_TOKENIZATION_MAPPING
 from .utils.chat_template_utils import render_jinja_template
 from .video_utils import VideoMetadata, load_video
 
@@ -63,10 +62,15 @@ from .utils import (
     download_url,
     is_offline_mode,
     is_remote_url,
+    is_torch_available,
     list_repo_templates,
     logging,
 )
 from .utils.deprecation import deprecate_kwarg
+
+
+if is_torch_available():
+    from .modeling_utils import PreTrainedAudioTokenizerBase
 
 
 logger = logging.get_logger(__name__)
@@ -517,10 +521,10 @@ class ProcessorMixin(PushToHubMixin):
             setattr(self, optional_attribute, optional_attribute_value)
 
             # Check audio tokenizer for its class but do not treat it as attr to avoid saving weights
-            if optional_attribute != "chat_template" and optional_attribute_value is not None:
+            if optional_attribute == "audio_tokenizer" and optional_attribute_value is not None:
                 proper_class = self.check_argument_for_proper_class(optional_attribute, optional_attribute_value)
 
-                if proper_class not in MODEL_FOR_AUDIO_TOKENIZATION_MAPPING.values():
+                if not (is_torch_available() and isinstance(optional_attribute_value, PreTrainedAudioTokenizerBase)):
                     raise ValueError(
                         f"Tried to use `{proper_class}` for audio tokenization. However, this class is not"
                         " registered for audio tokenization."

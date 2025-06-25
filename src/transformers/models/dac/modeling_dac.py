@@ -23,7 +23,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedAudioTokenizerBase, PreTrainedModel
 from ...utils import ModelOutput, auto_docstring
 from .configuration_dac import DacConfig
 
@@ -549,7 +549,7 @@ class DacPreTrainedModel(PreTrainedModel):
     The DAC (Descript Audio Codec) model.
     """
 )
-class DacModel(DacPreTrainedModel):
+class DacModel(DacPreTrainedModel, PreTrainedAudioTokenizerBase):
     def __init__(self, config: DacConfig):
         super().__init__(config)
         self.config = config
