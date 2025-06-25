@@ -255,6 +255,7 @@ class FastConformerConvModule(nn.Module):
 class FastConformerBlock(nn.Module):
     def __init__(self, config: FastConformerConfig):
         super().__init__()
+        self.gradient_checkpointing = False
         
         self.feed_forward1 = FastConformerFeedForward(config)
         self.self_attn = FastConformerMultiHeadAttention(config)
@@ -358,7 +359,15 @@ class FastConformerSubsamplingConv2D(nn.Module):
             repeat_num=self.num_layers,
         )
         
-        self.out = nn.Linear(self.conv_channels * int(out_length), config.d_model, bias=True)
+        # Handle meta tensor case for model initialization on meta device
+        if out_length.is_meta:
+            # For meta tensor initialization, use a reasonable default based on the feat_in
+            # This is just for shape calculation during meta initialization
+            out_length_val = feat_in // (self.stride ** self.num_layers)
+        else:
+            out_length_val = int(out_length)
+        
+        self.out = nn.Linear(self.conv_channels * out_length_val, config.d_model, bias=True)
         
     def forward(self, x: torch.Tensor, lengths: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         lengths = calc_length(
@@ -401,6 +410,7 @@ class FastConformerEncoder(FastConformerPreTrainedModel):
     def __init__(self, config: FastConformerConfig):
         super().__init__(config)
         self.config = config
+        self.gradient_checkpointing = False
         
         self.subsampling = FastConformerSubsamplingConv2D(config, config.num_mel_bins)
         self.pos_enc = FastConformerRelPositionalEncoding(config)
@@ -459,10 +469,20 @@ class FastConformerEncoder(FastConformerPreTrainedModel):
         for layer in self.layers:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
-                
-            layer_outputs = layer(
-                hidden_states, attention_mask=attention_mask, pos_emb=pos_emb, pad_mask=pad_mask, output_attentions=output_attentions
-            )
+            
+            if self.gradient_checkpointing and self.training:
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer.__call__,
+                    hidden_states,
+                    attention_mask,
+                    pos_emb,
+                    pad_mask,
+                    output_attentions,
+                )
+            else:
+                layer_outputs = layer(
+                    hidden_states, attention_mask=attention_mask, pos_emb=pos_emb, pad_mask=pad_mask, output_attentions=output_attentions
+                )
             hidden_states = layer_outputs[0]
             
             if output_attentions:
@@ -493,6 +513,7 @@ class FastConformerEncoder(FastConformerPreTrainedModel):
 class FastConformerModel(FastConformerPreTrainedModel):
     def __init__(self, config: FastConformerConfig):
         super().__init__(config)
+        self.gradient_checkpointing = False
         self.encoder = FastConformerEncoder(config)
         self.post_init()
 
@@ -512,85 +533,6 @@ class FastConformerModel(FastConformerPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-        )
-
-
-@add_start_docstrings(
-    """
-    FastConformer model with a CTC head on top for Connectionist Temporal Classification.
-    """,
-    """An encoder model with a FastConformer architecture.
-
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the library implements for all its models (such as downloading or saving, resizing the input embeddings, pruning heads etc.)
-
-    This model is also a [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and behavior.
-    """,
-)
-class FastConformerForCTC(FastConformerPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-
-        self.encoder = FastConformerEncoder(config)
-        self.lm_head = nn.Linear(config.d_model, config.vocab_size)
-
-        self.post_init()
-
-    def forward(
-        self,
-        input_features: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        input_lengths: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CausalLMOutput]:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        encoder_outputs = self.encoder(
-            input_features,
-            attention_mask=attention_mask,
-            input_lengths=input_lengths,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        hidden_states = encoder_outputs[0]
-        logits = self.lm_head(hidden_states)
-
-        loss = None
-        if labels is not None:
-            log_probs = nn.functional.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(0, 1)
-
-            if attention_mask is None:
-                input_lengths = torch.full(
-                    (logits.size(0),), logits.size(1), dtype=torch.long, device=logits.device
-                )
-            else:
-                input_lengths = attention_mask.sum(-1)
-            
-            target_lengths = (labels != -100).sum(-1)
-
-            loss = nn.functional.ctc_loss(
-                log_probs,
-                labels,
-                input_lengths,
-                target_lengths,
-                blank=self.config.pad_token_id,
-                reduction="mean",
-                zero_infinity=True,
-            )
-
-        if not return_dict:
-            output = (logits,) + encoder_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
-
-        return CausalLMOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
         )
 
 
