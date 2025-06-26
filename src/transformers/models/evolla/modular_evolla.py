@@ -1399,9 +1399,7 @@ class EvollaModel(EvollaPreTrainedModel):
         return causal_mask
 
 
-# this was adapted from modeling_idefics.IdeficsForVisionText2Text
 class EvollaForProteinText2Text(EvollaPreTrainedModel, GenerationMixin):
-    # _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
     _tied_weights_keys = []
 
     def __init__(self, config):
