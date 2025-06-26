@@ -19,13 +19,10 @@ from transformers import (
     AutoModelForTableQuestionAnswering,
     AutoTokenizer,
     TableQuestionAnsweringPipeline,
-    TFAutoModelForTableQuestionAnswering,
     pipeline,
 )
 from transformers.testing_utils import (
     is_pipeline_test,
-    require_pandas,
-    require_tensorflow_probability,
     require_torch,
     slow,
 )
@@ -317,55 +314,6 @@ class TQAPipelineTests(unittest.TestCase):
         self.test_integration_wtq_pt(torch_dtype="float16")
 
     @slow
-    @require_tensorflow_probability
-    @require_pandas
-    def test_integration_wtq_tf(self):
-        model_id = "google/tapas-base-finetuned-wtq"
-        model = TFAutoModelForTableQuestionAnswering.from_pretrained(model_id)
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        table_querier = pipeline("table-question-answering", model=model, tokenizer=tokenizer)
-
-        data = {
-            "Repository": ["Transformers", "Datasets", "Tokenizers"],
-            "Stars": ["36542", "4512", "3934"],
-            "Contributors": ["651", "77", "34"],
-            "Programming language": ["Python", "Python", "Rust, Python and NodeJS"],
-        }
-        queries = [
-            "What repository has the largest number of stars?",
-            "Given that the numbers of stars defines if a repository is active, what repository is the most active?",
-            "What is the number of repositories?",
-            "What is the average number of stars?",
-            "What is the total amount of stars?",
-        ]
-
-        results = table_querier(data, queries)
-
-        expected_results = [
-            {"answer": "Transformers", "coordinates": [(0, 0)], "cells": ["Transformers"], "aggregator": "NONE"},
-            {"answer": "Transformers", "coordinates": [(0, 0)], "cells": ["Transformers"], "aggregator": "NONE"},
-            {
-                "answer": "COUNT > Transformers, Datasets, Tokenizers",
-                "coordinates": [(0, 0), (1, 0), (2, 0)],
-                "cells": ["Transformers", "Datasets", "Tokenizers"],
-                "aggregator": "COUNT",
-            },
-            {
-                "answer": "AVERAGE > 36542, 4512, 3934",
-                "coordinates": [(0, 1), (1, 1), (2, 1)],
-                "cells": ["36542", "4512", "3934"],
-                "aggregator": "AVERAGE",
-            },
-            {
-                "answer": "SUM > 36542, 4512, 3934",
-                "coordinates": [(0, 1), (1, 1), (2, 1)],
-                "cells": ["36542", "4512", "3934"],
-                "aggregator": "SUM",
-            },
-        ]
-        self.assertListEqual(results, expected_results)
-
-    @slow
     @require_torch
     def test_integration_sqa_pt(self, torch_dtype="float32"):
         table_querier = pipeline(
@@ -394,34 +342,6 @@ class TQAPipelineTests(unittest.TestCase):
     @require_torch
     def test_integration_sqa_pt_fp16(self):
         self.test_integration_sqa_pt(torch_dtype="float16")
-
-    @slow
-    @require_tensorflow_probability
-    @require_pandas
-    def test_integration_sqa_tf(self):
-        model_id = "google/tapas-base-finetuned-sqa"
-        model = TFAutoModelForTableQuestionAnswering.from_pretrained(model_id)
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        table_querier = pipeline(
-            "table-question-answering",
-            model=model,
-            tokenizer=tokenizer,
-        )
-        data = {
-            "Actors": ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],
-            "Age": ["56", "45", "59"],
-            "Number of movies": ["87", "53", "69"],
-            "Date of birth": ["7 february 1967", "10 june 1996", "28 november 1967"],
-        }
-        queries = ["How many movies has George Clooney played in?", "How old is he?", "What's his date of birth?"]
-        results = table_querier(data, queries, sequential=True)
-
-        expected_results = [
-            {"answer": "69", "coordinates": [(2, 2)], "cells": ["69"]},
-            {"answer": "59", "coordinates": [(2, 1)], "cells": ["59"]},
-            {"answer": "28 november 1967", "coordinates": [(2, 3)], "cells": ["28 november 1967"]},
-        ]
-        self.assertListEqual(results, expected_results)
 
     @slow
     @require_torch

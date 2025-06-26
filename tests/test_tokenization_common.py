@@ -3105,7 +3105,6 @@ class TokenizerTesterMixin:
         #     model(**encoded_sequence_fast)
         #     model(**batch_encoded_sequence_fast)
 
-    # TODO: Check if require_torch is the best to test for numpy here ... Maybe move to require_flax when available
     @require_torch
     @slow
     def test_np_encode_plus_sent_to_model(self):
@@ -3146,7 +3145,6 @@ class TokenizerTesterMixin:
                         [sequence, sequence], return_tensors="np"
                     )
 
-                    # TODO: add forward through JAX/Flax when PR is merged
                     # This is currently here to make ruff happy !
                     if encoded_sequence_fast is None:
                         raise ValueError("Cannot convert list to numpy tensor on  encode_plus() (fast)")
