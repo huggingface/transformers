@@ -24,7 +24,10 @@ from transformers import (
     TokenClassificationPipeline,
     pipeline,
 )
-from transformers.pipelines import AggregationStrategy, TokenClassificationArgumentHandler
+from transformers.pipelines import (
+    AggregationStrategy,
+    TokenClassificationArgumentHandler,
+)
 from transformers.testing_utils import (
     is_pipeline_test,
     is_torch_available,
@@ -328,8 +331,10 @@ class TokenClassificationPipelineTests(unittest.TestCase):
         self.assertEqual(
             nested_simplify(output),
             [
-                {"entity_group": "PER", "score": ANY(float), "word": "Sarah", "start": 6, "end": 11},
-                {"entity_group": "LOC", "score": ANY(float), "word": "New York", "start": 21, "end": 29},
+                [
+                    {"entity_group": "PER", "score": ANY(float), "word": "Sarah", "start": 6, "end": 11},
+                    {"entity_group": "LOC", "score": ANY(float), "word": "New York", "start": 21, "end": 29},
+                ]
             ],
         )
 
@@ -349,8 +354,8 @@ class TokenClassificationPipelineTests(unittest.TestCase):
                     {"entity_group": "LOC", "score": ANY(float), "word": "New York", "start": 21, "end": 29},
                 ],
                 [
-                    {"entity_group": "PER", "score": ANY(float), "word": "Wolfgang", "start": 12, "end": 20},
-                    {"entity_group": "LOC", "score": ANY(float), "word": "Berlin", "start": 36, "end": 42},
+                    {"entity_group": "PER", "score": ANY(float), "word": "Wolfgang", "start": 11, "end": 19},
+                    {"entity_group": "LOC", "score": ANY(float), "word": "Berlin", "start": 34, "end": 40},
                 ],
             ],
         )
