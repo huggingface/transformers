@@ -139,6 +139,15 @@ def _pad_to_max_length(
     skip_ending_double_timestamps=False,
     timestamp_begin=None,
 ):
+    """
+    skip_ending_double_timestamps: when the segement ended with two timestamp tokens, whether to ignore the last timestamp token
+    see https://github.com/huggingface/transformers/pull/35750
+
+    _pad_to_max_length is used in different contexts:
+    1. At the end of generation: we need to keep both ending timestamp tokens in the segment (see https://github.com/huggingface/transformers/pull/34537).
+    2. In the middle of generation, e.g. when condition_on_prev_tokens=True and we want to use the last generated tokens as decoder_input_ids:
+       we must skip one of the double ending timestamp tokens (see https://github.com/huggingface/transformers/pull/35750).
+    """
     max_total_length = 0
     sequences = []
     token_timestamps_list = []
