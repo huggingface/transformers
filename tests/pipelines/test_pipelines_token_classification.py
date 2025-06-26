@@ -24,10 +24,7 @@ from transformers import (
     TokenClassificationPipeline,
     pipeline,
 )
-from transformers.pipelines import (
-    AggregationStrategy,
-    TokenClassificationArgumentHandler,
-)
+from transformers.pipelines import AggregationStrategy, TokenClassificationArgumentHandler
 from transformers.testing_utils import (
     is_pipeline_test,
     is_torch_available,
