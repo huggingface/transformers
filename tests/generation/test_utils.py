@@ -22,6 +22,7 @@ import random
 import tempfile
 import unittest
 import warnings
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -34,6 +35,7 @@ from transformers.testing_utils import (
     is_flaky,
     require_accelerate,
     require_flash_attn,
+    require_flash_attn_3,
     require_optimum_quanto,
     require_read_token,
     require_torch,
@@ -2292,6 +2294,7 @@ class GenerationTesterMixin:
         support_flag = {
             "sdpa": "_supports_sdpa",
             "flash_attention_2": "_supports_flash_attn_2",
+            "flash_attention_3": "_supports_flash_attn_3",
         }
 
         for model_class in self.all_generative_model_classes:
@@ -2368,6 +2371,14 @@ class GenerationTesterMixin:
     def test_eager_matches_fa2_generate(self):
         """Tests that generate has equivalent outputs with FA2 and eager attention implementations."""
         self._test_attention_implementation("flash_attention_2")
+
+    @pytest.mark.flash_attn_3_test
+    @require_flash_attn_3
+    @require_torch_gpu
+    @slow
+    def test_eager_matches_fa3_generate(self):
+        """Tests that generate has equivalent outputs with FA3 and eager attention implementations."""
+        self._test_attention_implementation("flash_attention_3")
 
     def _check_generate_outputs(self, output, config, use_cache=False, num_return_sequences=1, num_beams=1):
         input_batch_size = int(output.sequences.shape[0] / num_return_sequences)
@@ -4984,6 +4995,27 @@ class GenerationIntegrationTests(unittest.TestCase):
         model_inputs = tokenizer("Hello, world!", return_tensors="pt").to(model.device)
         with self.assertRaises(ValueError):
             model.generate(**model_inputs, custom_generate="transformers-community/custom_generate_example")
+
+    def test_custom_generate_local_directory(self):
+        """Tests that custom_generate works with local directories containing importable relative modules"""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            custom_generate_dir = Path(tmp_dir) / "custom_generate"
+            custom_generate_dir.mkdir()
+            with open(custom_generate_dir / "generate.py", "w") as f:
+                f.write("from .helper import ret_success\ndef generate(*args, **kwargs):\n    return ret_success()\n")
+            with open(custom_generate_dir / "helper.py", "w") as f:
+                f.write('def ret_success():\n    return "success"\n')
+            model = AutoModelForCausalLM.from_pretrained(
+                "hf-internal-testing/tiny-random-MistralForCausalLM", device_map="auto"
+            )
+            tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+            model_inputs = tokenizer("Hello, world!", return_tensors="pt").to(model.device)
+            value = model.generate(
+                **model_inputs,
+                custom_generate=str(tmp_dir),
+                trust_remote_code=True,
+            )
+            assert value == "success"
 
 
 @require_torch
