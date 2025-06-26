@@ -129,7 +129,6 @@ from .utils import (
     is_scipy_available,
     is_sentencepiece_available,
     is_seqio_available,
-    is_soundfile_available,
     is_spacy_available,
     is_speech_available,
     is_spqr_available,
@@ -643,7 +642,6 @@ def require_torchcodec(test_case):
 
     """
     return unittest.skipUnless(is_torchcodec_available(), "test requires Torchcodec")(test_case)
-
 
 
 def require_torch_or_tf(test_case):
