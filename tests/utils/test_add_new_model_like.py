@@ -40,44 +40,44 @@ from transformers.testing_utils import require_torch
 
 
 BERT_MODEL_FILES = {
-    "src/transformers/models/bert/__init__.py",
-    "src/transformers/models/bert/configuration_bert.py",
-    "src/transformers/models/bert/tokenization_bert.py",
-    "src/transformers/models/bert/tokenization_bert_fast.py",
-    "src/transformers/models/bert/tokenization_bert_tf.py",
-    "src/transformers/models/bert/modeling_bert.py",
-    "src/transformers/models/bert/modeling_flax_bert.py",
-    "src/transformers/models/bert/modeling_tf_bert.py",
-    "src/transformers/models/bert/convert_bert_original_tf_checkpoint_to_pytorch.py",
-    "src/transformers/models/bert/convert_bert_original_tf2_checkpoint_to_pytorch.py",
-    "src/transformers/models/bert/convert_bert_pytorch_checkpoint_to_original_tf.py",
-    "src/transformers/models/bert/convert_bert_token_dropping_original_tf2_checkpoint_to_pytorch.py",
+    "transformers/models/bert/__init__.py",
+    "transformers/models/bert/configuration_bert.py",
+    "transformers/models/bert/tokenization_bert.py",
+    "transformers/models/bert/tokenization_bert_fast.py",
+    "transformers/models/bert/tokenization_bert_tf.py",
+    "transformers/models/bert/modeling_bert.py",
+    "transformers/models/bert/modeling_flax_bert.py",
+    "transformers/models/bert/modeling_tf_bert.py",
+    "transformers/models/bert/convert_bert_original_tf_checkpoint_to_pytorch.py",
+    "transformers/models/bert/convert_bert_original_tf2_checkpoint_to_pytorch.py",
+    "transformers/models/bert/convert_bert_pytorch_checkpoint_to_original_tf.py",
+    "transformers/models/bert/convert_bert_token_dropping_original_tf2_checkpoint_to_pytorch.py",
 }
 
 VIT_MODEL_FILES = {
-    "src/transformers/models/vit/__init__.py",
-    "src/transformers/models/vit/configuration_vit.py",
-    "src/transformers/models/vit/convert_dino_to_pytorch.py",
-    "src/transformers/models/vit/convert_vit_timm_to_pytorch.py",
-    "src/transformers/models/vit/feature_extraction_vit.py",
-    "src/transformers/models/vit/image_processing_vit.py",
-    "src/transformers/models/vit/image_processing_vit_fast.py",
-    "src/transformers/models/vit/modeling_vit.py",
-    "src/transformers/models/vit/modeling_tf_vit.py",
-    "src/transformers/models/vit/modeling_flax_vit.py",
+    "transformers/models/vit/__init__.py",
+    "transformers/models/vit/configuration_vit.py",
+    "transformers/models/vit/convert_dino_to_pytorch.py",
+    "transformers/models/vit/convert_vit_timm_to_pytorch.py",
+    "transformers/models/vit/feature_extraction_vit.py",
+    "transformers/models/vit/image_processing_vit.py",
+    "transformers/models/vit/image_processing_vit_fast.py",
+    "transformers/models/vit/modeling_vit.py",
+    "transformers/models/vit/modeling_tf_vit.py",
+    "transformers/models/vit/modeling_flax_vit.py",
 }
 
 WAV2VEC2_MODEL_FILES = {
-    "src/transformers/models/wav2vec2/__init__.py",
-    "src/transformers/models/wav2vec2/configuration_wav2vec2.py",
-    "src/transformers/models/wav2vec2/convert_wav2vec2_original_pytorch_checkpoint_to_pytorch.py",
-    "src/transformers/models/wav2vec2/convert_wav2vec2_original_s3prl_checkpoint_to_pytorch.py",
-    "src/transformers/models/wav2vec2/feature_extraction_wav2vec2.py",
-    "src/transformers/models/wav2vec2/modeling_wav2vec2.py",
-    "src/transformers/models/wav2vec2/modeling_tf_wav2vec2.py",
-    "src/transformers/models/wav2vec2/modeling_flax_wav2vec2.py",
-    "src/transformers/models/wav2vec2/processing_wav2vec2.py",
-    "src/transformers/models/wav2vec2/tokenization_wav2vec2.py",
+    "transformers/models/wav2vec2/__init__.py",
+    "transformers/models/wav2vec2/configuration_wav2vec2.py",
+    "transformers/models/wav2vec2/convert_wav2vec2_original_pytorch_checkpoint_to_pytorch.py",
+    "transformers/models/wav2vec2/convert_wav2vec2_original_s3prl_checkpoint_to_pytorch.py",
+    "transformers/models/wav2vec2/feature_extraction_wav2vec2.py",
+    "transformers/models/wav2vec2/modeling_wav2vec2.py",
+    "transformers/models/wav2vec2/modeling_tf_wav2vec2.py",
+    "transformers/models/wav2vec2/modeling_flax_wav2vec2.py",
+    "transformers/models/wav2vec2/processing_wav2vec2.py",
+    "transformers/models/wav2vec2/tokenization_wav2vec2.py",
 }
 
 REPO_PATH = Path(transformers.__path__[0]).parent.parent
@@ -465,22 +465,26 @@ NEW_BERT_CONSTANT = "value"
         )
 
     def test_get_model_files_only_pt(self):
+        # `Path(f).relative_to(REPO_PATH)` may fail if `transformers` is not an editable install.
+        def get_relative_path_in_lib(f, components=4):
+            return os.path.sep.join(os.path.normpath(f).split(os.path.sep)[-components:])
+
         # BERT
         bert_files = get_model_files("bert", frameworks=["pt"])
 
         doc_file = str(Path(bert_files["doc_file"]).relative_to(REPO_PATH))
         self.assertEqual(doc_file, "docs/source/en/model_doc/bert.md")
 
-        model_files = {str(Path(f).relative_to(REPO_PATH)) for f in bert_files["model_files"]}
+        model_files = {get_relative_path_in_lib(f) for f in bert_files["model_files"]}
         bert_model_files = BERT_MODEL_FILES - {
-            "src/transformers/models/bert/modeling_tf_bert.py",
-            "src/transformers/models/bert/modeling_flax_bert.py",
+            "transformers/models/bert/modeling_tf_bert.py",
+            "transformers/models/bert/modeling_flax_bert.py",
         }
         self.assertEqual(model_files, bert_model_files)
 
         self.assertEqual(bert_files["module_name"], "bert")
 
-        test_files = {str(Path(f).relative_to(REPO_PATH)) for f in bert_files["test_files"]}
+        test_files = {get_relative_path_in_lib(f) for f in bert_files["test_files"]}
         bert_test_files = {
             "tests/models/bert/test_tokenization_bert.py",
             "tests/models/bert/test_modeling_bert.py",
@@ -492,16 +496,16 @@ NEW_BERT_CONSTANT = "value"
         doc_file = str(Path(vit_files["doc_file"]).relative_to(REPO_PATH))
         self.assertEqual(doc_file, "docs/source/en/model_doc/vit.md")
 
-        model_files = {str(Path(f).relative_to(REPO_PATH)) for f in vit_files["model_files"]}
+        model_files = {get_relative_path_in_lib(f) for f in vit_files["model_files"]}
         vit_model_files = VIT_MODEL_FILES - {
-            "src/transformers/models/vit/modeling_tf_vit.py",
-            "src/transformers/models/vit/modeling_flax_vit.py",
+            "transformers/models/vit/modeling_tf_vit.py",
+            "transformers/models/vit/modeling_flax_vit.py",
         }
         self.assertEqual(model_files, vit_model_files)
 
         self.assertEqual(vit_files["module_name"], "vit")
 
-        test_files = {str(Path(f).relative_to(REPO_PATH)) for f in vit_files["test_files"]}
+        test_files = {get_relative_path_in_lib(f) for f in vit_files["test_files"]}
         vit_test_files = {
             "tests/models/vit/test_image_processing_vit.py",
             "tests/models/vit/test_modeling_vit.py",
@@ -513,16 +517,16 @@ NEW_BERT_CONSTANT = "value"
         doc_file = str(Path(wav2vec2_files["doc_file"]).relative_to(REPO_PATH))
         self.assertEqual(doc_file, "docs/source/en/model_doc/wav2vec2.md")
 
-        model_files = {str(Path(f).relative_to(REPO_PATH)) for f in wav2vec2_files["model_files"]}
+        model_files = {get_relative_path_in_lib(f) for f in wav2vec2_files["model_files"]}
         wav2vec2_model_files = WAV2VEC2_MODEL_FILES - {
-            "src/transformers/models/wav2vec2/modeling_tf_wav2vec2.py",
-            "src/transformers/models/wav2vec2/modeling_flax_wav2vec2.py",
+            "transformers/models/wav2vec2/modeling_tf_wav2vec2.py",
+            "transformers/models/wav2vec2/modeling_flax_wav2vec2.py",
         }
         self.assertEqual(model_files, wav2vec2_model_files)
 
         self.assertEqual(wav2vec2_files["module_name"], "wav2vec2")
 
-        test_files = {str(Path(f).relative_to(REPO_PATH)) for f in wav2vec2_files["test_files"]}
+        test_files = {get_relative_path_in_lib(f) for f in wav2vec2_files["test_files"]}
         wav2vec2_test_files = {
             "tests/models/wav2vec2/test_feature_extraction_wav2vec2.py",
             "tests/models/wav2vec2/test_modeling_wav2vec2.py",
