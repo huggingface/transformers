@@ -216,7 +216,7 @@ class GenerationTesterMixin:
         if do_sample:
             logits_processor_kwargs.update(
                 {
-                    "top_k": 10,
+                    "top_k": 50,
                     "top_p": 0.7,
                     "temperature": 0.7,
                 }
