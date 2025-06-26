@@ -1380,7 +1380,15 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
                 "The `max_size` argument is deprecated and will be removed in a future version, use"
                 " `size['longest_edge']` instead."
             )
-            size = kwargs.pop("max_size")
+            max_size = kwargs.pop("max_size")
+            if size is None:
+                size = {"shortest_edge": 800, "longest_edge": max_size}
+            else:
+                # If size is already provided, we need to handle max_size appropriately
+                if isinstance(size, dict) and "longest_edge" not in size:
+                    size = dict(size)  # Make a copy to avoid modifying the original
+                    size["longest_edge"] = max_size
+                # If size already has longest_edge, the max_size is ignored (deprecated behavior)
 
         do_resize = self.do_resize if do_resize is None else do_resize
         size = self.size if size is None else size
