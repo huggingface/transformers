@@ -989,7 +989,7 @@ def check_model_inputs(func):
             return capture_fn
 
         capture_flags = self._can_record_outputs.keys()
-        recordable_keys = {f"output_{k}": kwargs.get(f"output_{k}", False) for k, v in capture_flags.items()}
+        recordable_keys = {f"output_{k}": kwargs.get(f"output_{k}", False) for k in capture_flags}
         if any(recordable_keys.values()):
             for _, layer in self.named_modules():
                 for key, (cls, idx) in self._can_record_outputs.items():
