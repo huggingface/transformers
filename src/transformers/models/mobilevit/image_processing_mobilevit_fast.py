@@ -74,13 +74,14 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
         do_center_crop: bool,
         crop_size: Optional[dict],
         do_flip_channel_order: bool,
+        disable_grouping: bool,
         return_tensors: Optional[str],
         **kwargs,
     ):
         processed_images = []
 
         # Group images by shape for more efficient batch processing
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
 
         # Process each group of images with the same shape
@@ -93,7 +94,7 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
         # Group again after resizing (in case resize produced different sizes)
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
 
         for shape, stacked_images in grouped_images.items():
