@@ -88,6 +88,7 @@ if TYPE_CHECKING:
     from .depth_anything import *
     from .depth_pro import *
     from .detr import *
+    from .dia import *
     from .dialogpt import *
     from .diffllama import *
     from .dinat import *
