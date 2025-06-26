@@ -408,13 +408,14 @@ class Blip2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
     _supports_attention_backend = True
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
+    _supports_flash_attn_2 = False
+    _supports_sdpa = False
+    _supports_flex_attn = False
 
     _no_split_modules = [
         "Blip2Attention",
         "Blip2QFormerMultiHeadAttention",
+        "Blip2EncoderLayer",
         "Blip2TextEmbeddings",
         "T5Block",
         "OPTDecoderLayer",
@@ -2074,7 +2075,8 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         # otherwise we expand manually by concating
         if getattr(self.config, "image_token_id", None) is not None:
             special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)
-            language_model_inputs = language_model_inputs.to(inputs_embeds.device, inputs_embeds.dtype)
+            language_model_inputs = language_model_inputs.to(inputs_embeds.dtype)
+            special_image_mask = special_image_mask.to(language_model_inputs.device)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, language_model_inputs)
         else:
             logger.warning_once(
@@ -2209,6 +2211,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         if getattr(self.config, "image_token_id", None) is not None:
             special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)
             inputs_embeds[special_image_mask] = language_model_inputs.flatten()
+            attention_mask = attention_mask.to(language_attention_mask.device)
         else:
             logger.warning_once(
                 "Expanding inputs for image tokens in BLIP-2 should be done in processing. "
@@ -2231,7 +2234,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
 
         inputs = {"inputs_embeds": inputs_embeds, "attention_mask": attention_mask}
         if not self.language_model.config.is_encoder_decoder:
-            inputs["input_ids"] = input_ids
+            inputs["input_ids"] = input_ids.to(language_model_inputs.device)
 
         outputs = self.language_model.generate(**inputs, **generate_kwargs)
         return outputs
