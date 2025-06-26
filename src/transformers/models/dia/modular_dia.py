@@ -688,6 +688,7 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, DiaGenerationMixin):
         self.logits_dense = nn.Linear(
             config.decoder_config.hidden_size, (self.num_channels * self.vocab_size), bias=False
         )
+        self.loss_type = "ForMaskedLM"
 
         # Initialize weights and apply final processing
         self.post_init()
