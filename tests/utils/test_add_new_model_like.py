@@ -443,7 +443,6 @@ NEW_BERT_CONSTANT = "value"
 
     def test_filter_framework_files(self):
         files = ["modeling_bert.py", "modeling_tf_bert.py", "modeling_flax_bert.py", "configuration_bert.py"]
-        self.assertEqual(filter_framework_files(files), files)
         self.assertEqual(set(filter_framework_files(files, ["pt", "tf", "flax"])), set(files))
 
         self.assertEqual(set(filter_framework_files(files, ["pt"])), {"modeling_bert.py", "configuration_bert.py"})
@@ -621,7 +620,7 @@ NEW_BERT_CONSTANT = "value"
         self.assertEqual(gpt_classes, expected_gpt_classes)
 
     def test_retrieve_info_for_model_with_bert(self):
-        bert_info = retrieve_info_for_model("bert")
+        bert_info = retrieve_info_for_model("bert", frameworks=["pt", "tf", "flax"])
         bert_classes = [
             "BertForTokenClassification",
             "BertForQuestionAnswering",
@@ -651,8 +650,6 @@ NEW_BERT_CONSTANT = "value"
         bert_test_files = {
             "tests/models/bert/test_tokenization_bert.py",
             "tests/models/bert/test_modeling_bert.py",
-            "tests/models/bert/test_modeling_tf_bert.py",
-            "tests/models/bert/test_modeling_flax_bert.py",
         }
         self.assertEqual(test_files, bert_test_files)
 
@@ -856,72 +853,6 @@ else:
     sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
 """
 
-        init_no_tokenizer = """
-from typing import TYPE_CHECKING
-
-from ...utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available
-
-_import_structure = {
-    "configuration_gpt2": ["GPT2Config", "GPT2OnnxConfig"],
-}
-
-try:
-    if not is_torch_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_gpt2"] = ["GPT2Model"]
-
-try:
-    if not is_tf_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_tf_gpt2"] = ["TFGPT2Model"]
-
-try:
-    if not is_flax_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_flax_gpt2"] = ["FlaxGPT2Model"]
-
-if TYPE_CHECKING:
-    from .configuration_gpt2 import GPT2Config, GPT2OnnxConfig
-
-    try:
-        if not is_torch_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_gpt2 import GPT2Model
-
-    try:
-        if not is_tf_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_tf_gpt2 import TFGPT2Model
-
-    try:
-        if not is_flax_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_flax_gpt2 import FlaxGPT2Model
-
-else:
-    import sys
-
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
-"""
-
         init_pt_only = """
 from typing import TYPE_CHECKING
 
@@ -1012,10 +943,6 @@ else:
             file_name = os.path.join(tmp_dir, "../__init__.py")
 
             self.init_file(file_name, test_init)
-            clean_frameworks_in_init(file_name, keep_processing=False)
-            self.check_result(file_name, init_no_tokenizer)
-
-            self.init_file(file_name, test_init)
             clean_frameworks_in_init(file_name, frameworks=["pt"])
             self.check_result(file_name, init_pt_only)
 
@@ -1075,72 +1002,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .image_processing_vit import ViTImageProcessor
-
-    try:
-        if not is_torch_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_vit import ViTModel
-
-    try:
-        if not is_tf_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_tf_vit import TFViTModel
-
-    try:
-        if not is_flax_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_flax_vit import FlaxViTModel
-
-else:
-    import sys
-
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
-"""
-
-        init_no_feature_extractor = """
-from typing import TYPE_CHECKING
-
-from ...utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available
-
-_import_structure = {
-    "configuration_vit": ["ViTConfig"],
-}
-
-try:
-    if not is_torch_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_vit"] = ["ViTModel"]
-
-try:
-    if not is_tf_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_tf_vit"] = ["TFViTModel"]
-
-try:
-    if not is_flax_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_flax_vit"] = ["FlaxViTModel"]
-
-if TYPE_CHECKING:
-    from .configuration_vit import ViTConfig
 
     try:
         if not is_torch_available():
@@ -1258,10 +1119,6 @@ else:
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             file_name = os.path.join(tmp_dir, "../__init__.py")
-
-            self.init_file(file_name, test_init)
-            clean_frameworks_in_init(file_name, keep_processing=False)
-            self.check_result(file_name, init_no_feature_extractor)
 
             self.init_file(file_name, test_init)
             clean_frameworks_in_init(file_name, frameworks=["pt"])
