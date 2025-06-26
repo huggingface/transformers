@@ -113,7 +113,10 @@ processed_outputs = processor.post_process_keypoint_detection(outputs, [image_si
     )
     plt.savefig(f"output_image.png")
     ```
-![image/png](https://cdn-uploads.huggingface.co/production/uploads/632885ba1558dac67c440aa8/ZtFmphEhx8tcbEQqOolyE.png)
+
+<div class="flex justify-center">
+    <img src="https://cdn-uploads.huggingface.co/production/uploads/632885ba1558dac67c440aa8/ZtFmphEhx8tcbEQqOolyE.png">
+</div>
 
 ## Resources
 
