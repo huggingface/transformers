@@ -595,6 +595,8 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = T5GemmaForConditionalGeneration if is_torch_available() else None
+    # `t5gemma` will give warning or raise error if it is not `eager` during training.
+    _torch_compile_train_attn_implementation = "eager"
 
     # won't fix
     test_torchscript = False

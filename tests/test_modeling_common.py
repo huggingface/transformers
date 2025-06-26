@@ -4418,6 +4418,10 @@ class ModelTesterMixin:
 
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         cls = self._torch_compile_train_cls
+        attn_implementation = getattr(self, "_torch_compile_train_attn_implementation", None)
+        if attn_implementation is not None:
+            config.attn_implementation = attn_implementation
+
         model = cls(config).to(torch_device)
 
         inputs = {
