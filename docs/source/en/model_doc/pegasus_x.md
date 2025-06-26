@@ -28,9 +28,11 @@ rendered properly in your Markdown viewer.
 
 [PEGASUS-X](https://huggingface.co/papers/2208.04347) is an encoder-decoder (sequence-to-sequence) transformer model for long-input summarization. It extends the [Pegasus](./pegasus) model with staggered block-local attention, global encoder tokens, and additional pretraining on long text sequences, enabling it to handle inputs of up to 16,000 tokens. PEGASUS-X matches the performance of much larger models while using fewer parameters.
 
-You can find all the original PEGASUS-X checkpoints under the [Google](https://huggingface.co/google?search_models=pegasus-x-) organization.
+You can find all the original PEGASUS-X checkpoints under the [Google](https://huggingface.co/google/models?search=pegasus-x) organization.
 
 > [!TIP]
+> This model was contributed by [zphang](https://huggingface.co/zphang).
+>
 > Click on the PEGASUS-X models in the right sidebar for more examples of how to apply PEGASUS-X to different language tasks.
 
 The example below demonstrates how to summarize text with [`Pipeline`], [`AutoModel`], and from the command line.
@@ -45,7 +47,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="summarization",
     model="google/pegasus-x-large",
-    torch_dtype=torch.float32,
+    torch_dtype=torch.bfloat16,
     device=0
 )
 pipeline("""Plants are among the most remarkable and essential life forms on Earth, possessing a unique ability to produce their own food through a process known as photosynthesis. This complex biochemical process is fundamental not only to plant life but to virtually all life on the planet.
@@ -65,7 +67,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "google/pegasus-x-large",
-    torch_dtype=torch.float32,
+    torch_dtype=torch.bfloat16,
     device_map="auto",
 )
 
@@ -123,8 +125,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ## Notes
 
-- PEGASUS-X does not support FP16.
-- PEGASUS-X uses the same [tokenizer](pegasus#transformers.PegasusTokenizer) as Pegasus.
+- PEGASUS-X also uses the [`PegasusTokenizer`].
 
 ## PegasusXConfig
 
