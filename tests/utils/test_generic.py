@@ -19,13 +19,12 @@ import numpy as np
 
 from transformers.configuration_utils import PretrainedConfig
 from transformers.modeling_outputs import BaseModelOutput
-from transformers.testing_utils import require_flax, require_torch
+from transformers.testing_utils import require_torch
 from transformers.utils import (
     can_return_tuple,
     expand_dims,
     filter_out_non_signature_kwargs,
     flatten_dict,
-    is_flax_available,
     is_torch_available,
     reshape,
     squeeze,
@@ -33,9 +32,6 @@ from transformers.utils import (
     transpose,
 )
 
-
-if is_flax_available():
-    import jax.numpy as jnp
 
 if is_torch_available():
     import torch
@@ -84,23 +80,6 @@ class GenericTester(unittest.TestCase):
         t = torch.tensor(x)
         self.assertTrue(np.allclose(transpose(x, axes=(1, 2, 0)), transpose(t, axes=(1, 2, 0)).numpy()))
 
-    @require_flax
-    def test_transpose_flax(self):
-        x = np.random.randn(3, 4)
-        t = jnp.array(x)
-        self.assertTrue(np.allclose(transpose(x), np.asarray(transpose(t))))
-
-        x = np.random.randn(3, 4, 5)
-        t = jnp.array(x)
-        self.assertTrue(np.allclose(transpose(x, axes=(1, 2, 0)), np.asarray(transpose(t, axes=(1, 2, 0)))))
-
-    def test_reshape_numpy(self):
-        x = np.random.randn(3, 4)
-        self.assertTrue(np.allclose(reshape(x, (4, 3)), np.reshape(x, (4, 3))))
-
-        x = np.random.randn(3, 4, 5)
-        self.assertTrue(np.allclose(reshape(x, (12, 5)), np.reshape(x, (12, 5))))
-
     @require_torch
     def test_reshape_torch(self):
         x = np.random.randn(3, 4)
@@ -110,23 +89,6 @@ class GenericTester(unittest.TestCase):
         x = np.random.randn(3, 4, 5)
         t = torch.tensor(x)
         self.assertTrue(np.allclose(reshape(x, (12, 5)), reshape(t, (12, 5)).numpy()))
-
-    @require_flax
-    def test_reshape_flax(self):
-        x = np.random.randn(3, 4)
-        t = jnp.array(x)
-        self.assertTrue(np.allclose(reshape(x, (4, 3)), np.asarray(reshape(t, (4, 3)))))
-
-        x = np.random.randn(3, 4, 5)
-        t = jnp.array(x)
-        self.assertTrue(np.allclose(reshape(x, (12, 5)), np.asarray(reshape(t, (12, 5)))))
-
-    def test_squeeze_numpy(self):
-        x = np.random.randn(1, 3, 4)
-        self.assertTrue(np.allclose(squeeze(x), np.squeeze(x)))
-
-        x = np.random.randn(1, 4, 1, 5)
-        self.assertTrue(np.allclose(squeeze(x, axis=2), np.squeeze(x, axis=2)))
 
     @require_torch
     def test_squeeze_torch(self):
@@ -138,16 +100,6 @@ class GenericTester(unittest.TestCase):
         t = torch.tensor(x)
         self.assertTrue(np.allclose(squeeze(x, axis=2), squeeze(t, axis=2).numpy()))
 
-    @require_flax
-    def test_squeeze_flax(self):
-        x = np.random.randn(1, 3, 4)
-        t = jnp.array(x)
-        self.assertTrue(np.allclose(squeeze(x), np.asarray(squeeze(t))))
-
-        x = np.random.randn(1, 4, 1, 5)
-        t = jnp.array(x)
-        self.assertTrue(np.allclose(squeeze(x, axis=2), np.asarray(squeeze(t, axis=2))))
-
     def test_expand_dims_numpy(self):
         x = np.random.randn(3, 4)
         self.assertTrue(np.allclose(expand_dims(x, axis=1), np.expand_dims(x, axis=1)))
@@ -157,12 +109,6 @@ class GenericTester(unittest.TestCase):
         x = np.random.randn(3, 4)
         t = torch.tensor(x)
         self.assertTrue(np.allclose(expand_dims(x, axis=1), expand_dims(t, axis=1).numpy()))
-
-    @require_flax
-    def test_expand_dims_flax(self):
-        x = np.random.randn(3, 4)
-        t = jnp.array(x)
-        self.assertTrue(np.allclose(expand_dims(x, axis=1), np.asarray(expand_dims(t, axis=1))))
 
     def test_to_py_obj_native(self):
         self.assertTrue(to_py_obj(1) == 1)
@@ -188,18 +134,6 @@ class GenericTester(unittest.TestCase):
 
         x2 = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
         t2 = torch.tensor(x2)
-        self.assertTrue(to_py_obj(t2) == x2)
-
-        self.assertTrue(to_py_obj([t1, t2]) == [x1, x2])
-
-    @require_flax
-    def test_to_py_obj_flax(self):
-        x1 = [[1, 2, 3], [4, 5, 6]]
-        t1 = jnp.array(x1)
-        self.assertTrue(to_py_obj(t1) == x1)
-
-        x2 = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
-        t2 = jnp.array(x2)
         self.assertTrue(to_py_obj(t2) == x2)
 
         self.assertTrue(to_py_obj([t1, t2]) == [x1, x2])

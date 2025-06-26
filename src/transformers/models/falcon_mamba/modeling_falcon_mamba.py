@@ -32,10 +32,8 @@ from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
-from ...models.mamba.modeling_mamba import MambaCache
 from ...utils import ModelOutput, auto_docstring, logging
-from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
-from ...utils.import_utils import is_mambapy_available as is_falcon_mambapy_available
+from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available, is_mambapy_available
 from .configuration_falcon_mamba import FalconMambaConfig
 
 
@@ -232,24 +230,7 @@ class FalconMambaMixer(nn.Module):
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
         self.use_bias = config.use_bias
 
-        if not is_fast_path_available:
-            if self.use_falcon_mambapy:
-                if is_falcon_mambapy_available():
-                    logger.warning_once(
-                        "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, falcon_mamba_inner_fn)`"
-                        " is None. Falling back to the falcon_mamba.py backend. To install follow https://github.com/state-spaces/falcon_mamba/#installation and"
-                        " https://github.com/Dao-AILab/causal-conv1d"
-                    )
-                else:
-                    raise ImportError(
-                        "use_falcon_mambapy is set to True but the falcon_mambapy package is not installed. To install it follow https://github.com/alxndrTL/falcon_mamba.py."
-                    )
-            else:
-                logger.warning_once(
-                    "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, falcon_mamba_inner_fn)`"
-                    " is None. Falling back to the sequential implementation of FalconMamba, as use_falcon_mambapy is set to False. To install follow https://github.com/state-spaces/falcon_mamba/#installation and"
-                    " https://github.com/Dao-AILab/causal-conv1d. For the falcon_mamba.py backend, follow https://github.com/alxndrTL/falcon_mamba.py."
-                )
+        self.warn_slow_implementation()
         # Triton expects to pass RMS weights even if they are non learnable, thus we need to create these weights here
         self.register_buffer(
             "b_c_rms", torch.nn.Parameter(torch.ones(self.ssm_state_size), requires_grad=False), persistent=False
@@ -258,6 +239,26 @@ class FalconMambaMixer(nn.Module):
             "dt_rms", torch.nn.Parameter(torch.ones(self.intermediate_size), requires_grad=False), persistent=False
         )
         self.rms_eps = config.mixer_rms_eps
+
+    def warn_slow_implementation(self):
+        if not is_fast_path_available:
+            if self.use_mambapy:
+                if is_mambapy_available():
+                    logger.warning_once(
+                        "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
+                        " is None. Falling back to the mamba.py backend. To install follow https://github.com/state-spaces/mamba/#installation and"
+                        " https://github.com/Dao-AILab/causal-conv1d"
+                    )
+                else:
+                    raise ImportError(
+                        "use_mambapy is set to True but the mambapy package is not installed. To install it follow https://github.com/alxndrTL/mamba.py."
+                    )
+            else:
+                logger.warning_once(
+                    "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
+                    " is None. Falling back to the sequential implementation of Mamba, as use_mambapy is set to False. To install follow https://github.com/state-spaces/mamba/#installation and"
+                    " https://github.com/Dao-AILab/causal-conv1d. For the mamba.py backend, follow https://github.com/alxndrTL/mamba.py."
+                )
 
     def cuda_kernels_forward(
         self,
@@ -392,7 +393,7 @@ class FalconMambaMixer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
-        if is_falcon_mambapy_available():
+        if is_mambapy_available():
             from mambapy.pscan import pscan
         else:
             pscan = None
@@ -819,7 +820,14 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
     ):
         # Overwritten -- uses `cache_params` as opposed to `past_key_values`
 
+        cache_params_not_initialized = cache_params is None
         if use_cache:
+            if cache_params_not_initialized:
+                max_batch_size = inputs_embeds.size(0) if inputs_embeds is not None else input_ids.size(0)
+                cache_params = FalconMambaCache(
+                    self.backbone.config, max_batch_size, device=self.device, dtype=self.dtype
+                )
+                cache_position = torch.arange(0, self.backbone.config.conv_kernel, device=input_ids.device)
             # `cache_position` should have been initialized in `generate`
             if cache_position is None:
                 raise ValueError(
@@ -840,7 +848,7 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
                 # the length of `cache_params.conv_states`, which is `config.conv_kernel`
                 cache_position = torch.arange(0, self.config.conv_kernel, device=input_ids.device)
 
-        if inputs_embeds is not None and cache_params is None:
+        if inputs_embeds is not None and cache_params_not_initialized:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids.contiguous()}
