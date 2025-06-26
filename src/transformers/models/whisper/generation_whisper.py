@@ -136,7 +136,18 @@ def _pad_to_max_length(
     cut_off_length=None,
     return_token_timestamps=False,
     force_unique_generate_call=False,
+    skip_ending_double_timestamps=False,
+    timestamp_begin=None,
 ):
+    """
+    skip_ending_double_timestamps: when the segement ended with two timestamp tokens, whether to ignore the last timestamp token
+    see https://github.com/huggingface/transformers/pull/35750
+
+    _pad_to_max_length is used in different contexts:
+    1. At the end of generation: we need to keep both ending timestamp tokens in the segment (see https://github.com/huggingface/transformers/pull/34537).
+    2. In the middle of generation, e.g. when condition_on_prev_tokens=True and we want to use the last generated tokens as decoder_input_ids:
+       we must skip one of the double ending timestamp tokens (see https://github.com/huggingface/transformers/pull/35750).
+    """
     max_total_length = 0
     sequences = []
     token_timestamps_list = []
@@ -166,7 +177,17 @@ def _pad_to_max_length(
 
     for current_segment_list in current_segments:
         if current_segment_list is not None and len([d["tokens"] for d in current_segment_list]) > 0:
-            sequence = torch.cat([d["tokens"] for d in current_segment_list], dim=-1)
+            sequences_list = []
+            for d in current_segment_list:
+                if skip_ending_double_timestamps and len(d["tokens"]) > 2 and d["tokens"][-2] >= timestamp_begin:
+                    # the segment finishes with two timestamp tokens
+                    # we need to ignore the last timestamp token
+                    # see https://github.com/huggingface/transformers/pull/34537
+                    sequences_list.append(d["tokens"][:-1])
+                else:
+                    sequences_list.append(d["tokens"])
+            sequence = torch.cat(sequences_list, dim=-1)
+
             if return_token_timestamps:
                 token_timestamps = torch.cat(
                     [d["result"]["token_timestamps"][d["idxs"][0] : d["idxs"][1]] for d in current_segment_list],
@@ -1809,14 +1830,6 @@ class WhisperGenerationMixin(GenerationMixin):
             # according to https://github.com/openai/whisper/blob/e58f28804528831904c3b6f2c0e473f346223433/whisper/decoding.py#L609
             active_segments = [current_segments[i] if do_condition_on_prev_tokens[i] else None for i in batch_idx_map]
 
-            for segments in active_segments:
-                for seg in segments:
-                    if len(seg["tokens"]) > 2 and seg["tokens"][-2] >= timestamp_begin:
-                        # the segment finishes with two timestamp tokens
-                        # we need to ignore the last timestamp token
-                        # see https://github.com/huggingface/transformers/pull/34537
-                        seg["tokens"] = seg["tokens"][:-1]
-
             if prompt_ids is not None and generation_config.prompt_condition_type == "all-segments":
                 prev_ids = prompt_ids
             else:
@@ -1833,6 +1846,8 @@ class WhisperGenerationMixin(GenerationMixin):
                 padding=padding,
                 bos_token_tensor=prev_ids,
                 cut_off_length=cut_off_length,
+                skip_ending_double_timestamps=True,
+                timestamp_begin=timestamp_begin,
             )
             decoder_input_ids = torch.cat([prev_tokens, decoder_input_ids], dim=-1)
 
