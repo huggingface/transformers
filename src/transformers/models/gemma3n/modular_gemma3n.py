@@ -506,6 +506,7 @@ class Gemma3nVisionConfig(TimmWrapperConfig):
         vocab_size: int = 128,
         vocab_offset: int = 262_144,
         rms_norm_eps: float = 1e-06,
+        model_args: Optional[dict] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
