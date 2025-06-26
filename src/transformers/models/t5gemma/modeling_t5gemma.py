@@ -1008,8 +1008,6 @@ class T5GemmaModel(T5GemmaPreTrainedModel):
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, decoder_sequence_length)`, *optional*):
             Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the range `[0,
             config.decoder.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
-
-        **flash_attn_kwargs: flash attention related parameters.
         """
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
