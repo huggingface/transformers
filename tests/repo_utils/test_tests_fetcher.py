@@ -151,7 +151,7 @@ def create_tmp_repo(tmp_dir, models=None):
 
     example_dir = tmp_dir / "examples"
     example_dir.mkdir(exist_ok=True)
-    for framework in ["pytorch"]:
+    for framework in ["flax", "pytorch", "tensorflow"]:
         framework_dir = example_dir / framework
         framework_dir.mkdir(exist_ok=True)
         with open(framework_dir / f"test_{framework}_examples.py", "w") as f:
@@ -525,15 +525,27 @@ src/transformers/configuration_utils.py
             create_tmp_repo(tmp_folder)
 
             expected_example_deps = {
+                "examples/flax/test_flax_examples.py": [
+                    "examples/flax/text-classification/run_glue.py",
+                    "examples/flax/test_flax_examples.py",
+                ],
                 "examples/pytorch/test_pytorch_examples.py": [
                     "examples/pytorch/text-classification/run_glue.py",
                     "examples/pytorch/test_pytorch_examples.py",
                 ],
+                "examples/tensorflow/test_tensorflow_examples.py": [
+                    "examples/tensorflow/text-classification/run_glue.py",
+                    "examples/tensorflow/test_tensorflow_examples.py",
+                ],
             }
 
             expected_examples = {
+                "examples/flax/test_flax_examples.py",
+                "examples/flax/text-classification/run_glue.py",
                 "examples/pytorch/test_pytorch_examples.py",
                 "examples/pytorch/text-classification/run_glue.py",
+                "examples/tensorflow/test_tensorflow_examples.py",
+                "examples/tensorflow/text-classification/run_glue.py",
             }
 
             with patch_transformer_repo_path(tmp_folder):
@@ -553,8 +565,12 @@ src/transformers/configuration_utils.py
                 "src/transformers/__init__.py",
                 "src/transformers/models/bert/__init__.py",
                 "tests/models/bert/test_modeling_bert.py",
+                "examples/flax/test_flax_examples.py",
+                "examples/flax/text-classification/run_glue.py",
                 "examples/pytorch/test_pytorch_examples.py",
                 "examples/pytorch/text-classification/run_glue.py",
+                "examples/tensorflow/test_tensorflow_examples.py",
+                "examples/tensorflow/text-classification/run_glue.py",
             }
             assert set(reverse_map["src/transformers/models/bert/modeling_bert.py"]) == expected_bert_deps
 
@@ -570,8 +586,12 @@ src/transformers/configuration_utils.py
                 "src/transformers/modeling_utils.py",
                 "tests/test_modeling_common.py",
                 "tests/models/bert/test_modeling_bert.py",
+                "examples/flax/test_flax_examples.py",
+                "examples/flax/text-classification/run_glue.py",
                 "examples/pytorch/test_pytorch_examples.py",
                 "examples/pytorch/text-classification/run_glue.py",
+                "examples/tensorflow/test_tensorflow_examples.py",
+                "examples/tensorflow/text-classification/run_glue.py",
             }
             assert set(reverse_map["src/transformers/__init__.py"]) == expected_init_deps
 
@@ -580,8 +600,12 @@ src/transformers/configuration_utils.py
                 "src/transformers/models/bert/configuration_bert.py",
                 "src/transformers/models/bert/modeling_bert.py",
                 "tests/models/bert/test_modeling_bert.py",
+                "examples/flax/test_flax_examples.py",
+                "examples/flax/text-classification/run_glue.py",
                 "examples/pytorch/test_pytorch_examples.py",
                 "examples/pytorch/text-classification/run_glue.py",
+                "examples/tensorflow/test_tensorflow_examples.py",
+                "examples/tensorflow/text-classification/run_glue.py",
             }
             assert set(reverse_map["src/transformers/models/bert/__init__.py"]) == expected_init_deps
 
@@ -596,8 +620,12 @@ src/transformers/configuration_utils.py
                 "src/transformers/models/bert/configuration_bert.py",
                 "src/transformers/models/bert/modeling_bert.py",
                 "tests/models/bert/test_modeling_bert.py",
+                "examples/flax/test_flax_examples.py",
+                "examples/flax/text-classification/run_glue.py",
                 "examples/pytorch/test_pytorch_examples.py",
                 "examples/pytorch/text-classification/run_glue.py",
+                "examples/tensorflow/test_tensorflow_examples.py",
+                "examples/tensorflow/text-classification/run_glue.py",
             }
             assert set(reverse_map["src/transformers/models/bert/__init__.py"]) == expected_init_deps
 
@@ -611,7 +639,9 @@ src/transformers/configuration_utils.py
             commit_changes("src/transformers/models/bert/modeling_bert.py", BERT_MODEL_FILE_NEW_CODE, repo)
 
             example_tests = {
+                "examples/flax/test_flax_examples.py",
                 "examples/pytorch/test_pytorch_examples.py",
+                "examples/tensorflow/test_tensorflow_examples.py",
             }
 
             with patch_transformer_repo_path(tmp_folder):
