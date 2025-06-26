@@ -15,7 +15,7 @@
 """PyTorch Chameleon model."""
 
 from functools import cached_property
-from typing import Callable, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -27,10 +27,10 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     LossKwargs,
     auto_docstring,
@@ -72,9 +72,6 @@ class ChameleonRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-ALL_LAYERNORM_LAYERS.append(ChameleonRMSNorm)
-
-
 # copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Chameleon
 # TODO(joao): add me back asap :)
 class ChameleonRotaryEmbedding(nn.Module):
@@ -100,7 +97,7 @@ class ChameleonRotaryEmbedding(nn.Module):
         # Force float32 since bfloat16 loses precision on long contexts
         # See https://github.com/huggingface/transformers/pull/29285
         device_type = x.device.type
-        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
+        device_type = device_type if device_type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
@@ -330,7 +327,7 @@ class ChameleonAttention(nn.Module):
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)
@@ -387,7 +384,7 @@ class ChameleonAttention(nn.Module):
 
 
 # copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with Llama->Chameleon, LLAMA->CHAMELEON
-class ChameleonDecoderLayer(nn.Module):
+class ChameleonDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: ChameleonConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -408,7 +405,7 @@ class ChameleonDecoderLayer(nn.Module):
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -462,7 +459,7 @@ class ChameleonDecoderLayer(nn.Module):
         return outputs
 
 
-class ChameleonSwinDecoderLayer(nn.Module):
+class ChameleonSwinDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: ChameleonConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -483,7 +480,7 @@ class ChameleonSwinDecoderLayer(nn.Module):
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
             hidden_states (`torch.FloatTensor`):
@@ -830,6 +827,7 @@ class ChameleonPreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
     _supports_static_cache = True
     _supports_param_buffer_assignment = False
+    _supports_flex_attn = True
     _supports_attention_backend = True
 
     def _init_weights(self, module):
@@ -854,7 +852,8 @@ class ChameleonPreTrainedModel(PreTrainedModel):
     custom_intro="""
     The VQ-VAE model used in Chameleon for encoding/decoding images into discrete tokens.
     This model follows the "Make-a-scene: Scene-based text-to-image generation with human priors" paper from
-    [ Oran Gafni, Adam Polyak, Oron Ashual, Shelly Sheynin, Devi Parikh, and Yaniv Taigman](https://arxiv.org/abs/2203.13131).
+    [ Oran Gafni, Adam Polyak, Oron Ashual, Shelly Sheynin, Devi Parikh, and Yaniv
+    Taigman](https://huggingface.co/papers/2203.13131).
     """
 )
 class ChameleonVQVAE(ChameleonPreTrainedModel):
@@ -904,12 +903,6 @@ class ChameleonModel(ChameleonPreTrainedModel):
         self.embed_tokens = value
 
     def get_image_tokens(self, pixel_values: torch.FloatTensor):
-        logger.warning(
-            "`model.get_image_tokens()` is deprecated and will be removed in v4.58. To obtain discrete token use `model.get_image_features()`"
-        )
-        return self.get_image_featues(pixel_values)
-
-    def get_image_features(self, pixel_values: torch.FloatTensor):
         """
         Tokenizes images into discrete tokens with VQGAN module. Converts
         obtained image tokens into BPE tokens and wraps with "boi" and "eoi"
@@ -924,6 +917,19 @@ class ChameleonModel(ChameleonPreTrainedModel):
         bpe_toks = self.vocabulary_mapping.convert_img2bpe(image_toks)
         bpe_toks = bpe_toks.view(batch_size, -1)
         return bpe_toks
+
+    def get_image_features(self, pixel_values: torch.FloatTensor):
+        """
+        Tokenizes images into discrete tokens with VQGAN module and embeds
+        them with text embeddings layer
+
+        Args:
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
+                The tensors corresponding to the input images.
+        """
+        image_tokens = self.get_image_tokens(pixel_values)
+        vision_embeddings = self.get_input_embeddings()(image_tokens)
+        return vision_embeddings
 
     @auto_docstring
     def forward(
@@ -940,7 +946,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    ) -> Union[tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -963,7 +969,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
             )
 
         if pixel_values is not None:
-            image_tokens = self.get_image_features(pixel_values)
+            image_tokens = self.get_image_tokens(pixel_values)
             special_image_mask = input_ids == self.vocabulary_mapping.image_token_id
             if not is_torchdynamo_compiling() and input_ids[special_image_mask].numel() != image_tokens.numel():
                 n_image_tokens_in_text = (input_ids == self.vocabulary_mapping.image_token_id).sum()
@@ -1006,28 +1012,16 @@ class ChameleonModel(ChameleonPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    causal_mask,
-                    position_ids,
-                    past_key_values,
-                    output_attentions,
-                    use_cache,
-                    cache_position,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=causal_mask,
-                    position_ids=position_ids,
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                    **kwargs,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                position_ids=position_ids,
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                **kwargs,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -1057,7 +1051,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
             attentions=all_self_attns,
         )
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
+    # Copied from transformers.models.gptj.modeling_gptj.GPTJModel._update_causal_mask
     def _update_causal_mask(
         self,
         attention_mask: Union[torch.Tensor, "BlockMask"],
@@ -1127,7 +1121,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
         return causal_mask
 
     @staticmethod
-    # Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel._prepare_4d_causal_attention_mask_with_cache_position
+    # Copied from transformers.models.gptj.modeling_gptj.GPTJModel._prepare_4d_causal_attention_mask_with_cache_position
     def _prepare_4d_causal_attention_mask_with_cache_position(
         attention_mask: torch.Tensor,
         sequence_length: int,
@@ -1221,6 +1215,12 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
     def get_decoder(self):
         return self.model
 
+    def get_image_tokens(self, pixel_values):
+        return self.model.get_image_tokens(pixel_values)
+
+    def get_image_features(self, pixel_values):
+        return self.model.get_image_features(pixel_values)
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1235,10 +1235,9 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[KwargsForCausalLM],
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -1269,7 +1268,6 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
@@ -1282,7 +1280,7 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
             cache_position=cache_position,
             **kwargs,
         )

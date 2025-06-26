@@ -462,7 +462,8 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -869,7 +870,7 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
         self.assertListEqual([result["text_labels"] for result in results], expected_text_labels)
 
     @require_torch_accelerator
-    def test_inference_object_detection_head_equivalence_cpu_gpu(self):
+    def test_inference_object_detection_head_equivalence_cpu_accelerator(self):
         processor = self.default_processor
         image = prepare_img()
         text_labels, task = prepare_text()
@@ -880,7 +881,7 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
         with torch.no_grad():
             cpu_outputs = model(**encoding)
 
-        # 2. run model on GPU
+        # 2. run model on accelerator
         model.to(torch_device)
         encoding = encoding.to(torch_device)
         with torch.no_grad():

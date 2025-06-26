@@ -27,7 +27,7 @@ from abc import ABC, abstractmethod
 from collections import UserDict
 from contextlib import contextmanager
 from os.path import abspath, exists
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 from ..dynamic_module_utils import custom_object_save
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
@@ -56,7 +56,7 @@ from ..utils import (
 )
 
 
-GenericTensor = Union[List["GenericTensor"], "torch.Tensor", "tf.Tensor"]
+GenericTensor = Union[list["GenericTensor"], "torch.Tensor", "tf.Tensor"]
 
 if is_tf_available():
     import tensorflow as tf
@@ -209,7 +209,7 @@ def pad_collate_fn(tokenizer, feature_extractor):
 def infer_framework_load_model(
     model,
     config: AutoConfig,
-    model_classes: Optional[Dict[str, Tuple[type]]] = None,
+    model_classes: Optional[dict[str, tuple[type]]] = None,
     task: Optional[str] = None,
     framework: Optional[str] = None,
     **model_kwargs,
@@ -294,8 +294,35 @@ def infer_framework_load_model(
                     model = model.eval()
                 # Stop loading on the first successful load.
                 break
-            except (OSError, ValueError):
-                all_traceback[model_class.__name__] = traceback.format_exc()
+            except (OSError, ValueError, TypeError, RuntimeError):
+                # `from_pretrained` may raise a `TypeError` or `RuntimeError` when the requested `torch_dtype`
+                # is not supported on the execution device (e.g. bf16 on a consumer GPU). We capture those so
+                # we can transparently retry the load in float32 before surfacing an error to the user.
+                fallback_tried = False
+                if is_torch_available() and ("torch_dtype" in kwargs):
+                    import torch  # local import to avoid unnecessarily importing torch for TF/JAX users
+
+                    fallback_tried = True
+                    fp32_kwargs = kwargs.copy()
+                    fp32_kwargs["torch_dtype"] = torch.float32
+
+                    try:
+                        model = model_class.from_pretrained(model, **fp32_kwargs)
+                        if hasattr(model, "eval"):
+                            model = model.eval()
+                        logger.warning(
+                            "Falling back to torch.float32 because loading with the original dtype failed on the"
+                            " target device."
+                        )
+                        break
+                    except Exception:
+                        # If it still fails, capture the traceback and continue to the next class.
+                        all_traceback[model_class.__name__] = traceback.format_exc()
+                        continue
+
+                # If no fallback was attempted or it also failed, record the original traceback.
+                if not fallback_tried:
+                    all_traceback[model_class.__name__] = traceback.format_exc()
                 continue
 
         if isinstance(model, str):
@@ -313,7 +340,7 @@ def infer_framework_load_model(
 
 def infer_framework_from_model(
     model,
-    model_classes: Optional[Dict[str, Tuple[type]]] = None,
+    model_classes: Optional[dict[str, tuple[type]]] = None,
     task: Optional[str] = None,
     framework: Optional[str] = None,
     **model_kwargs,
@@ -385,8 +412,8 @@ def get_framework(model, revision: Optional[str] = None):
 
 
 def get_default_model_and_revision(
-    targeted_task: Dict, framework: Optional[str], task_options: Optional[Any]
-) -> Tuple[str, str]:
+    targeted_task: dict, framework: Optional[str], task_options: Optional[Any]
+) -> tuple[str, str]:
     """
     Select a default model to use for a given task. Defaults to pytorch if ambiguous.
 
@@ -434,7 +461,7 @@ def load_assistant_model(
     model: "PreTrainedModel",
     assistant_model: Optional[Union[str, "PreTrainedModel"]],
     assistant_tokenizer: Optional[PreTrainedTokenizer],
-) -> Tuple[Optional["PreTrainedModel"], Optional[PreTrainedTokenizer]]:
+) -> tuple[Optional["PreTrainedModel"], Optional[PreTrainedTokenizer]]:
     """
     Prepares the assistant model and the assistant tokenizer for a pipeline whose model that can call `generate`.
 
@@ -563,7 +590,7 @@ class PipelineDataFormat:
         raise NotImplementedError()
 
     @abstractmethod
-    def save(self, data: Union[dict, List[dict]]):
+    def save(self, data: Union[dict, list[dict]]):
         """
         Save the provided data object with the representation for the current [`~pipelines.PipelineDataFormat`].
 
@@ -572,7 +599,7 @@ class PipelineDataFormat:
         """
         raise NotImplementedError()
 
-    def save_binary(self, data: Union[dict, List[dict]]) -> str:
+    def save_binary(self, data: Union[dict, list[dict]]) -> str:
         """
         Save the provided data object as a pickle-formatted binary data on the disk.
 
@@ -656,12 +683,12 @@ class CsvPipelineDataFormat(PipelineDataFormat):
                 else:
                     yield row[self.column[0]]
 
-    def save(self, data: List[dict]):
+    def save(self, data: list[dict]):
         """
         Save the provided data object with the representation for the current [`~pipelines.PipelineDataFormat`].
 
         Args:
-            data (`List[dict]`): The data to store.
+            data (`list[dict]`): The data to store.
         """
         with open(self.output_path, "w") as f:
             if len(data) > 0:
@@ -750,7 +777,7 @@ class PipedPipelineDataFormat(PipelineDataFormat):
         """
         print(data)
 
-    def save_binary(self, data: Union[dict, List[dict]]) -> str:
+    def save_binary(self, data: Union[dict, list[dict]]) -> str:
         if self.output_path is None:
             raise KeyError(
                 "When using piped input on pipeline outputting large object requires an output file path. "
@@ -937,6 +964,11 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
     ):
         if framework is None:
             framework, model = infer_framework_load_model(model, config=model.config)
+        if framework in ("tf", "jax"):
+            logger.warning_once(
+                "TensorFlow and JAX classes are deprecated and will be removed in Transformers v5. We "
+                "recommend migrating to PyTorch classes or pinning your version of Transformers."
+            )
 
         self.task = task
         self.model = model
@@ -1006,6 +1038,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         logger.warning(f"Device set to use {self.device}")
 
         self.binary_output = binary_output
+
         # We shouldn't call `model.to()` for models loaded with accelerate as well as the case that model is already on device
         if (
             self.framework == "pt"
@@ -1104,7 +1137,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                 A path to the directory where to saved. It will be created if it doesn't exist.
             safe_serialization (`str`):
                 Whether to save the model using `safetensors` or the traditional way for PyTorch or Tensorflow.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
         use_auth_token = kwargs.pop("use_auth_token", None)
@@ -1226,7 +1259,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             Recursive on lists **only**.
 
         Return:
-            `Dict[str, torch.Tensor]`: The same as `inputs` but on the proper device.
+            `dict[str, torch.Tensor]`: The same as `inputs` but on the proper device.
         """
         return self._ensure_tensor_on_device(inputs, self.device)
 
@@ -1248,12 +1281,12 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         else:
             return inputs
 
-    def check_model_type(self, supported_models: Union[List[str], dict]):
+    def check_model_type(self, supported_models: Union[list[str], dict]):
         """
         Check if the model class is in supported by the pipeline.
 
         Args:
-            supported_models (`List[str]` or `dict`):
+            supported_models (`list[str]` or `dict`):
                 The list of models supported by the pipeline, or a dictionary with model class values.
         """
         if not isinstance(supported_models, list):  # Create from a model mapping
@@ -1294,7 +1327,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         raise NotImplementedError("_sanitize_parameters not implemented")
 
     @abstractmethod
-    def preprocess(self, input_: Any, **preprocess_parameters: Dict) -> Dict[str, GenericTensor]:
+    def preprocess(self, input_: Any, **preprocess_parameters: dict) -> dict[str, GenericTensor]:
         """
         Preprocess will take the `input_` of a specific pipeline and return a dictionary of everything necessary for
         `_forward` to run properly. It should contain at least one tensor, but might have arbitrary other items.
@@ -1302,7 +1335,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         raise NotImplementedError("preprocess not implemented")
 
     @abstractmethod
-    def _forward(self, input_tensors: Dict[str, GenericTensor], **forward_parameters: Dict) -> ModelOutput:
+    def _forward(self, input_tensors: dict[str, GenericTensor], **forward_parameters: dict) -> ModelOutput:
         """
         _forward will receive the prepared dictionary from `preprocess` and run it on the model. This method might
         involve the GPU or the CPU and should be agnostic to it. Isolating this function is the reason for `preprocess`
@@ -1315,7 +1348,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         raise NotImplementedError("_forward not implemented")
 
     @abstractmethod
-    def postprocess(self, model_outputs: ModelOutput, **postprocess_parameters: Dict) -> Any:
+    def postprocess(self, model_outputs: ModelOutput, **postprocess_parameters: dict) -> Any:
         """
         Postprocess will receive the raw outputs of the `_forward` method, generally tensors, and reformat them into
         something more friendly. Generally it will output a list or a dict or results (containing just strings and
@@ -1486,16 +1519,16 @@ class ChunkPipeline(Pipeline):
 
 
 class PipelineRegistry:
-    def __init__(self, supported_tasks: Dict[str, Any], task_aliases: Dict[str, str]) -> None:
+    def __init__(self, supported_tasks: dict[str, Any], task_aliases: dict[str, str]) -> None:
         self.supported_tasks = supported_tasks
         self.task_aliases = task_aliases
 
-    def get_supported_tasks(self) -> List[str]:
+    def get_supported_tasks(self) -> list[str]:
         supported_task = list(self.supported_tasks.keys()) + list(self.task_aliases.keys())
         supported_task.sort()
         return supported_task
 
-    def check_task(self, task: str) -> Tuple[str, Dict, Any]:
+    def check_task(self, task: str) -> tuple[str, dict, Any]:
         if task in self.task_aliases:
             task = self.task_aliases[task]
         if task in self.supported_tasks:
@@ -1518,9 +1551,9 @@ class PipelineRegistry:
         self,
         task: str,
         pipeline_class: type,
-        pt_model: Optional[Union[type, Tuple[type]]] = None,
-        tf_model: Optional[Union[type, Tuple[type]]] = None,
-        default: Optional[Dict] = None,
+        pt_model: Optional[Union[type, tuple[type]]] = None,
+        tf_model: Optional[Union[type, tuple[type]]] = None,
+        default: Optional[dict] = None,
         type: Optional[str] = None,
     ) -> None:
         if task in self.supported_tasks:

@@ -15,7 +15,7 @@
 """PyTorch Speech2Text model."""
 
 import math
-from typing import Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 import torch
 from torch import nn
@@ -23,19 +23,32 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
+from ...modeling_attn_mask_utils import (
+    _prepare_4d_attention_mask,
+    _prepare_4d_attention_mask_for_sdpa,
+    _prepare_4d_causal_attention_mask,
+    _prepare_4d_causal_attention_mask_for_sdpa,
+)
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import (
     auto_docstring,
+    is_torch_flex_attn_available,
     logging,
 )
 from .configuration_speech_to_text import Speech2TextConfig
+
+
+if is_torch_flex_attn_available():
+    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
@@ -61,11 +74,11 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
 class Conv1dSubsampler(nn.Module):
     """
     Convolutional subsampler: a stack of 1D convolution (along temporal dimension) followed by non-linear activation
-    via gated linear units (https://arxiv.org/abs/1911.08460)
+    via gated linear units (https://huggingface.co/papers/1911.08460)
     """
 
     def __init__(self, config):
-        super(Conv1dSubsampler, self).__init__()
+        super().__init__()
         self.config = config
         self.num_layers = config.num_conv_layers
         self.in_channels = config.input_feat_per_channel * config.input_channels
@@ -161,7 +174,38 @@ class Speech2TextSinusoidalPositionalEmbedding(nn.Module):
         return incremental_indices.long() + padding_idx
 
 
-# Copied from transformers.models.hubert.modeling_hubert.HubertAttention with Hubert->Speech2Text
+# Copied from transformers.models.bart.modeling_bart.eager_attention_forward
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: Optional[float] = None,
+    dropout: float = 0.0,
+    head_mask: Optional[torch.Tensor] = None,
+    **kwargs,
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+
+    if head_mask is not None:
+        attn_weights = attn_weights * head_mask.view(1, -1, 1, 1)
+
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Attention with Wav2Vec2->Speech2Text
 class Speech2TextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -196,28 +240,34 @@ class Speech2TextAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
-
     def forward(
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        # TODO: we need a refactor so that the different attention modules can get their specific kwargs
+        # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
 
-        bsz, tgt_len, _ = hidden_states.size()
+        # determine input shapes
+        bsz, tgt_len = hidden_states.shape[:-1]
+        src_len = key_value_states.shape[1] if is_cross_attention else tgt_len
+
+        q_input_shape = (bsz, tgt_len, -1, self.head_dim)
+        kv_input_shape = (bsz, src_len, -1, self.head_dim)
 
         # get query proj
-        query_states = self.q_proj(hidden_states) * self.scaling
+        query_states = self.q_proj(hidden_states).view(*q_input_shape).transpose(1, 2)
+
         # get key, value proj
         # `past_key_value[0].shape[2] == key_value_states.shape[1]`
         # is checking that the `sequence_length` of the `past_key_value` is the same as
@@ -232,18 +282,18 @@ class Speech2TextAttention(nn.Module):
             value_states = past_key_value[1]
         elif is_cross_attention:
             # cross_attentions
-            key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
-            value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
+            key_states = self.k_proj(key_value_states).view(*kv_input_shape).transpose(1, 2)
+            value_states = self.v_proj(key_value_states).view(*kv_input_shape).transpose(1, 2)
         elif past_key_value is not None:
             # reuse k, v, self_attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+            key_states = self.k_proj(hidden_states).view(*kv_input_shape).transpose(1, 2)
+            value_states = self.v_proj(hidden_states).view(*kv_input_shape).transpose(1, 2)
             key_states = torch.cat([past_key_value[0], key_states], dim=2)
             value_states = torch.cat([past_key_value[1], value_states], dim=2)
         else:
             # self_attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+            key_states = self.k_proj(hidden_states).view(*kv_input_shape).transpose(1, 2)
+            value_states = self.v_proj(hidden_states).view(*kv_input_shape).transpose(1, 2)
 
         if self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
@@ -255,81 +305,36 @@ class Speech2TextAttention(nn.Module):
             # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_states, value_states)
 
-        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
-        query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
-        key_states = key_states.reshape(*proj_shape)
-        value_states = value_states.reshape(*proj_shape)
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        src_len = key_states.size(1)
-        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout,
+            scaling=self.scaling,
+            output_attentions=output_attentions,
+            head_mask=layer_head_mask,
+            **kwargs,
+        )
 
-        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
-            raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
-                f" {attn_weights.size()}"
-            )
-
-        if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
-                )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-        if layer_head_mask is not None:
-            if layer_head_mask.size() != (self.num_heads,):
-                raise ValueError(
-                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
-                    f" {layer_head_mask.size()}"
-                )
-            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-        if output_attentions:
-            # this operation is a bit awkward, but it's required to
-            # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to be reshaped
-            # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
-        else:
-            attn_weights_reshaped = None
-
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-
-        attn_output = torch.bmm(attn_probs, value_states)
-
-        if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz * self.num_heads, tgt_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
-        attn_output = attn_output.transpose(1, 2)
-
-        # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
-        # partitioned across GPUs when using tensor-parallelism.
-        attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
-
+        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights_reshaped, past_key_value
-
-
-SPEECH_TO_TEXT_ATTENTION_CLASSES = {"eager": Speech2TextAttention}
+        return attn_output, attn_weights, past_key_value
 
 
 # Copied from transformers.models.mbart.modeling_mbart.MBartEncoderLayer with MBart->Speech2Text, MBART->SPEECH_TO_TEXT
-class Speech2TextEncoderLayer(nn.Module):
+class Speech2TextEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Speech2TextConfig):
         super().__init__()
         self.embed_dim = config.d_model
 
-        self.self_attn = SPEECH_TO_TEXT_ATTENTION_CLASSES[config._attn_implementation](
+        self.self_attn = Speech2TextAttention(
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
@@ -393,12 +398,13 @@ class Speech2TextEncoderLayer(nn.Module):
 
 
 # copied from transformers.models.mbart.modeling_mbart.MBartDecoderLayer with MBart->Speech2Text, MBART->SPEECH_TO_TEXT
-class Speech2TextDecoderLayer(nn.Module):
+# TODO: change copy when applying cache class
+class Speech2TextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Speech2TextConfig):
         super().__init__()
         self.embed_dim = config.d_model
 
-        self.self_attn = SPEECH_TO_TEXT_ATTENTION_CLASSES[config._attn_implementation](
+        self.self_attn = Speech2TextAttention(
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -411,7 +417,7 @@ class Speech2TextDecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = SPEECH_TO_TEXT_ATTENTION_CLASSES[config._attn_implementation](
+        self.encoder_attn = Speech2TextAttention(
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -423,6 +429,7 @@ class Speech2TextDecoderLayer(nn.Module):
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
+    # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenDecoderLayer.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -431,7 +438,7 @@ class Speech2TextDecoderLayer(nn.Module):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         cross_attn_layer_head_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
     ) -> torch.Tensor:
@@ -519,6 +526,11 @@ class Speech2TextPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "input_features"
     supports_gradient_checkpointing = True
+    # TODO: tests would need a rewrite to check for correct implementation
+    # Current tests always assume certain inputs to be passed
+    _supports_flash_attn_2 = False
+    _supports_sdpa = False
+    _supports_flex_attn = False
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -607,7 +619,7 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
         Args:
             input_features (`torch.LongTensor` of shape `(batch_size, sequence_length, feature_size)`):
                 Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be
-                obtained by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a
+                obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a
                 `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
                 `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the fbank features,
                 padding and conversion into a tensor of type `torch.FloatTensor`. See
@@ -655,10 +667,10 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
         hidden_states = inputs_embeds + embed_pos
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
-        # expand attention_mask
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
+        attention_mask = self._update_full_mask(
+            attention_mask,
+            inputs_embeds,
+        )
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -672,7 +684,7 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             to_drop = False
             if self.training:
                 dropout_probability = torch.rand([])
@@ -682,21 +694,12 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
             if to_drop:
                 layer_outputs = (None, None)
             else:
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        encoder_layer.__call__,
-                        hidden_states,
-                        attention_mask,
-                        (head_mask[idx] if head_mask is not None else None),
-                        output_attentions,
-                    )
-                else:
-                    layer_outputs = encoder_layer(
-                        hidden_states,
-                        attention_mask,
-                        layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                        output_attentions=output_attentions,
-                    )
+                layer_outputs = encoder_layer(
+                    hidden_states,
+                    attention_mask,
+                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                    output_attentions=output_attentions,
+                )
 
                 hidden_states = layer_outputs[0]
 
@@ -712,6 +715,29 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
         return BaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
+
+    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_full_mask
+    def _update_full_mask(
+        self,
+        attention_mask: Union[torch.Tensor, None],
+        inputs_embeds: torch.Tensor,
+    ):
+        if attention_mask is not None:
+            if self.config._attn_implementation == "flash_attention_2":
+                attention_mask = attention_mask if 0 in attention_mask else None
+            elif self.config._attn_implementation == "sdpa":
+                # output_attentions=True & head_mask can not be supported when using SDPA, fall back to
+                # the manual implementation that requires a 4D causal mask in all cases.
+                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+                attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
+            elif self.config._attn_implementation == "flex_attention":
+                if isinstance(attention_mask, torch.Tensor):
+                    attention_mask = make_flex_block_causal_mask(attention_mask, is_causal=False)
+            else:
+                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+                attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
+
+        return attention_mask
 
 
 class Speech2TextDecoder(Speech2TextPreTrainedModel):
@@ -857,16 +883,18 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
-        attention_mask = _prepare_4d_causal_attention_mask(
-            attention_mask, input_shape, inputs_embeds, past_key_values_length
+        attention_mask = self._update_causal_mask(
+            attention_mask,
+            input_shape,
+            inputs_embeds,
+            past_key_values_length,
         )
-
-        # expand encoder attention mask
-        if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            encoder_attention_mask = _prepare_4d_attention_mask(
-                encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
-            )
+        encoder_attention_mask = self._update_cross_attn_mask(
+            encoder_hidden_states,
+            encoder_attention_mask,
+            input_shape,
+            inputs_embeds,
+        )
 
         # embed positions
         positions = self.embed_positions(input_ids, past_key_values_length=past_key_values_length)
@@ -895,7 +923,7 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
                     f" {head_mask.size()[0]}."
                 )
         for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
             if self.training:
@@ -905,33 +933,17 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    head_mask[idx] if head_mask is not None else None,
-                    cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
-                    None,
-                    output_attentions,
-                    use_cache,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=attention_mask,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                    cross_attn_layer_head_mask=(
-                        cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
-                    ),
-                    past_key_value=past_key_value,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                encoder_attention_mask=encoder_attention_mask,
+                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                cross_attn_layer_head_mask=(cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+            )
             hidden_states = layer_outputs[0]
 
             if use_cache:
@@ -962,6 +974,82 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
             attentions=all_self_attns,
             cross_attentions=all_cross_attentions,
         )
+
+    # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenDecoder._update_causal_mask
+    def _update_causal_mask(
+        self,
+        attention_mask: Union[torch.Tensor, None],
+        input_shape: torch.Size,
+        inputs_embeds: torch.Tensor,
+        past_key_values_length: int,
+    ):
+        if self.config._attn_implementation == "flash_attention_2":
+            # 2d mask is passed through the layers
+            attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+        elif self.config._attn_implementation == "sdpa":
+            # output_attentions=True & cross_attn_head_mask can not be supported when using SDPA, and we fall back on
+            # the manual implementation that requires a 4D causal mask in all cases.
+            attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
+                attention_mask,
+                input_shape,
+                inputs_embeds,
+                past_key_values_length,
+            )
+        elif self.config._attn_implementation == "flex_attention":
+            if isinstance(attention_mask, torch.Tensor):
+                attention_mask = make_flex_block_causal_mask(attention_mask)
+            # Other attention flavors support in-built causal (when `mask is None`)
+            # while we need to create our specific block mask regardless
+            elif attention_mask is None:
+                attention_mask = make_flex_block_causal_mask(
+                    torch.ones(
+                        size=(input_shape),
+                        device=inputs_embeds.device,
+                    )
+                )
+        else:
+            # 4d mask is passed through the layers
+            attention_mask = _prepare_4d_causal_attention_mask(
+                attention_mask, input_shape, inputs_embeds, past_key_values_length
+            )
+
+        return attention_mask
+
+    # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenDecoder._update_cross_attn_mask
+    def _update_cross_attn_mask(
+        self,
+        encoder_hidden_states: Union[torch.Tensor, None],
+        encoder_attention_mask: Union[torch.Tensor, None],
+        input_shape: torch.Size,
+        inputs_embeds: torch.Tensor,
+    ):
+        # expand encoder attention mask
+        if encoder_hidden_states is not None and encoder_attention_mask is not None:
+            if self.config._attn_implementation == "flash_attention_2":
+                encoder_attention_mask = encoder_attention_mask if 0 in encoder_attention_mask else None
+            elif self.config._attn_implementation == "sdpa":
+                # output_attentions=True & cross_attn_head_mask can not be supported when using SDPA, and we fall back on
+                # the manual implementation that requires a 4D causal mask in all cases.
+                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+                encoder_attention_mask = _prepare_4d_attention_mask_for_sdpa(
+                    encoder_attention_mask,
+                    inputs_embeds.dtype,
+                    tgt_len=input_shape[-1],
+                )
+            elif self.config._attn_implementation == "flex_attention":
+                if isinstance(encoder_attention_mask, torch.Tensor):
+                    encoder_attention_mask = make_flex_block_causal_mask(
+                        encoder_attention_mask,
+                        query_length=input_shape[-1],
+                        is_causal=False,
+                    )
+            else:
+                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+                encoder_attention_mask = _prepare_4d_attention_mask(
+                    encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+                )
+
+        return encoder_attention_mask
 
 
 @auto_docstring
@@ -997,18 +1085,18 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], Seq2SeqLMOutput]:
+    ) -> Union[tuple[torch.FloatTensor], Seq2SeqLMOutput]:
         r"""
         input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, feature_size)`):
             Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be obtained
-            by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.*
+            by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a `numpy.ndarray`, *e.g.*
             via the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
             [`AutoFeatureExtractor`] should be used for extracting the fbank features, padding and conversion into a
             tensor of type `torch.FloatTensor`. See [`~Speech2TextFeatureExtractor.__call__`]
@@ -1029,7 +1117,7 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
 
             If you want to change padding behavior, you should read
             [`modeling_speech_to_text._prepare_decoder_attention_mask`] and modify to your needs. See diagram 1 in [the
-            paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
+            paper](https://huggingface.co/papers/1910.13461) for more information on the default strategy.
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
 
@@ -1158,19 +1246,19 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel, Generation
         head_mask: Optional[torch.Tensor] = None,
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], Seq2SeqLMOutput]:
+    ) -> Union[tuple[torch.FloatTensor], Seq2SeqLMOutput]:
         r"""
         input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, feature_size)`):
             Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be obtained
-            by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.*
+            by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a `numpy.ndarray`, *e.g.*
             via the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
             [`AutoFeatureExtractor`] should be used for extracting the fbank features, padding and conversion into a
             tensor of type `torch.FloatTensor`. See [`~Speech2TextFeatureExtractor.__call__`]
@@ -1191,7 +1279,7 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel, Generation
 
             If you want to change padding behavior, you should read
             [`modeling_speech_to_text._prepare_decoder_attention_mask`] and modify to your needs. See diagram 1 in [the
-            paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
+            paper](https://huggingface.co/papers/1910.13461) for more information on the default strategy.
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
 

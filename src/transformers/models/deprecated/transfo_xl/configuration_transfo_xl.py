@@ -36,7 +36,7 @@ class TransfoXLConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 267735):
             Vocabulary size of the BERT model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`TransfoXLModel`] or [`TFTransfoXLModel`].
-        cutoffs (`List[int]`, *optional*, defaults to `[20000, 40000, 200000]`):
+        cutoffs (`list[int]`, *optional*, defaults to `[20000, 40000, 200000]`):
             Cutoffs for the adaptive softmax.
         d_model (`int`, *optional*, defaults to 1024):
             Dimensionality of the model's hidden states.

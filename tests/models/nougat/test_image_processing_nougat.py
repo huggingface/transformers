@@ -17,7 +17,7 @@ import unittest
 
 import numpy as np
 import requests
-from datasets import load_dataset
+from huggingface_hub import hf_hub_download
 
 from transformers.image_utils import SizeDict
 from transformers.testing_utils import require_torch, require_vision
@@ -93,8 +93,14 @@ class NougatImageProcessingTester:
         return self.num_channels, self.size["height"], self.size["width"]
 
     def prepare_dummy_image(self):
-        dataset = load_dataset("hf-internal-testing/fixtures_docvqa", split="test", trust_remote_code=True)
-        image = dataset[1]["image"].convert("RGB")
+        revision = "ec57bf8c8b1653a209c13f6e9ee66b12df0fc2db"
+        filepath = hf_hub_download(
+            repo_id="hf-internal-testing/fixtures_docvqa",
+            filename="nougat_pdf.png",
+            repo_type="dataset",
+            revision=revision,
+        )
+        image = Image.open(filepath).convert("RGB")
         return image
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
@@ -151,7 +157,7 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         for image_processing_class in self.image_processor_list:
             image_processor = image_processing_class(**self.image_processor_dict)
             inputs = image_processor(dummy_image, return_tensors="pt")
-            torch.testing.assert_close(inputs["pixel_values"].mean(), torch.tensor(-0.3935), rtol=1e-3, atol=1e-3)
+            torch.testing.assert_close(inputs["pixel_values"].mean(), torch.tensor(0.4906), rtol=1e-3, atol=1e-3)
 
     def test_crop_margin_all_white(self):
         image = np.uint8(np.ones((3, 100, 100)) * 255)
@@ -230,11 +236,15 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 self.assertEqual((3, 100, 200), aligned_image.shape)
 
     def prepare_dummy_np_image(self):
-        dataset = load_dataset("hf-internal-testing/fixtures_got_ocr", split="train", trust_remote_code=True)
-        image_pil = dataset[5]["image"].convert("RGB")
-        image = np.array(image_pil)
-
-        return np.transpose(image, (2, 0, 1))
+        revision = "ec57bf8c8b1653a209c13f6e9ee66b12df0fc2db"
+        filepath = hf_hub_download(
+            repo_id="hf-internal-testing/fixtures_docvqa",
+            filename="nougat_pdf.png",
+            repo_type="dataset",
+            revision=revision,
+        )
+        image = Image.open(filepath).convert("RGB")
+        return np.array(image).transpose(2, 0, 1)
 
     def test_crop_margin_equality_cv2_python(self):
         image = self.prepare_dummy_np_image()
@@ -243,13 +253,14 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 image = torch.from_numpy(image)
                 image_processor = image_processing_class(**self.image_processor_dict)
                 image_cropped_python = image_processor.crop_margin(image)
-                self.assertEqual(image_cropped_python.shape, torch.Size([3, 1050, 622]))
-                self.assertAlmostEqual(image_cropped_python.float().mean().item(), 218.54951360179655, delta=0.001)
+                self.assertEqual(image_cropped_python.shape, torch.Size([3, 850, 685]))
+                self.assertAlmostEqual(image_cropped_python.float().mean().item(), 237.43881150708458, delta=0.001)
             else:
                 image_processor = image_processing_class(**self.image_processor_dict)
+                print(image.shape)
                 image_cropped_python = image_processor.crop_margin(image)
-                self.assertEqual(image_cropped_python.shape, (3, 1050, 622))
-                self.assertAlmostEqual(image_cropped_python.mean(), 218.54951360179655, delta=0.001)
+                self.assertEqual(image_cropped_python.shape, (3, 850, 685))
+                self.assertAlmostEqual(image_cropped_python.mean(), 237.43881150708458, delta=0.001)
 
     def test_call_numpy_4_channels(self):
         for image_processing_class in self.image_processor_list:

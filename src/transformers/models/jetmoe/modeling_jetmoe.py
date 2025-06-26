@@ -15,7 +15,7 @@
 """PyTorch JetMoe model."""
 
 import math
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -27,6 +27,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
@@ -48,7 +49,7 @@ logger = logging.get_logger(__name__)
 
 # Copied from transformers.models.mixtral.modeling_mixtral.load_balancing_loss_func
 def load_balancing_loss_func(
-    gate_logits: Union[torch.Tensor, Tuple[torch.Tensor], None],
+    gate_logits: Union[torch.Tensor, tuple[torch.Tensor], None],
     num_experts: Optional[int] = None,
     top_k=2,
     attention_mask: Optional[torch.Tensor] = None,
@@ -56,7 +57,7 @@ def load_balancing_loss_func(
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
 
-    See Switch Transformer (https://arxiv.org/abs/2101.03961) for more details. This function implements the loss
+    See Switch Transformer (https://huggingface.co/papers/2101.03961) for more details. This function implements the loss
     function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
     experts is too unbalanced.
 
@@ -233,7 +234,7 @@ class JetMoeMoE(nn.Module):
     """
 
     def __init__(self, config: JetMoeConfig):
-        super(JetMoeMoE, self).__init__()
+        super().__init__()
 
         self.input_size = config.hidden_size
         self.hidden_size = config.intermediate_size
@@ -291,7 +292,7 @@ class JetMoeMoA(nn.Module):
     """
 
     def __init__(self, config: JetMoeConfig):
-        super(JetMoeMoA, self).__init__()
+        super().__init__()
 
         self.num_experts = config.num_local_experts
         self.input_size = config.hidden_size
@@ -497,7 +498,7 @@ class JetMoeAttention(nn.Module):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
         query_states, router_logits, topo_info = self.experts.map(hidden_states)
@@ -565,7 +566,7 @@ class JetMoeSdpaAttention(JetMoeAttention):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]], Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]], Optional[torch.Tensor]]:
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
             logger.warning_once(
@@ -655,8 +656,8 @@ class JetMoeFlashAttention2(JetMoeAttention):
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[
-        Tuple[torch.Tensor, Tuple[torch.Tensor]],
-        Optional[Tuple[torch.Tensor, Tuple[torch.Tensor], Tuple[torch.Tensor, ...]]],
+        tuple[torch.Tensor, tuple[torch.Tensor]],
+        Optional[tuple[torch.Tensor, tuple[torch.Tensor], tuple[torch.Tensor, ...]]],
     ]:
         """
         Forward pass of the JetMoeAttention module.
@@ -664,13 +665,13 @@ class JetMoeFlashAttention2(JetMoeAttention):
         Args:
             hidden_states (Optional[torch.FloatTensor]): Input hidden states.
             attention_mask (Optional[torch.FloatTensor]): Attention mask.
-            layer_past (Optional[Tuple[torch.Tensor]]): Past layer state.
+            layer_past (Optional[tuple[torch.Tensor]]): Past layer state.
             use_cache (Optional[bool]): Whether to use cached states.
             output_attentions (Optional[bool]): Whether to output attention weights.
             cache_position (Optional[torch.LongTensor]): Position of the cache.
 
         Returns:
-            Union[Tuple[torch.Tensor, Tuple[torch.Tensor]], Optional[Tuple[...]]]: Tuple containing outputs.
+            Union[tuple[torch.Tensor, tuple[torch.Tensor]], Optional[tuple[...]]]: Tuple containing outputs.
         """
         output_attentions = False
         bsz, q_len, hidden_size = hidden_states.size()
@@ -710,9 +711,14 @@ class JetMoeFlashAttention2(JetMoeAttention):
         # in fp32. (LlamaRMSNorm handles it correctly)
 
         input_dtype = query_states.dtype
+        device_type = query_states.device.type if query_states.device.type != "mps" else "cpu"
         if input_dtype == torch.float32:
             if torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_gpu_dtype()
+                target_dtype = (
+                    torch.get_autocast_dtype(device_type)
+                    if hasattr(torch, "get_autocast_dtype")
+                    else torch.get_autocast_gpu_dtype()
+                )
             # Handle the case where the model is quantized
             elif hasattr(self.config, "_pre_quantization_dtype"):
                 target_dtype = self.config._pre_quantization_dtype
@@ -758,7 +764,7 @@ JETMOE_ATTENTION_CLASSES = {
 }
 
 
-class JetMoeBlock(nn.Module):
+class JetMoeBlock(GradientCheckpointingLayer):
     def __init__(self, config: JetMoeConfig, layer_idx: Optional[int] = None):
         """
         Initialize the JetMoeBlock module.
@@ -778,13 +784,13 @@ class JetMoeBlock(nn.Module):
         self,
         hidden_states: Optional[torch.FloatTensor],
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
         output_router_logits: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple[torch.Tensor], Optional[Tuple[torch.Tensor, Tuple[torch.FloatTensor, ...]]]]:
+    ) -> Union[tuple[torch.Tensor], Optional[tuple[torch.Tensor, tuple[torch.FloatTensor, ...]]]]:
         # Self Attention
         attn_output, self_attn_weights, present_key_value, attn_router_logits = self.self_attention(
             hidden_states=self.input_layernorm(hidden_states),
@@ -886,7 +892,7 @@ class JetMoeModel(JetMoePreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -962,28 +968,15 @@ class JetMoeModel(JetMoePreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    position_ids,
-                    past_key_values,
-                    causal_mask,
-                    output_attentions,
-                    output_router_logits,
-                    use_cache,
-                    use_reentrant=False,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=causal_mask,
-                    position_ids=position_ids,
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    output_router_logits=output_router_logits,
-                    use_cache=use_cache,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                position_ids=position_ids,
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                output_router_logits=output_router_logits,
+                use_cache=use_cache,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -1014,7 +1007,7 @@ class JetMoeModel(JetMoePreTrainedModel):
             router_logits=all_router_logits,
         )
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
+    # Copied from transformers.models.gptj.modeling_gptj.GPTJModel._update_causal_mask
     def _update_causal_mask(
         self,
         attention_mask: Union[torch.Tensor, "BlockMask"],
@@ -1084,7 +1077,7 @@ class JetMoeModel(JetMoePreTrainedModel):
         return causal_mask
 
     @staticmethod
-    # Copied from transformers.models.llama.modeling_llama.LlamaModel._prepare_4d_causal_attention_mask_with_cache_position
+    # Copied from transformers.models.gptj.modeling_gptj.GPTJModel._prepare_4d_causal_attention_mask_with_cache_position
     def _prepare_4d_causal_attention_mask_with_cache_position(
         attention_mask: torch.Tensor,
         sequence_length: int,
@@ -1185,7 +1178,7 @@ class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,

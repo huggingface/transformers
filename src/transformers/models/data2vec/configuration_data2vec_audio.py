@@ -60,7 +60,7 @@ class Data2VecAudioConfig(PretrainedConfig):
         final_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for the final projection layer of [`Data2VecAudioForCTC`].
         layerdrop (`float`, *optional*, defaults to 0.1):
-            The LayerDrop probability. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556) for more
+            The LayerDrop probability. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556) for more
             details.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -71,13 +71,13 @@ class Data2VecAudioConfig(PretrainedConfig):
         feat_extract_activation (`str, `optional`, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the 1D convolutional layers of the feature
             extractor. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        conv_dim (`Tuple[int]` or `List[int]`, *optional*, defaults to `(512, 512, 512, 512, 512, 512, 512)`):
+        conv_dim (`tuple[int]` or `list[int]`, *optional*, defaults to `(512, 512, 512, 512, 512, 512, 512)`):
             A tuple of integers defining the number of input and output channels of each 1D convolutional layer in the
             feature encoder. The length of *conv_dim* defines the number of 1D convolutional layers.
-        conv_stride (`Tuple[int]` or `List[int]`, *optional*, defaults to `(5, 2, 2, 2, 2, 2, 2)`):
+        conv_stride (`tuple[int]` or `list[int]`, *optional*, defaults to `(5, 2, 2, 2, 2, 2, 2)`):
             A tuple of integers defining the stride of each 1D convolutional layer in the feature encoder. The length
             of *conv_stride* defines the number of convolutional layers and has to match the length of *conv_dim*.
-        conv_kernel (`Tuple[int]` or `List[int]`, *optional*, defaults to `(10, 3, 3, 3, 3, 3, 3)`):
+        conv_kernel (`tuple[int]` or `list[int]`, *optional*, defaults to `(10, 3, 3, 3, 3, 3, 3)`):
             A tuple of integers defining the kernel size of each 1D convolutional layer in the feature encoder. The
             length of *conv_kernel* defines the number of convolutional layers and has to match the length of
             *conv_dim*.
@@ -124,13 +124,13 @@ class Data2VecAudioConfig(PretrainedConfig):
             instance of [`Data2VecAudioForSequenceClassification`].
         classifier_proj_size (`int`, *optional*, defaults to 256):
             Dimensionality of the projection before token mean-pooling for classification.
-        tdnn_dim (`Tuple[int]` or `List[int]`, *optional*, defaults to `(512, 512, 512, 512, 1500)`):
+        tdnn_dim (`tuple[int]` or `list[int]`, *optional*, defaults to `(512, 512, 512, 512, 1500)`):
             A tuple of integers defining the number of output channels of each 1D convolutional layer in the *TDNN*
             module of the *XVector* model. The length of *tdnn_dim* defines the number of *TDNN* layers.
-        tdnn_kernel (`Tuple[int]` or `List[int]`, *optional*, defaults to `(5, 3, 3, 1, 1)`):
+        tdnn_kernel (`tuple[int]` or `list[int]`, *optional*, defaults to `(5, 3, 3, 1, 1)`):
             A tuple of integers defining the kernel size of each 1D convolutional layer in the *TDNN* module of the
             *XVector* model. The length of *tdnn_kernel* has to match the length of *tdnn_dim*.
-        tdnn_dilation (`Tuple[int]` or `List[int]`, *optional*, defaults to `(1, 2, 3, 1, 1)`):
+        tdnn_dilation (`tuple[int]` or `list[int]`, *optional*, defaults to `(1, 2, 3, 1, 1)`):
             A tuple of integers defining the dilation factor of each 1D convolutional layer in *TDNN* module of the
             *XVector* model. The length of *tdnn_dilation* has to match the length of *tdnn_dim*.
         xvector_output_dim (`int`, *optional*, defaults to 512):
@@ -252,7 +252,7 @@ class Data2VecAudioConfig(PretrainedConfig):
                 f" `len(config.conv_kernel) = {len(self.conv_kernel)}`."
             )
 
-        # fine-tuning config parameters for SpecAugment: https://arxiv.org/abs/1904.08779
+        # fine-tuning config parameters for SpecAugment: https://huggingface.co/papers/1904.08779
         self.mask_time_prob = mask_time_prob
         self.mask_time_length = mask_time_length
         self.mask_time_min_masks = mask_time_min_masks

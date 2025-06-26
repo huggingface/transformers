@@ -15,7 +15,7 @@
 """Pix2Struct modeling file"""
 
 import math
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -25,6 +25,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -33,7 +34,6 @@ from ...modeling_outputs import (
     Seq2SeqModelOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
@@ -69,7 +69,7 @@ class Pix2StructLayerNorm(nn.Module):
 
     def forward(self, hidden_states):
         # T5 uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
-        # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus variance is calculated
+        # Square Layer Normalization https://huggingface.co/papers/1910.07467 thus variance is calculated
         # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
         # half-precision inputs is done in fp32
 
@@ -95,8 +95,6 @@ except ImportError:
 except Exception:
     logger.warning("Discovered apex but it failed to load, falling back to Pix2StructLayerNorm")
     pass
-
-ALL_LAYERNORM_LAYERS.append(Pix2StructLayerNorm)
 
 
 class Pix2StructVisionEmbeddings(nn.Module):
@@ -262,7 +260,7 @@ class Pix2StructVisionMlp(nn.Module):
         return hidden_states
 
 
-class Pix2StructVisionLayer(nn.Module):
+class Pix2StructVisionLayer(GradientCheckpointingLayer):
     def __init__(self, config: Pix2StructConfig) -> None:
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -278,7 +276,7 @@ class Pix2StructVisionLayer(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         residual = hidden_states
 
         # in Pix2StructVision, layernorm is applied before self-attention
@@ -330,16 +328,7 @@ class Pix2StructVisionEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, attention_mask, layer_head_mask, output_attentions)
+            layer_outputs = layer_module(hidden_states, attention_mask, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -505,7 +494,7 @@ class Pix2StructVisionModel(Pix2StructPreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings.patch_projection
 
-    def _prune_heads(self, heads_to_prune: Dict[int, List[int]]) -> None:
+    def _prune_heads(self, heads_to_prune: dict[int, list[int]]) -> None:
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
         class PreTrainedModel
@@ -522,12 +511,12 @@ class Pix2StructVisionModel(Pix2StructPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         flattened_patches (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_channels x patch_height x patch_width)`):
             Flattened and padded pixel values. These values can be obtained using [`AutoImageProcessor`]. See
             [`Pix2StructVisionImageProcessor.__call__`] for details. Check the [original
-            paper](https://arxiv.org/abs/2210.03347) (figure 5) for more details.
+            paper](https://huggingface.co/papers/2210.03347) (figure 5) for more details.
 
         Example:
 
@@ -928,7 +917,7 @@ class Pix2StructTextLayerCrossAttention(nn.Module):
         return outputs
 
 
-class Pix2StructTextBlock(nn.Module):
+class Pix2StructTextBlock(GradientCheckpointingLayer):
     def __init__(self, config, has_relative_attention_bias=False, layer_idx: Optional[int] = None):
         super().__init__()
 
@@ -1103,7 +1092,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
         inputs_embeds: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1111,7 +1100,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
-    ) -> Union[Tuple[torch.FloatTensor, ...], CausalLMOutputWithCrossAttentions]:
+    ) -> Union[tuple[torch.FloatTensor, ...], CausalLMOutputWithCrossAttentions]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Pix2StructText is a model with relative position
@@ -1150,6 +1139,12 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if self.gradient_checkpointing and self.training and use_cache:
+            logger.warning(
+                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+            )
+            use_cache = False
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
@@ -1244,42 +1239,20 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.forward,
-                    hidden_states,
-                    causal_mask,
-                    position_bias,
-                    encoder_hidden_states,
-                    encoder_extended_attention_mask,
-                    encoder_decoder_position_bias,
-                    layer_head_mask,
-                    cross_attn_layer_head_mask,
-                    None,  # past_key_value is always None with gradient checkpointing
-                    use_cache,
-                    output_attentions,
-                    cache_position,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask=causal_mask,
-                    position_bias=position_bias,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_extended_attention_mask,
-                    encoder_decoder_position_bias=encoder_decoder_position_bias,
-                    layer_head_mask=layer_head_mask,
-                    cross_attn_layer_head_mask=cross_attn_layer_head_mask,
-                    past_key_value=past_key_values,
-                    use_cache=use_cache,
-                    output_attentions=output_attentions,
-                    cache_position=cache_position,
-                )
+            layer_outputs = layer_module(
+                hidden_states,
+                causal_mask,
+                position_bias,
+                encoder_hidden_states,
+                encoder_extended_attention_mask,
+                encoder_decoder_position_bias,  # as a positional argument for gradient checkpointing
+                layer_head_mask=layer_head_mask,
+                cross_attn_layer_head_mask=cross_attn_layer_head_mask,
+                past_key_value=past_key_values,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                cache_position=cache_position,
+            )
 
             # layer_outputs is a tuple with:
             # hidden-states, key-value-states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
@@ -1345,7 +1318,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
             cross_attentions=all_cross_attentions,
         )
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
+    # Copied from transformers.models.gptj.modeling_gptj.GPTJModel._update_causal_mask
     def _update_causal_mask(
         self,
         attention_mask: Union[torch.Tensor, "BlockMask"],
@@ -1415,7 +1388,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
         return causal_mask
 
     @staticmethod
-    # Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel._prepare_4d_causal_attention_mask_with_cache_position
+    # Copied from transformers.models.gptj.modeling_gptj.GPTJModel._prepare_4d_causal_attention_mask_with_cache_position
     def _prepare_4d_causal_attention_mask_with_cache_position(
         attention_mask: torch.Tensor,
         sequence_length: int,
@@ -1520,8 +1493,8 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel, GenerationMi
         head_mask: Optional[torch.FloatTensor] = None,
         decoder_head_mask: Optional[torch.FloatTensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         labels: Optional[torch.LongTensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
@@ -1529,7 +1502,7 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel, GenerationMi
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple[torch.FloatTensor], Seq2SeqModelOutput]:
+    ) -> Union[tuple[torch.FloatTensor], Seq2SeqModelOutput]:
         r"""
         flattened_patches (`torch.FloatTensor` of shape `(batch_size, seq_length, hidden_size)`):
             Flattened pixel patches. the `hidden_size` is obtained by the following formula: `hidden_size` =

@@ -350,6 +350,10 @@ The following auto classes are available for the following audio tasks.
 
 [[autodoc]] AutoModelForTextToWaveform
 
+### AutoModelForAudioTokenization
+
+[[autodoc]] AutoModelForAudioTokenization
+
 ## Multimodal
 
 The following auto classes are available for the following multimodal tasks.
@@ -389,3 +393,9 @@ The following auto classes are available for the following multimodal tasks.
 ### AutoModelForImageTextToText
 
 [[autodoc]] AutoModelForImageTextToText
+
+## Time Series
+
+### AutoModelForTimeSeriesPrediction
+
+[[autodoc]] AutoModelForTimeSeriesPrediction

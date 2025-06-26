@@ -250,6 +250,8 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
+                if name.endswith(".w_g"):
+                    continue
                 if param.requires_grad:
                     self.assertIn(
                         ((param.data.mean() * 1e9) / 1e9).round().item(),
