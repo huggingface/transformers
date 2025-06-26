@@ -236,9 +236,7 @@ def normalize_annotation(annotation: dict, image_size: tuple[int, int]) -> dict:
         if key == "boxes":
             boxes = value
             boxes = corners_to_center_format(boxes)
-            boxes /= np.asarray(
-                [image_width, image_height, image_width, image_height], dtype=np.float32
-            )
+            boxes /= np.asarray([image_width, image_height, image_width, image_height], dtype=np.float32)
             norm_annotation[key] = boxes
         else:
             norm_annotation[key] = value
@@ -346,9 +344,7 @@ def prepare_coco_detection_annotation(
 
     # Get all COCO annotations for the given image.
     annotations = target["annotations"]
-    annotations = [
-        obj for obj in annotations if "iscrowd" not in obj or obj["iscrowd"] == 0
-    ]
+    annotations = [obj for obj in annotations if "iscrowd" not in obj or obj["iscrowd"] == 0]
 
     classes = [obj["category_id"] for obj in annotations]
     classes = np.asarray(classes, dtype=np.int64)
@@ -375,9 +371,7 @@ def prepare_coco_detection_annotation(
     new_target["boxes"] = boxes[keep]
     new_target["area"] = area[keep]
     new_target["iscrowd"] = iscrowd[keep]
-    new_target["orig_size"] = np.asarray(
-        [int(image_height), int(image_width)], dtype=np.int64
-    )
+    new_target["orig_size"] = np.asarray([int(image_height), int(image_width)], dtype=np.int64)
 
     if annotations and "keypoints" in annotations[0]:
         keypoints = [obj["keypoints"] for obj in annotations]
@@ -445,9 +439,7 @@ def prepare_coco_panoptic_annotation(
     annotation_path = pathlib.Path(masks_path) / target["file_name"]
 
     new_target = {}
-    new_target["image_id"] = np.asarray(
-        [target["image_id"] if "image_id" in target else target["id"]], dtype=np.int64
-    )
+    new_target["image_id"] = np.asarray([target["image_id"] if "image_id" in target else target["id"]], dtype=np.int64)
     new_target["size"] = np.asarray([image_height, image_width], dtype=np.int64)
     new_target["orig_size"] = np.asarray([image_height, image_width], dtype=np.int64)
 
@@ -506,9 +498,7 @@ def get_segmentation_image(
     return seg_img
 
 
-def get_mask_area(
-    seg_img: np.ndarray, target_size: tuple[int, int], n_classes: int
-) -> np.ndarray:
+def get_mask_area(seg_img: np.ndarray, target_size: tuple[int, int], n_classes: int) -> np.ndarray:
     final_h, final_w = target_size
     np_seg_img = seg_img.astype(np.uint8)
     np_seg_img = np_seg_img.reshape(final_h, final_w, 3)
@@ -570,9 +560,7 @@ def post_process_panoptic_sample(
         raise ValueError("Not as many boxes as there are classes")
 
     cur_masks = masks[keep]
-    cur_masks = resize(
-        cur_masks[:, None], processed_size, resample=PILImageResampling.BILINEAR
-    )
+    cur_masks = resize(cur_masks[:, None], processed_size, resample=PILImageResampling.BILINEAR)
     cur_masks = safe_squeeze(cur_masks, 1)
     b, h, w = cur_masks.shape
 
@@ -584,9 +572,7 @@ def post_process_panoptic_sample(
         if not is_thing_map[label]:
             stuff_equiv_classes[label].append(k)
 
-    seg_img = get_segmentation_image(
-        cur_masks, processed_size, target_size, stuff_equiv_classes, deduplicate=True
-    )
+    seg_img = get_segmentation_image(cur_masks, processed_size, target_size, stuff_equiv_classes, deduplicate=True)
     area = get_mask_area(cur_masks, processed_size, n_classes=len(cur_scores))
 
     # We filter out any mask that is too small
@@ -597,9 +583,7 @@ def post_process_panoptic_sample(
             cur_masks = cur_masks[~filtered_small]
             cur_scores = cur_scores[~filtered_small]
             cur_classes = cur_classes[~filtered_small]
-            seg_img = get_segmentation_image(
-                cur_masks, (h, w), target_size, stuff_equiv_classes, deduplicate=True
-            )
+            seg_img = get_segmentation_image(cur_masks, (h, w), target_size, stuff_equiv_classes, deduplicate=True)
             area = get_mask_area(seg_img, target_size, n_classes=len(cur_scores))
             filtered_small = np.array([a <= 4 for a in area], dtype=bool)
     else:
@@ -640,9 +624,7 @@ def resize_annotation(
         resample (`PILImageResampling`, defaults to `PILImageResampling.NEAREST`):
             The resampling filter to use when resizing the masks.
     """
-    ratios = tuple(
-        float(s) / float(s_orig) for s, s_orig in zip(target_size, orig_size)
-    )
+    ratios = tuple(float(s) / float(s_orig) for s, s_orig in zip(target_size, orig_size))
     ratio_height, ratio_width = ratios
 
     new_annotation = {}
@@ -651,9 +633,7 @@ def resize_annotation(
     for key, value in annotation.items():
         if key == "boxes":
             boxes = value
-            scaled_boxes = boxes * np.asarray(
-                [ratio_width, ratio_height, ratio_width, ratio_height], dtype=np.float32
-            )
+            scaled_boxes = boxes * np.asarray([ratio_width, ratio_height, ratio_width, ratio_height], dtype=np.float32)
             new_annotation["boxes"] = scaled_boxes
         elif key == "area":
             area = value
@@ -661,9 +641,7 @@ def resize_annotation(
             new_annotation["area"] = scaled_area
         elif key == "masks":
             masks = value[:, None]
-            masks = np.array(
-                [resize(mask, target_size, resample=resample) for mask in masks]
-            )
+            masks = np.array([resize(mask, target_size, resample=resample) for mask in masks])
             masks = masks.astype(np.float32)
             masks = masks[:, 0] > threshold
             new_annotation["masks"] = masks
@@ -748,9 +726,7 @@ def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_
     return masks[to_keep], scores[to_keep], labels[to_keep]
 
 
-def check_segment_validity(
-    mask_labels, mask_probs, k, mask_threshold=0.5, overlap_mask_area_threshold=0.8
-):
+def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overlap_mask_area_threshold=0.8):
     # Get the mask associated with the k class
     mask_k = mask_labels == k
     mask_k_area = mask_k.sum()
@@ -780,9 +756,7 @@ def compute_segments(
     height = mask_probs.shape[1] if target_size is None else target_size[0]
     width = mask_probs.shape[2] if target_size is None else target_size[1]
 
-    segmentation = torch.zeros(
-        (height, width), dtype=torch.int32, device=mask_probs.device
-    )
+    segmentation = torch.zeros((height, width), dtype=torch.int32, device=mask_probs.device)
     segments: list[dict] = []
 
     if target_size is not None:
@@ -927,10 +901,8 @@ class DetrImageProcessor(BaseImageProcessor):
         else:
             max_size = None if size is None else 1333
 
-        size = (
-            size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
-        )
-        size = get_size_dict(size, max_size=None, default_to_square=False)
+        size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
+        size = get_size_dict(size, max_size=1333, default_to_square=False)
 
         # Backwards compatibility
         if do_convert_annotations is None:
@@ -945,9 +917,7 @@ class DetrImageProcessor(BaseImageProcessor):
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
         self.do_convert_annotations = do_convert_annotations
-        self.image_mean = (
-            image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
-        )
+        self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_pad = do_pad
         self.pad_size = pad_size
@@ -984,9 +954,7 @@ class DetrImageProcessor(BaseImageProcessor):
         if "max_size" in kwargs:
             image_processor_dict["max_size"] = kwargs.pop("max_size")
         if "pad_and_return_pixel_mask" in kwargs:
-            image_processor_dict["pad_and_return_pixel_mask"] = kwargs.pop(
-                "pad_and_return_pixel_mask"
-            )
+            image_processor_dict["pad_and_return_pixel_mask"] = kwargs.pop("pad_and_return_pixel_mask")
         return super().from_dict(image_processor_dict, **kwargs)
 
     def prepare_annotation(
@@ -1004,11 +972,7 @@ class DetrImageProcessor(BaseImageProcessor):
         format = format if format is not None else self.format
 
         if format == AnnotationFormat.COCO_DETECTION:
-            return_segmentation_masks = (
-                False
-                if return_segmentation_masks is None
-                else return_segmentation_masks
-            )
+            return_segmentation_masks = False if return_segmentation_masks is None else return_segmentation_masks
             target = prepare_coco_detection_annotation(
                 image,
                 target,
@@ -1016,9 +980,7 @@ class DetrImageProcessor(BaseImageProcessor):
                 input_data_format=input_data_format,
             )
         elif format == AnnotationFormat.COCO_PANOPTIC:
-            return_segmentation_masks = (
-                True if return_segmentation_masks is None else return_segmentation_masks
-            )
+            return_segmentation_masks = True if return_segmentation_masks is None else return_segmentation_masks
             target = prepare_coco_panoptic_annotation(
                 image,
                 target,
@@ -1115,9 +1077,7 @@ class DetrImageProcessor(BaseImageProcessor):
         Resize the annotation to match the resized image. If size is an int, smaller edge of the mask will be matched
         to this number.
         """
-        return resize_annotation(
-            annotation, orig_size=orig_size, target_size=size, resample=resample
-        )
+        return resize_annotation(annotation, orig_size=orig_size, target_size=size, resample=resample)
 
     # TODO (Amy) - update to use `rescale_factor` instead of `scale`
     def rescale(
@@ -1153,9 +1113,7 @@ class DetrImageProcessor(BaseImageProcessor):
             input_data_format=input_data_format,
         )
 
-    def normalize_annotation(
-        self, annotation: dict, image_size: tuple[int, int]
-    ) -> dict:
+    def normalize_annotation(self, annotation: dict, image_size: tuple[int, int]) -> dict:
         """
         Normalize the boxes in the annotation from `[top_left_x, top_left_y, bottom_right_x, bottom_right_y]` to
         `[center_x, center_y, width, height]` format and from absolute to relative pixel values.
@@ -1291,13 +1249,9 @@ class DetrImageProcessor(BaseImageProcessor):
         if pad_size is not None:
             padded_size = (pad_size["height"], pad_size["width"])
         else:
-            padded_size = get_max_height_width(
-                images, input_data_format=input_data_format
-            )
+            padded_size = get_max_height_width(images, input_data_format=input_data_format)
 
-        annotation_list = (
-            annotations if annotations is not None else [None] * len(images)
-        )
+        annotation_list = annotations if annotations is not None else [None] * len(images)
         padded_images = []
         padded_annotations = []
         for image, annotation in zip(images, annotation_list):
@@ -1330,8 +1284,7 @@ class DetrImageProcessor(BaseImageProcessor):
 
         if annotations is not None:
             encoded_inputs["labels"] = [
-                BatchFeature(annotation, tensor_type=return_tensors)
-                for annotation in padded_annotations
+                BatchFeature(annotation, tensor_type=return_tensors) for annotation in padded_annotations
             ]
 
         return encoded_inputs
@@ -1462,16 +1415,12 @@ class DetrImageProcessor(BaseImageProcessor):
         size = get_size_dict(size=size, default_to_square=False)
         resample = self.resample if resample is None else resample
         do_rescale = self.do_rescale if do_rescale is None else do_rescale
-        rescale_factor = (
-            self.rescale_factor if rescale_factor is None else rescale_factor
-        )
+        rescale_factor = self.rescale_factor if rescale_factor is None else rescale_factor
         do_normalize = self.do_normalize if do_normalize is None else do_normalize
         image_mean = self.image_mean if image_mean is None else image_mean
         image_std = self.image_std if image_std is None else image_std
         do_convert_annotations = (
-            self.do_convert_annotations
-            if do_convert_annotations is None
-            else do_convert_annotations
+            self.do_convert_annotations if do_convert_annotations is None else do_convert_annotations
         )
         do_pad = self.do_pad if do_pad is None else do_pad
         pad_size = self.pad_size if pad_size is None else pad_size
@@ -1589,24 +1538,16 @@ class DetrImageProcessor(BaseImageProcessor):
                 ]
 
         if do_rescale:
-            images = [
-                self.rescale(image, rescale_factor, input_data_format=input_data_format)
-                for image in images
-            ]
+            images = [self.rescale(image, rescale_factor, input_data_format=input_data_format) for image in images]
 
         if do_normalize:
             images = [
-                self.normalize(
-                    image, image_mean, image_std, input_data_format=input_data_format
-                )
-                for image in images
+                self.normalize(image, image_mean, image_std, input_data_format=input_data_format) for image in images
             ]
 
         if do_convert_annotations and annotations is not None:
             annotations = [
-                self.normalize_annotation(
-                    annotation, get_image_size(image, input_data_format)
-                )
+                self.normalize_annotation(annotation, get_image_size(image, input_data_format))
                 for annotation, image in zip(annotations, images)
             ]
 
@@ -1624,18 +1565,13 @@ class DetrImageProcessor(BaseImageProcessor):
             )
         else:
             images = [
-                to_channel_dimension_format(
-                    image, data_format, input_channel_dim=input_data_format
-                )
+                to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
                 for image in images
             ]
-            encoded_inputs = BatchFeature(
-                data={"pixel_values": images}, tensor_type=return_tensors
-            )
+            encoded_inputs = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
             if annotations is not None:
                 encoded_inputs["labels"] = [
-                    BatchFeature(annotation, tensor_type=return_tensors)
-                    for annotation in annotations
+                    BatchFeature(annotation, tensor_type=return_tensors) for annotation in annotations
                 ]
 
         return encoded_inputs
@@ -1666,13 +1602,9 @@ class DetrImageProcessor(BaseImageProcessor):
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
 
         if len(out_logits) != len(target_sizes):
-            raise ValueError(
-                "Make sure that you pass in as many target sizes as the batch dimension of the logits"
-            )
+            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
         if target_sizes.shape[1] != 2:
-            raise ValueError(
-                "Each element of target_sizes must contain the size (h, w) of each image of the batch"
-            )
+            raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
 
         prob = nn.functional.softmax(out_logits, -1)
         scores, labels = prob[..., :-1].max(-1)
@@ -1684,15 +1616,10 @@ class DetrImageProcessor(BaseImageProcessor):
         scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
         boxes = boxes * scale_fct[:, None, :]
 
-        results = [
-            {"scores": s, "labels": l, "boxes": b}
-            for s, l, b in zip(scores, labels, boxes)
-        ]
+        results = [{"scores": s, "labels": l, "boxes": b} for s, l, b in zip(scores, labels, boxes)]
         return results
 
-    def post_process_segmentation(
-        self, outputs, target_sizes, threshold=0.9, mask_threshold=0.5
-    ):
+    def post_process_segmentation(self, outputs, target_sizes, threshold=0.9, mask_threshold=0.5):
         """
         Converts the output of [`DetrForSegmentation`] into image segmentation predictions. Only supports PyTorch.
 
@@ -1729,9 +1656,7 @@ class DetrImageProcessor(BaseImageProcessor):
             cur_scores = cur_scores[keep]
             cur_labels = cur_labels[keep]
             cur_masks = cur_masks[keep]
-            cur_masks = nn.functional.interpolate(
-                cur_masks[:, None], to_tuple(size), mode="bilinear"
-            ).squeeze(1)
+            cur_masks = nn.functional.interpolate(cur_masks[:, None], to_tuple(size), mode="bilinear").squeeze(1)
             cur_masks = (cur_masks.sigmoid() > mask_threshold) * 1
 
             predictions = {
@@ -1743,9 +1668,7 @@ class DetrImageProcessor(BaseImageProcessor):
         return preds
 
     # inspired by https://github.com/facebookresearch/detr/blob/master/models/segmentation.py#L218
-    def post_process_instance(
-        self, results, outputs, orig_target_sizes, max_target_sizes, threshold=0.5
-    ):
+    def post_process_instance(self, results, outputs, orig_target_sizes, max_target_sizes, threshold=0.5):
         """
         Converts the output of [`DetrForSegmentation`] into actual instance segmentation predictions. Only supports
         PyTorch.
@@ -1773,9 +1696,7 @@ class DetrImageProcessor(BaseImageProcessor):
         )
 
         if len(orig_target_sizes) != len(max_target_sizes):
-            raise ValueError(
-                "Make sure to pass in as many orig_target_sizes as max_target_sizes"
-            )
+            raise ValueError("Make sure to pass in as many orig_target_sizes as max_target_sizes")
         max_h, max_w = max_target_sizes.max(0)[0].tolist()
         outputs_masks = outputs.pred_masks.squeeze(2)
         outputs_masks = nn.functional.interpolate(
@@ -1783,9 +1704,7 @@ class DetrImageProcessor(BaseImageProcessor):
         )
         outputs_masks = (outputs_masks.sigmoid() > threshold).cpu()
 
-        for i, (cur_mask, t, tt) in enumerate(
-            zip(outputs_masks, max_target_sizes, orig_target_sizes)
-        ):
+        for i, (cur_mask, t, tt) in enumerate(zip(outputs_masks, max_target_sizes, orig_target_sizes)):
             img_h, img_w = t[0], t[1]
             results[i]["masks"] = cur_mask[:, :img_h, :img_w].unsqueeze(1)
             results[i]["masks"] = nn.functional.interpolate(
@@ -1831,9 +1750,7 @@ class DetrImageProcessor(BaseImageProcessor):
         if target_sizes is None:
             target_sizes = processed_sizes
         if len(processed_sizes) != len(target_sizes):
-            raise ValueError(
-                "Make sure to pass in as many processed_sizes as target_sizes"
-            )
+            raise ValueError("Make sure to pass in as many processed_sizes as target_sizes")
 
         if is_thing_map is None:
             # default to is_thing_map of COCO panoptic
@@ -1865,9 +1782,7 @@ class DetrImageProcessor(BaseImageProcessor):
             cur_scores = cur_scores[keep]
             cur_labels = cur_labels[keep]
             cur_masks = cur_masks[keep]
-            cur_masks = nn.functional.interpolate(
-                cur_masks[:, None], to_tuple(size), mode="bilinear"
-            ).squeeze(1)
+            cur_masks = nn.functional.interpolate(cur_masks[:, None], to_tuple(size), mode="bilinear").squeeze(1)
             cur_boxes = center_to_corners_format(cur_boxes[keep])
 
             h, w = cur_masks.shape[-2:]
@@ -1904,13 +1819,9 @@ class DetrImageProcessor(BaseImageProcessor):
                 final_h, final_w = to_tuple(target_size)
 
                 seg_img = PIL.Image.fromarray(id_to_rgb(m_id.view(h, w).cpu().numpy()))
-                seg_img = seg_img.resize(
-                    size=(final_w, final_h), resample=PILImageResampling.NEAREST
-                )
+                seg_img = seg_img.resize(size=(final_w, final_h), resample=PILImageResampling.NEAREST)
 
-                np_seg_img = torch.ByteTensor(
-                    torch.ByteStorage.from_buffer(seg_img.tobytes())
-                )
+                np_seg_img = torch.ByteTensor(torch.ByteStorage.from_buffer(seg_img.tobytes()))
                 np_seg_img = np_seg_img.view(final_h, final_w, 3)
                 np_seg_img = np_seg_img.numpy()
 
@@ -2008,9 +1919,7 @@ class DetrImageProcessor(BaseImageProcessor):
             else:
                 img_h, img_w = target_sizes.unbind(1)
 
-            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(
-                boxes.device
-            )
+            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
             boxes = boxes * scale_fct[:, None, :]
 
         results = []
@@ -2022,9 +1931,7 @@ class DetrImageProcessor(BaseImageProcessor):
 
         return results
 
-    def post_process_semantic_segmentation(
-        self, outputs, target_sizes: Optional[list[tuple[int, int]]] = None
-    ):
+    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple[int, int]]] = None):
         """
         Converts the output of [`DetrForSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 
@@ -2040,18 +1947,12 @@ class DetrImageProcessor(BaseImageProcessor):
                 corresponding to the target_sizes entry (if `target_sizes` is specified). Each entry of each
                 `torch.Tensor` correspond to a semantic class id.
         """
-        class_queries_logits = (
-            outputs.logits
-        )  # [batch_size, num_queries, num_classes+1]
-        masks_queries_logits = (
-            outputs.pred_masks
-        )  # [batch_size, num_queries, height, width]
+        class_queries_logits = outputs.logits  # [batch_size, num_queries, num_classes+1]
+        masks_queries_logits = outputs.pred_masks  # [batch_size, num_queries, height, width]
 
         # Remove the null class `[..., :-1]`
         masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
-        masks_probs = (
-            masks_queries_logits.sigmoid()
-        )  # [batch_size, num_queries, height, width]
+        masks_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
 
         # Semantic segmentation logits of shape (batch_size, num_classes, height, width)
         segmentation = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
@@ -2076,9 +1977,7 @@ class DetrImageProcessor(BaseImageProcessor):
                 semantic_segmentation.append(semantic_map)
         else:
             semantic_segmentation = segmentation.argmax(dim=1)
-            semantic_segmentation = [
-                semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])
-            ]
+            semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
 
         return semantic_segmentation
 
@@ -2121,42 +2020,28 @@ class DetrImageProcessor(BaseImageProcessor):
                 - **label_id** -- An integer representing the label / semantic class id corresponding to `segment_id`.
                 - **score** -- Prediction score of segment with `segment_id`.
         """
-        class_queries_logits = (
-            outputs.logits
-        )  # [batch_size, num_queries, num_classes+1]
-        masks_queries_logits = (
-            outputs.pred_masks
-        )  # [batch_size, num_queries, height, width]
+        class_queries_logits = outputs.logits  # [batch_size, num_queries, num_classes+1]
+        masks_queries_logits = outputs.pred_masks  # [batch_size, num_queries, height, width]
 
         batch_size = class_queries_logits.shape[0]
         num_labels = class_queries_logits.shape[-1] - 1
 
-        mask_probs = (
-            masks_queries_logits.sigmoid()
-        )  # [batch_size, num_queries, height, width]
+        mask_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
 
         # Predicted label and score of each query (batch_size, num_queries)
-        pred_scores, pred_labels = nn.functional.softmax(
-            class_queries_logits, dim=-1
-        ).max(-1)
+        pred_scores, pred_labels = nn.functional.softmax(class_queries_logits, dim=-1).max(-1)
 
         # Loop over items in batch size
         results: list[dict[str, TensorType]] = []
 
         for i in range(batch_size):
-            mask_probs_item, pred_scores_item, pred_labels_item = (
-                remove_low_and_no_objects(
-                    mask_probs[i], pred_scores[i], pred_labels[i], threshold, num_labels
-                )
+            mask_probs_item, pred_scores_item, pred_labels_item = remove_low_and_no_objects(
+                mask_probs[i], pred_scores[i], pred_labels[i], threshold, num_labels
             )
 
             # No mask found
             if mask_probs_item.shape[0] <= 0:
-                height, width = (
-                    target_sizes[i]
-                    if target_sizes is not None
-                    else mask_probs_item.shape[1:]
-                )
+                height, width = target_sizes[i] if target_sizes is not None else mask_probs_item.shape[1:]
                 segmentation = torch.zeros((height, width)) - 1
                 results.append({"segmentation": segmentation, "segments_info": []})
                 continue
@@ -2228,42 +2113,28 @@ class DetrImageProcessor(BaseImageProcessor):
             logger.warning_once("`label_ids_to_fuse` unset. No instance will be fused.")
             label_ids_to_fuse = set()
 
-        class_queries_logits = (
-            outputs.logits
-        )  # [batch_size, num_queries, num_classes+1]
-        masks_queries_logits = (
-            outputs.pred_masks
-        )  # [batch_size, num_queries, height, width]
+        class_queries_logits = outputs.logits  # [batch_size, num_queries, num_classes+1]
+        masks_queries_logits = outputs.pred_masks  # [batch_size, num_queries, height, width]
 
         batch_size = class_queries_logits.shape[0]
         num_labels = class_queries_logits.shape[-1] - 1
 
-        mask_probs = (
-            masks_queries_logits.sigmoid()
-        )  # [batch_size, num_queries, height, width]
+        mask_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
 
         # Predicted label and score of each query (batch_size, num_queries)
-        pred_scores, pred_labels = nn.functional.softmax(
-            class_queries_logits, dim=-1
-        ).max(-1)
+        pred_scores, pred_labels = nn.functional.softmax(class_queries_logits, dim=-1).max(-1)
 
         # Loop over items in batch size
         results: list[dict[str, TensorType]] = []
 
         for i in range(batch_size):
-            mask_probs_item, pred_scores_item, pred_labels_item = (
-                remove_low_and_no_objects(
-                    mask_probs[i], pred_scores[i], pred_labels[i], threshold, num_labels
-                )
+            mask_probs_item, pred_scores_item, pred_labels_item = remove_low_and_no_objects(
+                mask_probs[i], pred_scores[i], pred_labels[i], threshold, num_labels
             )
 
             # No mask found
             if mask_probs_item.shape[0] <= 0:
-                height, width = (
-                    target_sizes[i]
-                    if target_sizes is not None
-                    else mask_probs_item.shape[1:]
-                )
+                height, width = target_sizes[i] if target_sizes is not None else mask_probs_item.shape[1:]
                 segmentation = torch.zeros((height, width)) - 1
                 results.append({"segmentation": segmentation, "segments_info": []})
                 continue

@@ -127,9 +127,7 @@ class ConditionalDetrImageProcessingTester:
         height, width = self.get_expected_values(images, batched=True)
         return self.num_channels, height, width
 
-    def prepare_image_inputs(
-        self, equal_resolution=False, numpify=False, torchify=False
-    ):
+    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         return prepare_image_inputs(
             batch_size=self.batch_size,
             num_channels=self.num_channels,
@@ -143,15 +141,9 @@ class ConditionalDetrImageProcessingTester:
 
 @require_torch
 @require_vision
-class ConditionalDetrImageProcessingTest(
-    AnnotationFormatTestMixin, ImageProcessingTestMixin, unittest.TestCase
-):
-    image_processing_class = (
-        ConditionalDetrImageProcessor if is_vision_available() else None
-    )
-    fast_image_processing_class = (
-        ConditionalDetrImageProcessorFast if is_torchvision_available() else None
-    )
+class ConditionalDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixin, unittest.TestCase):
+    image_processing_class = ConditionalDetrImageProcessor if is_vision_available() else None
+    fast_image_processing_class = ConditionalDetrImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
@@ -172,12 +164,8 @@ class ConditionalDetrImageProcessingTest(
 
     def test_image_processor_from_dict_with_kwargs(self):
         for image_processing_class in self.image_processor_list:
-            image_processor = image_processing_class.from_dict(
-                self.image_processor_dict
-            )
-            self.assertEqual(
-                image_processor.size, {"shortest_edge": 18, "longest_edge": 1333}
-            )
+            image_processor = image_processing_class.from_dict(self.image_processor_dict)
+            self.assertEqual(image_processor.size, {"shortest_edge": 18, "longest_edge": 1333})
             self.assertEqual(image_processor.do_pad, True)
 
             image_processor = image_processing_class.from_dict(
@@ -186,9 +174,7 @@ class ConditionalDetrImageProcessingTest(
                 max_size=84,
                 pad_and_return_pixel_mask=False,
             )
-            self.assertEqual(
-                image_processor.size, {"shortest_edge": 42, "longest_edge": 84}
-            )
+            self.assertEqual(image_processor.size, {"shortest_edge": 42, "longest_edge": 84})
             self.assertEqual(image_processor.do_pad, False)
 
     @slow
@@ -202,12 +188,8 @@ class ConditionalDetrImageProcessingTest(
 
         for image_processing_class in self.image_processor_list:
             # encode them
-            image_processing = image_processing_class.from_pretrained(
-                "microsoft/conditional-detr-resnet-50"
-            )
-            encoding = image_processing(
-                images=image, annotations=target, return_tensors="pt"
-            )
+            image_processing = image_processing_class.from_pretrained("microsoft/conditional-detr-resnet-50")
+            encoding = image_processing(images=image, annotations=target, return_tensors="pt")
 
             # verify pixel values
             expected_shape = torch.Size([1, 3, 800, 1066])
@@ -245,24 +227,16 @@ class ConditionalDetrImageProcessingTest(
             )
             # verify image_id
             expected_image_id = torch.tensor([39769])
-            torch.testing.assert_close(
-                encoding["labels"][0]["image_id"], expected_image_id
-            )
+            torch.testing.assert_close(encoding["labels"][0]["image_id"], expected_image_id)
             # verify is_crowd
             expected_is_crowd = torch.tensor([0, 0, 0, 0, 0, 0])
-            torch.testing.assert_close(
-                encoding["labels"][0]["iscrowd"], expected_is_crowd
-            )
+            torch.testing.assert_close(encoding["labels"][0]["iscrowd"], expected_is_crowd)
             # verify class_labels
             expected_class_labels = torch.tensor([75, 75, 63, 65, 17, 17])
-            torch.testing.assert_close(
-                encoding["labels"][0]["class_labels"], expected_class_labels
-            )
+            torch.testing.assert_close(encoding["labels"][0]["class_labels"], expected_class_labels)
             # verify orig_size
             expected_orig_size = torch.tensor([480, 640])
-            torch.testing.assert_close(
-                encoding["labels"][0]["orig_size"], expected_orig_size
-            )
+            torch.testing.assert_close(encoding["labels"][0]["orig_size"], expected_orig_size)
             # verify size
             expected_size = torch.tensor([800, 1066])
             torch.testing.assert_close(encoding["labels"][0]["size"], expected_size)
@@ -271,9 +245,7 @@ class ConditionalDetrImageProcessingTest(
     def test_call_pytorch_with_coco_panoptic_annotations(self):
         # prepare image, target and masks_path
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        with open(
-            "./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt"
-        ) as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt") as f:
             target = json.loads(f.read())
 
         target = {
@@ -330,31 +302,20 @@ class ConditionalDetrImageProcessingTest(
             )
             # verify image_id
             expected_image_id = torch.tensor([39769])
-            torch.testing.assert_close(
-                encoding["labels"][0]["image_id"], expected_image_id
-            )
+            torch.testing.assert_close(encoding["labels"][0]["image_id"], expected_image_id)
             # verify is_crowd
             expected_is_crowd = torch.tensor([0, 0, 0, 0, 0, 0])
-            torch.testing.assert_close(
-                encoding["labels"][0]["iscrowd"], expected_is_crowd
-            )
+            torch.testing.assert_close(encoding["labels"][0]["iscrowd"], expected_is_crowd)
             # verify class_labels
             expected_class_labels = torch.tensor([17, 17, 63, 75, 75, 93])
-            torch.testing.assert_close(
-                encoding["labels"][0]["class_labels"], expected_class_labels
-            )
+            torch.testing.assert_close(encoding["labels"][0]["class_labels"], expected_class_labels)
             # verify masks
             expected_masks_sum = 822873
-            relative_error = (
-                torch.abs(encoding["labels"][0]["masks"].sum() - expected_masks_sum)
-                / expected_masks_sum
-            )
+            relative_error = torch.abs(encoding["labels"][0]["masks"].sum() - expected_masks_sum) / expected_masks_sum
             self.assertTrue(relative_error < 1e-3)
             # verify orig_size
             expected_orig_size = torch.tensor([480, 640])
-            torch.testing.assert_close(
-                encoding["labels"][0]["orig_size"], expected_orig_size
-            )
+            torch.testing.assert_close(encoding["labels"][0]["orig_size"], expected_orig_size)
             # verify size
             expected_size = torch.tensor([800, 1066])
             torch.testing.assert_close(encoding["labels"][0]["size"], expected_size)
@@ -363,9 +324,7 @@ class ConditionalDetrImageProcessingTest(
     # Copied from tests.models.detr.test_image_processing_detr.DetrImageProcessingTest.test_batched_coco_detection_annotations with Detr->ConditionalDetr, facebook/detr-resnet-50 ->microsoft/conditional-detr-resnet-50
     def test_batched_coco_detection_annotations(self):
         image_0 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        image_1 = Image.open(
-            "./tests/fixtures/tests_samples/COCO/000000039769.png"
-        ).resize((800, 800))
+        image_1 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png").resize((800, 800))
 
         with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt") as f:
             target = json.loads(f.read())
@@ -400,9 +359,7 @@ class ConditionalDetrImageProcessingTest(
 
             # Check the pixel values have been padded
             postprocessed_height, postprocessed_width = 800, 1066
-            expected_shape = torch.Size(
-                [2, 3, postprocessed_height, postprocessed_width]
-            )
+            expected_shape = torch.Size([2, 3, postprocessed_height, postprocessed_width])
             self.assertEqual(encoding["pixel_values"].shape, expected_shape)
 
             # Check the bounding boxes have been adjusted for padded images
@@ -428,20 +385,12 @@ class ConditionalDetrImageProcessingTest(
                     [0.5790, 0.4115, 0.3430, 0.7161],
                 ]
             )
-            torch.testing.assert_close(
-                encoding["labels"][0]["boxes"], expected_boxes_0, atol=1e-3, rtol=1e-3
-            )
-            torch.testing.assert_close(
-                encoding["labels"][1]["boxes"], expected_boxes_1, atol=1e-3, rtol=1e-3
-            )
+            torch.testing.assert_close(encoding["labels"][0]["boxes"], expected_boxes_0, atol=1e-3, rtol=1e-3)
+            torch.testing.assert_close(encoding["labels"][1]["boxes"], expected_boxes_1, atol=1e-3, rtol=1e-3)
 
             # Check the masks have also been padded
-            self.assertEqual(
-                encoding["labels"][0]["masks"].shape, torch.Size([6, 800, 1066])
-            )
-            self.assertEqual(
-                encoding["labels"][1]["masks"].shape, torch.Size([6, 800, 1066])
-            )
+            self.assertEqual(encoding["labels"][0]["masks"].shape, torch.Size([6, 800, 1066]))
+            self.assertEqual(encoding["labels"][1]["masks"].shape, torch.Size([6, 800, 1066]))
 
             # Check if do_convert_annotations=False, then the annotations are not converted to centre_x, centre_y, width, height
             # format and not in the range [0, 1]
@@ -488,24 +437,16 @@ class ConditionalDetrImageProcessingTest(
                     unnormalized_boxes_1[:, 1] + unnormalized_boxes_1[:, 3] / 2,
                 ]
             ).T
-            torch.testing.assert_close(
-                encoding["labels"][0]["boxes"], expected_boxes_0, atol=1, rtol=1
-            )
-            torch.testing.assert_close(
-                encoding["labels"][1]["boxes"], expected_boxes_1, atol=1, rtol=1
-            )
+            torch.testing.assert_close(encoding["labels"][0]["boxes"], expected_boxes_0, atol=1, rtol=1)
+            torch.testing.assert_close(encoding["labels"][1]["boxes"], expected_boxes_1, atol=1, rtol=1)
 
     # Copied from tests.models.detr.test_image_processing_detr.DetrImageProcessingTest.test_batched_coco_panoptic_annotations with Detr->ConditionalDetr
     def test_batched_coco_panoptic_annotations(self):
         # prepare image, target and masks_path
         image_0 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        image_1 = Image.open(
-            "./tests/fixtures/tests_samples/COCO/000000039769.png"
-        ).resize((800, 800))
+        image_1 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png").resize((800, 800))
 
-        with open(
-            "./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt"
-        ) as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt") as f:
             target = json.loads(f.read())
 
         annotation_0 = {
@@ -549,9 +490,7 @@ class ConditionalDetrImageProcessingTest(
 
             # Check the pixel values have been padded
             postprocessed_height, postprocessed_width = 800, 1066
-            expected_shape = torch.Size(
-                [2, 3, postprocessed_height, postprocessed_width]
-            )
+            expected_shape = torch.Size([2, 3, postprocessed_height, postprocessed_width])
             self.assertEqual(encoding["pixel_values"].shape, expected_shape)
 
             # Check the bounding boxes have been adjusted for padded images
@@ -577,20 +516,12 @@ class ConditionalDetrImageProcessingTest(
                     [0.2997, 0.2994, 0.5994, 0.5987],
                 ]
             )
-            torch.testing.assert_close(
-                encoding["labels"][0]["boxes"], expected_boxes_0, atol=1e-3, rtol=1e-3
-            )
-            torch.testing.assert_close(
-                encoding["labels"][1]["boxes"], expected_boxes_1, atol=1e-3, rtol=1e-3
-            )
+            torch.testing.assert_close(encoding["labels"][0]["boxes"], expected_boxes_0, atol=1e-3, rtol=1e-3)
+            torch.testing.assert_close(encoding["labels"][1]["boxes"], expected_boxes_1, atol=1e-3, rtol=1e-3)
 
             # Check the masks have also been padded
-            self.assertEqual(
-                encoding["labels"][0]["masks"].shape, torch.Size([6, 800, 1066])
-            )
-            self.assertEqual(
-                encoding["labels"][1]["masks"].shape, torch.Size([6, 800, 1066])
-            )
+            self.assertEqual(encoding["labels"][0]["masks"].shape, torch.Size([6, 800, 1066]))
+            self.assertEqual(encoding["labels"][1]["masks"].shape, torch.Size([6, 800, 1066]))
 
             # Check if do_convert_annotations=False, then the annotations are not converted to centre_x, centre_y, width, height
             # format and not in the range [0, 1]
@@ -638,12 +569,8 @@ class ConditionalDetrImageProcessingTest(
                     unnormalized_boxes_1[:, 1] + unnormalized_boxes_1[:, 3] / 2,
                 ]
             ).T
-            torch.testing.assert_close(
-                encoding["labels"][0]["boxes"], expected_boxes_0, atol=1, rtol=1
-            )
-            torch.testing.assert_close(
-                encoding["labels"][1]["boxes"], expected_boxes_1, atol=1, rtol=1
-            )
+            torch.testing.assert_close(encoding["labels"][0]["boxes"], expected_boxes_0, atol=1, rtol=1)
+            torch.testing.assert_close(encoding["labels"][1]["boxes"], expected_boxes_1, atol=1, rtol=1)
 
     # Copied from tests.models.detr.test_image_processing_detr.DetrImageProcessingTest.test_max_width_max_height_resizing_and_pad_strategy with Detr->ConditionalDetr
     def test_max_width_max_height_resizing_and_pad_strategy(self):
@@ -704,23 +631,17 @@ class ConditionalDetrImageProcessingTest(
             self.assertEqual(image_processor.size, expected_size)
 
             # Test 2: size with max_size (max_size should be used to set longest_edge if not present)
-            image_processor = image_processing_class(
-                size={"shortest_edge": 600}, max_size=900
-            )
+            image_processor = image_processing_class(size={"shortest_edge": 600}, max_size=900)
             expected_size = {"shortest_edge": 600, "longest_edge": 900}
             self.assertEqual(image_processor.size, expected_size)
 
             # Test 3: size with longest_edge and max_size (max_size should be ignored)
-            image_processor = image_processing_class(
-                size={"shortest_edge": 500, "longest_edge": 800}, max_size=1200
-            )
+            image_processor = image_processing_class(size={"shortest_edge": 500, "longest_edge": 800}, max_size=1200)
             expected_size = {"shortest_edge": 500, "longest_edge": 800}
             self.assertEqual(image_processor.size, expected_size)
 
             # Test 4: from_dict with max_size
-            image_processor = image_processing_class.from_dict(
-                self.image_processor_dict, max_size=1100
-            )
+            image_processor = image_processing_class.from_dict(self.image_processor_dict, max_size=1100)
             expected_size = {"shortest_edge": 18, "longest_edge": 1100}
             self.assertEqual(image_processor.size, expected_size)
 
