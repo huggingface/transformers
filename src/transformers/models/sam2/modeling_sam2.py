@@ -2339,7 +2339,7 @@ class Sam2Model(Sam2PreTrainedModel):
 
             # reshape feature maps to the same shape as the backbone feature sizes
             image_embeddings = [
-                feat.permute(1, 2, 0).view(1, -1, *feat_size)
+                feat.permute(1, 2, 0).view(batch_size, -1, *feat_size)
                 for feat, feat_size in zip(feature_maps, self.backbone_feature_sizes)
             ]
 
