@@ -16,6 +16,7 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.nn import BCEWithLogitsLoss, MSELoss
 
 from .loss_d_fine import DFineForObjectDetectionLoss
@@ -46,11 +47,22 @@ def ForCausalLMLoss(
     logits,
     labels,
     vocab_size: int,
+    hidden_states: Optional[torch.Tensor] = None,
+    lm_head_weight: Optional[torch.Tensor] = None,
+    logits_to_keep: Optional[int] = None,
     num_items_in_batch: Optional[torch.Tensor] = None,
     ignore_index: int = -100,
     shift_labels: Optional[torch.Tensor] = None,
     **kwargs,
 ) -> torch.Tensor:
+    if hidden_states and lm_head_weight:
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        # compute linear
+        logits = F.linear(
+            hidden_states[:, slice_indices, :],
+            lm_head_weight,
+        )
+
     # Upcast to float if we need to compute the loss to avoid potential precision issues
     logits = logits.float()
 
