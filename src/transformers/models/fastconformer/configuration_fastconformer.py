@@ -34,7 +34,7 @@ class FastConformerConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 1024):
-            Vocabulary size of the FastConformer model. Note: This parameter is not used in the FastConformer 
+            Vocabulary size of the FastConformer model. Note: This parameter is not used in the FastConformer
             audio encoder but is required for HuggingFace framework compatibility.
         d_model (`int`, *optional*, defaults to 1024):
             Dimension of the layers and the hidden states.
