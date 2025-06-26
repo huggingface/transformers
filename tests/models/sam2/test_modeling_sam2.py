@@ -501,8 +501,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         sorted_indices = torch.argsort(outputs.ious.squeeze(), descending=True)
         scores = outputs.ious.squeeze()[sorted_indices]
         masks_logits = outputs.low_res_masks.squeeze()[sorted_indices][0, :3, :3]
-        print("scores", scores)
-        print("masks_logits", masks_logits)
+
         torch.testing.assert_close(
             scores, torch.tensor([0.9546, 0.4937, 0.0428]).to(torch_device), atol=1e-4, rtol=1e-4
         )
@@ -510,6 +509,32 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             masks_logits,
             torch.tensor(
                 [[-25.0963, -41.5728, -30.8723], [-34.7112, -30.7988, -36.4013], [-25.3061, -37.4575, -33.1899]]
+            ).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
+
+    def test_inference_mask_generation_one_point_no_multimask(self):
+        raw_image = prepare_image()
+        input_points = [[[[500, 375]]]]
+        input_labels = [[[1]]]
+
+        inputs = self.processor(
+            images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt"
+        ).to(torch_device)
+
+        with torch.no_grad():
+            outputs = self.model(**inputs, multimask_output=False)
+        self.assertEqual(outputs.ious.shape, (1, 1, 1))
+        self.assertEqual(outputs.low_res_masks.shape, (1, 1, 1, 256, 256))
+        scores = outputs.ious.squeeze((0, 1))
+        masks_logits = outputs.low_res_masks.squeeze((0, 1))[0, :3, :3]
+
+        torch.testing.assert_close(scores, torch.tensor([0.9366]).to(torch_device), atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(
+            masks_logits,
+            torch.tensor(
+                [[-7.1674, -13.4459, -9.6908], [-10.6038, -9.7242, -12.4059], [-7.4478, -12.4997, -10.5906]]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
@@ -552,46 +577,50 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
     #     )
 
     def test_inference_mask_generation_batched_points_batched_images(self):
-        model = Sam2Model.from_pretrained("facebook/sam2-vit-base")
-        processor = SamProcessor.from_pretrained("facebook/sam2-vit-base")
+        raw_image1 = prepare_image()
+        raw_image2 = prepare_dog_img()
+        input_points = [[[[500, 375], [10, 10]]], [[[770, 200], [730, 120]]]]
+        input_labels = [[[1, -10]], [[1, 0]]]
 
-        model.to(torch_device)
-        model.eval()
-
-        raw_image = prepare_image()
-        input_points = [
-            [[[820, 1080]], [[820, 1080]], [[820, 1080]], [[820, 1080]]],
-            [[[510, 1080]], [[820, 1080]], [[820, 1080]], [[820, 1080]]],
-        ]
-
-        inputs = processor(images=[raw_image, raw_image], input_points=input_points, return_tensors="pt").to(
-            torch_device
-        )
+        inputs = self.processor(
+            images=[raw_image1, raw_image2], input_points=input_points, input_labels=input_labels, return_tensors="pt"
+        ).to(torch_device)
 
         with torch.no_grad():
-            outputs = model(**inputs)
-        scores = outputs.iou_scores.squeeze().cpu()
-        masks = outputs.pred_masks[0, 0, 0, 0, :3].cpu()
+            outputs = self.model(**inputs)
+        self.assertEqual(outputs.ious.shape, (2, 1, 3))
+        self.assertEqual(outputs.low_res_masks.shape, (2, 1, 3, 256, 256))
 
-        EXPECTED_SCORES = torch.tensor(
-            [
-                [
-                    [0.6765, 0.9379, 0.8803],
-                    [0.6765, 0.9379, 0.8803],
-                    [0.6765, 0.9379, 0.8803],
-                    [0.6765, 0.9379, 0.8803],
-                ],
-                [
-                    [0.3317, 0.7264, 0.7646],
-                    [0.6765, 0.9379, 0.8803],
-                    [0.6765, 0.9379, 0.8803],
-                    [0.6765, 0.9379, 0.8803],
-                ],
-            ]
+        sorted_indices = torch.argsort(outputs.ious[0].squeeze(), descending=True)
+        scores1 = outputs.ious[0].squeeze()[sorted_indices]
+        masks_logits1 = outputs.low_res_masks[0].squeeze()[sorted_indices][0, :3, :3]
+        sorted_indices = torch.argsort(outputs.ious[1].squeeze(), descending=True)
+        scores2 = outputs.ious[1].squeeze()[sorted_indices]
+        masks_logits2 = outputs.low_res_masks[1].squeeze()[sorted_indices][0, :3, :3]
+
+        torch.testing.assert_close(
+            scores1, torch.tensor([0.9584, 0.4898, 0.0445]).to(torch_device), atol=1e-4, rtol=1e-4
         )
-        EXPECTED_MASKS = torch.tensor([-2.8550, -2.7988, -2.9625])
-        self.assertTrue(torch.allclose(scores, EXPECTED_SCORES, atol=1e-3))
-        self.assertTrue(torch.allclose(masks, EXPECTED_MASKS, atol=1e-3))
+        torch.testing.assert_close(
+            masks_logits1,
+            torch.tensor(
+                [[-22.4127, -37.7623, -27.7642], [-31.0563, -27.6730, -32.6308], [-22.4559, -33.8773, -29.5238]]
+            ).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
+
+        torch.testing.assert_close(
+            scores2, torch.tensor([0.9504, 0.8117, 0.7426]).to(torch_device), atol=1e-4, rtol=1e-4
+        )
+        torch.testing.assert_close(
+            masks_logits2,
+            torch.tensor(
+                [[-13.1202, -17.3222, -14.9687], [-16.2375, -12.7737, -17.6353], [-13.5025, -17.1528, -15.6627]]
+            ).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
 
     def test_inference_mask_generation_one_point_one_bb_zero(self):
         model = Sam2Model.from_pretrained("facebook/sam2-vit-base")
@@ -618,67 +647,6 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         scores = outputs.iou_scores.squeeze()
 
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.7894), atol=1e-4))
-
-    def test_inference_mask_generation_one_point(self):
-        model = Sam2Model.from_pretrained("facebook/sam2-vit-base")
-        processor = SamProcessor.from_pretrained("facebook/sam2-vit-base")
-
-        model.to(torch_device)
-        model.eval()
-
-        raw_image = prepare_image()
-
-        input_points = [[[400, 650]]]
-        input_labels = [[1]]
-
-        inputs = processor(
-            images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt"
-        ).to(torch_device)
-
-        with torch.no_grad():
-            outputs = model(**inputs)
-        scores = outputs.iou_scores.squeeze()
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9675), atol=1e-4))
-
-        # With no label
-        input_points = [[[400, 650]]]
-
-        inputs = processor(images=raw_image, input_points=input_points, return_tensors="pt").to(torch_device)
-
-        with torch.no_grad():
-            outputs = model(**inputs)
-        scores = outputs.iou_scores.squeeze()
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9675), atol=1e-4))
-
-    def test_inference_mask_generation_two_points(self):
-        model = Sam2Model.from_pretrained("facebook/sam2-vit-base")
-        processor = SamProcessor.from_pretrained("facebook/sam2-vit-base")
-
-        model.to(torch_device)
-        model.eval()
-
-        raw_image = prepare_image()
-
-        input_points = [[[400, 650], [800, 650]]]
-        input_labels = [[1, 1]]
-
-        inputs = processor(
-            images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt"
-        ).to(torch_device)
-
-        with torch.no_grad():
-            outputs = model(**inputs)
-        scores = outputs.iou_scores.squeeze()
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9762), atol=1e-4))
-
-        # no labels
-        inputs = processor(images=raw_image, input_points=input_points, return_tensors="pt").to(torch_device)
-
-        with torch.no_grad():
-            outputs = model(**inputs)
-        scores = outputs.iou_scores.squeeze()
-
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9762), atol=1e-4))
 
     def test_inference_mask_generation_two_points_batched(self):
         model = Sam2Model.from_pretrained("facebook/sam2-vit-base")
