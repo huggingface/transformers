@@ -197,7 +197,7 @@ def eager_attention_forward(
 class LlamaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    return_hooks = {"attention", 0}
+    return_hooks = {"attentions", 1}
 
     def __init__(self, config: LlamaConfig, layer_idx: int):
         super().__init__()
