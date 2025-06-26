@@ -28,7 +28,7 @@ class KyutaiSpeechToTextConfig(PretrainedConfig):
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
     2.6b-en model.
 
-    e.g. [kyutai/stt-2.6b-en](https://huggingface.co/kyutai/stt-2.6b-en)
+    e.g. [kyutai/stt-2.6b-en-trfs](https://huggingface.co/kyutai/stt-2.6b-en-trfs)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -110,8 +110,7 @@ class KyutaiSpeechToTextConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    # not the best naming here for `model_type`, but original codebase already uses model type:`stt` for in the config so we keep it to simplify
-    model_type = "stt"
+    model_type = "kyutai_speech_to_text"
     keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs = {"codec_config": AutoConfig}
 
