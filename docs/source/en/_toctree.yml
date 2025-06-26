@@ -22,7 +22,7 @@
     - local: add_new_model
       title: Legacy model contribution
     - local: auto_docstring
-      title: Document your models
+      title: Documenting a model
     - local: attention_interface
       title: Customizing attention function
     title: Models
