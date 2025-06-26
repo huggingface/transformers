@@ -22,16 +22,16 @@
 import math
 import warnings
 from dataclasses import dataclass
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 import torch
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
-from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import (
     FlashAttentionKwargs,
     flash_attn_supports_top_left_mask,
@@ -55,15 +55,9 @@ from ...modeling_utils import (
     prune_linear_layer,
 )
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, is_torch_flex_attn_available, logging
+from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.import_utils import is_torch_fx_proxy, is_torchdynamo_compiling
 from .configuration_evolla import EvollaConfig, SaProtConfig
-
-
-if is_torch_flex_attn_available():
-    from torch.nn.attention.flex_attention import BlockMask
-
-    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 if is_flash_attn_available():
@@ -79,8 +73,8 @@ class EvollaProteinEncoderModelOutput(ModelOutput):
 
     sequence_compressor_output: torch.FloatTensor = None
     last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -255,12 +249,12 @@ class EvollaAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -454,6 +448,8 @@ class EvollaSequenceAlignerCrossAttention(nn.Module):
         query_layer = query_layer * self.scale
 
         # attention_mask: [bs, 1, querylength, keylength]
+        if query_attn_mask is None:
+            query_attn_mask = torch.ones(query_states.size(0), query_states.size(1)).to(query_states.device)
         attention_mask = query_attn_mask[:, None, :, None] * kv_attn_mask[:, None, None, :]
         # Compute the scaled dot-product attention scores
         attn_weights = torch.matmul(query_layer, key_layer.transpose(-1, -2))  # [bs, numheads, querylength, keylength]
@@ -579,13 +575,13 @@ class EvollaDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         protein_kv_states: Optional[torch.Tensor] = None,
         structure_kv_states: Optional[torch.Tensor] = None,
         msa_kv_states: Optional[torch.Tensor] = None,
@@ -594,7 +590,7 @@ class EvollaDecoderLayer(GradientCheckpointingLayer):
         msa_batch_mask: Optional[torch.Tensor] = None,
         query_attn_mask: Optional[torch.Tensor] = None,
         **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
@@ -619,7 +615,7 @@ class EvollaDecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
-        if hasattr(self, "adapter") and self.adapter is not None:
+        if hasattr(self, "adapter"):
             hidden_states = self.adapter(
                 query_states=hidden_states,
                 protein_kv_states=protein_kv_states,
@@ -793,7 +789,7 @@ class RotaryEmbedding(torch.nn.Module):
 
         return self._cos_cached, self._sin_cached
 
-    def forward(self, q: torch.Tensor, k: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, q: torch.Tensor, k: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         self._cos_cached, self._sin_cached = self._update_cos_sin_tables(k, seq_dimension=-2)
 
         return (
@@ -846,9 +842,9 @@ class EvollaSaProtSelfAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         mixed_query_layer = self.query(hidden_states)
 
         # If this is instantiated as a cross-attention module, the keys
@@ -978,9 +974,9 @@ class EvollaSaProtFlashAttention2(EvollaSaProtSelfAttention):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         # Flash attention doesn't support output_attentions or cross attention
         if output_attentions or head_mask is not None or encoder_hidden_states is not None:
             logger.warning_once(
@@ -1013,9 +1009,14 @@ class EvollaSaProtFlashAttention2(EvollaSaProtSelfAttention):
         # This might slowdown training & inference so it is recommended to not cast the LayerNorms
         # in fp32.
         input_dtype = query_layer.dtype
+        device_type = query_layer.device.type if query_layer.device.type != "mps" else "cpu"
         if input_dtype == torch.float32:
             if torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_gpu_dtype()
+                target_dtype = (
+                    torch.get_autocast_dtype(device_type)
+                    if hasattr(torch, "get_autocast_dtype")
+                    else torch.get_autocast_gpu_dtype()
+                )
             # Handle the case where the model is quantized
             elif hasattr(self.config, "_pre_quantization_dtype"):
                 target_dtype = self.config._pre_quantization_dtype
@@ -1155,7 +1156,7 @@ class EvollaSaProtOutput(nn.Module):
         return hidden_states
 
 
-class EvollaSaProtLayer(nn.Module):
+class EvollaSaProtLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -1281,27 +1282,15 @@ class EvollaSaProtEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    past_key_value,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    past_key_value,
-                    output_attentions,
-                )
+            layer_outputs = layer_module(
+                hidden_states,
+                attention_mask,
+                layer_head_mask,
+                encoder_hidden_states,
+                encoder_attention_mask,
+                past_key_value,
+                output_attentions,
+            )
 
             hidden_states = layer_outputs[0]
             if use_cache:
@@ -1381,6 +1370,7 @@ class EvollaSaProtProteinEncoder(nn.Module):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
+    @can_return_tuple
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1390,12 +1380,11 @@ class EvollaSaProtProteinEncoder(nn.Module):
         inputs_embeds: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
+    ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
@@ -1420,7 +1409,6 @@ class EvollaSaProtProteinEncoder(nn.Module):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if self.config.is_decoder:
             use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -1485,13 +1473,9 @@ class EvollaSaProtProteinEncoder(nn.Module):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
-
-        if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
@@ -1502,15 +1486,8 @@ class EvollaSaProtProteinEncoder(nn.Module):
             cross_attentions=encoder_outputs.cross_attentions,
         )
 
-    @property
-    def dtype(self) -> torch.dtype:
-        """
-        `torch.dtype`: The dtype of the module (assuming that all the module parameters have the same dtype).
-        """
-        return get_parameter_dtype(self)
-
     def get_extended_attention_mask(
-        self, attention_mask: Tensor, input_shape: Tuple[int], device: torch.device = None, dtype: torch.float = None
+        self, attention_mask: Tensor, input_shape: tuple[int], device: torch.device = None, dtype: torch.float = None
     ) -> Tensor:
         """
         Makes broadcastable attention and causal masks so that future and masked tokens are ignored.
@@ -1525,7 +1502,7 @@ class EvollaSaProtProteinEncoder(nn.Module):
             `torch.Tensor` The extended attention mask, with a the same dtype as `attention_mask.dtype`.
         """
         if dtype is None:
-            dtype = self.dtype
+            dtype = get_parameter_dtype(self)
 
         if not (attention_mask.dim() == 2 and self.config.is_decoder):
             # show warning only if it won't be shown in `create_extended_attention_mask_for_decoder`
@@ -1580,8 +1557,12 @@ class EvollaSaProtProteinEncoder(nn.Module):
         # /transformer/transformer_layers.py#L270
         # encoder_extended_attention_mask = (encoder_extended_attention_mask ==
         # encoder_extended_attention_mask.transpose(-1, -2))
-        encoder_extended_attention_mask = encoder_extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-        encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * torch.finfo(self.dtype).min
+        encoder_extended_attention_mask = encoder_extended_attention_mask.to(
+            dtype=get_parameter_dtype(self)
+        )  # fp16 compatibility
+        encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * torch.finfo(
+            get_parameter_dtype(self)
+        ).min
 
         return encoder_extended_attention_mask
 
@@ -1655,7 +1636,7 @@ class EvollaSaProtProteinEncoder(nn.Module):
         elif head_mask.dim() == 2:
             head_mask = head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)  # We can specify head_mask for each layer
         assert head_mask.dim() == 5, f"head_mask.dim != 5, instead {head_mask.dim()}"
-        head_mask = head_mask.to(dtype=self.dtype)  # switch to float if need + fp16 compatibility
+        head_mask = head_mask.to(dtype=get_parameter_dtype(self))  # switch to float if need + fp16 compatibility
         return head_mask
 
 
@@ -1709,15 +1690,12 @@ class EvollaSequenceCompressorAttention(nn.Module):
 
         bs, nh, skd, okd = sim.shape
         # mask_raw = repeat(mask, "bs okd -> bs nh skd okd", nh=nh, skd=skd)
-        ones = torch.ones(nh, skd).to(mask.device)  # 创建一个全 1 的张量，形状为 (nh, skd)
-        # mask = torch.einsum("bk,oj -> bojk", mask, ones)
+        ones = torch.ones(nh, skd).to(mask.device)  # Create a tensor of ones with shape (nh, skd)
         mask_exp = mask[:, None, None, :]
         ones_exp = ones[None, :, :, None]
         mask = mask_exp * ones_exp
-        # assert torch.allclose(mask_raw, mask)
 
         sim = sim.masked_fill((1 - mask).bool(), -1e4)
-        # sim = sim + (1 - mask) * torch.tensor(float('-inf'), dtype=sim.dtype)  # 加上mask
         attn = sim.softmax(dim=-1)
 
         # out = einsum("... i j, ... j d -> ... i d", attn, v)
@@ -1763,14 +1741,6 @@ class EvollaSequenceCompressorResampler(nn.Module):
 
         self.protein_projector = nn.Linear(protein_repr_dim, output_repr_dim)
 
-    @property
-    def device(self):
-        return self.latents.device
-
-    @property
-    def dtype(self):
-        return self.latents.dtype
-
     def forward(self, embeds, mask):
         b = embeds.shape[0]
 
@@ -1810,9 +1780,6 @@ class EvollaPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
     def _init_weights(self, module):
-        # important: this ported version of Evolla isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed - the m4 code
-        # base should be used for training from scratch and it contains the correct code.
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
@@ -1865,37 +1832,35 @@ class EvollaProteinEncoder(nn.Module):
 
         self.sequence_compressor_resampler = EvollaSequenceCompressorResampler(config=config)
 
+    @can_return_tuple
     def sequence_encode(
         self,
         input_ids: torch.LongTensor,
         attention_mask: torch.FloatTensor,
-        return_dict: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ):
         sequence_repr = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            return_dict=return_dict,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
         )
 
         return sequence_repr
 
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor,
         attention_mask: torch.FloatTensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs,
     ):
         protein_output = self.sequence_encode(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            return_dict=True,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
         )
@@ -1904,9 +1869,6 @@ class EvollaProteinEncoder(nn.Module):
         protein_embeds = protein_output.last_hidden_state
 
         sequence_repr = self.sequence_compressor_resampler(protein_embeds, attention_mask)
-
-        if not return_dict:
-            return sequence_repr, protein_embeds, attention_mask
 
         return EvollaProteinEncoderModelOutput(
             sequence_compressor_output=sequence_repr,
@@ -1957,6 +1919,7 @@ class EvollaModel(EvollaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1967,7 +1930,6 @@ class EvollaModel(EvollaPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         protein_input_ids: Optional[torch.LongTensor] = None,
         protein_attention_mask: Optional[torch.Tensor] = None,
@@ -1976,13 +1938,12 @@ class EvollaModel(EvollaPreTrainedModel):
         structure_batch_mask: Optional[torch.Tensor] = None,
         msa_batch_mask: Optional[torch.Tensor] = None,
         **kwargs,
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    ) -> Union[tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # If not provided `protein_feats`, use the `protein_encoder` to get the protein features
         if protein_input_ids is not None and protein_attention_mask is not None:
@@ -1991,7 +1952,6 @@ class EvollaModel(EvollaPreTrainedModel):
                 attention_mask=protein_attention_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                return_dict=True,
             )
             protein_feats = protein_outputs.sequence_compressor_output
             protein_batch_mask = torch.tensor([True] * protein_input_ids.shape[0], device=protein_input_ids.device)
@@ -2008,17 +1968,8 @@ class EvollaModel(EvollaPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        batch_size, seq_length, _ = inputs_embeds.shape
-        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        seq_length_with_past = seq_length + past_key_values_length
-
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache()
-
-        if attention_mask is None:
-            attention_mask = torch.ones(
-                (batch_size, seq_length_with_past), dtype=torch.int64, device=inputs_embeds.device
-            )
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -2029,8 +1980,12 @@ class EvollaModel(EvollaPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+        causal_mask = create_causal_mask(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
         )
 
         hidden_states = inputs_embeds
@@ -2046,44 +2001,24 @@ class EvollaModel(EvollaPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    causal_mask,
-                    position_ids,
-                    past_key_values,
-                    output_attentions,
-                    use_cache,
-                    cache_position,
-                    position_embeddings,
-                    protein_kv_states=protein_feats,
-                    structure_kv_states=structure_feats,
-                    msa_kv_states=msa_feats,
-                    protein_batch_mask=protein_batch_mask,
-                    structure_batch_mask=structure_batch_mask,
-                    msa_batch_mask=msa_batch_mask,
-                    query_attn_mask=attention_mask,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=causal_mask,
-                    position_ids=position_ids,
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                    position_embeddings=position_embeddings,
-                    protein_kv_states=protein_feats,
-                    structure_kv_states=structure_feats,
-                    msa_kv_states=msa_feats,
-                    protein_batch_mask=protein_batch_mask,
-                    structure_batch_mask=structure_batch_mask,
-                    msa_batch_mask=msa_batch_mask,
-                    query_attn_mask=attention_mask,
-                    **kwargs,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                position_ids=position_ids,
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                position_embeddings=position_embeddings,
+                protein_kv_states=protein_feats,
+                structure_kv_states=structure_feats,
+                msa_kv_states=msa_feats,
+                protein_batch_mask=protein_batch_mask,
+                structure_batch_mask=structure_batch_mask,
+                msa_batch_mask=msa_batch_mask,
+                query_attn_mask=attention_mask,
+                **kwargs,
+            )
             hidden_states = layer_outputs[0]
 
             if output_attentions:
@@ -2101,134 +2036,7 @@ class EvollaModel(EvollaPreTrainedModel):
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
-        return output if return_dict else output.to_tuple()
-
-    def _update_causal_mask(
-        self,
-        attention_mask: Union[torch.Tensor, "BlockMask"],
-        input_tensor: torch.Tensor,
-        cache_position: torch.Tensor,
-        past_key_values: Cache,
-        output_attentions: bool = False,
-    ):
-        if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and (attention_mask == 0.0).any():
-                return attention_mask
-            return None
-        if self.config._attn_implementation == "flex_attention":
-            if isinstance(attention_mask, torch.Tensor):
-                attention_mask = make_flex_block_causal_mask(attention_mask)
-            return attention_mask
-
-        # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
-        # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
-        # to infer the attention mask.
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-        using_static_cache = isinstance(past_key_values, StaticCache)
-
-        # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
-            if AttentionMaskConverter._ignore_causal_mask_sdpa(
-                attention_mask,
-                inputs_embeds=input_tensor,
-                past_key_values_length=past_seen_tokens,
-                is_training=self.training,
-            ):
-                return None
-
-        dtype, device = input_tensor.dtype, input_tensor.device
-        sequence_length = input_tensor.shape[1]
-        if using_static_cache:
-            target_length = past_key_values.get_max_cache_shape()
-        else:
-            target_length = (
-                attention_mask.shape[-1]
-                if isinstance(attention_mask, torch.Tensor)
-                else past_seen_tokens + sequence_length + 1
-            )
-
-        # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
-        causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
-            attention_mask,
-            sequence_length=sequence_length,
-            target_length=target_length,
-            dtype=dtype,
-            device=device,
-            cache_position=cache_position,
-            batch_size=input_tensor.shape[0],
-        )
-
-        if (
-            self.config._attn_implementation == "sdpa"
-            and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu", "npu"]
-            and not output_attentions
-        ):
-            # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
-            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
-            # Details: https://github.com/pytorch/pytorch/issues/110213
-            min_dtype = torch.finfo(dtype).min
-            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
-
-        return causal_mask
-
-    @staticmethod
-    def _prepare_4d_causal_attention_mask_with_cache_position(
-        attention_mask: torch.Tensor,
-        sequence_length: int,
-        target_length: int,
-        dtype: torch.dtype,
-        device: torch.device,
-        cache_position: torch.Tensor,
-        batch_size: int,
-        **kwargs,
-    ):
-        """
-        Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
-        `(batch_size, key_value_length)`, or if the input `attention_mask` is already 4D, do nothing.
-
-        Args:
-            attention_mask (`torch.Tensor`):
-                A 2D attention mask of shape `(batch_size, key_value_length)` or a 4D attention mask of shape
-                `(batch_size, 1, query_length, key_value_length)`.
-            sequence_length (`int`):
-                The sequence length being processed.
-            target_length (`int`):
-                The target length: when generating with static cache, the mask should be as long as the static cache,
-                to account for the 0 padding, the part of the cache that is not filled yet.
-            dtype (`torch.dtype`):
-                The dtype to use for the 4D attention mask.
-            device (`torch.device`):
-                The device to place the 4D attention mask on.
-            cache_position (`torch.Tensor`):
-                Indices depicting the position of the input sequence tokens in the sequence.
-            batch_size (`torch.Tensor`):
-                Batch size.
-        """
-        if attention_mask is not None and attention_mask.dim() == 4:
-            # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
-            causal_mask = attention_mask
-        else:
-            min_dtype = torch.finfo(dtype).min
-            causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
-            )
-            if sequence_length != 1:
-                causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
-            causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
-            if attention_mask is not None:
-                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
-                mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
-                    causal_mask.device
-                )
-                padding_mask = padding_mask == 0
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    padding_mask, min_dtype
-                )
-
-        return causal_mask
+        return output
 
 
 # this was adapted from modeling_idefics.IdeficsForVisionText2Text
@@ -2250,6 +2058,7 @@ class EvollaForProteinText2Text(EvollaPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         return self.model.set_input_embeddings(value)
 
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor = None,  # text input ids
@@ -2261,7 +2070,6 @@ class EvollaForProteinText2Text(EvollaPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         use_cache: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs,
     ):
         r"""
@@ -2291,7 +2099,6 @@ class EvollaForProteinText2Text(EvollaPreTrainedModel, GenerationMixin):
 
         >>> print(processor.batch_decode(outputs, skip_special_tokens=True))
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.model(
             input_ids=input_ids,
@@ -2302,7 +2109,6 @@ class EvollaForProteinText2Text(EvollaPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             use_cache=use_cache,
-            return_dict=True,
             **kwargs,
         )
         hidden_states = outputs[0]
@@ -2319,7 +2125,7 @@ class EvollaForProteinText2Text(EvollaPreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-        return lm_outputs if return_dict else lm_outputs.to_tuple()
+        return lm_outputs
 
 
 __all__ = ["EvollaForProteinText2Text", "EvollaModel", "EvollaPreTrainedModel"]
