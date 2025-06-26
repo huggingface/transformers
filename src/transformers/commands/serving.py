@@ -376,6 +376,9 @@ class ServeCommand(BaseTransformersCLICommand):
                     generation_config.eos_token_id = [generation_config.eos_token_id]
                 tool_start_token_id = self.tokenizer.encode(_TOOL_CALL_TOKENS[tool_model_family]["start"])[0]
                 generation_config.eos_token_id.append(tool_start_token_id)
+                # TODO: trigger 2 constrained generations after the tool call start token is emitted:
+                # 1. tool names
+                # 2. tool arguments
             # ====== END OF TOOL PREPROCESSING LOGIC ======
 
             print(generation_config)
