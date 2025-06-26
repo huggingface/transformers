@@ -17,7 +17,11 @@ import unittest
 from functools import lru_cache
 
 from transformers import CohereTokenizerFast
-from transformers.testing_utils import require_jinja, require_tokenizers, require_torch_multi_gpu
+from transformers.testing_utils import (
+    require_jinja,
+    require_tokenizers,
+    require_torch_multi_accelerator,
+)
 
 from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 
@@ -55,7 +59,7 @@ class CohereTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return CohereTokenizerFast.from_pretrained(pretrained_name, **kwargs)
 
     # This gives CPU OOM on a single-gpu runner (~60G RAM). On multi-gpu runner, it has ~180G RAM which is enough.
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_torch_encode_plus_sent_to_model(self):
         super().test_torch_encode_plus_sent_to_model()
 

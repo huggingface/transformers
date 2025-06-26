@@ -19,7 +19,7 @@ import os
 import re
 from abc import ABC, abstractmethod
 from collections import Counter, defaultdict, deque
-from typing import Dict, Optional, Set, Union
+from typing import Optional, Union
 
 import libcst as cst
 from check_copies import run_ruff
@@ -197,7 +197,7 @@ def get_full_attribute_name(node: Union[cst.Attribute, cst.Name]) -> Optional[st
 
 # Transformer class to replace ClassB.call_to_method and ClassB().call_to_method with super().call_to_method
 class ReplaceMethodCallTransformer(cst.CSTTransformer):
-    def __init__(self, all_bases: Set[str]):
+    def __init__(self, all_bases: set[str]):
         self.all_bases = all_bases
 
     def leave_Attribute(self, original_node: cst.Attribute, updated_node: cst.Attribute) -> cst.CSTNode:
@@ -473,7 +473,7 @@ class SuperTransformer(cst.CSTTransformer):
 
 
 def find_all_dependencies(
-    dependency_mapping: Dict[str, set],
+    dependency_mapping: dict[str, set],
     start_entity: Optional[str] = None,
     initial_dependencies: Optional[set] = None,
     initial_checked_dependencies: Optional[set] = None,
@@ -618,7 +618,8 @@ ALL_FILE_TYPES = (
     "tokenization",
     "processing",
     "image_processing",
-    "feature_extractor",
+    "video_processing",
+    "feature_extraction",
 )
 
 
@@ -635,11 +636,11 @@ class ModuleMapper(CSTVisitor, ABC):
     def __init__(self, python_module: cst.Module):
         # fmt: off
         self.python_module: cst.Module = python_module             # original cst.Module being visited
-        self.classes: Dict[str, cst.ClassDef] = {}                 # mapping from class names to Nodes (it will be ordered by default!!)
+        self.classes: dict[str, cst.ClassDef] = {}                 # mapping from class names to Nodes (it will be ordered by default!!)
         self.imports = []                                          # stores all import statements
-        self.functions: Dict[str, cst.FunctionDef] = {}            # mapping of global scope function names to Nodes
+        self.functions: dict[str, cst.FunctionDef] = {}            # mapping of global scope function names to Nodes
         self.object_dependency_mapping = defaultdict(set)          # immediate function/assignment dependency mapping (i.e. dependencies immediately in the function/assignment definition)
-        self.assignments: Dict[str, cst.SimpleStatementLine] = {}  # mapping of global assignments names to Nodes
+        self.assignments: dict[str, cst.SimpleStatementLine] = {}  # mapping of global assignments names to Nodes
         self.current_function = None                               # this keeps track of the current module-scope function
         self.current_class = None                                  # this keeps track of the current module-scope class
         self.current_assignment = None                             # this keeps track of the current module-scope assignment
@@ -1133,9 +1134,12 @@ TYPE_TO_FILE_TYPE = {
     "Processor": "processing",
     "ImageProcessor": "image_processing",
     "ImageProcessorFast": "image_processing*_fast",  # "*" indicates where to insert the model name before the "_fast" suffix
+    "VideoProcessor": "video_processing",
+    "VideoProcessorInitKwargs": "video_processing",
     "FastImageProcessorKwargs": "image_processing*_fast",
-    "FeatureExtractor": "feature_extractor",
+    "FeatureExtractor": "feature_extraction",
     "ProcessorKwargs": "processing",
+    "VideosKwargs": "processing",
     "ImagesKwargs": "processing",
     "TextKwargs": "processing",
 }
@@ -1262,8 +1266,8 @@ class ModularFileMapper(ModuleMapper):
         # fmt: off
         self.model_name = new_name  # name of the model being defined. Should be in the format of `llama` or `layout_xlm` or `phi3`
 
-        self.model_specific_imported_objects: Dict[str, str] = {}  # e.g. {"LlamaModel": "transformers.models.llama.modeling_llama"}
-        self.model_specific_modules: Dict[str, cst.Module] = {}  # e.g. {"transformers.models.llama.modeling_llama": cst.Module}
+        self.model_specific_imported_objects: dict[str, str] = {}  # e.g. {"LlamaModel": "transformers.models.llama.modeling_llama"}
+        self.model_specific_modules: dict[str, cst.Module] = {}  # e.g. {"transformers.models.llama.modeling_llama": cst.Module}
 
         self.all_all_to_add = {}
         # fmt: on
@@ -1435,7 +1439,7 @@ class ModularFileMapper(ModuleMapper):
 
         original_dependencies = []
         other_files_dependencies = defaultdict(list)
-        for dep in tuple(missing_dependencies):
+        for dep in sorted(missing_dependencies):
             if dep in self.added_objects_file_mapping:
                 file = self.added_objects_file_mapping[dep]
                 other_files_dependencies[file].append(dep)
@@ -1486,7 +1490,7 @@ class ModularFileMapper(ModuleMapper):
                 suffix = common_partial_suffix(class_name, modeling_bases[0])
                 if len(suffix) > 0 and suffix[0].isupper():
                     cased_model_name = class_name.replace(suffix, "")
-                    # If both the old model and new model share the last part of their name, is is detected as a common
+                    # If both the old model and new model share the last part of their name, is detected as a common
                     # suffix, but it should not be the case -> use the full name in this case
                     if len(cased_model_name) < len(cased_default_name) and cased_default_name in class_name:
                         cased_model_name = cased_default_name
@@ -1774,19 +1778,31 @@ def save_modeling_file(modular_file, converted_file):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    # Same arg as both positional and optional, just for convenience
     parser.add_argument(
+        "files",
+        nargs="*",
+        help="A list of `modular_xxxx` files that should be converted to single model file",
+    )
+    parser.add_argument(
+        "--files-to-parse",
         "--files_to_parse",
+        "--files",
+        "-f",
         default=["all"],
         nargs="+",
         help="A list of `modular_xxxx` files that should be converted to single model file",
     )
     args = parser.parse_args()
-    if args.files_to_parse == ["all"]:
-        args.files_to_parse = glob.glob("src/transformers/models/**/modular_*.py", recursive=True)
-    if args.files_to_parse == ["examples"]:
-        args.files_to_parse = glob.glob("examples/**/modular_*.py", recursive=True)
+    # Both arg represent the same data, but as positional and optional
+    files_to_parse = args.files if len(args.files) > 0 else args.files_to_parse
+
+    if files_to_parse == ["all"]:
+        files_to_parse = glob.glob("src/transformers/models/**/modular_*.py", recursive=True)
+    if files_to_parse == ["examples"]:
+        files_to_parse = glob.glob("examples/**/modular_*.py", recursive=True)
     else:
-        for i, model_name in enumerate(args.files_to_parse):
+        for i, model_name in enumerate(files_to_parse):
             if os.sep not in model_name:
                 full_path = os.path.join("src", "transformers", "models", model_name, f"modular_{model_name}.py")
                 # If it does not exist, try in the examples section
@@ -1795,10 +1811,10 @@ if __name__ == "__main__":
                 # We did not find it anywhere
                 if not os.path.isfile(full_path):
                     raise ValueError(f"Cannot find a modular file for {model_name}. Please provide the full path.")
-                args.files_to_parse[i] = full_path
+                files_to_parse[i] = full_path
 
-    priority_list, _ = find_priority_list(args.files_to_parse)
-    assert len(priority_list) == len(args.files_to_parse), "Some files will not be converted"
+    priority_list, _ = find_priority_list(files_to_parse)
+    assert len(priority_list) == len(files_to_parse), "Some files will not be converted"
 
     for file_name in priority_list:
         print(f"Converting {file_name} to a single model single file format")

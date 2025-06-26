@@ -14,13 +14,14 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
 
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
+from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
@@ -45,61 +46,52 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class CsmOutputWithPast(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for the model autoregressive outputs.
+    """
+)
+class CsmOutputWithPast(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
 
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss (for next-token prediction).
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    depth_decoder_loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction) of the depth decoder model.
+    depth_decoder_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the depth decoder (scores for each vocabulary token before SoftMax).
+    depth_decoder_past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+    depth_decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+        one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
-            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-            `past_key_values` input) to speed up sequential decoding.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        depth_decoder_loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss (for next-token prediction) of the depth decoder model.
-        depth_decoder_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the depth decoder (scores for each vocabulary token before SoftMax).
-        depth_decoder_past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
-        depth_decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        depth_decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-        backbone_loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss (for next-token prediction) of the backbone model.
+        Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+    depth_decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`.
+    backbone_loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction) of the backbone model.
     """
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     depth_decoder_loss: Optional[torch.FloatTensor] = None
     depth_decoder_logits: torch.FloatTensor = None
-    depth_decoder_past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    depth_decoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    depth_decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    depth_decoder_past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None
+    depth_decoder_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    depth_decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     backbone_loss: Optional[torch.FloatTensor] = None
 
 
@@ -187,7 +179,7 @@ class CsmDepthDecoderModel(LlamaModel):
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    ) -> Union[tuple, BaseModelOutputWithPast]:
         r"""
         backbone_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, backbone_hidden_size)`, *optional*):
             The last hidden state of the backbone model. Such input is required when the first codebook token (the one generated by the backbone model)
@@ -240,8 +232,12 @@ class CsmDepthDecoderModel(LlamaModel):
 
         inputs_embeds = self.inputs_embeds_projector(inputs_embeds)
 
-        causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+        causal_mask = create_causal_mask(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
         )
 
         hidden_states = inputs_embeds
@@ -366,7 +362,7 @@ class CsmDepthDecoderForCausalLM(LlamaForCausalLM, GenerationMixin):
         backbone_last_hidden_state: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -375,7 +371,7 @@ class CsmDepthDecoderForCausalLM(LlamaForCausalLM, GenerationMixin):
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[KwargsForCausalLM],
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
         backbone_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, backbone_hidden_size)`, *optional*):
             The last hidden state of the backbone model. Such input is required when the first codebook token (the one generated by the backbone model)
@@ -590,22 +586,23 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
             # =======================================
             # TODO: @eustlb, this should be batched !!!
             # but requires making sure batched inference of the codec model works as intended
-            audio_tokens_list = []
-            for batch_input_values, batch_input_values_cutoffs in zip(input_values, input_values_cutoffs):
-                batch_input_values_cutoffs = batch_input_values_cutoffs[batch_input_values_cutoffs >= 0]
-                for i in range(batch_input_values_cutoffs.shape[0] - 1):
-                    start_idx = batch_input_values_cutoffs[i]
-                    end_idx = batch_input_values_cutoffs[i + 1]
-                    audio_batch = batch_input_values[..., start_idx:end_idx]
-                    codec_outputs = self.codec_model.encode(audio_batch.unsqueeze(0))
-                    codebook_ids = codec_outputs.audio_codes.transpose(1, -1)
-                    audio_tokens_list.append(codebook_ids[0])
+            with torch.no_grad():
+                audio_tokens_list = []
+                for batch_input_values, batch_input_values_cutoffs in zip(input_values, input_values_cutoffs):
+                    batch_input_values_cutoffs = batch_input_values_cutoffs[batch_input_values_cutoffs >= 0]
+                    for i in range(batch_input_values_cutoffs.shape[0] - 1):
+                        start_idx = batch_input_values_cutoffs[i]
+                        end_idx = batch_input_values_cutoffs[i + 1]
+                        audio_batch = batch_input_values[..., start_idx:end_idx]
+                        codec_outputs = self.codec_model.encode(audio_batch.unsqueeze(0))
+                        codebook_ids = codec_outputs.audio_codes.transpose(1, -1)
+                        audio_tokens_list.append(codebook_ids[0])
 
-            max_audio_frames = max(el.shape[0] for el in audio_tokens_list)
-            batched_audio_token_ids = torch.stack(
-                [nn.functional.pad(el, (0, 0, 0, max_audio_frames - el.shape[0])) for el in audio_tokens_list]
-            )
-            audio_codes_mask = self.codec_model.get_audio_codes_mask(input_values_mask)
+                max_audio_frames = max(el.shape[0] for el in audio_tokens_list)
+                batched_audio_token_ids = torch.stack(
+                    [nn.functional.pad(el, (0, 0, 0, max_audio_frames - el.shape[0])) for el in audio_tokens_list]
+                )
+                audio_codes_mask = self.codec_model.get_audio_codes_mask(input_values_mask)
             # =======================================
             audio_token_id = self.config.audio_token_id
             audio_token_mask = input_ids == audio_token_id
@@ -627,6 +624,7 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
             if labels is not None:
                 labels_expanded = labels.unsqueeze(-1).repeat(1, 1, self.config.num_codebooks)
                 labels_expanded[audio_token_mask] = batched_audio_token_ids[audio_codes_mask]
+                labels_expanded[audio_eos_token_mask] = audio_eos_frame_ids
                 # mask depth decoder
                 depth_decoder_ignore_frames_idxs = (labels == -101).nonzero(as_tuple=True)
                 labels_expanded[depth_decoder_ignore_frames_idxs[0], depth_decoder_ignore_frames_idxs[1], 1:] = -100
@@ -674,7 +672,7 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
         attention_mask: Optional[torch.Tensor] = None,
         input_values_cutoffs: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -683,7 +681,7 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[KwargsForCausalLM],
-    ) -> Union[Tuple, CsmOutputWithPast]:
+    ) -> Union[tuple, CsmOutputWithPast]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length, num_codebooks) or (batch_size, sequence_length)`):
             1. (batch_size, sequence_length): corresponds to the input sequence prepared with the processor from the text prompt. Such input
@@ -720,7 +718,7 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
         >>> from transformers import CsmForConditionalGeneration, AutoProcessor
         >>> from datasets import load_dataset, Audio
 
-        >>> model_id = "eustlb/csm-1b"
+        >>> model_id = "sesame/csm-1b"
         >>> torch_device = "cuda" if torch.cuda.is_available() else "cpu"
 
         >>> processor = AutoProcessor.from_pretrained(model_id)
@@ -834,61 +832,6 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
             else None,
             depth_decoder_attentions=depth_decoder_outputs.attentions if depth_decoder_outputs is not None else None,
         )
-
-    @staticmethod
-    def _prepare_4d_causal_attention_mask_with_cache_position(
-        attention_mask: torch.Tensor,
-        sequence_length: int,
-        target_length: int,
-        dtype: torch.dtype,
-        cache_position: torch.Tensor,
-        batch_size: int,
-        **kwargs,
-    ):
-        """
-        Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
-        `(batch_size, key_value_length)`, or if the input `attention_mask` is already 4D, do nothing.
-
-        Args:
-            attention_mask (`torch.Tensor`):
-                A 2D attention mask of shape `(batch_size, key_value_length)` or a 4D attention mask of shape
-                `(batch_size, 1, query_length, key_value_length)`.
-            sequence_length (`int`):
-                The sequence length being processed.
-            target_length (`int`):
-                The target length: when generating with static cache, the mask should be as long as the static cache,
-                to account for the 0 padding, the part of the cache that is not filled yet.
-            dtype (`torch.dtype`):
-                The dtype to use for the 4D attention mask.
-            cache_position (`torch.Tensor`):
-                Indices depicting the position of the input sequence tokens in the sequence.
-            batch_size (`torch.Tensor`):
-                Batch size.
-        """
-        if attention_mask is not None and attention_mask.dim() == 4:
-            # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
-            causal_mask = attention_mask
-        else:
-            min_dtype = torch.finfo(dtype).min
-            causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=cache_position.device
-            )
-            if sequence_length != 1:
-                causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=cache_position.device) > cache_position.reshape(-1, 1)
-            causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
-            if attention_mask is not None:
-                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
-                mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
-                    causal_mask.device
-                )
-                padding_mask = padding_mask == 0
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    padding_mask, min_dtype
-                )
-
-        return causal_mask
 
 
 __all__ = [

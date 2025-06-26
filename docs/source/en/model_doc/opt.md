@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The OPT model was proposed in [Open Pre-trained Transformer Language Models](https://arxiv.org/pdf/2205.01068) by Meta AI.
+The OPT model was proposed in [Open Pre-trained Transformer Language Models](https://huggingface.co/papers/2205.01068) by Meta AI.
 OPT is a series of open-sourced large causal language models which perform similar in performance to GPT3.
 
 The abstract from the paper is the following:
@@ -40,6 +40,9 @@ The original code can be found [here](https://github.com/facebookresearch/metase
 Tips:
 - OPT has the same architecture as [`BartDecoder`].
 - Contrary to GPT2, OPT adds the EOS token `</s>` to the beginning of every prompt.
+
+> [!NOTE]
+> The `head_mask` argument is ignored when using all attention implementation other than "eager". If you have a `head_mask` and want it to have effect, load the model with `XXXModel.from_pretrained(model_id, attn_implementation="eager")`
 
 ## Resources
 

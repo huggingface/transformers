@@ -23,14 +23,6 @@
       title: Modular Transformers
     - local: auto_docstring
       title: Document your models
-    - local: task_summary
-      title: What 🤗 Transformers can do
-    - local: tasks_explained
-      title: How 🤗 Transformers solve tasks
-    - local: model_summary
-      title: The Transformer model family
-    - local: attention
-      title: Attention mechanisms
     - local: attention_interface
       title: Customizing attention function
     title: Models
@@ -39,6 +31,8 @@
       title: Tokenizers
     - local: image_processors
       title: Image processors
+    - local: video_processors
+      title: Video processors
     - local: backbones
       title: Backbones
     - local: feature_extractors
@@ -74,12 +68,12 @@
       title: Prompt engineering
     - local: llm_optims
       title: Optimizing inference
+    - local: cache_explanation
+      title: Caching
     - local: kv_cache
       title: KV cache strategies
     - local: serving
       title: Serving
-    - local: cache_explanation
-      title: Caching
     - local: llm_tutorial_optimization
       title: Getting the most out of LLMs
     - local: perplexity
@@ -127,8 +121,8 @@
       title: Hyperparameter search
     title: Trainer API
   - sections:
-    - local: gpu_selection
-      title: GPU selection
+    - local: accelerator_selection
+      title: Accelerator selection
     - local: accelerate
       title: Accelerate
     - local: fsdp
@@ -362,11 +356,15 @@
       title: Feature Extractor
     - local: main_classes/image_processor
       title: Image Processor
-    title: Main classes
+    - local: main_classes/video_processor
+      title: Video Processor
+    title: Main Classes
   - sections:
     - sections:
       - local: model_doc/albert
         title: ALBERT
+      - local: model_doc/arcee
+        title: Arcee
       - local: model_doc/bamba
         title: Bamba
       - local: model_doc/bart
@@ -382,7 +380,7 @@
       - local: model_doc/bert-japanese
         title: BertJapanese
       - local: model_doc/bertweet
-        title: Bertweet
+        title: BERTweet
       - local: model_doc/big_bird
         title: BigBird
       - local: model_doc/bigbird_pegasus
@@ -435,6 +433,8 @@
         title: DiffLlama
       - local: model_doc/distilbert
         title: DistilBERT
+      - local: model_doc/dots1
+        title: dots1
       - local: model_doc/dpr
         title: DPR
       - local: model_doc/electra
@@ -451,6 +451,8 @@
         title: Falcon
       - local: model_doc/falcon3
         title: Falcon3
+      - local: model_doc/falcon_h1
+        title: FalconH1
       - local: model_doc/falcon_mamba
         title: FalconMamba
       - local: model_doc/flan-t5
@@ -536,7 +538,7 @@
       - local: model_doc/mamba
         title: Mamba
       - local: model_doc/mamba2
-        title: mamba2
+        title: Mamba2
       - local: model_doc/marian
         title: MarianMT
       - local: model_doc/markuplm
@@ -549,6 +551,8 @@
         title: MegatronBERT
       - local: model_doc/megatron_gpt2
         title: MegatronGPT2
+      - local: model_doc/minimax
+        title: MiniMax
       - local: model_doc/mistral
         title: Mistral
       - local: model_doc/mixtral
@@ -653,6 +657,8 @@
         title: SwitchTransformers
       - local: model_doc/t5
         title: T5
+      - local: model_doc/t5gemma
+        title: T5Gemma
       - local: model_doc/t5v1.1
         title: T5v1.1
       - local: model_doc/tapex
@@ -743,6 +749,8 @@
         title: ImageGPT
       - local: model_doc/levit
         title: LeViT
+      - local: model_doc/lightglue
+        title: LightGlue
       - local: model_doc/mask2former
         title: Mask2Former
       - local: model_doc/maskformer
@@ -831,6 +839,8 @@
         title: CSM
       - local: model_doc/dac
         title: dac
+      - local: model_doc/dia
+        title: Dia
       - local: model_doc/encodec
         title: EnCodec
       - local: model_doc/fastspeech2_conformer
@@ -839,6 +849,8 @@
         title: GraniteSpeech
       - local: model_doc/hubert
         title: Hubert
+      - local: model_doc/kyutai_speech_to_text
+        title: Kyutai Speech-To-Text
       - local: model_doc/mctct
         title: MCTCT
       - local: model_doc/mimi
@@ -897,6 +909,8 @@
     - sections:
       - local: model_doc/timesformer
         title: TimeSformer
+      - local: model_doc/vjepa2
+        title: V-JEPA 2
       - local: model_doc/videomae
         title: VideoMAE
       - local: model_doc/vivit
@@ -931,6 +945,8 @@
         title: CLVP
       - local: model_doc/colpali
         title: ColPali
+      - local: model_doc/colqwen2
+        title: ColQwen2
       - local: model_doc/data2vec
         title: Data2Vec
       - local: model_doc/deplot
@@ -945,6 +961,8 @@
         title: Gemma3
       - local: model_doc/git
         title: GIT
+      - local: model_doc/glm4v
+        title: glm4v
       - local: model_doc/got_ocr2
         title: GOT-OCR2
       - local: model_doc/granitevision
@@ -1037,6 +1055,8 @@
         title: SigLIP
       - local: model_doc/siglip2
         title: SigLIP2
+      - local: model_doc/smollm3
+        title: SmolLM3
       - local: model_doc/smolvlm
         title: SmolVLM
       - local: model_doc/speech-encoder-decoder
@@ -1115,4 +1135,9 @@
     - local: internal/time_series_utils
       title: Utilities for Time Series
     title: Internal helpers
+  - sections:
+    - local: reference/environment_variables
+      title: Environment Variables
+    title: Reference
   title: API
+

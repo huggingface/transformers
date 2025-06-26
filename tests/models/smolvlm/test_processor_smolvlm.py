@@ -16,6 +16,7 @@ import shutil
 import tempfile
 import unittest
 from io import BytesIO
+from typing import Optional
 
 import numpy as np
 import requests
@@ -63,6 +64,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         cls.bos_token = processor.tokenizer.bos_token
         cls.image_token = processor.image_token
+        cls.video_token = processor.video_token
         cls.fake_image_token = processor.fake_image_token
         cls.global_img_token = processor.global_image_token
 
@@ -79,6 +81,9 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_image_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
 
+    def get_video_processor(self, **kwargs):
+        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).video_processor
+
     def get_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
@@ -88,6 +93,13 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "image_seq_len": 2,
             "chat_template": "<|im_start|>{% for message in messages %}{{message['role'] | capitalize}}{% if message['content'][0]['type'] == 'image' %}{{':'}}{% else %}{{': '}}{% endif %}{% for line in message['content'] %}{% if line['type'] == 'text' %}{{line['text']}}{% elif line['type'] == 'image' %}{{ '<image>' }}{% endif %}{% endfor %}<end_of_utterance>\n{% endfor %}{% if add_generation_prompt %}{{ 'Assistant:' }}{% endif %}",
         }
+
+    def prepare_video_inputs(self, batch_size: Optional[int] = None):
+        """This function prepares a list of numpy videos."""
+        video_input = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)] * 8
+        if batch_size is None:
+            return [[video_input]]
+        return [[video_input]] * batch_size
 
     def get_split_image_expected_tokens(self, processor, image_rows, image_cols):
         text_split_images = []
@@ -343,7 +355,6 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     {"type": "text", "text": "What do these images show?"},
                     {"type": "image"},
                     {"type": "image"},
-                    "What do these images show?",
                 ],
             },
             {
@@ -369,11 +380,8 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertEqual(rendered, expected_rendered)
 
-    @unittest.skip(reason="SmolVLM replaced `type=video` with `type=image` in chat templates")
-    def test_apply_chat_template_video_special_processing(self):
-        pass
-
     @require_av
+    @require_torch
     def test_apply_chat_template_video_frame_sampling(self):
         # overridden because SmolVLM has special preprocessing for videos
         processor = self.get_processor()
@@ -402,7 +410,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenize=True,
             return_dict=True,
             num_frames=num_frames,
-            return_tensors="np",
+            return_tensors="pt",
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
@@ -417,7 +425,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenize=True,
             return_dict=True,
             video_fps=video_fps,
-            return_tensors="np",
+            return_tensors="pt",
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
@@ -433,10 +441,13 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
+        video_processor = self.get_component("video_processor")
         tokenizer = self.get_component("tokenizer")
 
         processor_kwargs = self.prepare_processor_dict()
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor, **processor_kwargs)
+        processor = self.processor_class(
+            tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor, **processor_kwargs
+        )
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(batch_size=2, modality="image")
@@ -455,6 +466,31 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs["pixel_values"].shape[2], 3)
         self.assertEqual(inputs["pixel_values"].shape[3], 300)
         self.assertEqual(len(inputs["input_ids"][0]), 76)
+
+    @require_torch
+    @require_vision
+    def test_unstructured_kwargs_batched_video(self):
+        if "video_processor" not in self.processor_class.attributes:
+            self.skipTest(f"video_processor attribute not present in {self.processor_class}")
+        processor_components = self.prepare_components()
+        processor_kwargs = self.prepare_processor_dict()
+        processor = self.processor_class(**processor_components, **processor_kwargs)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = self.prepare_text_inputs(batch_size=2, modality="video")
+        video_input = self.prepare_video_inputs(batch_size=2)
+        inputs = processor(
+            text=input_str,
+            videos=video_input,
+            return_tensors="pt",
+            do_rescale=True,
+            rescale_factor=-1,
+            padding="max_length",
+            max_length=172,
+        )
+
+        self.assertLessEqual(inputs[self.videos_input_name][0].mean(), 0)
+        self.assertEqual(len(inputs["input_ids"][0]), 172)
 
     @require_torch
     @require_vision
@@ -556,3 +592,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 padding=True,
                 max_length=20,
             )
+
+    @unittest.skip("SmolVLM cannot accept image URL as video frames, because it needs to know video fps and duration")
+    def test_apply_chat_template_video_1(self):
+        pass

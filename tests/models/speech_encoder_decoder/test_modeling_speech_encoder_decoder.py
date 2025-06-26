@@ -300,6 +300,10 @@ class EncoderDecoderMixin:
         input_features=None,
         **kwargs,
     ):
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+        decoder_config._attn_implementation = "eager"
+
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
         decoder_attention_mask = decoder_attention_mask[:, :-1]

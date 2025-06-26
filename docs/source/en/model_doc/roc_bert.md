@@ -14,39 +14,78 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# RoCBert
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<div style="float: right;">
+   <div class="flex flex-wrap space-x-1">
+          <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+   </div>
 </div>
 
-## Overview
+# RoCBert
 
-The RoCBert model was proposed in [RoCBert: Robust Chinese Bert with Multimodal Contrastive Pretraining](https://aclanthology.org/2022.acl-long.65.pdf)  by HuiSu, WeiweiShi, XiaoyuShen, XiaoZhou, TuoJi, JiaruiFang, JieZhou.
-It's a pretrained Chinese language model that is robust under various forms of adversarial attacks.
+[RoCBert](https://aclanthology.org/2022.acl-long.65.pdf) is a pretrained Chinese [BERT](./bert) model designed against adversarial attacks like typos and synonyms. It is pretrained with a contrastive learning objective to align normal and adversarial text examples. The examples include different semantic, phonetic, and visual features of Chinese. This makes RoCBert more robust against manipulation.
 
-The abstract from the paper is the following:
+You can find all the original RoCBert checkpoints under the [weiweishi](https://huggingface.co/weiweishi) profile.
 
-*Large-scale pretrained language models have achieved SOTA results on NLP tasks. However, they have been shown
-vulnerable to adversarial attacks especially for logographic languages like Chinese. In this work, we propose
-ROCBERT: a pretrained Chinese Bert that is robust to various forms of adversarial attacks like word perturbation,
-synonyms, typos, etc. It is pretrained with the contrastive learning objective which maximizes the label consistency
-under different synthesized adversarial examples. The model takes as input multimodal information including the
-semantic, phonetic and visual features. We show all these features are important to the model robustness since the
-attack can be performed in all the three forms. Across 5 Chinese NLU tasks, ROCBERT outperforms strong baselines under
-three blackbox adversarial algorithms without sacrificing the performance on clean testset. It also performs the best
-in the toxic content detection task under human-made attacks.*
+> [!TIP]
+> This model was contributed by [weiweishi](https://huggingface.co/weiweishi).
+> 
+> Click on the RoCBert models in the right sidebar for more examples of how to apply RoCBert to different Chinese language tasks.
 
-This model was contributed by [weiweishi](https://huggingface.co/weiweishi).
+The example below demonstrates how to predict the [MASK] token with [`Pipeline`], [`AutoModel`], and from the command line.
 
-## Resources
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Causal language modeling task guide](../tasks/language_modeling)
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
-- [Multiple choice task guide](../tasks/multiple_choice)
+```py
+import torch
+from transformers import pipeline
+
+pipeline = pipeline(
+   task="fill-mask",
+   model="weiweishi/roc-bert-base-zh",
+   torch_dtype=torch.float16,
+   device=0
+)
+pipeline("這家餐廳的拉麵是我[MASK]過的最好的拉麵之")
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```py
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained(
+   "weiweishi/roc-bert-base-zh",
+)
+model = AutoModelForMaskedLM.from_pretrained(
+   "weiweishi/roc-bert-base-zh",
+   torch_dtype=torch.float16,
+   device_map="auto",
+)
+inputs = tokenizer("這家餐廳的拉麵是我[MASK]過的最好的拉麵之", return_tensors="pt").to("cuda")
+
+with torch.no_grad():
+   outputs = model(**inputs)
+   predictions = outputs.logits
+
+masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]
+predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
+predicted_token = tokenizer.decode(predicted_token_id)
+
+print(f"The predicted token is: {predicted_token}")
+```
+
+</hfoption>
+<hfoption id="transformers CLI">
+
+```bash
+echo -e "這家餐廳的拉麵是我[MASK]過的最好的拉麵之" | transformers-cli run --task fill-mask --model weiweishi/roc-bert-base-zh --device 0
+```
+
+</hfoption>
+</hfoptions>
 
 ## RoCBertConfig
 
