@@ -24,7 +24,7 @@ from transformers.testing_utils import require_torch, require_torch_multi_gpu, s
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -327,10 +327,10 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_initialization(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         config.rescale_prenorm_residual = True
-        config.initializer_range = 0
 
+        configs_no_init = _config_zero_init(config)
         for model_class in self.all_model_classes:
-            model = model_class(config=config)
+            model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if "dt_proj.bias" in name:
                     dt = torch.exp(
