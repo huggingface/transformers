@@ -898,11 +898,9 @@ class DetrImageProcessor(BaseImageProcessor):
                     size = dict(size)  # Make a copy to avoid modifying the original
                     size["longest_edge"] = max_size
                 # If size already has longest_edge, the max_size is ignored (deprecated behavior)
-        else:
-            max_size = None if size is None else 1333
 
         size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
-        size = get_size_dict(size, max_size=1333, default_to_square=False)
+        size = get_size_dict(size, max_size=max_size, default_to_square=False)
 
         # Backwards compatibility
         if do_convert_annotations is None:
@@ -1032,6 +1030,10 @@ class DetrImageProcessor(BaseImageProcessor):
                 "Please specify in `size['longest_edge'] instead`.",
             )
             max_size = kwargs.pop("max_size")
+            # If size is already a dict but missing longest_edge, add it from max_size
+            if isinstance(size, dict) and "longest_edge" not in size:
+                size = dict(size)  # Make a copy
+                size["longest_edge"] = max_size
         else:
             max_size = None
         size = get_size_dict(size, max_size=max_size, default_to_square=False)
