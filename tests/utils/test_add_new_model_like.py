@@ -464,67 +464,6 @@ NEW_BERT_CONSTANT = "value"
             {"modeling_bert.py", "modeling_flax_bert.py", "configuration_bert.py"},
         )
 
-    def test_get_model_files(self):
-        # BERT
-        bert_files = get_model_files("bert")
-
-        doc_file = str(Path(bert_files["doc_file"]).relative_to(REPO_PATH))
-        self.assertEqual(doc_file, "docs/source/en/model_doc/bert.md")
-
-        model_files = {str(Path(f).relative_to(REPO_PATH)) for f in bert_files["model_files"]}
-        self.assertEqual(model_files, BERT_MODEL_FILES)
-
-        self.assertEqual(bert_files["module_name"], "bert")
-
-        test_files = {str(Path(f).relative_to(REPO_PATH)) for f in bert_files["test_files"]}
-        bert_test_files = {
-            "tests/models/bert/test_tokenization_bert.py",
-            "tests/models/bert/test_modeling_bert.py",
-            "tests/models/bert/test_modeling_tf_bert.py",
-            "tests/models/bert/test_modeling_flax_bert.py",
-        }
-        self.assertEqual(test_files, bert_test_files)
-
-        # VIT
-        vit_files = get_model_files("vit")
-        doc_file = str(Path(vit_files["doc_file"]).relative_to(REPO_PATH))
-        self.assertEqual(doc_file, "docs/source/en/model_doc/vit.md")
-
-        model_files = {str(Path(f).relative_to(REPO_PATH)) for f in vit_files["model_files"]}
-        self.assertEqual(model_files, VIT_MODEL_FILES)
-
-        self.assertEqual(vit_files["module_name"], "vit")
-
-        test_files = {str(Path(f).relative_to(REPO_PATH)) for f in vit_files["test_files"]}
-        vit_test_files = {
-            "tests/models/vit/test_image_processing_vit.py",
-            "tests/models/vit/test_modeling_vit.py",
-            "tests/models/vit/test_modeling_tf_vit.py",
-            "tests/models/vit/test_modeling_flax_vit.py",
-        }
-        self.assertEqual(test_files, vit_test_files)
-
-        # Wav2Vec2
-        wav2vec2_files = get_model_files("wav2vec2")
-        doc_file = str(Path(wav2vec2_files["doc_file"]).relative_to(REPO_PATH))
-        self.assertEqual(doc_file, "docs/source/en/model_doc/wav2vec2.md")
-
-        model_files = {str(Path(f).relative_to(REPO_PATH)) for f in wav2vec2_files["model_files"]}
-        self.assertEqual(model_files, WAV2VEC2_MODEL_FILES)
-
-        self.assertEqual(wav2vec2_files["module_name"], "wav2vec2")
-
-        test_files = {str(Path(f).relative_to(REPO_PATH)) for f in wav2vec2_files["test_files"]}
-        wav2vec2_test_files = {
-            "tests/models/wav2vec2/test_feature_extraction_wav2vec2.py",
-            "tests/models/wav2vec2/test_modeling_wav2vec2.py",
-            "tests/models/wav2vec2/test_modeling_tf_wav2vec2.py",
-            "tests/models/wav2vec2/test_modeling_flax_wav2vec2.py",
-            "tests/models/wav2vec2/test_processor_wav2vec2.py",
-            "tests/models/wav2vec2/test_tokenization_wav2vec2.py",
-        }
-        self.assertEqual(test_files, wav2vec2_test_files)
-
     def test_get_model_files_only_pt(self):
         # BERT
         bert_files = get_model_files("bert", frameworks=["pt"])
@@ -671,7 +610,7 @@ NEW_BERT_CONSTANT = "value"
         self.assertIsNone(bert_model_patterns.processor_class)
 
     def test_retrieve_info_for_model_with_vit(self):
-        vit_info = retrieve_info_for_model("vit")
+        vit_info = retrieve_info_for_model("vit", frameworks=["pt", "tf", "flax"])
         vit_classes = ["ViTForImageClassification", "ViTModel"]
         pt_only_classes = ["ViTForMaskedImageModeling"]
         expected_model_classes = {
@@ -716,7 +655,7 @@ NEW_BERT_CONSTANT = "value"
         self.assertIsNone(vit_model_patterns.processor_class)
 
     def test_retrieve_info_for_model_with_wav2vec2(self):
-        wav2vec2_info = retrieve_info_for_model("wav2vec2")
+        wav2vec2_info = retrieve_info_for_model("wav2vec2", frameworks=["pt", "tf", "flax"])
         wav2vec2_classes = [
             "Wav2Vec2Model",
             "Wav2Vec2ForPreTraining",
@@ -1237,7 +1176,7 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
             )
 
             self.init_file(doc_file, test_doc)
-            duplicate_doc_file(doc_file, gpt2_model_patterns, new_model_patterns)
+            duplicate_doc_file(doc_file, gpt2_model_patterns, new_model_patterns, frameworks=["pt", "tf", "flax"])
             self.check_result(new_doc_file, test_new_doc)
 
             test_new_doc_pt_only = test_new_doc.replace(
@@ -1276,7 +1215,7 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
                 "GPT-New New", "huggingface/gpt-new-new", tokenizer_class="GPT2Tokenizer"
             )
             self.init_file(doc_file, test_doc)
-            duplicate_doc_file(doc_file, gpt2_model_patterns, new_model_patterns)
+            duplicate_doc_file(doc_file, gpt2_model_patterns, new_model_patterns, frameworks=["pt", "tf", "flax"])
             print(test_new_doc_no_tok)
             self.check_result(new_doc_file, test_new_doc_no_tok)
 
