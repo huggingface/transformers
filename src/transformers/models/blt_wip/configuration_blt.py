@@ -49,7 +49,7 @@ class BLTLocalEncoderConfig(PretrainedConfig):
         vocab_size=256,
         cross_attn_all_layers=True,
         cross_attn_k=2,
-        dim_global=2048,
+        hidden_size_global=2048,
         pm_size=0,
         hidden_size=512,
         num_attention_heads=8,
@@ -70,8 +70,8 @@ class BLTLocalEncoderConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.cross_attn_all_layers = cross_attn_all_layers
         self.cross_attn_k = cross_attn_k
-        self.hidden_size_global=dim_global
-        self.pm_size=pm_size
+        self.hidden_size_global = hidden_size_global
+        self.pm_size = pm_size
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads or num_attention_heads
@@ -87,8 +87,8 @@ class BLTLocalEncoderConfig(PretrainedConfig):
         self.multiple_of = multiple_of
         self._attn_implementation = _attn_implementation
         self.decoder_dim_token_emb = 1024
-        self.encoder_dim_token_emb=1024
-        self.encoder_dim_patch_emb=self.hidden_size
+        self.encoder_dim_token_emb = 1024
+        self.encoder_dim_patch_emb = self.hidden_size
         
         super().__init__(**kwargs)
     
@@ -104,7 +104,7 @@ class BLTLocalDecoderConfig(PretrainedConfig):
         vocab_size=256,
         cross_attn_all_layers=True,
         cross_attn_k=2,
-        dim_global=2048,
+        hidden_size_global=2048,
         hidden_size=512,
         num_attention_heads=8,
         num_key_value_heads=None,
@@ -124,7 +124,7 @@ class BLTLocalDecoderConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.cross_attn_all_layers = cross_attn_all_layers
         self.cross_attn_k = cross_attn_k
-        self.hidden_size_global=dim_global
+        self.hidden_size_global = hidden_size_global
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads or num_attention_heads
@@ -139,8 +139,8 @@ class BLTLocalDecoderConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.multiple_of = multiple_of
         self._attn_implementation = _attn_implementation
-        self.decoder_dim_token_emb=1024
-        self.encoder_dim_token_emb=1024
+        self.decoder_dim_token_emb = 1024
+        self.encoder_dim_token_emb = 1024
 
         super().__init__(**kwargs)
 
@@ -197,17 +197,17 @@ class BLTPatcherConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 256):
             Vocabulary size for the entropy model used in patching.
-        dim (`int`, *optional*, defaults to 512):
+        hidden_size (`int`, *optional*, defaults to 512):
             Hidden dimension for the entropy model.
-        n_layers (`int`, *optional*, defaults to 8):
+        num_hidden_layers (`int`, *optional*, defaults to 8):
             Number of layers in the entropy model.
-        n_heads (`int`, *optional*, defaults to 8):
+        num_attention_heads (`int`, *optional*, defaults to 8):
             Number of attention heads in the entropy model.
         head_dim (`int`, *optional*):
             Dimension of each attention head in the entropy model.
-        n_kv_heads (`int`, *optional*):
+        num_key_value_heads (`int`, *optional*):
             Number of key-value heads in the entropy model.
-        max_seqlen (`int`, *optional*, defaults to 1024):
+        max_position_embeddings (`int`, *optional*, defaults to 1024):
             Maximum sequence length for the entropy model.
         norm_eps (`float`, *optional*, defaults to 1e-5):
             Layer normalization epsilon for the entropy model.
@@ -219,18 +219,10 @@ class BLTPatcherConfig(PretrainedConfig):
             Make feedforward dimension multiple of this for the entropy model.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             RoPE theta parameter for the entropy model.
-        rope_use_fp32_in_outer_product (`bool`, *optional*, defaults to False):
-            Whether to use fp32 in RoPE outer product for the entropy model.
         attn_impl (`str`, *optional*, defaults to "sdpa"):
             Attention implementation for the entropy model.
         attn_bias_type (`str`, *optional*, defaults to "causal"):
             Attention bias type for the entropy model.
-        weight_tying (`bool`, *optional*, defaults to False):
-            Whether to tie embeddings in the entropy model.
-        bos_token_id (`int`, *optional*, defaults to 1):
-            Beginning of sequence token id for the entropy model.
-        eos_token_id (`int`, *optional*, defaults to 2):
-            End of sequence token id for the entropy model.
     """
     
     model_type = "blt_patcher"
@@ -238,12 +230,12 @@ class BLTPatcherConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=256,
-        dim=512,
-        n_layers=8,
-        n_heads=8,
+        hidden_size=512,
+        num_hidden_layers=8,
+        num_attention_heads=8,
         head_dim=None,
-        n_kv_heads=None,
-        max_seqlen=1024,
+        num_key_value_heads=None,
+        max_position_embeddings=1024,
         norm_eps=1e-5,
         dropout=0.0,
         ffn_dim_multiplier=None,
@@ -252,27 +244,24 @@ class BLTPatcherConfig(PretrainedConfig):
         rope_use_fp32_in_outer_product=False,
         attn_impl="sdpa",
         attn_bias_type="causal",
-        weight_tying=False,
         bos_token_id=1,
         eos_token_id=2,
         **kwargs,
     ):
         self.vocab_size = vocab_size
-        self.hidden_size = dim
-        self.num_hidden_layers = n_layers
-        self.num_attention_heads = n_heads
-        self.head_dim = head_dim if head_dim is not None else (dim // n_heads)
-        self.num_key_value_heads = n_kv_heads if n_kv_heads is not None else n_heads
-        self.max_seqlen = max_seqlen
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.head_dim = head_dim if head_dim is not None else (hidden_size // num_attention_heads)
+        self.num_key_value_heads = num_key_value_heads if num_key_value_heads is not None else num_attention_heads
+        self.max_position_embeddings = max_position_embeddings
         self.norm_eps = norm_eps
         self.dropout = dropout
         self.intermediate_size = ffn_dim_multiplier
         self.multiple_of = multiple_of
         self.rope_theta = rope_theta
-        self.rope_use_fp32_in_outer_product = rope_use_fp32_in_outer_product
         self.attn_impl = attn_impl
         self.attn_bias_type = attn_bias_type
-        self.weight_tying = weight_tying
         
         super().__init__(
             bos_token_id=bos_token_id,
@@ -281,10 +270,6 @@ class BLTPatcherConfig(PretrainedConfig):
         )
         
         # Add attributes needed for compatibility with transformer models
-        self.hidden_size = dim
-        self.num_attention_heads = n_heads
-        self.num_key_value_heads = self.num_key_value_heads  # Use the computed n_kv_heads
-        self.max_position_embeddings = max_seqlen
         self.hidden_act = "silu"  # BLT uses silu activation
         
         # Calculate intermediate_size using BLTMLP logic based on actual hidden_size
@@ -321,25 +306,25 @@ class BLTConfig(PretrainedConfig):
             Number of key-value heads for grouped query attention. If not specified, defaults to num_attention_heads.
 
         # Component-specific dimensions
-        dim_global (`int`, *optional*, defaults to 512):
+        hidden_size_global (`int`, *optional*, defaults to 512):
             Dimension of the global transformer component.
-        dim_local_decoder (`int`, *optional*, defaults to 512):
+        hidden_size_local_decoder (`int`, *optional*, defaults to 512):
             Dimension of the local decoder component.
-        dim_local_encoder (`int`, *optional*, defaults to 512):
+        hidden_size_local_encoder (`int`, *optional*, defaults to 512):
             Dimension of the local encoder component.
-        n_layers_global (`int`, *optional*, defaults to 8):
+        num_hidden_layers_global (`int`, *optional*, defaults to 8):
             Number of layers in the global transformer.
-        n_layers_local_decoder (`int`, *optional*, defaults to 8):
+        num_hidden_layers_local_decoder (`int`, *optional*, defaults to 8):
             Number of layers in the local decoder.
-        n_layers_local_encoder (`int`, *optional*, defaults to 8):
+        num_hidden_layers_local_encoder (`int`, *optional*, defaults to 8):
             Number of layers in the local encoder.
-        n_heads_global (`int`, *optional*, defaults to 8):
+        num_attention_heads_global (`int`, *optional*, defaults to 8):
             Number of attention heads in the global transformer.
-        n_heads_local_decoder (`int`, *optional*, defaults to 8):
+        num_attention_heads_local_decoder (`int`, *optional*, defaults to 8):
             Number of attention heads in the local decoder.
-        n_heads_local_encoder (`int`, *optional*, defaults to 8):
+        num_attention_heads_local_encoder (`int`, *optional*, defaults to 8):
             Number of attention heads in the local encoder.
-        n_kv_heads_global (`int`, *optional*):
+        num_key_value_heads_global (`int`, *optional*):
             Number of key-value heads in the global transformer.
 
         # Transformer configuration
@@ -394,10 +379,6 @@ class BLTConfig(PretrainedConfig):
         encoder_hash_byte_group_nb_functions (`int`, *optional*, defaults to 3):
             Number of hash functions for byte groups.
 
-        # Model behavior
-        weight_tying (`bool`, *optional*, defaults to False):
-            Whether to tie input and output embeddings.
-
         # Parameter mixing
         pm_size (`int`, *optional*, defaults to 0):
             Parameter mixing size.
@@ -442,16 +423,16 @@ class BLTConfig(PretrainedConfig):
         head_dim=None,
         num_key_value_heads=None,
         # Component-specific dimensions
-        dim_global=512,
-        dim_local_decoder=512,
-        dim_local_encoder=512,
-        n_layers_global=8,
-        n_layers_local_decoder=8,
-        n_layers_local_encoder=8,
-        n_heads_global=8,
-        n_heads_local_decoder=8,
-        n_heads_local_encoder=8,
-        n_kv_heads_global=None,
+        hidden_size_global=512,
+        hidden_size_local_decoder=512,
+        hidden_size_local_encoder=512,
+        num_hidden_layers_global=8,
+        num_hidden_layers_local_decoder=8,
+        num_hidden_layers_local_encoder=8,
+        num_attention_heads_global=8,
+        num_attention_heads_local_decoder=8,
+        num_attention_heads_local_encoder=8,
+        num_key_value_heads_global=None,
         # Transformer configuration
         norm_eps=1e-5,
         dropout=0.0,
@@ -480,15 +461,8 @@ class BLTConfig(PretrainedConfig):
         encoder_hash_byte_group_size=None,
         encoder_hash_byte_group_vocab=30000,
         encoder_hash_byte_group_nb_functions=3,
-        # Model behavior
-        weight_tying=False,
         # Parameter mixing
         pm_size=0,
-        # Special tokens
-        bos_token_id=1,
-        eos_token_id=2,
-        pad_token_id=-1,
-        boe_id=0,
         # Patcher configuration
         patcher_args=None,
         # Inherited
@@ -507,16 +481,16 @@ class BLTConfig(PretrainedConfig):
         self.num_key_value_heads = num_key_value_heads
 
         # Component-specific dimensions
-        self.hidden_size_global = dim_global
-        self.hidden_size_local_decoder = dim_local_decoder
-        self.hidden_size_local_encoder = dim_local_encoder
-        self.num_hidden_layers_global = n_layers_global
-        self.num_hidden_layers_local_decoder = n_layers_local_decoder
-        self.num_hidden_layers_local_encoder = n_layers_local_encoder
-        self.num_attention_heads_global = n_heads_global
-        self.num_attention_heads_local_decoder = n_heads_local_decoder
-        self.num_attention_heads_local_encoder = n_heads_local_encoder
-        self.num_key_value_heads_global = n_kv_heads_global
+        self.hidden_size_global = hidden_size_global
+        self.hidden_size_local_decoder = hidden_size_local_decoder
+        self.hidden_size_local_encoder = hidden_size_local_encoder
+        self.num_hidden_layers_global = num_hidden_layers_global
+        self.num_hidden_layers_local_decoder = num_hidden_layers_local_decoder
+        self.num_hidden_layers_local_encoder = num_hidden_layers_local_encoder
+        self.num_attention_heads_global = num_attention_heads_global
+        self.num_attention_heads_local_decoder = num_attention_heads_local_decoder
+        self.num_attention_heads_local_encoder = num_attention_heads_local_encoder
+        self.num_key_value_heads_global = num_key_value_heads_global
 
         # Transformer configuration
         self.norm_eps = norm_eps
@@ -552,26 +526,20 @@ class BLTConfig(PretrainedConfig):
         self.encoder_hash_byte_group_vocab = encoder_hash_byte_group_vocab
         self.encoder_hash_byte_group_nb_functions = encoder_hash_byte_group_nb_functions
 
-        # Model behavior
-        self.weight_tying = weight_tying
-
         # Parameter mixing
         self.pm_size = pm_size
-        
-        # Special token IDs
-        self.boe_id = boe_id
-
+    
         # Initialize component configurations
         self.encoder_config = BLTLocalEncoderConfig(
             vocab_size=vocab_size,
             cross_attn_all_layers=cross_attn_all_layers_encoder,
             cross_attn_k=cross_attn_k,
-            dim_global=dim_global,
+            hidden_size_global=hidden_size_global,
             pm_size=pm_size,
-            hidden_size=dim_local_encoder,
-            num_attention_heads=n_heads_local_encoder,
+            hidden_size=hidden_size_local_encoder,
+            num_attention_heads=num_attention_heads_local_encoder,
             num_key_value_heads=num_key_value_heads,
-            num_hidden_layers=n_layers_local_encoder,
+            num_hidden_layers=num_hidden_layers_local_encoder,
             norm_eps=norm_eps,
             dropout=dropout,
             max_position_embeddings=max_encoder_seq_length or max_position_embeddings,
@@ -585,11 +553,11 @@ class BLTConfig(PretrainedConfig):
             vocab_size=vocab_size,
             cross_attn_all_layers=cross_attn_all_layers_decoder,
             cross_attn_k=cross_attn_k,
-            dim_global=dim_global,
-            hidden_size=dim_local_decoder,
-            num_attention_heads=n_heads_local_decoder,
+            hidden_size_global=hidden_size_global,
+            hidden_size=hidden_size_local_decoder,
+            num_attention_heads=num_attention_heads_local_decoder,
             num_key_value_heads=num_key_value_heads,
-            num_hidden_layers=n_layers_local_decoder,
+            num_hidden_layers=num_hidden_layers_local_decoder,
             norm_eps=norm_eps,
             dropout=dropout,
             max_position_embeddings=max_encoder_seq_length or max_position_embeddings,
@@ -600,10 +568,10 @@ class BLTConfig(PretrainedConfig):
         )
 
         self.global_config = BLTGlobalTransformerConfig(
-            hidden_size=dim_global,
-            num_attention_heads=n_heads_global,
-            num_key_value_heads=n_kv_heads_global,
-            num_hidden_layers=n_layers_global,
+            hidden_size=hidden_size_global,
+            num_attention_heads=num_attention_heads_global,
+            num_key_value_heads=num_key_value_heads_global,
+            num_hidden_layers=num_hidden_layers_global,
             norm_eps=norm_eps,
             dropout=dropout,
             max_position_embeddings=max_position_embeddings,
@@ -611,13 +579,10 @@ class BLTConfig(PretrainedConfig):
             rope_scaling={"rope_type": "default"},
             hidden_act=hidden_act,
             multiple_of=multiple_of,
-            global_dim_patch_emb=dim_local_encoder * cross_attn_k,
+            global_dim_patch_emb=hidden_size_local_encoder * cross_attn_k,
         )
 
-        if patcher_args is not None:
-            self.patcher_config = BLTPatcherConfig(**patcher_args)
-        else:
-            self.patcher_config = BLTPatcherConfig()
+        self.patcher_config = BLTPatcherConfig(**patcher_args)
 
         # Handle hash byte group size validation
         if self.encoder_hash_byte_group_size is not None and type(self.encoder_hash_byte_group_size) == str:
@@ -629,22 +594,14 @@ class BLTConfig(PretrainedConfig):
         self.rope_scaling = {"rope_type": "default"}
 
         # Set compatibility attributes for transformers
-        self.num_key_value_heads = n_heads_local_encoder
+        self.num_key_value_heads = num_attention_heads_local_encoder
         self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = dim_local_encoder
-        self.num_attention_heads = n_heads_local_encoder
+        self.hidden_size = hidden_size_local_encoder
+        self.num_attention_heads = num_attention_heads_local_encoder
         
         # Calculate intermediate_size using BLTMLP logic for each component
         # Note: Each component uses its own hidden dimension, not the main dim
         self.intermediate_size = None  # Will be calculated per component
-
-        super().__init__(
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            pad_token_id=pad_token_id,
-            **kwargs,
-        )
-
 
 
 __all__ = [

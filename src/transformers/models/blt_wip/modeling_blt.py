@@ -589,7 +589,7 @@ class BLTLocalEncoder(nn.Module):
             layer_outputs = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None)
             hidden_states = layer_outputs[0]
 
-            if idx == len(self.layers) - 1 or self.cross_attn_all_layers_encoder:
+            if idx == len(self.layers) - 1 or self.cross_attn_all_layers:
                 patch_embeds = self.patch_reduce(hidden_states, num_patches, "amax", patch_ids)
                 patch_embeds = self.patch_embedding_projection(patch_embeds)
                 patch_embeds = patch_embeds.reshape(batch_size, patch_embeds.shape[1] * self.cross_attn_k, self.hidden_size)
@@ -655,7 +655,7 @@ class BLTLocalDecoder(nn.Module):
         self.rotary_emb = BLTRotaryEmbedding(config=config)
 
         self.patch_embedding_projection = nn.Linear(
-            in_features=config.dim_global,
+            in_features=config.hidden_size_global,
             out_features=config.decoder_dim_token_emb * config.cross_attn_k,
             bias=False,
         )
@@ -729,7 +729,7 @@ class BLTCrossAttention(nn.Module):
         self.config = config
         self.layer_idx = layer_idx
         # Use provided hidden_size or fallback to encoder dimension
-        self.hidden_size = hidden_size or config.dim_local_encoder
+        self.hidden_size = hidden_size or config.hidden_size_local_encoder
         self.num_heads = config.num_attention_heads
         self.num_key_value_heads = config.num_attention_heads  # Assuming same for cross attention
         self.head_dim = self.hidden_size // self.num_heads
@@ -901,7 +901,7 @@ class BLTPreTrainedModel(PreTrainedModel):
              
         elif isinstance(module, BLTModel):
             if module.encoder_hash_tok_embedding is not None:
-                emb_std = module.config.dim_local_encoder ** (-0.5)
+                emb_std = module.config.hidden_size_local_encoder ** (-0.5)
                 for emb in module.encoder_hash_tok_embedding:
                     emb._custom_std = emb_std
                     
@@ -911,10 +911,10 @@ class BLTPreTrainedModel(PreTrainedModel):
                 
         elif isinstance(module, BLTLocalDecoder):
             if module.patch_embedding_projection is not None:
-                module.patch_embedding_projection._custom_std = module.config.dim_global ** (-0.5)
+                module.patch_embedding_projection._custom_std = module.config.hidden_size_global ** (-0.5)
                 
         elif isinstance(module, BLTPatcher):
-            emb_std = module.config.dim ** (-0.5)
+            emb_std = module.config.hidden_size ** (-0.5)
             module.embed_tokens._custom_std = emb_std
             module.lm_head._custom_std = emb_std
 
@@ -931,7 +931,7 @@ class BLTModel(BLTPreTrainedModel):
 
         self.encoder_hash_tok_embedding = init_hash_embeddings(
             config,
-            local_encoder_dim=config.dim_local_encoder,
+            local_encoder_dim=config.hidden_size_local_encoder,
             encoder_hash_byte_group_size=config.encoder_hash_byte_group_size,
         )
 
@@ -1028,16 +1028,16 @@ class BLTPatcher(BLTPreTrainedModel):
 
         self.layers = nn.ModuleList()
         # Create transformer layers using the patcher config
-        for layer_idx in range(self.config.n_layers):
+        for layer_idx in range(self.config.num_hidden_layers):
             self.layers.append(BLTTransformerLayer(self.config, layer_idx))
 
 
-        self.embed_tokens = torch.nn.Embedding(self.config.vocab_size, self.config.dim)
+        self.embed_tokens = torch.nn.Embedding(self.config.vocab_size, self.config.hidden_size)
 
-        self.norm = BLTRMSNorm(self.config.dim, eps=self.config.norm_eps)
+        self.norm = BLTRMSNorm(self.config.hidden_size, eps=self.config.norm_eps)
 
         self.lm_head = nn.Linear(
-            self.config.dim,
+            self.config.hidden_size,
             self.config.vocab_size,
             bias=False,
         )
@@ -1055,7 +1055,7 @@ class BLTPatcher(BLTPreTrainedModel):
         # Handle chunked processing for entropy calculation
         entropies = []
         predictions = []
-        max_length = self.config.max_seqlen
+        max_length = self.config.max_position_embeddings
         batch_numel = max_length * patching_batch_size
         splits = torch.split(token_values.flatten(), batch_numel)
 
