@@ -19,10 +19,10 @@ Feature extractor class for FastConformer
 import warnings
 from typing import Optional, Union
 
-from ... import is_torch_available
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
-from ...utils import TensorType, is_librosa_available, logging, requires_backends
+from ...utils import TensorType, is_librosa_available, is_torch_available, logging, requires_backends
+
 
 if is_torch_available():
     import torch
@@ -95,9 +95,9 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
         padding_value=0.0,
         return_attention_mask=True,
         **kwargs,
-    ):
+        ):
         requires_backends(self, ["librosa"])
-        
+
         super().__init__(
             feature_size=feature_size,
             sampling_rate=sampling_rate,
@@ -132,15 +132,15 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
         if self._filterbanks is None:
             if not is_torch_available():
                 raise ImportError("PyTorch is required for FastConformer feature extraction")
-            
+
             if not is_librosa_available():
                 raise ImportError(
                     "librosa is required for FastConformer feature extraction. "
                     "Please install it with `pip install librosa`."
                 )
-            
+
             import librosa
-            
+
             self._filterbanks = torch.tensor(
                 librosa.filters.mel(
                     sr=self.sampling_rate,
@@ -323,7 +323,7 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
         """
         if not is_torch_available():
             raise ImportError("PyTorch is required for FastConformer feature extraction")
-        
+
         if not is_librosa_available():
             raise ImportError(
                 "librosa is required for FastConformer feature extraction. "
