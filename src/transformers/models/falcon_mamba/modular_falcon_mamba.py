@@ -14,14 +14,13 @@
 # limitations under the License.
 """PyTorch FALCONMAMBA model."""
 
-import logging
 from typing import Optional
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ...utils import auto_docstring
+from ...utils import auto_docstring, logging
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available, is_mambapy_available
 from ..mamba.configuration_mamba import MambaConfig
 from ..mamba.modeling_mamba import (
