@@ -77,563 +77,6 @@ class EvollaProteinEncoderModelOutput(ModelOutput):
     attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
-@use_kernel_forward_from_hub("RMSNorm")
-class EvollaRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        EvollaRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-class EvollaRotaryEmbedding(nn.Module):
-    def __init__(self, config: EvollaConfig, device=None):
-        super().__init__()
-        # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-
-class EvollaMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
-
-
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
-
-
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs,
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
-class EvollaAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
-    def __init__(self, config: EvollaConfig, layer_idx: int):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.scaling = self.head_dim**-0.5
-        self.attention_dropout = config.attention_dropout
-        self.is_causal = True
-
-        self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
-        )
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
-        past_key_value: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-
-        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        if past_key_value is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
-
-
-class EvollaFeedForward(nn.Module):
-    def __init__(self, dim, mult=4):
-        super().__init__()
-        inner_dim = int(dim * mult)
-
-        self.norm = nn.LayerNorm(dim)
-        self.fc1 = nn.Linear(dim, inner_dim, bias=False)
-        self.activation = nn.GELU()
-        self.fc2 = nn.Linear(inner_dim, dim, bias=False)
-
-    def forward(self, x):
-        x = self.norm(x)
-        x = self.fc1(x)
-        x = self.activation(x)
-        x = self.fc2(x)
-        return x
-
-
-class EvollaSequenceAlignerCrossAttention(nn.Module):
-    def __init__(
-        self,
-        config,
-        protein_encoder_dim: Optional[int] = None,
-        structure_encoder_dim: Optional[int] = None,
-        msa_encoder_dim: Optional[int] = None,
-    ):
-        super().__init__()
-
-        self.hidden_size = config.hidden_size
-        self.num_attention_heads = config.num_attention_heads
-        self.scale = self.num_attention_heads**-0.5
-        self.attention_head_size = int(self.hidden_size / self.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-
-        attention_probs_dropout_prob = config.aligner_attention_probs_dropout_prob
-        enable_bias = config.aligner_enable_bias
-        ffn_mult = config.aligner_ffn_mult
-
-        self.query = nn.Linear(self.hidden_size, self.all_head_size)
-        if protein_encoder_dim is not None:
-            self.key_protein = nn.Linear(protein_encoder_dim, self.all_head_size)
-            self.value_protein = nn.Linear(protein_encoder_dim, self.all_head_size)
-        else:
-            self.key_protein = None
-            self.value_protein = None
-
-        if structure_encoder_dim is not None:
-            self.key_structure = nn.Linear(structure_encoder_dim, self.all_head_size)
-            self.value_structure = nn.Linear(structure_encoder_dim, self.all_head_size)
-        else:
-            self.key_structure = None
-            self.value_structure = None
-
-        if msa_encoder_dim is not None:
-            self.key_msa = nn.Linear(msa_encoder_dim, self.all_head_size)
-            self.value_msa = nn.Linear(msa_encoder_dim, self.all_head_size)
-        else:
-            self.key_msa = None
-            self.value_msa = None
-
-        self.attention_norm = EvollaRMSNorm(self.hidden_size)
-
-        self.dropout = nn.Dropout(attention_probs_dropout_prob)
-
-        self.out_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=enable_bias)
-
-        self.ff = EvollaFeedForward(self.hidden_size, ffn_mult)
-        self.gate_attention = nn.Parameter(torch.tensor([0.0]))
-        self.gate_ffw = nn.Parameter(torch.tensor([0.0]))
-
-    def cross_attention(
-        self,
-        query_states,
-        protein_key_value_states,
-        structure_key_value_states,
-        msa_key_value_states,
-        query_attn_mask,
-        protein_kv_attn_mask,
-        structure_kv_attn_mask,
-        msa_kv_attn_mask,
-    ):
-        """
-        query_states: text
-        key_value_states: protein
-        query_states: [bs, query_seq_len, dim]
-        key_value_states: [bs, kv_seq_len, dim]
-        query_attn_mask: [bs, query_seq_len]
-        kv_attn_mask: [bs, kv_seq_len]
-        """
-
-        # Concatenate protein and structure
-        kv_attn_mask = [protein_kv_attn_mask, structure_kv_attn_mask, msa_kv_attn_mask]
-        kv_attn_mask = [_ for _ in kv_attn_mask if _ is not None]
-        if not kv_attn_mask:
-            raise ValueError("At least one modality should be provided for cross attention.")
-        kv_attn_mask = torch.cat(kv_attn_mask, dim=1)
-
-        query_layer = self.attention_norm(query_states)
-
-        # Warning: This place might cause issues, refers to
-        # https://discuss.pytorch.org/t/cuda-error-cublas-status-not-supported-when-calling-cublasltmatmul-from-torch-nn-functional-linear/170214/13
-        # Solution: add `DISABLE_ADDMM_CUDA_LT=1` as environment variable
-        # Apply linear transformation to input_query, input_key, and input_value
-        query_layer = self.query(query_layer)  # [bs, querylength, dim]
-
-        if self.key_protein is not None and self.value_protein is not None:
-            protein_key_value_states = protein_key_value_states.to(query_states)
-            key_layer_protein = self.key_protein(protein_key_value_states)  # [bs, keylength, dim]
-            value_layer_protein = self.value_protein(protein_key_value_states)  # [bs, keylength, dim]
-        else:
-            key_layer_protein = None
-            value_layer_protein = None
-
-        if self.key_structure is not None and self.value_structure is not None:
-            structure_key_value_states = structure_key_value_states.to(query_states)
-            key_layer_structure = self.key_structure(structure_key_value_states)  # [bs, keylength, dim]
-            value_layer_structure = self.value_structure(structure_key_value_states)  # [bs, keylength, dim]
-        else:
-            key_layer_structure = None
-            value_layer_structure = None
-
-        if self.key_msa is not None and self.value_msa is not None:
-            msa_key_value_states = msa_key_value_states.to(query_states)
-            key_layer_msa = self.key_msa(msa_key_value_states)  # [bs, keylength, dim]
-            value_layer_msa = self.value_msa(msa_key_value_states)  # [bs, keylength, dim]
-        else:
-            key_layer_msa = None
-            value_layer_msa = None
-
-        key_layer = [key_layer_protein, key_layer_structure, key_layer_msa]
-        key_layer = [_ for _ in key_layer if _ is not None]
-        key_layer = torch.cat(key_layer, dim=1)
-
-        value_layer = [value_layer_protein, value_layer_structure, value_layer_msa]
-        value_layer = [_ for _ in value_layer if _ is not None]
-        value_layer = torch.cat(value_layer, dim=1)
-
-        new_query_layer_shape = query_layer.size()[:-1] + (
-            self.num_attention_heads,
-            self.attention_head_size,
-        )
-        query_layer = query_layer.view(*new_query_layer_shape).permute(0, 2, 1, 3)
-
-        new_key_layer_shape = key_layer.size()[:-1] + (
-            self.num_attention_heads,
-            self.attention_head_size,
-        )
-        key_layer = key_layer.view(*new_key_layer_shape).permute(0, 2, 1, 3)
-
-        new_value_layer_shape = value_layer.size()[:-1] + (
-            self.num_attention_heads,
-            self.attention_head_size,
-        )
-        value_layer = value_layer.view(*new_value_layer_shape).permute(0, 2, 1, 3)
-
-        query_layer = query_layer * self.scale
-
-        # attention_mask: [bs, 1, querylength, keylength]
-        if query_attn_mask is None:
-            query_attn_mask = torch.ones(query_states.size(0), query_states.size(1)).to(query_states.device)
-        attention_mask = query_attn_mask[:, None, :, None] * kv_attn_mask[:, None, None, :]
-        # Compute the scaled dot-product attention scores
-        attn_weights = torch.matmul(query_layer, key_layer.transpose(-1, -2))  # [bs, numheads, querylength, keylength]
-        attn_weights = attn_weights - attn_weights.amax(dim=-1, keepdim=True).detach()  # To stablize score
-        attention_scores = attn_weights.masked_fill(
-            (1 - attention_mask).bool(), torch.finfo(attn_weights.dtype).min
-        )  # [bs, numheads, querylength, keylength]
-
-        attention_probs = nn.Softmax(dim=-1)(attention_scores)
-
-        # attention_probs_dropped = self.dropout(attention_probs)
-
-        context_layer = torch.matmul(attention_probs, value_layer)  # [bs, numheads, querylength, dim/numheads]
-
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(*new_context_layer_shape)
-
-        context_layer = self.out_proj(context_layer)
-
-        return context_layer
-
-    def forward(
-        self,
-        query_states,
-        protein_kv_states,
-        structure_kv_states,
-        msa_kv_states,
-        query_attn_mask,
-        protein_kv_attn_mask=None,
-        structure_kv_attn_mask=None,
-        msa_kv_attn_mask=None,
-        protein_batch_mask=None,
-        structure_batch_mask=None,
-        msa_batch_mask=None,
-        past_key_value=None,
-    ):
-        """
-        kv_states: protein
-        query_states: text
-
-        query_states: [bs, query_seq_len, dim]
-        kv_states: [bs, kv_seq_len, dim]
-        query_attn_mask: [bs, query_seq_len]
-        kv_attn_mask: [bs, kv_seq_len], default None
-        past_key_value: [bs, past_kv_seq_len, dim], default None
-        """
-        if protein_kv_states is not None:
-            bs, protein_kv_seq_len, dim = protein_kv_states.shape
-            if protein_kv_attn_mask is None:
-                protein_kv_attn_mask = (
-                    torch.ones(bs, protein_kv_seq_len).to(protein_batch_mask.device)
-                    * protein_batch_mask.expand(size=(protein_kv_seq_len, bs)).T
-                ).to(protein_kv_states.device)
-        else:
-            protein_kv_attn_mask = None
-
-        if structure_kv_states is not None:
-            bs, structure_kv_seq_len, dim = structure_kv_states.shape
-            if structure_kv_attn_mask is None:
-                structure_kv_attn_mask = (
-                    torch.ones(bs, structure_kv_seq_len).to(protein_batch_mask.device)
-                    * structure_batch_mask.expand(size=(structure_kv_seq_len, bs)).T
-                ).to(structure_kv_states.device)
-        else:
-            structure_kv_attn_mask = None
-
-        if msa_kv_states is not None:
-            bs, msa_kv_seq_len, dim = msa_kv_states.shape
-            if msa_kv_attn_mask is None:
-                msa_kv_attn_mask = (
-                    torch.ones(bs, msa_kv_seq_len).to(protein_batch_mask.device)
-                    * msa_batch_mask.expand(size=(msa_kv_seq_len, bs)).T
-                ).to(msa_kv_states.device)
-        else:
-            msa_kv_attn_mask = None
-        hidden_states = query_states
-        # only when there's at least one valid modality, crossattention will be performed
-        if (
-            (protein_kv_states is not None and protein_kv_attn_mask.any())
-            or (structure_kv_states is not None and structure_kv_attn_mask.any())
-            or (msa_kv_states is not None and msa_kv_attn_mask.any())
-        ):
-            residual = hidden_states
-            hidden_states = self.cross_attention(
-                query_states=hidden_states,
-                protein_key_value_states=protein_kv_states,
-                structure_key_value_states=structure_kv_states,
-                msa_key_value_states=msa_kv_states,
-                query_attn_mask=query_attn_mask,
-                protein_kv_attn_mask=protein_kv_attn_mask,
-                structure_kv_attn_mask=structure_kv_attn_mask,
-                msa_kv_attn_mask=msa_kv_attn_mask,
-            )  # [bs, query_seq_len, dim]
-            # tanh gate
-            hidden_states = torch.tanh(self.gate_attention) * hidden_states
-
-            hidden_states = residual + hidden_states  # input_query
-
-            residual = hidden_states
-            hidden_states = self.ff(hidden_states) * torch.tanh(self.gate_ffw)
-            hidden_states = residual + hidden_states
-
-        return hidden_states
-
-
-class EvollaDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: EvollaConfig, layer_idx: int):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-
-        self.self_attn = EvollaAttention(config=config, layer_idx=layer_idx)
-
-        self.mlp = EvollaMLP(config)
-        self.input_layernorm = EvollaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = EvollaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        if (layer_idx + 1) % max(config.num_hidden_layers // config.aligner_num_add_layers, 1) == 0:
-            self.adapter = EvollaSequenceAlignerCrossAttention(
-                config,
-                protein_encoder_dim=config.hidden_size,
-            )
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        protein_kv_states: Optional[torch.Tensor] = None,
-        structure_kv_states: Optional[torch.Tensor] = None,
-        msa_kv_states: Optional[torch.Tensor] = None,
-        protein_batch_mask: Optional[torch.Tensor] = None,
-        structure_batch_mask: Optional[torch.Tensor] = None,
-        msa_batch_mask: Optional[torch.Tensor] = None,
-        query_attn_mask: Optional[torch.Tensor] = None,
-        **kwargs,
-    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        residual = hidden_states
-
-        hidden_states = self.input_layernorm(hidden_states)
-
-        # Self Attention
-        hidden_states, self_attn_weights = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_value=past_key_value,
-            output_attentions=output_attentions,
-            use_cache=use_cache,
-            cache_position=cache_position,
-            position_embeddings=position_embeddings,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-
-        if hasattr(self, "adapter"):
-            hidden_states = self.adapter(
-                query_states=hidden_states,
-                protein_kv_states=protein_kv_states,
-                structure_kv_states=structure_kv_states,
-                msa_kv_states=msa_kv_states,
-                query_attn_mask=query_attn_mask,
-                protein_batch_mask=protein_batch_mask,
-                structure_batch_mask=structure_batch_mask,
-                msa_batch_mask=msa_batch_mask,
-            )
-
-        outputs = (hidden_states,)
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        return outputs
-
-
 def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_length=0):
     """
     Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
@@ -1386,6 +829,23 @@ class EvollaSaProtProteinEncoder(nn.Module):
         output_hidden_states: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         r"""
+        input_ids (`torch.LongTensor` of shape `((batch_size, sequence_length))`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        position_ids (`torch.LongTensor` of shape `((batch_size, sequence_length))`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
+        inputs_embeds (`torch.FloatTensor` of shape `((batch_size, sequence_length), hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
+
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
             the model is configured as a decoder.
@@ -1429,7 +889,7 @@ class EvollaSaProtProteinEncoder(nn.Module):
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         # past_key_values_length
-        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
 
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
@@ -1640,6 +1100,330 @@ class EvollaSaProtProteinEncoder(nn.Module):
         return head_mask
 
 
+class EvollaProteinEncoder(nn.Module):
+    def __init__(
+        self,
+        config: EvollaConfig,
+        add_pooling_layer: bool = False,
+    ):
+        super().__init__()
+        protein_config = SaProtConfig(
+            vocab_size=config.protein_vocab_size,
+            mask_token_id=config.protein_mask_token_id,
+            pad_token_id=config.protein_pad_token_id,
+            hidden_size=config.protein_hidden_size,
+            num_hidden_layers=config.protein_num_hidden_layers,
+            num_attention_heads=config.protein_num_attention_heads,
+            intermediate_size=config.protein_intermediate_size,
+            hidden_dropout_prob=config.protein_hidden_dropout_prob,
+            attention_probs_dropout_prob=config.protein_attention_probs_dropout_prob,
+            max_position_embeddings=config.protein_max_position_embeddings,
+            layer_norm_eps=config.protein_layer_norm_eps,
+            position_embedding_type=config.protein_position_embedding_type,
+            emb_layer_norm_before=config.protein_emb_layer_norm_before,
+            token_dropout=config.protein_token_dropout,
+        )
+        self.model = EvollaSaProtProteinEncoder(
+            config=protein_config,
+            add_pooling_layer=add_pooling_layer,
+        )
+
+        self.sequence_compressor_resampler = EvollaSequenceCompressorResampler(config=config)
+
+    @can_return_tuple
+    def sequence_encode(
+        self,
+        input_ids: torch.LongTensor,
+        attention_mask: torch.FloatTensor,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+    ):
+        sequence_repr = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+        )
+
+        return sequence_repr
+
+    @can_return_tuple
+    def forward(
+        self,
+        input_ids: torch.LongTensor,
+        attention_mask: torch.FloatTensor,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        **kwargs,
+    ):
+        protein_output = self.sequence_encode(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+        )
+
+        # TODO: could be replaced by last hidden state
+        protein_embeds = protein_output.last_hidden_state
+
+        sequence_repr = self.sequence_compressor_resampler(protein_embeds, attention_mask)
+
+        return EvollaProteinEncoderModelOutput(
+            sequence_compressor_output=sequence_repr,
+            last_hidden_state=protein_output.last_hidden_state,
+            hidden_states=protein_output.hidden_states,
+            attentions=protein_output.attentions,
+        )
+
+
+class EvollaSequenceAlignerCrossAttention(nn.Module):
+    def __init__(
+        self,
+        config,
+        protein_encoder_dim: Optional[int] = None,
+        structure_encoder_dim: Optional[int] = None,
+        msa_encoder_dim: Optional[int] = None,
+    ):
+        super().__init__()
+
+        self.hidden_size = config.hidden_size
+        self.num_attention_heads = config.num_attention_heads
+        self.scale = self.num_attention_heads**-0.5
+        self.attention_head_size = int(self.hidden_size / self.num_attention_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+
+        attention_probs_dropout_prob = config.aligner_attention_probs_dropout_prob
+        enable_bias = config.aligner_enable_bias
+        ffn_mult = config.aligner_ffn_mult
+
+        self.query = nn.Linear(self.hidden_size, self.all_head_size)
+        if protein_encoder_dim is not None:
+            self.key_protein = nn.Linear(protein_encoder_dim, self.all_head_size)
+            self.value_protein = nn.Linear(protein_encoder_dim, self.all_head_size)
+        else:
+            self.key_protein = None
+            self.value_protein = None
+
+        if structure_encoder_dim is not None:
+            self.key_structure = nn.Linear(structure_encoder_dim, self.all_head_size)
+            self.value_structure = nn.Linear(structure_encoder_dim, self.all_head_size)
+        else:
+            self.key_structure = None
+            self.value_structure = None
+
+        if msa_encoder_dim is not None:
+            self.key_msa = nn.Linear(msa_encoder_dim, self.all_head_size)
+            self.value_msa = nn.Linear(msa_encoder_dim, self.all_head_size)
+        else:
+            self.key_msa = None
+            self.value_msa = None
+
+        self.attention_norm = EvollaRMSNorm(self.hidden_size)
+
+        self.dropout = nn.Dropout(attention_probs_dropout_prob)
+
+        self.out_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=enable_bias)
+
+        self.ff = EvollaFeedForward(self.hidden_size, ffn_mult)
+        self.gate_attention = nn.Parameter(torch.tensor([0.0]))
+        self.gate_ffw = nn.Parameter(torch.tensor([0.0]))
+
+    def cross_attention(
+        self,
+        query_states,
+        protein_key_value_states,
+        structure_key_value_states,
+        msa_key_value_states,
+        query_attn_mask,
+        protein_kv_attn_mask,
+        structure_kv_attn_mask,
+        msa_kv_attn_mask,
+    ):
+        """
+        query_states: text
+        key_value_states: protein
+        query_states: [bs, query_seq_len, dim]
+        key_value_states: [bs, kv_seq_len, dim]
+        query_attn_mask: [bs, query_seq_len]
+        kv_attn_mask: [bs, kv_seq_len]
+        """
+
+        # Concatenate protein and structure
+        kv_attn_mask = [protein_kv_attn_mask, structure_kv_attn_mask, msa_kv_attn_mask]
+        kv_attn_mask = [_ for _ in kv_attn_mask if _ is not None]
+        if not kv_attn_mask:
+            raise ValueError("At least one modality should be provided for cross attention.")
+        kv_attn_mask = torch.cat(kv_attn_mask, dim=1)
+
+        query_layer = self.attention_norm(query_states)
+
+        # Warning: This place might cause issues, refers to
+        # https://discuss.pytorch.org/t/cuda-error-cublas-status-not-supported-when-calling-cublasltmatmul-from-torch-nn-functional-linear/170214/13
+        # Solution: add `DISABLE_ADDMM_CUDA_LT=1` as environment variable
+        # Apply linear transformation to input_query, input_key, and input_value
+        query_layer = self.query(query_layer)  # [bs, querylength, dim]
+
+        if self.key_protein is not None and self.value_protein is not None:
+            protein_key_value_states = protein_key_value_states.to(query_states)
+            key_layer_protein = self.key_protein(protein_key_value_states)  # [bs, keylength, dim]
+            value_layer_protein = self.value_protein(protein_key_value_states)  # [bs, keylength, dim]
+        else:
+            key_layer_protein = None
+            value_layer_protein = None
+
+        if self.key_structure is not None and self.value_structure is not None:
+            structure_key_value_states = structure_key_value_states.to(query_states)
+            key_layer_structure = self.key_structure(structure_key_value_states)  # [bs, keylength, dim]
+            value_layer_structure = self.value_structure(structure_key_value_states)  # [bs, keylength, dim]
+        else:
+            key_layer_structure = None
+            value_layer_structure = None
+
+        if self.key_msa is not None and self.value_msa is not None:
+            msa_key_value_states = msa_key_value_states.to(query_states)
+            key_layer_msa = self.key_msa(msa_key_value_states)  # [bs, keylength, dim]
+            value_layer_msa = self.value_msa(msa_key_value_states)  # [bs, keylength, dim]
+        else:
+            key_layer_msa = None
+            value_layer_msa = None
+
+        key_layer = [key_layer_protein, key_layer_structure, key_layer_msa]
+        key_layer = [_ for _ in key_layer if _ is not None]
+        key_layer = torch.cat(key_layer, dim=1)
+
+        value_layer = [value_layer_protein, value_layer_structure, value_layer_msa]
+        value_layer = [_ for _ in value_layer if _ is not None]
+        value_layer = torch.cat(value_layer, dim=1)
+
+        new_query_layer_shape = query_layer.size()[:-1] + (
+            self.num_attention_heads,
+            self.attention_head_size,
+        )
+        query_layer = query_layer.view(*new_query_layer_shape).permute(0, 2, 1, 3)
+
+        new_key_layer_shape = key_layer.size()[:-1] + (
+            self.num_attention_heads,
+            self.attention_head_size,
+        )
+        key_layer = key_layer.view(*new_key_layer_shape).permute(0, 2, 1, 3)
+
+        new_value_layer_shape = value_layer.size()[:-1] + (
+            self.num_attention_heads,
+            self.attention_head_size,
+        )
+        value_layer = value_layer.view(*new_value_layer_shape).permute(0, 2, 1, 3)
+
+        query_layer = query_layer * self.scale
+
+        # attention_mask: [bs, 1, querylength, keylength]
+        if query_attn_mask is None:
+            query_attn_mask = torch.ones(query_states.size(0), query_states.size(1)).to(query_states.device)
+        attention_mask = query_attn_mask[:, None, :, None] * kv_attn_mask[:, None, None, :]
+        # Compute the scaled dot-product attention scores
+        attn_weights = torch.matmul(query_layer, key_layer.transpose(-1, -2))  # [bs, numheads, querylength, keylength]
+        attn_weights = attn_weights - attn_weights.amax(dim=-1, keepdim=True).detach()  # To stablize score
+        attention_scores = attn_weights.masked_fill(
+            (1 - attention_mask).bool(), torch.finfo(attn_weights.dtype).min
+        )  # [bs, numheads, querylength, keylength]
+
+        attention_probs = nn.Softmax(dim=-1)(attention_scores)
+
+        # attention_probs_dropped = self.dropout(attention_probs)
+
+        context_layer = torch.matmul(attention_probs, value_layer)  # [bs, numheads, querylength, dim/numheads]
+
+        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        context_layer = context_layer.view(*new_context_layer_shape)
+
+        context_layer = self.out_proj(context_layer)
+
+        return context_layer
+
+    def forward(
+        self,
+        query_states,
+        protein_kv_states,
+        structure_kv_states,
+        msa_kv_states,
+        query_attn_mask,
+        protein_kv_attn_mask=None,
+        structure_kv_attn_mask=None,
+        msa_kv_attn_mask=None,
+        protein_batch_mask=None,
+        structure_batch_mask=None,
+        msa_batch_mask=None,
+        past_key_value=None,
+    ):
+        """
+        kv_states: protein
+        query_states: text
+
+        query_states: [bs, query_seq_len, dim]
+        kv_states: [bs, kv_seq_len, dim]
+        query_attn_mask: [bs, query_seq_len]
+        kv_attn_mask: [bs, kv_seq_len], default None
+        past_key_value: [bs, past_kv_seq_len, dim], default None
+        """
+        if protein_kv_states is not None:
+            bs, protein_kv_seq_len, dim = protein_kv_states.shape
+            if protein_kv_attn_mask is None:
+                protein_kv_attn_mask = (
+                    torch.ones(bs, protein_kv_seq_len).to(protein_batch_mask.device)
+                    * protein_batch_mask.expand(size=(protein_kv_seq_len, bs)).T
+                ).to(protein_kv_states.device)
+        else:
+            protein_kv_attn_mask = None
+
+        if structure_kv_states is not None:
+            bs, structure_kv_seq_len, dim = structure_kv_states.shape
+            if structure_kv_attn_mask is None:
+                structure_kv_attn_mask = (
+                    torch.ones(bs, structure_kv_seq_len).to(protein_batch_mask.device)
+                    * structure_batch_mask.expand(size=(structure_kv_seq_len, bs)).T
+                ).to(structure_kv_states.device)
+        else:
+            structure_kv_attn_mask = None
+
+        if msa_kv_states is not None:
+            bs, msa_kv_seq_len, dim = msa_kv_states.shape
+            if msa_kv_attn_mask is None:
+                msa_kv_attn_mask = (
+                    torch.ones(bs, msa_kv_seq_len).to(protein_batch_mask.device)
+                    * msa_batch_mask.expand(size=(msa_kv_seq_len, bs)).T
+                ).to(msa_kv_states.device)
+        else:
+            msa_kv_attn_mask = None
+        hidden_states = query_states
+        # only when there's at least one valid modality, crossattention will be performed
+        if (
+            (protein_kv_states is not None and protein_kv_attn_mask.any())
+            or (structure_kv_states is not None and structure_kv_attn_mask.any())
+            or (msa_kv_states is not None and msa_kv_attn_mask.any())
+        ):
+            residual = hidden_states
+            hidden_states = self.cross_attention(
+                query_states=hidden_states,
+                protein_key_value_states=protein_kv_states,
+                structure_key_value_states=structure_kv_states,
+                msa_key_value_states=msa_kv_states,
+                query_attn_mask=query_attn_mask,
+                protein_kv_attn_mask=protein_kv_attn_mask,
+                structure_kv_attn_mask=structure_kv_attn_mask,
+                msa_kv_attn_mask=msa_kv_attn_mask,
+            )  # [bs, query_seq_len, dim]
+            # tanh gate
+            hidden_states = torch.tanh(self.gate_attention) * hidden_states
+
+            hidden_states = residual + hidden_states  # input_query
+
+            residual = hidden_states
+            hidden_states = self.ff(hidden_states) * torch.tanh(self.gate_ffw)
+            hidden_states = residual + hidden_states
+
+        return hidden_states
+
+
 class EvollaSequenceCompressorAttention(nn.Module):
     def __init__(self, dim, dim_head=64, heads=8):
         super().__init__()
@@ -1764,6 +1548,315 @@ class EvollaSequenceCompressorResampler(nn.Module):
         return self.norm(transformed_feature)
 
 
+@use_kernel_forward_from_hub("RMSNorm")
+class EvollaRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        EvollaRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
+class EvollaRotaryEmbedding(nn.Module):
+    def __init__(self, config: EvollaConfig, device=None):
+        super().__init__()
+        # BC: "rope_type" was originally "type"
+        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+        else:
+            self.rope_type = "default"
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = self.inv_freq
+
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
+class EvollaMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
+
+
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        position_ids (`torch.Tensor`, *optional*):
+            Deprecated and unused.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+
+
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+        attn_weights = attn_weights + causal_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+class EvollaAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(self, config: EvollaConfig, layer_idx: int):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = True
+
+        self.q_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.k_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+        )
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: Optional[torch.Tensor],
+        past_key_value: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if past_key_value is not None:
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+
+class EvollaFeedForward(nn.Module):
+    def __init__(self, dim, mult=4):
+        super().__init__()
+        inner_dim = int(dim * mult)
+
+        self.norm = nn.LayerNorm(dim)
+        self.fc1 = nn.Linear(dim, inner_dim, bias=False)
+        self.activation = nn.GELU()
+        self.fc2 = nn.Linear(inner_dim, dim, bias=False)
+
+    def forward(self, x):
+        x = self.norm(x)
+        x = self.fc1(x)
+        x = self.activation(x)
+        x = self.fc2(x)
+        return x
+
+
+class EvollaDecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: EvollaConfig, layer_idx: int):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+
+        self.self_attn = EvollaAttention(config=config, layer_idx=layer_idx)
+
+        self.mlp = EvollaMLP(config)
+        self.input_layernorm = EvollaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = EvollaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        if (layer_idx + 1) % max(config.num_hidden_layers // config.aligner_num_add_layers, 1) == 0:
+            self.adapter = EvollaSequenceAlignerCrossAttention(
+                config,
+                protein_encoder_dim=config.hidden_size,
+            )
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: Optional[bool] = False,
+        use_cache: Optional[bool] = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        protein_kv_states: Optional[torch.Tensor] = None,
+        structure_kv_states: Optional[torch.Tensor] = None,
+        msa_kv_states: Optional[torch.Tensor] = None,
+        protein_batch_mask: Optional[torch.Tensor] = None,
+        structure_batch_mask: Optional[torch.Tensor] = None,
+        msa_batch_mask: Optional[torch.Tensor] = None,
+        query_attn_mask: Optional[torch.Tensor] = None,
+        **kwargs,
+    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        residual = hidden_states
+
+        hidden_states = self.input_layernorm(hidden_states)
+
+        # Self Attention
+        hidden_states, self_attn_weights = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_value=past_key_value,
+            output_attentions=output_attentions,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            position_embeddings=position_embeddings,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
+
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+
+        if hasattr(self, "adapter"):
+            hidden_states = self.adapter(
+                query_states=hidden_states,
+                protein_kv_states=protein_kv_states,
+                structure_kv_states=structure_kv_states,
+                msa_kv_states=msa_kv_states,
+                query_attn_mask=query_attn_mask,
+                protein_batch_mask=protein_batch_mask,
+                structure_batch_mask=structure_batch_mask,
+                msa_batch_mask=msa_batch_mask,
+            )
+
+        outputs = (hidden_states,)
+        if output_attentions:
+            outputs += (self_attn_weights,)
+
+        return outputs
+
+
 @auto_docstring
 class EvollaPreTrainedModel(PreTrainedModel):
     config_class = EvollaConfig
@@ -1800,82 +1893,6 @@ class EvollaPreTrainedModel(PreTrainedModel):
             module.attention_norm.weight.data.fill_(1.0)
         elif isinstance(module, EvollaSequenceCompressorResampler):
             module.latents.data.normal_(mean=0.0, std=std)
-
-
-class EvollaProteinEncoder(nn.Module):
-    def __init__(
-        self,
-        config: EvollaConfig,
-        add_pooling_layer: bool = False,
-    ):
-        super().__init__()
-        protein_config = SaProtConfig(
-            vocab_size=config.protein_vocab_size,
-            mask_token_id=config.protein_mask_token_id,
-            pad_token_id=config.protein_pad_token_id,
-            hidden_size=config.protein_hidden_size,
-            num_hidden_layers=config.protein_num_hidden_layers,
-            num_attention_heads=config.protein_num_attention_heads,
-            intermediate_size=config.protein_intermediate_size,
-            hidden_dropout_prob=config.protein_hidden_dropout_prob,
-            attention_probs_dropout_prob=config.protein_attention_probs_dropout_prob,
-            max_position_embeddings=config.protein_max_position_embeddings,
-            layer_norm_eps=config.protein_layer_norm_eps,
-            position_embedding_type=config.protein_position_embedding_type,
-            emb_layer_norm_before=config.protein_emb_layer_norm_before,
-            token_dropout=config.protein_token_dropout,
-        )
-        self.model = EvollaSaProtProteinEncoder(
-            config=protein_config,
-            add_pooling_layer=add_pooling_layer,
-        )
-
-        self.sequence_compressor_resampler = EvollaSequenceCompressorResampler(config=config)
-
-    @can_return_tuple
-    def sequence_encode(
-        self,
-        input_ids: torch.LongTensor,
-        attention_mask: torch.FloatTensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-    ):
-        sequence_repr = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-        )
-
-        return sequence_repr
-
-    @can_return_tuple
-    def forward(
-        self,
-        input_ids: torch.LongTensor,
-        attention_mask: torch.FloatTensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        **kwargs,
-    ):
-        protein_output = self.sequence_encode(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-        )
-
-        # TODO: could be replaced by last hidden state
-        protein_embeds = protein_output.last_hidden_state
-
-        sequence_repr = self.sequence_compressor_resampler(protein_embeds, attention_mask)
-
-        return EvollaProteinEncoderModelOutput(
-            sequence_compressor_output=sequence_repr,
-            last_hidden_state=protein_output.last_hidden_state,
-            hidden_states=protein_output.hidden_states,
-            attentions=protein_output.attentions,
-        )
 
 
 class EvollaModel(EvollaPreTrainedModel):
@@ -2039,9 +2056,7 @@ class EvollaModel(EvollaPreTrainedModel):
         return output
 
 
-# this was adapted from modeling_idefics.IdeficsForVisionText2Text
 class EvollaForProteinText2Text(EvollaPreTrainedModel, GenerationMixin):
-    # _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
     _tied_weights_keys = []
 
     def __init__(self, config):
