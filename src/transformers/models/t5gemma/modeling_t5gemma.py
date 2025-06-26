@@ -1168,11 +1168,15 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
-        if self.training and self.config._attn_implementation != "eager" and not is_torchdynamo_compiling():
-            logger.warning_once(
+        if self.training and self.config._attn_implementation != "eager":
+            msg = (
                 "It is strongly recommended to train T5Gemma models with the `eager` attention implementation "
                 f"instead of `{self.config._attn_implementation}`. Use `eager` with `AutoModelForCausalLM.from_pretrained('<path-to-checkpoint>', attn_implementation='eager')`."
             )
+            if is_torchdynamo_compiling():
+                raise ValueError(msg)
+            else:
+                logger.warning_once(msg)
 
         if labels is not None and decoder_input_ids is None and decoder_inputs_embeds is None:
             # get decoder inputs from shifting lm labels to the right
