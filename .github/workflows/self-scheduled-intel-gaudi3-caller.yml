@@ -5,6 +5,9 @@ on:
   workflow_dispatch:
   schedule:
     - cron: "17 2 * * *"
+  push:
+    branches:
+      - fix-hpu-errors
 
 jobs:
   model-ci:
