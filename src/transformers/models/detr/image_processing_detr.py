@@ -856,22 +856,32 @@ class DetrImageProcessor(BaseImageProcessor):
         do_convert_annotations: Optional[bool] = None,
         do_pad: bool = True,
         pad_size: Optional[dict[str, int]] = None,
+        max_size: Optional[int] = None,
         **kwargs,
     ) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
 
-        if "max_size" in kwargs:
+        if max_size is not None or "max_size" in kwargs:
+            if max_size is None:
+                max_size = kwargs.pop("max_size")
             logger.warning_once(
                 "The `max_size` parameter is deprecated and will be removed in v4.26. "
                 "Please specify in `size['longest_edge'] instead`.",
             )
-            max_size = kwargs.pop("max_size")
+            if size is None:
+                size = {"shortest_edge": 800, "longest_edge": max_size}
+            else:
+                # If size is already provided, we need to handle max_size appropriately
+                if isinstance(size, dict) and "longest_edge" not in size:
+                    size = dict(size)  # Make a copy to avoid modifying the original
+                    size["longest_edge"] = max_size
+                # If size already has longest_edge, the max_size is ignored (deprecated behavior)
         else:
             max_size = None if size is None else 1333
 
         size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
-        size = get_size_dict(size, max_size=max_size, default_to_square=False)
+        size = get_size_dict(size, max_size=None, default_to_square=False)
 
         # Backwards compatibility
         if do_convert_annotations is None:
@@ -1345,7 +1355,17 @@ class DetrImageProcessor(BaseImageProcessor):
                 "The `max_size` argument is deprecated and will be removed in a future version, use"
                 " `size['longest_edge']` instead."
             )
-            size = kwargs.pop("max_size")
+            max_size = kwargs.pop("max_size")
+            if size is None:
+                size = {"shortest_edge": 800, "longest_edge": max_size}
+            else:
+                # If size is already provided, we need to handle max_size appropriately
+                if isinstance(size, dict) and "longest_edge" not in size:
+                    size = dict(size)  # Make a copy to avoid modifying the original
+                    size["longest_edge"] = max_size
+                # If size already has longest_edge, the max_size is ignored (deprecated behavior)
+        else:
+            max_size = None if size is None else 1333
 
         do_resize = self.do_resize if do_resize is None else do_resize
         size = self.size if size is None else size
