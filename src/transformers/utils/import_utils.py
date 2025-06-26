@@ -829,49 +829,44 @@ def is_torch_hpu_available():
     if not hasattr(torch, "hpu") or not torch.hpu.is_available():
         return False
 
-    import habana_frameworks.torch.utils.experimental as htexp  # noqa: F401
-
-    # IlyasMoutawwakil: We patch masked_fill_ for int64 tensors to avoid a bug on Gaudi1
-    # synNodeCreateWithId failed for node: masked_fill_fwd_i64 with synStatus 26 [Generic failure]
-    # This can be removed once Gaudi1 support is discontinued but for now we need it to keep using
-    # dl1.24xlarge Gaudi1 instances on AWS for testing.
-    # check if the device is Gaudi1 (vs Gaudi2, Gaudi3).
-    if htexp._get_device_type() == htexp.synDeviceType.synDeviceGaudi:
-        original_masked_fill_ = torch.Tensor.masked_fill_
-
-        def patched_masked_fill_(self, mask, value):
-            if self.dtype == torch.int64:
-                logger.warning_once(
-                    "In-place tensor.masked_fill_(mask, value) is not supported for int64 tensors on Gaudi1. "
-                    "This operation will be performed out-of-place using tensor[mask] = value."
-                )
-                self[mask] = value
-            else:
-                original_masked_fill_(self, mask, value)
-
-        torch.Tensor.masked_fill_ = patched_masked_fill_
-
     # We patch torch.gather for int64 tensors to avoid a bug on Gaudi
     # Graph compile failed with synStatus 26 [Generic failure]
     # This can be removed once bug is fixed but for now we need it.
-    original_gather = torch.Tensor.gather
+    original_gather = torch.gather
 
     def patched_gather(input: torch.Tensor, dim: int, index: torch.LongTensor) -> torch.Tensor:
         if input.dtype == torch.int64 and input.device.type == "hpu":
-            logger.warning_once(
-                "torch.gather is not supported for int64 tensors on Gaudi. "
-                "This operation will be performed patched_gather using indexing."
-            )
-
-            idx = [torch.arange(size, device=input.device, dtype=input.dtype) for size in input.shape]
-            idx[dim] = index
-            idx = tuple(idx)
-            output = input[idx]
-            return output
+            return original_gather(input.to(torch.int32), dim, index).to(torch.int64)
         else:
             return original_gather(input, dim, index)
 
-    torch.Tensor.gather = patched_gather
+    torch.gather = patched_gather
+
+    original_take_along_dim = torch.take_along_dim
+
+    def patched_take_along_dim(
+        input: torch.Tensor, indices: torch.LongTensor, dim: Optional[int] = None
+    ) -> torch.Tensor:
+        if input.dtype == torch.int64 and input.device.type == "hpu":
+            return original_take_along_dim(input.to(torch.int32), indices, dim).to(torch.int64)
+        else:
+            return original_take_along_dim(input, indices, dim)
+
+    torch.take_along_dim = patched_take_along_dim
+
+    original_cholesky = torch.linalg.cholesky
+
+    def safe_cholesky(A, *args, **kwargs):
+        output = original_cholesky(A, *args, **kwargs)
+
+        if torch.isnan(output).any():
+            jitter_value = 1e-9
+            diag_jitter = torch.eye(A.size(-1), dtype=A.dtype, device=A.device) * jitter_value
+            output = original_cholesky(A + diag_jitter, *args, **kwargs)
+
+        return output
+
+    torch.linalg.cholesky = safe_cholesky
 
     # IlyasMoutawwakil: we patch torch.compile to use the HPU backend by default
     # https://github.com/huggingface/transformers/pull/38790#discussion_r2157043944
