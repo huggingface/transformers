@@ -409,8 +409,8 @@ class Blip2PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _supports_attention_backend = True
     _supports_flash_attn_2 = False
-    _supports_sdpa = False
-    _supports_flex_attn = False
+    _supports_sdpa = True
+    _supports_flex_attn = True
 
     _no_split_modules = [
         "Blip2Attention",
