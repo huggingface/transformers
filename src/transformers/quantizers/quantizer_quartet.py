@@ -38,6 +38,7 @@ class QuartetHfQuantizer(HfQuantizer):
 
     requires_calibration = False
     requires_parameters_quantization = True
+    is_qat_trainable = True
     required_packages = ["qutlass", "quartet_qat", "quartet"]
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
@@ -95,8 +96,8 @@ class QuartetHfQuantizer(HfQuantizer):
         module, _ = get_module_from_name(model, param_name)
         assert isinstance(module, QuartetLinear), f"Module {param_name} is not a QuartetLinear somehow..."
 
-        if param_name.endswith(".weight_q"):
-            module.weight_q = torch.nn.Parameter(
+        if param_name.endswith(".qweight"):
+            module.qweight = torch.nn.Parameter(
                 param_value.to(target_device),
                 requires_grad=False,
             )
@@ -104,7 +105,7 @@ class QuartetHfQuantizer(HfQuantizer):
                 module.weight = None
             return
 
-        module.weight = torch.nn.Parameter(param_value.to(target_device), requires_grad=module.weight.requires_grad)
+        module.weight = torch.nn.Parameter(param_value.to(target_device))
         module.pre_forward()
 
         if unexpected_keys is not None and param_name in unexpected_keys:
@@ -164,7 +165,7 @@ class QuartetHfQuantizer(HfQuantizer):
         from quartet_qat import QuartetLinear
 
         module, tensor_name = get_module_from_name(model, param_name)
-        if isinstance(module, QuartetLinear) and tensor_name in ["weight", "weight_q"]:
+        if isinstance(module, QuartetLinear) and tensor_name in ["weight", "qweight"]:
             # Only quantize weights of QuartetLinear modules that are not already quantized
             return True
         else:

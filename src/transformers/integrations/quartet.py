@@ -38,6 +38,8 @@ def adapt_quartet_config(config: QuartetConfig):
 
     if config.backward_dtype == "mxfp4":
         backward_dtype = QuartetDtype.MXFP4
+    elif config.backward_dtype == "bf16":
+        backward_dtype = QuartetDtype.BF16
     else:
         raise ValueError(f"Unsupported backward dtype: {config.backward_dtype}")
 

@@ -1600,8 +1600,8 @@ class QuartetConfig(QuantizationConfigMixin):
             raise ValueError("forward_dtype must be mxfp4 for now")
         if self.exponent_dtype not in ["e8m0"]:
             raise ValueError("exponent_dtype must be e8m0 for now")
-        if self.backward_dtype not in ["mxfp4"]:
-            raise ValueError("backward_dtype must be mxfp4 for now")
+        if self.backward_dtype not in ["mxfp4", "bf16"]:
+            raise ValueError("backward_dtype must be mxfp4 or bf16 for now")
         if self.group_size not in [32]:
             raise ValueError("group_size must be 32 for now")
         if self.do_hadamard not in [True]:
