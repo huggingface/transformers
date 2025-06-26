@@ -841,6 +841,7 @@ def is_torch_hpu_available():
             return original_gather(input, dim, index)
 
     torch.gather = patched_gather
+    torch.Tensor.gather = patched_gather
 
     original_take_along_dim = torch.take_along_dim
 
@@ -867,6 +868,19 @@ def is_torch_hpu_available():
         return output
 
     torch.linalg.cholesky = safe_cholesky
+
+    original_scatter = torch.scatter
+
+    def patched_scatter(
+        input: torch.Tensor, dim: int, index: torch.Tensor, src: torch.Tensor, *args, **kwargs
+    ) -> torch.Tensor:
+        if input.device.type == "hpu" and input is src:
+            return original_scatter(input, dim, index, src.clone(), *args, **kwargs)
+        else:
+            return original_scatter(input, dim, index, src, *args, **kwargs)
+
+    torch.scatter = patched_scatter
+    torch.Tensor.scatter = patched_scatter
 
     # IlyasMoutawwakil: we patch torch.compile to use the HPU backend by default
     # https://github.com/huggingface/transformers/pull/38790#discussion_r2157043944
