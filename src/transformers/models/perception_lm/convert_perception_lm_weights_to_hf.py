@@ -17,6 +17,7 @@ import json
 import os
 import tempfile
 import warnings
+from typing import List
 
 import torch
 from timm.models.eva import checkpoint_filter_fn
@@ -388,9 +389,10 @@ def write_model(
         config = PerceptionLMConfig(
             text_config=text_config.to_dict(),
             vision_config=vision_config.to_dict(),
-            vision_tower_config=vision_params["use_cls_token"],
             projector_pooling_ratio=projector_pooling_ratio,
-            image_token_id=image_token_id,
+            vision_use_cls_token=vision_params["use_cls_token"],
+            image_token_id=tokenizer.image_token_id,
+            video_token_id=tokenizer.video_token_id,
         )
 
         config.save_pretrained(tmp_model_path)
@@ -580,7 +582,7 @@ def main():
     parser.add_argument(
         "--special_tokens",
         default=None,
-        type=list[str],
+        type=List[str],
         help="The list of special tokens that should be added to the model.",
     )
     args = parser.parse_args()

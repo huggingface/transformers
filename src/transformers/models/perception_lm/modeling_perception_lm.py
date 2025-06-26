@@ -28,10 +28,8 @@ from torch import nn
 
 from transformers.generation.utils import GenerationMixin
 
-from ...modeling_outputs import ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
-
-# from ...generation import GenerationMixin
 from ...utils import auto_docstring, can_return_tuple
 from ..auto import AutoModel
 from .configuration_perception_lm import PerceptionLMConfig
@@ -121,6 +119,29 @@ class PerceptionLMPreTrainedModel(PreTrainedModel):
 @dataclass
 @auto_docstring(
     custom_intro="""
+    Base class for PerceptionLM outputs, with hidden states and attentions.
+    """
+)
+class PerceptionLMModelOutputWithPast(BaseModelOutputWithPast):
+    r"""
+    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    image_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    """
+
+    image_hidden_states: Optional[torch.FloatTensor] = None
+    video_hidden_states: Optional[torch.FloatTensor] = None
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
     Base class for PerceptionLM causal language model (or autoregressive) outputs.
     """
 )
@@ -147,6 +168,7 @@ class PerceptionLMCausalLMOutputWithPast(ModelOutput):
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[torch.FloatTensor] = None
+    video_hidden_states: Optional[torch.FloatTensor] = None
 
 
 @auto_docstring
@@ -211,7 +233,7 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **lm_kwargs,
-    ) -> Union[tuple, PerceptionLMCausalLMOutputWithPast]:
+    ) -> Union[tuple, PerceptionLMModelOutputWithPast]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of input sequence tokens in the vocabulary.
@@ -290,6 +312,7 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
             image_features = image_features.to(inputs_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
+        video_features = None
         if pixel_values_videos is not None:
             video_features = self.get_image_features(
                 pixel_values=pixel_values_videos.to(inputs_embeds),
@@ -308,12 +331,19 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             **lm_kwargs,
         )
-        return outputs, image_features
+        return PerceptionLMModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            hidden_states=outputs.hidden_states,
+            past_key_values=outputs.past_key_values,
+            attentions=outputs.attentions,
+            image_hidden_states=image_features if pixel_values is not None else None,
+            video_hidden_states=(video_features if pixel_values_videos is not None else None),
+        )
 
     def check_mask_feature_size_match(self, media_mask, media_features):
         media_token_count = media_mask.sum()
@@ -333,6 +363,22 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
         self.model = PerceptionLMModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
+
+    # Make modules available throught conditional class for BC
+    @property
+    def language_model(self):
+        return self.model.language_model
+
+    @property
+    def vision_tower(self):
+        return self.model.vision_tower
+
+    @property
+    def multi_modal_projector(self):
+        return self.model.multi_modal_projector
+
+    def set_input_embeddings(self, new_embeddings):
+        self.model.set_input_embeddings(new_embeddings)
 
     def get_input_embeddings(self):
         return self.model.get_input_embeddings()
@@ -380,6 +426,8 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
             model_inputs["pixel_values_videos"] = pixel_values_videos
         return model_inputs
 
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -427,7 +475,7 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
         "USER:  \nWhat's the content of the image? ASSISTANT: The image features a busy city street with a stop sign prominently displayed"
         ```"""
 
-        outputs, image_features = self.model(
+        outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
             pixel_values_videos=pixel_values_videos,
@@ -464,8 +512,9 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
+            image_hidden_states=outputs.image_hidden_states,
+            video_hidden_states=outputs.video_hidden_states,
         )
 
 
-__all__ = ["PerceptionLMForConditionalGeneration", "PerceptionLMPreTrainedModel"]
+__all__ = ["PerceptionLMForConditionalGeneration", "PerceptionLMPreTrainedModel", "PerceptionLMModel"]
