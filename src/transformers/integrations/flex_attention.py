@@ -32,10 +32,11 @@ import torch
 from packaging import version
 
 from ..utils import is_torch_flex_attn_available, logging
-from ..utils.import_utils import _torch_version, is_torchdynamo_compiling
+from ..utils.import_utils import _torch_version, is_torch_less_or_equal, is_torchdynamo_compiling
 
 
 if is_torch_flex_attn_available():
+    from torch.nn.attention.flex_attention import _DEFAULT_SPARSE_BLOCK_SIZE as flex_default_block_size  # noqa: N811
     from torch.nn.attention.flex_attention import BlockMask, create_block_mask, flex_attention
 
 
@@ -63,16 +64,20 @@ class WrappedFlexAttention:
         Initialize or update the singleton instance.
         """
         if not self._is_flex_compiled or training != self.training:
+            self.training = training
+            if is_torch_less_or_equal("2.5.1"):
+                self._compiled_flex_attention = torch.compile(flex_attention, dynamic=False)
             # In PyTorch 2.6.0, there's a known issue with flex attention compilation which may
             # cause errors. The suggested fix is to compile with "max-autotune-no-cudagraphs"
             # see https://github.com/pytorch/pytorch/issues/146260 for training
-            self.training = training
-            if version.parse(_torch_version).base_version == "2.6.0" and training:
+            elif version.parse(_torch_version).base_version == "2.6.0" and training:
                 self._compiled_flex_attention = torch.compile(
                     flex_attention, dynamic=False, mode="max-autotune-no-cudagraphs"
                 )
+            # Fallback, usually the most recent torch 2.7.x+ versions
             else:
                 self._compiled_flex_attention = torch.compile(flex_attention)
+
             self._is_flex_compiled = True
 
     def __call__(self):
@@ -140,7 +145,9 @@ def make_flex_block_causal_mask(
         key_length = total_seq_len
     if not query_length:
         query_length = total_seq_len
-    attention_mask_2d = torch.nn.functional.pad(attention_mask_2d, value=0, pad=(0, key_length))
+    # older torch (2.5.x) cannot handle sequences not in multiples of 128 (default block size)
+    pad_len = ((key_length // flex_default_block_size) + 1) * flex_default_block_size
+    attention_mask_2d = torch.nn.functional.pad(attention_mask_2d, value=0, pad=(0, pad_len - key_length))
     device = attention_mask_2d.device
     document_ids = attention_mask_2d.clone()
 
@@ -208,7 +215,8 @@ def make_flex_block_causal_mask(
         Q_LEN=query_length,
         KV_LEN=key_length,
         device=device,
-        _compile=True,
+        # compiling the mask is not BC with older torch
+        _compile=not is_torch_less_or_equal("2.5.1"),
     )
 
 
