@@ -1,4 +1,4 @@
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,11 +15,7 @@
 
 import unittest
 
-from transformers import is_torch_available
 from transformers.models.fastconformer import FastConformerConfig
-from transformers.testing_utils import require_torch, slow
-
-from ...test_configuration_common import ConfigTester
 
 
 class FastConformerConfigTester:
@@ -126,7 +122,7 @@ class FastConformerConfigTest(unittest.TestCase):
     def test_config_defaults(self):
         """Test that the default configuration matches expected values."""
         config = FastConformerConfig()
-        
+
         # Test default values
         self.assertEqual(config.vocab_size, 1024)
         self.assertEqual(config.d_model, 1024)
@@ -166,7 +162,7 @@ class FastConformerConfigTest(unittest.TestCase):
             xscaling=True,
             use_bias=True,
         )
-        
+
         self.assertEqual(config.vocab_size, 2048)
         self.assertEqual(config.d_model, 512)
         self.assertEqual(config.encoder_layers, 12)
@@ -188,11 +184,11 @@ class FastConformerConfigTest(unittest.TestCase):
     def test_config_attribute_map(self):
         """Test that attribute mapping works correctly."""
         config = FastConformerConfig()
-        
+
         # Test attribute map
         self.assertEqual(config.attribute_map["num_attention_heads"], "encoder_attention_heads")
         self.assertEqual(config.attribute_map["hidden_size"], "d_model")
-        
+
         # Test that mapped attributes work
         self.assertEqual(config.num_attention_heads, config.encoder_attention_heads)
         self.assertEqual(config.hidden_size, config.d_model)
@@ -210,7 +206,7 @@ class FastConformerConfigTest(unittest.TestCase):
             encoder_attention_heads=8,
             num_mel_bins=80,
         )
-        
+
         # Test to_dict
         config_dict = config.to_dict()
         self.assertEqual(config_dict["d_model"], 512)
@@ -218,7 +214,7 @@ class FastConformerConfigTest(unittest.TestCase):
         self.assertEqual(config_dict["encoder_attention_heads"], 8)
         self.assertEqual(config_dict["num_mel_bins"], 80)
         self.assertEqual(config_dict["model_type"], "fastconformer")
-        
+
         # Test from_dict
         new_config = FastConformerConfig.from_dict(config_dict)
         self.assertEqual(new_config.d_model, 512)
@@ -229,14 +225,14 @@ class FastConformerConfigTest(unittest.TestCase):
     def test_config_nemo_compatibility(self):
         """Test NeMo-specific configuration attributes."""
         config = FastConformerConfig()
-        
+
         # Test NeMo-specific attributes
         self.assertTrue(hasattr(config, "subsampling_factor"))
         self.assertTrue(hasattr(config, "subsampling_conv_channels"))
         self.assertTrue(hasattr(config, "conv_kernel_size"))
         self.assertTrue(hasattr(config, "xscaling"))
         self.assertTrue(hasattr(config, "dropout_emb"))
-        
+
         # Test that these can be set to NeMo-typical values
         config = FastConformerConfig(
             subsampling_factor=8,
@@ -245,7 +241,7 @@ class FastConformerConfigTest(unittest.TestCase):
             xscaling=True,
             dropout_emb=0.1,
         )
-        
+
         self.assertEqual(config.subsampling_factor, 8)
         self.assertEqual(config.subsampling_conv_channels, 256)
         self.assertEqual(config.conv_kernel_size, 9)
@@ -262,14 +258,14 @@ class FastConformerConfigTest(unittest.TestCase):
         # Should not raise error if d_model is divisible by num_attention_heads
         self.assertEqual(config.d_model, 768)
         self.assertEqual(config.encoder_attention_heads, 12)
-        
+
         # Test odd kernel size (should be valid)
         config = FastConformerConfig(conv_kernel_size=7)
         self.assertEqual(config.conv_kernel_size, 7)
-        
+
         # Test power-of-2 subsampling factor
         config = FastConformerConfig(subsampling_factor=4)
         self.assertEqual(config.subsampling_factor, 4)
-        
+
         config = FastConformerConfig(subsampling_factor=16)
-        self.assertEqual(config.subsampling_factor, 16) 
+        self.assertEqual(config.subsampling_factor, 16)

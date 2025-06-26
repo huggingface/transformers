@@ -136,5 +136,4 @@ The conversion process:
 
 ## FastConformerEncoder
 
-[[autodoc]] FastConformerEncoder
-    - forward 
+[[autodoc]] FastConformerEncoder 
