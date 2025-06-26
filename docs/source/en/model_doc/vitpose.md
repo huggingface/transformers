@@ -227,7 +227,6 @@ image_pose_result = pose_results[0]
                     else:
                         cv2.line(image, (x1, y1), (x2, y2), color, thickness=thickness)
 
-
     # Note: keypoint_edges and color palette are dataset-specific
     keypoint_edges = model.config.edges
 
