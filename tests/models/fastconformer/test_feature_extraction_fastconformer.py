@@ -1,4 +1,4 @@
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import unittest
 import numpy as np
 
 from transformers.models.fastconformer import FastConformerFeatureExtractor
-from transformers.testing_utils import require_torch, slow
+from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available
 
 
@@ -97,7 +97,8 @@ class FastConformerFeatureExtractionTester:
         else:
             # make sure that inputs increase in size
             speech_inputs = [
-                _flatten(floats_list((1, x))) for x in range(self.min_seq_length, self.max_seq_length, self.seq_length_diff)
+                _flatten(floats_list((1, x)))
+                for x in range(self.min_seq_length, self.max_seq_length, self.seq_length_diff)
             ]
 
         if numpify:
@@ -126,7 +127,7 @@ class FastConformerFeatureExtractionTest(unittest.TestCase):
         feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
 
         with tempfile.TemporaryDirectory() as tmpdirname:
-            saved_file = feat_extract_first.save_pretrained(tmpdirname)[0]
+            feat_extract_first.save_pretrained(tmpdirname)
             feat_extract_second = self.feature_extraction_class.from_pretrained(tmpdirname)
 
         dict_first = feat_extract_first.to_dict()
@@ -138,6 +139,7 @@ class FastConformerFeatureExtractionTest(unittest.TestCase):
         json_string = feat_extract_first.to_json_string()
         # Test that json_string is valid JSON and contains expected keys
         import json
+
         parsed_dict = json.loads(json_string)
         self.assertIn("feature_size", parsed_dict)
         self.assertIn("sampling_rate", parsed_dict)
@@ -171,18 +173,18 @@ class FastConformerFeatureExtractionTest(unittest.TestCase):
         if is_torch_available():
             # Convert to torch tensors
             torch_speech_inputs = [torch.tensor(speech_input, dtype=torch.float32) for speech_input in speech_inputs]
-            
+
             # Test single input
             encoded_sequence = feat_extract(torch_speech_inputs[0].unsqueeze(0), return_tensors="pt")
             self.assertTrue("input_features" in encoded_sequence)
             self.assertTrue("attention_mask" in encoded_sequence)
             self.assertTrue("input_lengths" in encoded_sequence)
-            
+
             # Test batched - pad to same length and create batch tensor
             max_length = max(len(inp) for inp in torch_speech_inputs)
             padded_inputs = []
             audio_lengths = []
-            
+
             for inp in torch_speech_inputs:
                 audio_lengths.append(len(inp))
                 if len(inp) < max_length:
@@ -190,12 +192,12 @@ class FastConformerFeatureExtractionTest(unittest.TestCase):
                 else:
                     padded = inp
                 padded_inputs.append(padded)
-            
+
             batch_tensor = torch.stack(padded_inputs)
             lengths_tensor = torch.tensor(audio_lengths, dtype=torch.long)
-            
+
             encoded_sequences = feat_extract(batch_tensor, audio_lengths=lengths_tensor, return_tensors="pt")
-            
+
             self.assertTrue("input_features" in encoded_sequences)
             self.assertTrue("attention_mask" in encoded_sequences)
             self.assertTrue("input_lengths" in encoded_sequences)
@@ -204,17 +206,17 @@ class FastConformerFeatureExtractionTest(unittest.TestCase):
     @require_torch
     def test_torch_extraction(self):
         feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
-        
+
         # Create test audio
         speech_inputs = [list(itertools.chain(*floats_list((1, x)))) for x in range(800, 1400, 200)]
         torch_speech_inputs = [torch.tensor(speech_input, dtype=torch.float32) for speech_input in speech_inputs]
-        
+
         # Test single input
         batch_audio = torch_speech_inputs[0].unsqueeze(0)
         audio_lengths = torch.tensor([len(torch_speech_inputs[0])], dtype=torch.long)
-        
+
         features = feat_extract(batch_audio, audio_lengths=audio_lengths, return_tensors="pt")
-        
+
         # Check output format
         self.assertEqual(features.input_features.dim(), 3)  # (batch, time, features)
         self.assertEqual(features.input_features.shape[2], feat_extract.feature_size)
@@ -230,23 +232,23 @@ class FastConformerFeatureExtractionTest(unittest.TestCase):
             win_length=400,
             n_fft=512,
         )
-        
+
         # Create test signal - 1 second of audio
         duration = 1.0
         sample_rate = 16000
         num_samples = int(duration * sample_rate)
-        
+
         # Create a simple sine wave
         t = torch.linspace(0, duration, num_samples)
         frequency = 440  # A4 note
         audio = torch.sin(2 * torch.pi * frequency * t).unsqueeze(0)
         audio_lengths = torch.tensor([num_samples], dtype=torch.long)
-        
+
         features = feat_extract(audio, audio_lengths=audio_lengths, return_tensors="pt")
-        
+
         # Check that we get expected number of mel bins
         self.assertEqual(features.input_features.shape[2], 80)
-        
+
         # Check that we get reasonable number of time frames
         expected_frames = feat_extract.get_seq_len(num_samples, feat_extract.n_fft, feat_extract.hop_length)
         self.assertEqual(features.input_features.shape[1], expected_frames)
@@ -258,52 +260,52 @@ class FastConformerFeatureExtractionTest(unittest.TestCase):
             normalize="per_feature",
             feature_size=80,
         )
-        
+
         # Test all_features normalization
         feat_extract_all_features = self.feature_extraction_class(
             normalize="all_features",
             feature_size=80,
         )
-        
+
         # Create test audio
         audio = torch.randn(1, 8000)  # 0.5 seconds at 16kHz
         audio_lengths = torch.tensor([8000], dtype=torch.long)
-        
+
         features_per = feat_extract_per_feature(audio, audio_lengths=audio_lengths, return_tensors="pt")
         features_all = feat_extract_all_features(audio, audio_lengths=audio_lengths, return_tensors="pt")
-        
+
         # Both should have the same shape
         self.assertEqual(features_per.input_features.shape, features_all.input_features.shape)
-        
+
         # But different values due to different normalization
         self.assertFalse(torch.allclose(features_per.input_features, features_all.input_features))
 
     @require_torch
     def test_attention_mask_computation(self):
         feat_extract = self.feature_extraction_class()
-        
+
         # Create inputs of different lengths
         short_audio = torch.randn(1, 4000)  # 0.25 seconds
         long_audio = torch.randn(1, 12000)  # 0.75 seconds
-        
+
         # Pad to same length
         max_length = 12000
         padded_short = torch.cat([short_audio, torch.zeros(1, max_length - 4000)], dim=1)
-        
+
         batch_audio = torch.cat([padded_short, long_audio], dim=0)
         audio_lengths = torch.tensor([4000, 12000], dtype=torch.long)
-        
+
         features = feat_extract(batch_audio, audio_lengths=audio_lengths, return_tensors="pt")
-        
+
         # Check attention mask
         attention_mask = features.attention_mask
-        
+
         # First sequence should have fewer valid frames
         valid_frames_0 = attention_mask[0].sum().item()
         valid_frames_1 = attention_mask[1].sum().item()
-        
+
         self.assertLess(valid_frames_0, valid_frames_1)
-        
+
         # Check that input_lengths match attention mask sums
         self.assertEqual(features.input_lengths[0].item(), valid_frames_0)
         self.assertEqual(features.input_lengths[1].item(), valid_frames_1)
@@ -313,27 +315,27 @@ class FastConformerFeatureExtractionTest(unittest.TestCase):
         # Test with and without preemphasis
         feat_extract_with_preemph = self.feature_extraction_class(preemph=0.97)
         feat_extract_without_preemph = self.feature_extraction_class(preemph=0.0)
-        
+
         audio = torch.randn(1, 8000)
         audio_lengths = torch.tensor([8000], dtype=torch.long)
-        
+
         features_with = feat_extract_with_preemph(audio, audio_lengths=audio_lengths, return_tensors="pt")
         features_without = feat_extract_without_preemph(audio, audio_lengths=audio_lengths, return_tensors="pt")
-        
+
         # Should produce different results
         self.assertFalse(torch.allclose(features_with.input_features, features_without.input_features))
 
     @require_torch
     def test_device_placement(self):
         feat_extract = self.feature_extraction_class()
-        
+
         audio = torch.randn(1, 8000)
         audio_lengths = torch.tensor([8000], dtype=torch.long)
-        
+
         # Test default (CPU)
         features_cpu = feat_extract(audio, audio_lengths=audio_lengths, return_tensors="pt")
         self.assertEqual(features_cpu.input_features.device.type, "cpu")
-        
+
         # Test explicit device parameter
         features_cpu_explicit = feat_extract(audio, audio_lengths=audio_lengths, return_tensors="pt", device="cpu")
         self.assertEqual(features_cpu_explicit.input_features.device.type, "cpu")
@@ -342,20 +344,20 @@ class FastConformerFeatureExtractionTest(unittest.TestCase):
     def test_different_window_functions(self):
         # Test different window functions
         window_types = ["hann", "hamming", "blackman", "bartlett"]
-        
+
         audio = torch.randn(1, 8000)
         audio_lengths = torch.tensor([8000], dtype=torch.long)
-        
+
         features_list = []
         for window in window_types:
             feat_extract = self.feature_extraction_class(window=window)
             features = feat_extract(audio, audio_lengths=audio_lengths, return_tensors="pt")
             features_list.append(features.input_features)
-        
+
         # All should have the same shape
         for features in features_list[1:]:
             self.assertEqual(features.shape, features_list[0].shape)
-        
+
         # But different values due to different windows
         for i, features in enumerate(features_list[1:], 1):
             self.assertFalse(torch.allclose(features, features_list[0], atol=1e-5))
@@ -369,34 +371,30 @@ class FastConformerFeatureExtractionTest(unittest.TestCase):
     def test_batch_equivalence(self):
         """Test that batched processing produces reasonable results."""
         feat_extract = self.feature_extraction_class(sampling_rate=16000)
-        
+
         # Create two different length inputs
         audio1 = torch.randn(8000)  # 0.5 seconds
         audio2 = torch.randn(12000)  # 0.75 seconds
-        
-        # Process individually
-        features1 = feat_extract(audio1.unsqueeze(0), audio_lengths=torch.tensor([8000]), return_tensors="pt")
-        features2 = feat_extract(audio2.unsqueeze(0), audio_lengths=torch.tensor([12000]), return_tensors="pt")
-        
+
         # Process as batch
         max_length = 12000
         padded_audio1 = torch.cat([audio1, torch.zeros(max_length - 8000)])
         batch_audio = torch.stack([padded_audio1, audio2])
         batch_lengths = torch.tensor([8000, 12000])
-        
+
         batch_features = feat_extract(batch_audio, audio_lengths=batch_lengths, return_tensors="pt")
-        
+
         # Test that batch processing produces expected shapes and properties
         self.assertEqual(batch_features.input_features.shape[0], 2)  # batch size
         self.assertEqual(batch_features.input_features.shape[2], feat_extract.feature_size)  # feature dimension
         self.assertEqual(batch_features.attention_mask.shape[0], 2)  # batch size
         self.assertEqual(batch_features.input_lengths.shape[0], 2)  # batch size
-        
+
         # Test that input lengths are reasonable
         self.assertGreater(batch_features.input_lengths[0].item(), 0)
         self.assertGreater(batch_features.input_lengths[1].item(), 0)
         self.assertLess(batch_features.input_lengths[0].item(), batch_features.input_lengths[1].item())
-        
+
         # Test that attention masks have correct number of valid frames
         self.assertEqual(batch_features.attention_mask[0].sum().item(), batch_features.input_lengths[0].item())
         self.assertEqual(batch_features.attention_mask[1].sum().item(), batch_features.input_lengths[1].item())
@@ -404,8 +402,10 @@ class FastConformerFeatureExtractionTest(unittest.TestCase):
     def test_feature_extractor_without_torch(self):
         """Test that appropriate error is raised when torch is not available."""
         import unittest.mock
-        
-        with unittest.mock.patch("transformers.models.fastconformer.feature_extraction_fastconformer.is_torch_available", lambda: False):
+
+        with unittest.mock.patch(
+            "transformers.models.fastconformer.feature_extraction_fastconformer.is_torch_available", lambda: False
+        ):
             with self.assertRaises(ImportError):
                 feat_extract = FastConformerFeatureExtractor()
                 audio = [[1, 2, 3, 4, 5]]
@@ -413,4 +413,4 @@ class FastConformerFeatureExtractionTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main() 
+    unittest.main()

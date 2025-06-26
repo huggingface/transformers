@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -34,8 +34,8 @@ class FastConformerConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 1024):
-            Vocabulary size of the FastConformer model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`FastConformerModel`].
+            Vocabulary size of the FastConformer model. Note: This parameter is not used in the FastConformer 
+            audio encoder but is required for HuggingFace framework compatibility.
         d_model (`int`, *optional*, defaults to 1024):
             Dimension of the layers and the hidden states.
         encoder_layers (`int`, *optional*, defaults to 24):
@@ -68,14 +68,29 @@ class FastConformerConfig(PretrainedConfig):
             Whether to use bias in the linear layers.
         num_mel_bins (`int`, *optional*, defaults to 128):
             Number of mel features
+        xscaling (`bool`, *optional*, defaults to `False`):
+            Whether to apply input scaling to the model inputs.
+        dropout_emb (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for embedding layers.
+        pad_token_id (`int`, *optional*, defaults to 0):
+            The id of the padding token.
+        bos_token_id (`int`, *optional*, defaults to 1):
+            The id of the beginning-of-sequence token.
+        eos_token_id (`int`, *optional*, defaults to 2):
+            The id of the end-of-sequence token.
     """
+
     model_type = "fastconformer"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model", "num_hidden_layers": "encoder_layers"}
+    attribute_map = {
+        "num_attention_heads": "encoder_attention_heads",
+        "hidden_size": "d_model",
+        "num_hidden_layers": "encoder_layers",
+    }
 
     def __init__(
         self,
-        vocab_size=1024,
+        vocab_size=1024,  # Not used for audio models, but required by HF framework
         d_model=1024,
         encoder_layers=24,
         encoder_attention_heads=8,
@@ -98,7 +113,7 @@ class FastConformerConfig(PretrainedConfig):
         eos_token_id=2,
         **kwargs,
     ):
-        self.vocab_size = vocab_size
+        self.vocab_size = vocab_size  # Not used but required by HF framework
         self.d_model = d_model
         self.encoder_layers = encoder_layers
         self.encoder_attention_heads = encoder_attention_heads
@@ -122,4 +137,7 @@ class FastConformerConfig(PretrainedConfig):
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             **kwargs,
-        ) 
+        )
+
+
+__all__ = ["FastConformerConfig"]
