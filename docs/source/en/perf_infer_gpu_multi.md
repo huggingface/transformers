@@ -247,6 +247,7 @@ The example below shows how to implement `ColwiseParallel` with this workflow.
         ...
     }
     model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, tp_plan=tp_plan)
+    ```
 
 ## Benchmarks
 
