@@ -16,6 +16,7 @@ import argparse
 import gc
 import json
 import os
+from pathlib import Path
 from typing import List, Optional
 
 import regex as re
@@ -85,7 +86,18 @@ def write_model(
     eos_token_id = 199999 if not instruct else [199999, 200018]
     pad_token_id = 128004
 
-    config = OpenAIMoeConfig()
+    original_config = json.loads((Path(input_base_path) / "config.json").read_text())
+
+    num_local_experts = original_config.pop("num_experts")
+    rope_scaling = {
+        "beta_fast": float(original_config.pop("rope_ntk_beta")),
+        "beta_slow": float(original_config.pop("rope_ntk_alpha")),
+        "factor": float(original_config.pop('rope_scaling_factor')),
+        "rope_type": "yarn",
+        "truncate": False
+      }
+
+    config = OpenAIMoeConfig(num_local_experts=num_local_experts, rope_scaling=rope_scaling, **original_config)
 
     print(f"Fetching all parameters from the checkpoint at {input_base_path}...")
     final_ = {}
