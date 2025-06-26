@@ -2,17 +2,13 @@
 
 ## Overview
 
-The FastConformer model was proposed in [Fast Conformer with Linearly Scalable Attention for Efficient Speech Recognition](https://arxiv.org/abs/2305.05084) by Jiayu DU, Xinyuan Zhou, Lirong Dai. FastConformer is an optimized version of the Conformer architecture for automatic speech recognition (ASR) that reduces computational complexity while maintaining high accuracy.
+The FastConformer model was proposed in [Fast Conformer with Linearly Scalable Attention for Efficient Speech Recognition](https://arxiv.org/abs/2305.05084). FastConformer is an optimized version of the Conformer architecture for automatic speech recognition (ASR) that reduces computational complexity while maintaining high accuracy. FastConformer, replaces the quadratic self-attention with a linearly scalable attention mechanism while preserving the modeling capability of Conformer. Specifically, it applies 8x downsampling, depth-wise seperable convolutions and optionally limit attention context for improved memory efficiency. The proposed FastConformer achieves comparable recognition accuracy with significantly reduced computational costs, making it practical for deployment in resource-constrained environments.*
 
-The abstract from the paper is the following:
-
-*The recently proposed Conformer has become the de facto standard architecture for speech recognition. However, the quadratic complexity of its self-attention mechanism limits its scalability for long sequences. In this work, we propose FastConformer, which replaces the quadratic self-attention with a linearly scalable attention mechanism while preserving the modeling capability of Conformer. Specifically, we apply structured pruning to the attention heads and leverage efficient attention mechanisms. The proposed FastConformer achieves comparable recognition accuracy with significantly reduced computational costs, making it practical for deployment in resource-constrained environments.*
-
-This model was contributed by [HuggingFace](https://huggingface.co/). The original implementation can be found in [NVIDIA NeMo](https://github.com/NVIDIA/NeMo).
+The original implementation can be found in [NVIDIA NeMo](https://github.com/NVIDIA/NeMo).
 
 ## Usage
 
-FastConformer is primarily designed for automatic speech recognition tasks. The model processes mel-spectrogram features extracted from raw audio and produces contextualized representations suitable for downstream ASR tasks.
+FastConformer is primarily designed for automatic speech recognition tasks. The model processes mel-spectrogram features extracted from raw audio and produces contextualized representations suitable for downstream ASR tasks. Here you can load all parakeet, canary based models encoder for getting outputs from fastconformer encoder. Full pipeline will be added seperately for Parakeet and Canary models with their respective decoders. 
 
 ### Basic usage
 
@@ -21,8 +17,8 @@ import torch
 from transformers import AutoModel, AutoFeatureExtractor
 
 # Load model and feature extractor
-model = AutoModel.from_pretrained("nvidia/parakeet-tdt-0.6b-v2-hf")
-feature_extractor = AutoFeatureExtractor.from_pretrained("nvidia/parakeet-tdt-0.6b-v2-hf")
+model = AutoModel.from_pretrained("nvidia/parakeet-tdt-0.6b-v2") #also works with other parakeet and Canary models
+feature_extractor = AutoFeatureExtractor.from_pretrained("nvidia/parakeet-tdt-0.6b-v2") #also works with other parakeet and Canary models
 
 # Prepare audio input (example with random data)
 # In practice, you would load real audio data
@@ -54,8 +50,8 @@ encoder_hidden_states = outputs.last_hidden_state
 import torch
 from transformers import AutoModel, AutoFeatureExtractor
 
-model = AutoModel.from_pretrained("nvidia/parakeet-tdt-0.6b-v2-hf")
-feature_extractor = AutoFeatureExtractor.from_pretrained("nvidia/parakeet-tdt-0.6b-v2-hf")
+model = AutoModel.from_pretrained("nvidia/parakeet-tdt-0.6b-v2") # also works with other parakeet and Canary models
+feature_extractor = AutoFeatureExtractor.from_pretrained("nvidia/parakeet-tdt-0.6b-v2")
 
 # Example with two audio samples of different lengths
 audio1 = torch.randn(8000)   # 0.5 seconds
