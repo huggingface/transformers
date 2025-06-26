@@ -971,14 +971,9 @@ def check_model_inputs(func):
         bound.apply_defaults()
         all_args = bound.arguments
 
-        # Extract input_ids and inputs_embeds more robustly
-        input_ids = all_args.get("input_ids", None)
-        inputs_embeds = all_args.get("inputs_embeds", None)
-        # TODO check the inputs ids vs input embeds.
-        # probably a key string saying which input are not compatible with each other
+        # TODO @Lysandre add the head we have today about GC and training
+        # and all of the rest that is general transformers checking
 
-        use_cache = kwargs["use_cache"]
-        past_key_values = kwargs.get("past_key_values", None)
         hooks = []
         collected_outputs = {}
 
@@ -996,7 +991,7 @@ def check_model_inputs(func):
                 layer,
             ) in self.named_modules():  # pretty sure we gotta attache the hooks to an instance and not a class
                 for key, (cls, idx) in self._can_record_outputs.items():
-                    if capture_flags.get(key, False) and isinstance(layer, cls):
+                    if capture_flags.get(key, getattr(self.config, key, False)) and isinstance(layer, cls):
                         hook_fn = make_capture_fn(key, idx)
                         hooks.append(register_hook_if_needed(layer, hook_fn))
 
@@ -1005,17 +1000,8 @@ def check_model_inputs(func):
             if h is not None:
                 h.remove()
 
-        # Insert collected outputs
         for key in collected_outputs:
-            # Optional: append a final model-level output like `last_hidden_state` for hidden_states
-            # if needed. You can customize this as per key semantics.
-            outputs[key] = tuple(collected_outputs[key]) if collected_outputs[key] else None
-
-        # Fill missing keys with None if not using return_dict
-        if return_dict is False:
-            for key in recordable_keys:
-                if key not in outputs:
-                    outputs[key] = None
+            outputs[key] = collected_outputs[key]
 
         if return_dict is False:
             outputs = outputs.to_tuple()
