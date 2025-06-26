@@ -411,7 +411,7 @@ class EvollaDecoderLayer(LlamaDecoderLayer):
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
-        if hasattr(self, "adapter") and self.adapter is not None:
+        if hasattr(self, "adapter"):
             hidden_states = self.adapter(
                 query_states=hidden_states,
                 protein_kv_states=protein_kv_states,
