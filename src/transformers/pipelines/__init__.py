@@ -1016,7 +1016,7 @@ def pipeline(
     load_image_processor = pipeline_class._load_image_processor
     load_processor = pipeline_class._load_processor
 
-    if tokenizer is None and (load_tokenizer or load_tokenizer is None):
+    if load_tokenizer or load_tokenizer is None:
         try:
             # Try to infer tokenizer from model or config name (if provided as str)
             if tokenizer is None:
@@ -1052,7 +1052,7 @@ def pipeline(
             else:
                 tokenizer = None
 
-    if image_processor is None and (load_image_processor or load_image_processor is None):
+    if load_image_processor or load_image_processor is None:
         try:
             # Try to infer image processor from model or config name (if provided as str)
             if image_processor is None:
@@ -1083,7 +1083,7 @@ def pipeline(
             else:
                 image_processor = None
 
-    if feature_extractor is None and (load_feature_extractor or load_feature_extractor is None):
+    if load_feature_extractor or load_feature_extractor is None:
         try:
             # Try to infer feature extractor from model or config name (if provided as str)
             if feature_extractor is None:
@@ -1140,7 +1140,7 @@ def pipeline(
             else:
                 feature_extractor = None
 
-    if processor is None and (load_processor or load_processor is None):
+    if load_processor or load_processor is None:
         try:
             # Try to infer processor from model or config name (if provided as str)
             if processor is None:
