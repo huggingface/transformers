@@ -95,7 +95,7 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
         padding_value=0.0,
         return_attention_mask=True,
         **kwargs,
-        ):
+    ):
         requires_backends(self, ["librosa"])
 
         super().__init__(
