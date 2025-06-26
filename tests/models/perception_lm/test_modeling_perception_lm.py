@@ -106,12 +106,8 @@ class PerceptionLMVisionText2TextModelTester:
         self.num_frames = 1
         self.num_channels = 3
         self.image_size = self.vision_config["model_args"]["img_size"][0]
-        self.num_image_tokens = (
-            self.vision_config["model_args"]["img_size"][0] // 14
-        ) ** 2
-        self.num_video_tokens = (
-            self.vision_config["model_args"]["img_size"][0] // 14
-        ) ** 2
+        self.num_image_tokens = (self.vision_config["model_args"]["img_size"][0] // 14) ** 2
+        self.num_video_tokens = (self.vision_config["model_args"]["img_size"][0] // 14) ** 2
         self.seq_length = seq_length + self.num_image_tokens
         self.encoder_seq_length = self.seq_length
 
@@ -150,19 +146,12 @@ class PerceptionLMVisionText2TextModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config, pixel_values, pixel_values_videos = self.prepare_config_and_inputs()
-        input_ids = (
-            ids_tensor(
-                [self.batch_size, self.seq_length], config.text_config.vocab_size - 2
-            )
-            + 2
-        )
+        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 2) + 2
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
         input_ids[input_ids == config.image_token_id] = self.pad_token_id
         input_ids[input_ids == config.video_token_id] = self.pad_token_id
         input_ids[:, : self.num_image_tokens] = config.image_token_id
-        input_ids[
-            :, self.num_image_tokens : self.num_video_tokens + self.num_image_tokens
-        ] = config.video_token_id
+        input_ids[:, self.num_image_tokens : self.num_video_tokens + self.num_image_tokens] = config.video_token_id
 
         inputs_dict = {
             "pixel_values": pixel_values,
@@ -174,9 +163,7 @@ class PerceptionLMVisionText2TextModelTester:
 
 
 @require_torch
-class PerceptionLMForConditionalGenerationModelTest(
-    ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
-):
+class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
     Model tester for `PerceptionLMForConditionalGeneration`.
     """
@@ -286,54 +273,26 @@ class PerceptionLMForConditionalGenerationModelTest(
             _ = model(input_ids=input_ids, pixel_values=pixel_values)
 
     def test_training(self):
-        self.all_model_classes = (
-            (
-                PerceptionLMForConditionalGeneration,
-            )
-            if is_torch_available()
-            else ()
-        )
+        self.all_model_classes = (PerceptionLMForConditionalGeneration,) if is_torch_available() else ()
         super().test_training()
 
     def test_training_gradient_checkpointing(self):
-        self.all_model_classes = (
-            (
-                PerceptionLMForConditionalGeneration,
-            )
-            if is_torch_available()
-            else ()
-        )
+        self.all_model_classes = (PerceptionLMForConditionalGeneration,) if is_torch_available() else ()
         super().test_training_gradient_checkpointing()
 
     def test_training_gradient_checkpointing_use_reentrant(self):
-        self.all_model_classes = (
-            (
-                PerceptionLMForConditionalGeneration,
-            )
-            if is_torch_available()
-            else ()
-        )
+        self.all_model_classes = (PerceptionLMForConditionalGeneration,) if is_torch_available() else ()
         super().test_training_gradient_checkpointing_use_reentrant()
 
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        self.all_model_classes = (
-            (
-                PerceptionLMForConditionalGeneration,
-            )
-            if is_torch_available()
-            else ()
-        )
+        self.all_model_classes = (PerceptionLMForConditionalGeneration,) if is_torch_available() else ()
         super().test_training_gradient_checkpointing_use_reentrant_false()
 
-    @unittest.skip(
-        reason="Timm Eva (PE) weights cannot be fully constructed in _init_weights"
-    )
+    @unittest.skip(reason="Timm Eva (PE) weights cannot be fully constructed in _init_weights")
     def test_can_init_all_missing_weights(self):
         pass
 
-    @unittest.skip(
-        reason="Timm Eva (PE) weights cannot be fully constructed in _init_weights"
-    )
+    @unittest.skip(reason="Timm Eva (PE) weights cannot be fully constructed in _init_weights")
     def test_initialization(self):
         pass
 
@@ -357,21 +316,15 @@ class PerceptionLMForConditionalGenerationModelTest(
     def test_can_load_with_meta_device_context_manager(self):
         pass
 
-    @unittest.skip(
-        "Specifying both inputs_embeds and pixel_values are not supported for PerceptionLM"
-    )
+    @unittest.skip("Specifying both inputs_embeds and pixel_values are not supported for PerceptionLM")
     def test_generate_from_inputs_embeds_0_greedy(self):
         pass
 
-    @unittest.skip(
-        "Specifying both inputs_embeds and pixel_values are not supported for PerceptionLM"
-    )
+    @unittest.skip("Specifying both inputs_embeds and pixel_values are not supported for PerceptionLM")
     def test_generate_from_inputs_embeds_1_beam_search(self):
         pass
 
-    @unittest.skip(
-        "Specifying both inputs_embeds and pixel_values are not supported for PerceptionLM"
-    )
+    @unittest.skip("Specifying both inputs_embeds and pixel_values are not supported for PerceptionLM")
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
@@ -444,18 +397,14 @@ class PerceptionLMForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = "The bar plot displays the values of four categories: step, horror, mood, and lumber"  # fmt: skip
 
         self.assertEqual(
-            self.processor.decode(
-                generate_ids_without_inputs[0], skip_special_tokens=True
-            ),
+            self.processor.decode(generate_ids_without_inputs[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
 
     @slow
     @require_bitsandbytes
     def test_small_model_integration_test_batched(self):
-        model = PerceptionLMForConditionalGeneration.from_pretrained(
-            TEST_MODEL_PATH, load_in_4bit=True
-        )
+        model = PerceptionLMForConditionalGeneration.from_pretrained(TEST_MODEL_PATH, load_in_4bit=True)
         processor = AutoProcessor.from_pretrained(TEST_MODEL_PATH)
         inputs = processor.apply_chat_template(
             [self.conversation1, self.conversation2],
@@ -476,9 +425,7 @@ class PerceptionLMForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = ['The bar plot displays the values of four categories: step, horror, mood, and lumber', 'The video shows a group of people in green shirts and white shorts performing a jump rope routine']  # fmt: skip
 
         self.assertEqual(
-            processor.batch_decode(
-                generate_ids_without_inputs, skip_special_tokens=True
-            ),
+            processor.batch_decode(generate_ids_without_inputs, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
 
@@ -486,9 +433,7 @@ class PerceptionLMForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_generation_no_images(self):
         # model_id = "facebook/Perception-LM-1B"
-        model = PerceptionLMForConditionalGeneration.from_pretrained(
-            TEST_MODEL_PATH, load_in_4bit=True
-        )
+        model = PerceptionLMForConditionalGeneration.from_pretrained(TEST_MODEL_PATH, load_in_4bit=True)
         processor = AutoProcessor.from_pretrained(TEST_MODEL_PATH)
 
         # Prepare inputs with no images
