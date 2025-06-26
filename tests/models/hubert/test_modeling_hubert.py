@@ -370,6 +370,9 @@ class HubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config.output_hidden_states = True
         config.output_attentions = True
 
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+
         # no need to test all models as different heads yield the same functionality
         model_class = self.all_model_classes[0]
         model = model_class(config)
@@ -632,6 +635,9 @@ class HubertRobustModelTest(ModelTesterMixin, unittest.TestCase):
         config.output_hidden_states = True
         config.output_attentions = True
 
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+
         # no need to test all models as different heads yield the same functionality
         model_class = self.all_model_classes[0]
         model = model_class(config)
@@ -761,7 +767,7 @@ class HubertModelIntegrationTest(unittest.TestCase):
     def _load_superb(self, task, num_samples):
         from datasets import load_dataset
 
-        ds = load_dataset("anton-l/superb_dummy", task, split="test", trust_remote_code=True)
+        ds = load_dataset("anton-l/superb_dummy", task, split="test")
 
         return ds[:num_samples]
 

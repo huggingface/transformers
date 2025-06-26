@@ -167,7 +167,7 @@ def _replace_with_fbgemm_fp8_linear(
     """
     Private method that wraps the recursion for module replacement.
 
-    Returns the converted model and a boolean that indicates if the conversion has been successfull or not.
+    Returns the converted model and a boolean that indicates if the conversion has been successful or not.
     """
 
     import re
@@ -196,7 +196,7 @@ def _replace_with_fbgemm_fp8_linear(
 
                     # Force requires grad to False to avoid unexpected errors
                     model._modules[name].requires_grad_(False)
-                # set non persistant buffer outside of init_empty_weights
+                # set non persistent buffer outside of init_empty_weights
                 model._modules[name].input_scale_ub = torch.tensor(
                     [quantization_config.activation_scale_ub],
                     dtype=torch.float,
@@ -251,10 +251,10 @@ def replace_with_fbgemm_fp8_linear(
     Parameters:
         model (`torch.nn.Module`):
             Input model or `torch.nn.Module` as the function is run recursively.
-        modules_to_not_convert (`List[`str`]`, *optional*, defaults to `["lm_head"]`):
+        modules_to_not_convert (`list[`str`]`, *optional*, defaults to `["lm_head"]`):
             Names of the modules to not convert in `FP8Linear`. In practice we keep the `lm_head` in full precision
             for numerical stability reasons.
-        current_key_name (`List[`str`]`, *optional*):
+        current_key_name (`list[`str`]`, *optional*):
             An array to track the current key of the recursion. This is used to check whether the current key (part of
             it) is not in the list of modules to not convert (for instances modules that are offloaded to `cpu` or
             `disk`).

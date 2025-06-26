@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import contextlib
-import warnings
 from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Optional, Union
@@ -129,15 +128,10 @@ class Seq2SeqTrainer(Trainer):
         # Strict validation to fail early. `GenerationConfig.save_pretrained()`, run at the end of training, throws
         # an exception if there are warnings at validation time.
         try:
-            with warnings.catch_warnings(record=True) as caught_warnings:
-                gen_config.validate()
-            if len(caught_warnings) > 0:
-                raise ValueError(str([w.message for w in caught_warnings]))
+            gen_config.validate(strict=True)
         except ValueError as exc:
-            raise ValueError(
-                "The loaded generation config instance is invalid -- `GenerationConfig.validate()` throws warnings "
-                "and/or exceptions. Fix these issues to train your model.\n\nThrown during validation:\n" + str(exc)
-            )
+            raise ValueError(str(exc) + "\n\nFix these issues to train your model.")
+
         return gen_config
 
     def evaluate(
@@ -160,7 +154,7 @@ class Seq2SeqTrainer(Trainer):
                 Pass a dataset if you wish to override `self.eval_dataset`. If it is an [`~datasets.Dataset`], columns
                 not accepted by the `model.forward()` method are automatically removed. It must implement the `__len__`
                 method.
-            ignore_keys (`List[str]`, *optional*):
+            ignore_keys (`list[str]`, *optional*):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions.
             metric_key_prefix (`str`, *optional*, defaults to `"eval"`):
@@ -213,7 +207,7 @@ class Seq2SeqTrainer(Trainer):
             test_dataset (`Dataset`):
                 Dataset to run the predictions on. If it is a [`~datasets.Dataset`], columns not accepted by the
                 `model.forward()` method are automatically removed. Has to implement the method `__len__`
-            ignore_keys (`List[str]`, *optional*):
+            ignore_keys (`list[str]`, *optional*):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions.
             metric_key_prefix (`str`, *optional*, defaults to `"eval"`):
@@ -239,7 +233,7 @@ class Seq2SeqTrainer(Trainer):
 
             - predictions (`np.ndarray`): The predictions on `test_dataset`.
             - label_ids (`np.ndarray`, *optional*): The labels (if the dataset contained some).
-            - metrics (`Dict[str, float]`, *optional*): The potential dictionary of metrics (if the dataset contained
+            - metrics (`dict[str, float]`, *optional*): The potential dictionary of metrics (if the dataset contained
               labels).
         """
 
@@ -276,7 +270,7 @@ class Seq2SeqTrainer(Trainer):
         Args:
             model (`nn.Module`):
                 The model to evaluate.
-            inputs (`Dict[str, Union[torch.Tensor, Any]]`):
+            inputs (`dict[str, Union[torch.Tensor, Any]]`):
                 The inputs and targets of the model.
 
                 The dictionary will be unpacked before being fed to the model. Most models expect the targets under the
@@ -287,7 +281,7 @@ class Seq2SeqTrainer(Trainer):
                 Additional `generate` specific kwargs.
 
         Return:
-            Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]: A tuple with the loss, logits and
+            tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]: A tuple with the loss, logits and
             labels (each being optional).
         """
 

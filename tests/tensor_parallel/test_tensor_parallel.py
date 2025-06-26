@@ -12,15 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import subprocess
 import tempfile
 import textwrap
 
 from transformers import is_torch_available
+from transformers.integrations.tensor_parallel import get_packed_weights, repack_weights
 from transformers.testing_utils import (
     TestCasePlus,
+    backend_device_count,
     get_torch_dist_unique_port,
+    require_huggingface_hub_greater_or_equal,
     require_torch_multi_gpu,
+    torch_device,
 )
 
 
@@ -28,19 +33,51 @@ if is_torch_available():
     import torch
 
 
+class TestTensorParallelUtils(TestCasePlus):
+    def test_packed_unpacked_conversion(self):
+        WORLD_SIZE = 2
+        PACKED_BLOCK_SIZE = 800
+        SHARDING_DIM = 2
+        NUM_BLOCKS = 2
+
+        original_packed_weights = torch.randn(4, 512, 2 * PACKED_BLOCK_SIZE)
+        original_packed_weights.get_dtype = lambda: "F32"  # get_packed_weights expects PySlice object
+        empty_param = torch.empty(4, 512, 2 * PACKED_BLOCK_SIZE)
+
+        class MockDeviceMesh:
+            def size(self):
+                return WORLD_SIZE
+
+        mock_mesh = (
+            MockDeviceMesh()
+        )  # get_packed_weights only calls `.size()`, do this to avoid doing actual distributed run
+
+        packed_weights_0 = get_packed_weights(original_packed_weights, empty_param, mock_mesh, 0, SHARDING_DIM)
+        packed_weights_1 = get_packed_weights(original_packed_weights, empty_param, mock_mesh, 1, SHARDING_DIM)
+
+        # simulate all gather of sharded weights
+        packed_weights = torch.cat([packed_weights_0, packed_weights_1], dim=SHARDING_DIM)
+        unpacked_weights = repack_weights(packed_weights, SHARDING_DIM, WORLD_SIZE, NUM_BLOCKS)
+
+        assert torch.allclose(unpacked_weights, original_packed_weights)
+
+
 # RUN_SLOW=1 pytest -sv tests/tensor_parallel/test_tensor_parallel.py
 class TestTensorParallel(TestCasePlus):
     nproc_per_node = 2
 
-    def torchrun(self, script: str):
+    def torchrun(self, script: str, is_torchrun: bool = True):
         """Run the `script` using `torchrun` command for multi-processing in a subprocess. Captures errors as necessary."""
         with tempfile.NamedTemporaryFile(mode="w+", suffix=".py") as tmp:
             tmp.write(script)
             tmp.flush()
             tmp.seek(0)
-            cmd = (
-                f"torchrun --nproc_per_node {self.nproc_per_node} --master_port {get_torch_dist_unique_port()} {tmp.name}"
-            ).split()
+            if is_torchrun:
+                cmd = (
+                    f"torchrun --nproc_per_node {self.nproc_per_node} --master_port {get_torch_dist_unique_port()} {tmp.name}"
+                ).split()
+            else:
+                cmd = ["python3", tmp.name]
 
             # Note that the subprocess will be waited for here, and raise an error if not successful
             try:
@@ -88,7 +125,49 @@ class TestTensorParallel(TestCasePlus):
         )
         self.torchrun(script_to_run)
 
+    @require_huggingface_hub_greater_or_equal("0.31.4")
+    def test_model_save(self):
+        from safetensors import safe_open
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            for is_torchrun in [True, False]:
+                script_to_run = textwrap.dedent(
+                    f"""
+                    import torch
+                    import os
+                    from transformers import AutoModelForCausalLM
+
+                    model_id = "JackFram/llama-68m"
+                    kwargs = dict()
+
+                    if os.environ.get("RANK", None) is not None:
+                        kwargs["tp_plan"] = "auto"
+                        result_dir = "{tmp_dir}/tp"
+                    else:
+                        result_dir = "{tmp_dir}/nontp"
+
+                    model = AutoModelForCausalLM.from_pretrained(model_id, **kwargs)
+                    model.save_pretrained(result_dir)
+                    """
+                )
+                self.torchrun(script_to_run, is_torchrun=is_torchrun)
+
+            non_tp_model_path = os.path.join(tmp_dir, "nontp")
+            tp_model_path = os.path.join(tmp_dir, "tp")
+
+            for filename in os.listdir(non_tp_model_path):
+                if not filename.endswith(".safetensors"):
+                    continue
+
+                non_tp_model = safe_open(os.path.join(non_tp_model_path, filename), device="cpu", framework="pt")
+                tp_model = safe_open(os.path.join(tp_model_path, filename), device="cpu", framework="pt")
+                for non_tp_key in non_tp_model.keys():
+                    non_tp_tensor = non_tp_model.get_tensor(non_tp_key)
+                    tp_tensor = tp_model.get_tensor(non_tp_key)
+                    assert torch.allclose(non_tp_tensor, tp_tensor), f"Tensor with key: {non_tp_key} does not match"
+                    del non_tp_tensor, tp_tensor
+
 
 @require_torch_multi_gpu
 class TestTensorParallelCuda(TestTensorParallel):
-    nproc_per_node = torch.cuda.device_count()
+    nproc_per_node = backend_device_count(torch_device)

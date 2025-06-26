@@ -27,29 +27,11 @@ from ...modeling_outputs import (
     SemanticSegmenterOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import auto_docstring, logging
 from .configuration_mobilenet_v2 import MobileNetV2Config
 
 
 logger = logging.get_logger(__name__)
-
-
-# General docstring
-_CONFIG_FOR_DOC = "MobileNetV2Config"
-
-# Base docstring
-_CHECKPOINT_FOR_DOC = "google/mobilenet_v2_1.0_224"
-_EXPECTED_OUTPUT_SHAPE = [1, 1280, 7, 7]
-
-# Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "google/mobilenet_v2_1.0_224"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 def _build_tf_to_pytorch_map(model, config, tf_weights=None):
@@ -438,12 +420,8 @@ class MobileNetV2Stem(nn.Module):
         return features
 
 
+@auto_docstring
 class MobileNetV2PreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = MobileNetV2Config
     load_tf_weights = load_tf_weights_in_mobilenet_v2
     base_model_prefix = "mobilenet_v2"
@@ -462,36 +440,13 @@ class MobileNetV2PreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-MOBILENET_V2_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`MobileNetV2Config`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-MOBILENET_V2_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`MobileNetV2ImageProcessor.__call__`] for details.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare MobileNetV2 model outputting raw hidden-states without any specific head on top.",
-    MOBILENET_V2_START_DOCSTRING,
-)
+@auto_docstring
 class MobileNetV2Model(MobileNetV2PreTrainedModel):
     def __init__(self, config: MobileNetV2Config, add_pooling_layer: bool = True):
+        r"""
+        add_pooling_layer (bool, *optional*, defaults to `True`):
+            Whether to add a pooling layer
+        """
         super().__init__(config)
         self.config = config
 
@@ -554,14 +509,7 @@ class MobileNetV2Model(MobileNetV2PreTrainedModel):
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError
 
-    @add_start_docstrings_to_model_forward(MOBILENET_V2_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPoolingAndNoAttention,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -603,12 +551,11 @@ class MobileNetV2Model(MobileNetV2PreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     MobileNetV2 model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
     ImageNet.
-    """,
-    MOBILENET_V2_START_DOCSTRING,
+    """
 )
 class MobileNetV2ForImageClassification(MobileNetV2PreTrainedModel):
     def __init__(self, config: MobileNetV2Config) -> None:
@@ -626,13 +573,7 @@ class MobileNetV2ForImageClassification(MobileNetV2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(MOBILENET_V2_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=ImageClassifierOutputWithNoAttention,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -691,7 +632,7 @@ class MobileNetV2ForImageClassification(MobileNetV2PreTrainedModel):
 class MobileNetV2DeepLabV3Plus(nn.Module):
     """
     The neural network from the paper "Encoder-Decoder with Atrous Separable Convolution for Semantic Image
-    Segmentation" https://arxiv.org/abs/1802.02611
+    Segmentation" https://huggingface.co/papers/1802.02611
     """
 
     def __init__(self, config: MobileNetV2Config) -> None:
@@ -763,11 +704,10 @@ class MobileNetV2DeepLabV3Plus(nn.Module):
         return features
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     MobileNetV2 model with a semantic segmentation head on top, e.g. for Pascal VOC.
-    """,
-    MOBILENET_V2_START_DOCSTRING,
+    """
 )
 class MobileNetV2ForSemanticSegmentation(MobileNetV2PreTrainedModel):
     def __init__(self, config: MobileNetV2Config) -> None:
@@ -780,8 +720,7 @@ class MobileNetV2ForSemanticSegmentation(MobileNetV2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(MOBILENET_V2_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SemanticSegmenterOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -793,8 +732,6 @@ class MobileNetV2ForSemanticSegmentation(MobileNetV2PreTrainedModel):
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
-
-        Returns:
 
         Examples:
 

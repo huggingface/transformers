@@ -34,7 +34,7 @@ class Emu3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
-        image_processor = Emu3ImageProcessor()
+        image_processor = Emu3ImageProcessor(min_pixels=28 * 28, max_pixels=56 * 56)
         extra_special_tokens = extra_special_tokens = {
             "image_token": "<image>",
             "boi_token": "<|image start|>",
@@ -51,8 +51,10 @@ class Emu3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             image_processor=image_processor, tokenizer=tokenizer, chat_template="dummy_template"
         )
         processor.save_pretrained(cls.tmpdirname)
+        cls.image_token = processor.image_token
 
-    def prepare_processor_dict(self):
+    @staticmethod
+    def prepare_processor_dict():
         return {
             "chat_template": "{% for message in messages %}{% if message['role'] != 'system' %}{{ message['role'].upper() + ': '}}{% endif %}{# Render all images first #}{% for content in message['content'] | selectattr('type', 'equalto', 'image') %}{{ '<image>' }}{% endfor %}{# Render all text next #}{% if message['role'] != 'assistant' %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{{ content['text'] + ' '}}{% endfor %}{% else %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{% generation %}{{ content['text'] + ' '}}{% endgeneration %}{% endfor %}{% endif %}{% endfor %}{% if add_generation_prompt %}{{ 'ASSISTANT:' }}{% endif %}",
         }  # fmt: skip

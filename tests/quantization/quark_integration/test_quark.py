@@ -11,18 +11,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import unittest
 
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, GenerationConfig, QuarkConfig
 from transformers.testing_utils import (
+    cleanup,
     is_torch_available,
     require_accelerate,
     require_quark,
-    require_read_token,
     require_torch_gpu,
     require_torch_multi_gpu,
     slow,
+    torch_device,
 )
 from transformers.utils.import_utils import is_quark_available
 
@@ -34,6 +34,7 @@ if is_quark_available():
     from quark.torch.export.nn.modules.qparamslinear import QParamsLinear
 
 
+@require_quark
 class QuarkConfigTest(unittest.TestCase):
     def test_commmon_args(self):
         config = AutoConfig.from_pretrained("amd/Llama-3.1-8B-Instruct-w-int8-a-int8-sym-test")
@@ -44,7 +45,7 @@ class QuarkConfigTest(unittest.TestCase):
 @require_quark
 @require_torch_gpu
 class QuarkTest(unittest.TestCase):
-    reference_model_name = "meta-llama/Llama-3.1-8B-Instruct"
+    reference_model_name = "unsloth/Meta-Llama-3.1-8B-Instruct"
     quantized_model_name = "amd/Llama-3.1-8B-Instruct-w-int8-a-int8-sym-test"
 
     input_text = "Today I am in Paris and"
@@ -53,6 +54,8 @@ class QuarkTest(unittest.TestCase):
     EXPECTED_OUTPUTS.add("Today I am in Paris and I am not in Paris, France\nToday I am in Paris, Illinois")
     EXPECTED_OUTPUTS.add("Today I am in Paris and I am enjoying the city of light. I am not just any ordinary Paris")
     EXPECTED_OUTPUTS.add("Today I am in Paris and I am enjoying my day off! The sun is shining, the birds are")
+    EXPECTED_OUTPUTS.add("Today I am in Paris and I'm here to tell you about it. It's a beautiful day,")
+    EXPECTED_OUTPUTS.add("Today I am in Paris and I am not in Paris at all! I am not in Paris, but")
 
     EXPECTED_RELATIVE_DIFFERENCE = 1.66
     device_map = None
@@ -75,13 +78,18 @@ class QuarkTest(unittest.TestCase):
             device_map=cls.device_map,
         )
 
-    @require_read_token
+    def tearDown(self):
+        r"""
+        TearDown function needs to be called at the end of each test to free the accelerator memory and cache, also to
+        avoid unexpected behaviors. Please see: https://discuss.pytorch.org/t/how-can-we-release-gpu-memory-cache/14530/27
+        """
+        cleanup(torch_device, gc_collect=True)
+
     def test_memory_footprint(self):
         mem_quantized = self.quantized_model.get_memory_footprint()
 
         self.assertTrue(self.mem_fp16 / mem_quantized > self.EXPECTED_RELATIVE_DIFFERENCE)
 
-    @require_read_token
     def test_device_and_dtype_assignment(self):
         r"""
         Test whether trying to cast (or assigning a device to) a model after quantization will throw an error.
@@ -95,10 +103,9 @@ class QuarkTest(unittest.TestCase):
             # Tries with a `dtype``
             self.quantized_model.to(torch.float16)
 
-    @require_read_token
     def test_original_dtype(self):
         r"""
-        A simple test to check if the model succesfully stores the original dtype
+        A simple test to check if the model successfully stores the original dtype
         """
         self.assertTrue(hasattr(self.quantized_model.config, "_pre_quantization_dtype"))
         self.assertFalse(hasattr(self.model_fp16.config, "_pre_quantization_dtype"))
@@ -106,7 +113,6 @@ class QuarkTest(unittest.TestCase):
 
         self.assertTrue(isinstance(self.quantized_model.model.layers[0].mlp.gate_proj, QParamsLinear))
 
-    @require_read_token
     def check_inference_correctness(self, model):
         r"""
         Test the generation quality of the quantized model and see that we are matching the expected output.
@@ -130,7 +136,6 @@ class QuarkTest(unittest.TestCase):
         # Get the generation
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
-    @require_read_token
     def test_generate_quality(self):
         """
         Simple test to check the quality of the model by comparing the generated tokens with the expected tokens

@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for Idefics."""
 
-from typing import Callable, Dict, List, Optional, Union
+from typing import Callable, Optional, Union
 
 from PIL import Image
 
@@ -55,16 +55,22 @@ class IdeficsImageProcessor(BaseImageProcessor):
     Args:
         image_size (`int`, *optional*, defaults to 224):
             Resize to image size
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IDEFICS_STANDARD_MEAN`):
+        image_mean (`float` or `list[float]`, *optional*, defaults to `IDEFICS_STANDARD_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method. Can be
             overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IDEFICS_STANDARD_STD`):
+        image_std (`float` or `list[float]`, *optional*, defaults to `IDEFICS_STANDARD_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
         image_num_channels (`int`, *optional*, defaults to 3):
             Number of image channels.
+        do_rescale (`bool`, *optional*, defaults to `True`):
+            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by `do_rescale` in
+            the `preprocess` method.
+        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
+            Scale factor to use if rescaling the image. Can be overridden by `rescale_factor` in the `preprocess`
+            method.
     """
 
     model_input_names = ["pixel_values"]
@@ -72,26 +78,32 @@ class IdeficsImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         image_size: int = 224,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         image_num_channels: Optional[int] = 3,
+        do_rescale: bool = True,
+        rescale_factor: Union[int, float] = 1 / 255,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
 
         self.image_size = image_size
         self.image_num_channels = image_num_channels
-        self.image_mean = image_mean
-        self.image_std = image_std
+        self.image_mean = image_mean if image_mean is not None else IDEFICS_STANDARD_MEAN
+        self.image_std = image_std if image_std is not None else IDEFICS_STANDARD_STD
+        self.do_rescale = do_rescale
+        self.rescale_factor = rescale_factor
 
     def preprocess(
         self,
         images: ImageInput,
         image_num_channels: Optional[int] = 3,
-        image_size: Optional[Dict[str, int]] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        transform: Callable = None,
+        image_size: Optional[dict[str, int]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
+        transform: Optional[Callable] = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
         return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
         **kwargs,
     ) -> TensorType:
@@ -105,11 +117,11 @@ class IdeficsImageProcessor(BaseImageProcessor):
                 Resize to image size
             image_num_channels (`int`, *optional*, defaults to `self.image_num_channels`):
                 Number of image channels.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `IDEFICS_STANDARD_MEAN`):
+            image_mean (`float` or `list[float]`, *optional*, defaults to `IDEFICS_STANDARD_MEAN`):
                 Mean to use if normalizing the image. This is a float or list of floats the length of the number of
                 channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method. Can
                 be overridden by the `image_mean` parameter in the `preprocess` method.
-            image_std (`float` or `List[float]`, *optional*, defaults to `IDEFICS_STANDARD_STD`):
+            image_std (`float` or `list[float]`, *optional*, defaults to `IDEFICS_STANDARD_STD`):
                 Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
                 number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess`
                 method. Can be overridden by the `image_std` parameter in the `preprocess` method.
@@ -117,6 +129,12 @@ class IdeficsImageProcessor(BaseImageProcessor):
                 A custom transform function that accepts a single image can be passed for training. For example,
                 `torchvision.Compose` can be used to compose multiple transforms. If `None` - an inference mode is
                 assumed - and then a preset of inference-specific transforms will be applied to the images
+            do_rescale (`bool`, *optional*, defaults to `True`):
+                Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by `do_rescale` in
+                the `preprocess` method.
+            rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
+                Scale factor to use if rescaling the image. Can be overridden by `rescale_factor` in the `preprocess`
+                method.
 
         Returns:
             a PyTorch tensor of the processed images
@@ -126,6 +144,8 @@ class IdeficsImageProcessor(BaseImageProcessor):
         image_num_channels = image_num_channels if image_num_channels is not None else self.image_num_channels
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
+        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
+        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         size = (image_size, image_size)
 
         if isinstance(images, list) and len(images) == 0:
@@ -160,7 +180,7 @@ class IdeficsImageProcessor(BaseImageProcessor):
         # further transforms expect numpy arrays
         images = [to_numpy_array(x) for x in images]
         images = [resize(x, size, resample=PILImageResampling.BICUBIC) for x in images]
-        images = [self.rescale(image=image, scale=1 / 255) for image in images]
+        images = [self.rescale(image=image, scale=rescale_factor) for image in images]
         images = [self.normalize(x, mean=image_mean, std=image_std) for x in images]
         images = [to_channel_dimension_format(x, ChannelDimension.FIRST) for x in images]
         images = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)["pixel_values"]

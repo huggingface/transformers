@@ -14,17 +14,11 @@
 import shutil
 import tempfile
 import unittest
-from typing import Optional
 
 from transformers import AutoProcessor, AutoTokenizer, Qwen2AudioProcessor, WhisperFeatureExtractor
 from transformers.testing_utils import require_torch, require_torchaudio
-from transformers.utils import is_torch_available
 
 from ...test_processing_common import ProcessorTesterMixin
-
-
-if is_torch_available:
-    pass
 
 
 @require_torch
@@ -37,9 +31,9 @@ class Qwen2AudioProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.checkpoint = "Qwen/Qwen2-Audio-7B-Instruct"
         cls.tmpdirname = tempfile.mkdtemp()
 
-        processor_kwargs = cls.prepare_processor_dict()
-        processor = Qwen2AudioProcessor.from_pretrained(cls.checkpoint, **processor_kwargs)
+        processor = Qwen2AudioProcessor.from_pretrained(cls.checkpoint)
         processor.save_pretrained(cls.tmpdirname)
+        cls.audio_token = processor.audio_token
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
@@ -47,29 +41,12 @@ class Qwen2AudioProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_audio_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).audio_processor
 
+    def get_processor(self, **kwargs):
+        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
+
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
-
-    @staticmethod
-    def prepare_processor_dict():
-        return {
-            "chat_template": "{% set audio_count = namespace(value=0) %}{% for message in messages %}{% if loop.first and message['role'] != 'system' %}<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n{% endif %}<|im_start|>{{ message['role'] }}\n{% if message['content'] is string %}{{ message['content'] }}<|im_end|>\n{% else %}{% for content in message['content'] %}{% if 'audio' in content or 'audio_url' in content or content['type'] == 'audio' %}{% set audio_count.value = audio_count.value + 1 %}Audio {{ audio_count.value }}: <|audio_bos|><|AUDIO|><|audio_eos|>\n{% elif 'text' in content %}{{ content['text'] }}{% endif %}{% endfor %}<|im_end|>\n{% endif %}{% endfor %}{% if add_generation_prompt %}<|im_start|>assistant\n{% endif %}",
-        }
-
-    # Override as Qwen2AudioProcessor needs audio tokens in prompts
-    def prepare_text_inputs(self, batch_size: Optional[int] = None):
-        if batch_size is None:
-            return "lower newer <|AUDIO|>"
-
-        if batch_size < 1:
-            raise ValueError("batch_size must be greater than 0")
-
-        if batch_size == 1:
-            return ["lower newer <|AUDIO|>"]
-        return ["lower newer <|AUDIO|>", "<|AUDIO|> upper older longer string"] + ["<|AUDIO|> lower newer"] * (
-            batch_size - 2
-        )
 
     def test_can_load_various_tokenizers(self):
         processor = Qwen2AudioProcessor.from_pretrained(self.checkpoint)

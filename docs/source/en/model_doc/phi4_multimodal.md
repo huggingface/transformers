@@ -64,7 +64,7 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     return_dict=True,
     return_tensors="pt",
-).to(device, torch.float16)
+).to(device)
 
 # Generate response
 generate_ids = model.generate(
@@ -98,8 +98,7 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     return_dict=True,
     return_tensors="pt",
-    sample_rate=sample_rate,
-).to(device, torch.float16)
+).to(device)
 
 generate_ids = model.generate(
     **inputs,

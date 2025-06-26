@@ -11,13 +11,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import json
 import shutil
 import tempfile
 import unittest
 
-from transformers.testing_utils import require_vision
-from transformers.utils import is_torch_available, is_vision_available
+import torch
+
+from transformers.testing_utils import require_torch, require_vision
+from transformers.utils import is_torchvision_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -27,15 +30,15 @@ if is_vision_available():
         AutoProcessor,
         LlavaOnevisionImageProcessor,
         LlavaOnevisionProcessor,
-        LlavaOnevisionVideoProcessor,
         Qwen2TokenizerFast,
     )
 
-if is_torch_available:
-    pass
+    if is_torchvision_available():
+        from transformers import LlavaOnevisionVideoProcessor
 
 
 @require_vision
+@require_torch
 class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = LlavaOnevisionProcessor
 
@@ -45,12 +48,15 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = LlavaOnevisionImageProcessor()
         video_processor = LlavaOnevisionVideoProcessor()
         tokenizer = Qwen2TokenizerFast.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
+        tokenizer.add_special_tokens({"additional_special_tokens": ["<image>", "<video>"]})
         processor_kwargs = cls.prepare_processor_dict()
 
         processor = LlavaOnevisionProcessor(
             video_processor=video_processor, image_processor=image_processor, tokenizer=tokenizer, **processor_kwargs
         )
         processor.save_pretrained(cls.tmpdirname)
+        cls.image_token = processor.image_token
+        cls.video_token = processor.video_token
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
@@ -73,15 +79,6 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "vision_feature_select_strategy": "default"
         }  # fmt: skip
 
-    def test_processor_to_json_string(self):
-        processor = self.get_processor()
-        obj = json.loads(processor.to_json_string())
-        for key, value in self.prepare_processor_dict().items():
-            # chat_tempalate are tested as a separate test because they are saved in separate files
-            if key != "chat_template":
-                self.assertEqual(obj[key], value)
-                self.assertEqual(getattr(processor, key, None), value)
-
     # Copied from tests.models.llava.test_processor_llava.LlavaProcessorTest.test_chat_template_is_saved
     def test_chat_template_is_saved(self):
         processor_loaded = self.processor_class.from_pretrained(self.tmpdirname)
@@ -93,3 +90,33 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # so we check if the same template is loaded
         processor_dict = self.prepare_processor_dict()
         self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
+
+    def test_image_token_filling(self):
+        processor = self.processor_class.from_pretrained(self.tmpdirname)
+        processor.patch_size = 14
+        processor.vision_feature_select_strategy = "default"
+        processor.image_processor.crop_size = {"height": 336, "width": 336}
+        processor.image_processor.size = {"shortest_edge": 336}
+        processor.image_processor.image_grid_pinpoints = [[672, 336]]
+        processor.num_image_tokens = (processor.image_processor.size["shortest_edge"] // processor.patch_size) ** 2
+        # Important to check with non square image
+        image = torch.randint(0, 2, (3, 503, 316))
+        expected_image_tokens = 1525
+        image_token_index = processor.image_token_id
+
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image"},
+                    {"type": "text", "text": "What is shown in this image?"},
+                ],
+            },
+        ]
+        inputs = processor(
+            text=[processor.apply_chat_template(messages)],
+            images=[image],
+            return_tensors="pt",
+        )
+        image_tokens = (inputs["input_ids"] == image_token_index).sum().item()
+        self.assertEqual(expected_image_tokens, image_tokens)
