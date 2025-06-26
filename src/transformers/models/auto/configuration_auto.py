@@ -868,6 +868,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("sam_hq_vision_model", "sam_hq"),
         ("llama4_text", "llama4"),
         ("blip_2_qformer", "blip_2"),
+        ("fastspeech2_conformer_with_hifigan", "fastspeech2_conformer"),
     ]
 )
 
@@ -1245,6 +1246,7 @@ class AutoConfig:
             f"Should have a `model_type` key in its {CONFIG_NAME}, or contain one of the following strings "
             f"in its name: {', '.join(CONFIG_MAPPING.keys())}"
         )
+
     @staticmethod
     def register(model_type, config, exist_ok=False) -> None:
         """
