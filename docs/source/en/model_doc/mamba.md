@@ -115,6 +115,13 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
   trainer.train()
    ```
 
+## MambaCache
+
+[[autodoc]] MambaCache
+    - update_conv_state
+    - update_ssm_state
+    - reset
+
 ## MambaConfig
 
 [[autodoc]] MambaConfig
