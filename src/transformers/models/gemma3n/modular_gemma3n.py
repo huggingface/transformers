@@ -906,7 +906,6 @@ class Gemma3nAudioRelativePositionEmbedding(nn.Module):
 
 
 class Gemma3nAudioAttention(nn.Module):
-
     def __init__(self, config: Gemma3nAudioConfig):
         super().__init__()
         self.config = config
@@ -2690,8 +2689,6 @@ class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
 
 __all__ = [
     "Gemma3nAudioConfig",
-    "Gemma3nAudioConfig",
-    "Gemma3nAudioEncoder",
     "Gemma3nAudioEncoder",
     "Gemma3nConfig",
     "Gemma3nForCausalLM",

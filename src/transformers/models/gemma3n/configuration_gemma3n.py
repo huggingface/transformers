@@ -499,6 +499,7 @@ class Gemma3nVisionConfig(PretrainedConfig):
         super().__init__(**kwargs)
         self.initializer_range = initializer_range
         self.do_pooling = do_pooling
+        self.model_args = model_args  # named "model_args" for BC with timm
         self.architecture = architecture
         self.hidden_size = hidden_size
         self.vocab_size = vocab_size
@@ -675,4 +676,4 @@ class Gemma3nConfig(PretrainedConfig):
         self.initializer_range = initializer_range
 
 
-__all__ = ["Gemma3nAudioConfig", "Gemma3nAudioConfig", "Gemma3nConfig", "Gemma3nTextConfig", "Gemma3nVisionConfig"]
+__all__ = ["Gemma3nAudioConfig", "Gemma3nConfig", "Gemma3nTextConfig", "Gemma3nVisionConfig"]
