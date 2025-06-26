@@ -640,7 +640,7 @@ class ConditionalDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcess
             expected_size = {"shortest_edge": 500, "longest_edge": 800}
             self.assertEqual(image_processor.size, expected_size)
 
-                    # Test 4: from_dict with max_size (using a dict without longest_edge)
+            # Test 4: from_dict with max_size (using a dict without longest_edge)
         test_dict = {k: v for k, v in self.image_processor_dict.items() if k != "size"}
         test_dict["size"] = {"shortest_edge": 18}  # Only shortest_edge, no longest_edge
         image_processor = image_processing_class.from_dict(test_dict, max_size=1100)

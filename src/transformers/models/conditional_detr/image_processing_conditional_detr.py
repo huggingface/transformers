@@ -969,7 +969,30 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         """
         image_processor_dict = image_processor_dict.copy()
         if "max_size" in kwargs:
-            image_processor_dict["max_size"] = kwargs.pop("max_size")
+            max_size = kwargs.pop("max_size")
+            # Check for size in both image_processor_dict and kwargs
+            size = kwargs.get("size", image_processor_dict.get("size"))
+            
+            if size is not None:
+                # If size is an integer, convert to shortest_edge dict
+                if isinstance(size, int):
+                    size = {"shortest_edge": size}
+                # If size is a dict but missing longest_edge, add it
+                elif isinstance(size, dict) and "longest_edge" not in size:
+                    size = dict(size)  # Make a copy
+                
+                if isinstance(size, dict) and "longest_edge" not in size:
+                    size["longest_edge"] = max_size
+                    
+                # Update both locations if size was in kwargs
+                if "size" in kwargs:
+                    kwargs["size"] = size
+                else:
+                    image_processor_dict["size"] = size
+            else:
+                # If no size provided, create default size with max_size
+                image_processor_dict["size"] = {"shortest_edge": 800, "longest_edge": max_size}
+                
         if "pad_and_return_pixel_mask" in kwargs:
             image_processor_dict["pad_and_return_pixel_mask"] = kwargs.pop("pad_and_return_pixel_mask")
         return super().from_dict(image_processor_dict, **kwargs)
@@ -1433,8 +1456,11 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
             else:
                 # If size is already provided, we need to handle max_size appropriately
                 if isinstance(size, dict) and "longest_edge" not in size:
-                    size = get_size_dict(size, max_size=max_size, default_to_square=False)
+                    size = dict(size)  # Make a copy to avoid modifying the original
+                    size["longest_edge"] = max_size
                 # If size already has longest_edge, the max_size is ignored (deprecated behavior)
+        else:
+            max_size = None if size is None else 1333
 
         do_resize = self.do_resize if do_resize is None else do_resize
         size = self.size if size is None else size
@@ -1650,11 +1676,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
 
     # Copied from transformers.models.deformable_detr.image_processing_deformable_detr.DeformableDetrImageProcessor.post_process_object_detection with DeformableDetr->ConditionalDetr
     def post_process_object_detection(
-        self,
-        outputs,
-        threshold: float = 0.5,
-        target_sizes: Union[TensorType, list[tuple]] = None,
-        top_k: int = 100,
+        self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, list[tuple]] = None, top_k: int = 100
     ):
         """
         Converts the raw output of [`ConditionalDetrForObjectDetection`] into final bounding boxes in (top_left_x,

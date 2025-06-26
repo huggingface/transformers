@@ -946,7 +946,30 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
         """
         image_processor_dict = image_processor_dict.copy()
         if "max_size" in kwargs:
-            image_processor_dict["max_size"] = kwargs.pop("max_size")
+            max_size = kwargs.pop("max_size")
+            # Check for size in both image_processor_dict and kwargs
+            size = kwargs.get("size", image_processor_dict.get("size"))
+            
+            if size is not None:
+                # If size is an integer, convert to shortest_edge dict
+                if isinstance(size, int):
+                    size = {"shortest_edge": size}
+                # If size is a dict but missing longest_edge, add it
+                elif isinstance(size, dict) and "longest_edge" not in size:
+                    size = dict(size)  # Make a copy
+                
+                if isinstance(size, dict) and "longest_edge" not in size:
+                    size["longest_edge"] = max_size
+                    
+                # Update both locations if size was in kwargs
+                if "size" in kwargs:
+                    kwargs["size"] = size
+                else:
+                    image_processor_dict["size"] = size
+            else:
+                # If no size provided, create default size with max_size
+                image_processor_dict["size"] = {"shortest_edge": 800, "longest_edge": max_size}
+                
         if "pad_and_return_pixel_mask" in kwargs:
             image_processor_dict["pad_and_return_pixel_mask"] = kwargs.pop("pad_and_return_pixel_mask")
         return super().from_dict(image_processor_dict, **kwargs)
@@ -1034,11 +1057,17 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
         size = get_size_dict(size, max_size=max_size, default_to_square=False)
         if "shortest_edge" in size and "longest_edge" in size:
             new_size = get_resize_output_image_size(
-                image, size["shortest_edge"], size["longest_edge"], input_data_format=input_data_format
+                image,
+                size["shortest_edge"],
+                size["longest_edge"],
+                input_data_format=input_data_format,
             )
         elif "max_height" in size and "max_width" in size:
             new_size = get_image_size_for_max_height_width(
-                image, size["max_height"], size["max_width"], input_data_format=input_data_format
+                image,
+                size["max_height"],
+                size["max_width"],
+                input_data_format=input_data_format,
             )
         elif "height" in size and "width" in size:
             new_size = (size["height"], size["width"])
@@ -1098,7 +1127,12 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
         """
-        return rescale(image, rescale_factor, data_format=data_format, input_data_format=input_data_format)
+        return rescale(
+            image,
+            rescale_factor,
+            data_format=data_format,
+            input_data_format=input_data_format,
+        )
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.normalize_annotation
     def normalize_annotation(self, annotation: dict, image_size: tuple[int, int]) -> dict:
@@ -1182,7 +1216,11 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
         )
         if annotation is not None:
             annotation = self._update_annotation_for_padded_image(
-                annotation, (input_height, input_width), (output_height, output_width), padding, update_bboxes
+                annotation,
+                (input_height, input_width),
+                (output_height, output_width),
+                padding,
+                update_bboxes,
             )
         return padded_image, annotation
 
@@ -1258,7 +1296,11 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
 
         if return_pixel_mask:
             masks = [
-                make_pixel_mask(image=image, output_size=padded_size, input_data_format=input_data_format)
+                make_pixel_mask(
+                    image=image,
+                    output_size=padded_size,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
             data["pixel_mask"] = masks
@@ -1391,6 +1433,8 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
                     size = dict(size)  # Make a copy to avoid modifying the original
                     size["longest_edge"] = max_size
                 # If size already has longest_edge, the max_size is ignored (deprecated behavior)
+        else:
+            max_size = None if size is None else 1333
 
         do_resize = self.do_resize if do_resize is None else do_resize
         size = self.size if size is None else size
@@ -1415,7 +1459,10 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
+        validate_kwargs(
+            captured_kwargs=kwargs.keys(),
+            valid_processor_keys=self._valid_processor_keys,
+        )
 
         # Here, the pad() method pads to the maximum of (width, height). It does not need to be validated.
         validate_preprocess_arguments(
