@@ -464,7 +464,7 @@ class BLTConfig(PretrainedConfig):
         # Parameter mixing
         pm_size=0,
         # Patcher configuration
-        patcher_args=None,
+        patcher_args={},
         # Inherited
         **kwargs,
     ):
