@@ -302,8 +302,8 @@ class BaseImageProcessorFast(BaseImageProcessor):
             image = image.float() / 256
             image = F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
             image = image * 256
-            image = image.masked_fill(image > 255, 255)
-            image = image.masked_fill(image < 0, 0)
+            image = torch.where(image > 255, 255, image)
+            image = torch.where(image < 0, 0, image)
             image = image.round().to(torch.uint8)
         else:
             image = F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
