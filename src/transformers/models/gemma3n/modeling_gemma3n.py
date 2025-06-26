@@ -103,8 +103,8 @@ class Gemma3nCausalLMOutputWithPast(ModelOutput):
         A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder after projecting last hidden state.
     audio_hidden_states (`torch.FloatTensor`, *optional*):
-            A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-            audio_hidden_states of the model produced by the audio encoder and after projecting the last hidden state.
+        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+        audio_hidden_states of the model produced by the audio encoder and after projecting the last hidden state.
     """
 
     loss: Optional[torch.FloatTensor] = None
