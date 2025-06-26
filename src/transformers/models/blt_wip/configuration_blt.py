@@ -213,8 +213,6 @@ class BLTPatcherConfig(PretrainedConfig):
             Layer normalization epsilon for the entropy model.
         dropout (`float`, *optional*, defaults to 0.0):
             Dropout probability for the entropy model.
-        sliding_window (`int`, *optional*):
-            Sliding window size for the entropy model attention.
         ffn_dim_multiplier (`float`, *optional*):
             Feedforward dimension multiplier for the entropy model.
         multiple_of (`int`, *optional*, defaults to 256):
@@ -227,12 +225,6 @@ class BLTPatcherConfig(PretrainedConfig):
             Attention implementation for the entropy model.
         attn_bias_type (`str`, *optional*, defaults to "causal"):
             Attention bias type for the entropy model.
-        init_base_std (`float`, *optional*):
-            Base initialization standard deviation for the entropy model.
-        init_std_factor (`str`, *optional*, defaults to "disabled"):
-            Initialization std factor for the entropy model.
-        dim_token_emb (`int`, *optional*):
-            Token embedding dimension for the entropy model.
         weight_tying (`bool`, *optional*, defaults to False):
             Whether to tie embeddings in the entropy model.
         bos_token_id (`int`, *optional*, defaults to 1):
@@ -254,16 +246,12 @@ class BLTPatcherConfig(PretrainedConfig):
         max_seqlen=1024,
         norm_eps=1e-5,
         dropout=0.0,
-        sliding_window=None,
         ffn_dim_multiplier=None,
         multiple_of=256,
         rope_theta=10000.0,
         rope_use_fp32_in_outer_product=False,
         attn_impl="sdpa",
         attn_bias_type="causal",
-        init_base_std=None,
-        init_std_factor="disabled",
-        dim_token_emb=None,
         weight_tying=False,
         bos_token_id=1,
         eos_token_id=2,
@@ -278,16 +266,12 @@ class BLTPatcherConfig(PretrainedConfig):
         self.max_seqlen = max_seqlen
         self.norm_eps = norm_eps
         self.dropout = dropout
-        self.sliding_window = sliding_window
         self.ffn_dim_multiplier = ffn_dim_multiplier
         self.multiple_of = multiple_of
         self.rope_theta = rope_theta
         self.rope_use_fp32_in_outer_product = rope_use_fp32_in_outer_product
         self.attn_impl = attn_impl
         self.attn_bias_type = attn_bias_type
-        self.init_base_std = init_base_std
-        self.init_std_factor = InitStdFactor(init_std_factor)
-        self.dim_token_emb = dim_token_emb
         self.weight_tying = weight_tying
         
         super().__init__(
@@ -312,7 +296,7 @@ class BLTPatcherConfig(PretrainedConfig):
 
 class BLTConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ByteLatentTransformer`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`BLTModel`]. It is used to instantiate a
     BLT model according to the specified arguments, defining the model architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -379,22 +363,8 @@ class BLTConfig(PretrainedConfig):
             Attention implementation to use ("sdpa" or "flex_attention").
         attn_bias_type (`str`, *optional*, defaults to "causal"):
             Type of attention bias to apply.
-        local_attention_window_len (`int`, *optional*):
-            Window length for local attention.
         use_rope (`bool`, *optional*, defaults to True):
             Whether to use rotary position embeddings.
-
-        # Initialization
-        init_base_std (`float`, *optional*):
-            Base standard deviation for weight initialization.
-        init_std_factor (`str`, *optional*, defaults to "disabled"):
-            Factor for adjusting initialization standard deviation.
-
-        # Embedding dimensions
-        dim_token_emb (`int`, *optional*):
-            Token embedding dimension.
-        dim_token (`int`, *optional*):
-            Token dimension.
 
         # Patching configuration
         patch_in_forward (`bool`, *optional*, defaults to False):
@@ -437,8 +407,6 @@ class BLTConfig(PretrainedConfig):
             Whether to apply cross attention to all decoder layers.
         cross_attn_all_layers_encoder (`bool`, *optional*, defaults to False):
             Whether to apply cross attention to all encoder layers.
-        cross_attn_use_flex_attention (`bool`, *optional*, defaults to True):
-            Whether to use flexible attention for cross attention.
         cross_attn_init_by_pooling (`bool`, *optional*, defaults to False):
             Whether to initialize cross attention by pooling.
 
@@ -453,28 +421,12 @@ class BLTConfig(PretrainedConfig):
             Vocabulary size for hash byte groups.
         encoder_hash_byte_group_nb_functions (`int`, *optional*, defaults to 3):
             Number of hash functions for byte groups.
-        encoder_enable_byte_ngrams (`bool`, *optional*, defaults to False):
-            Whether to enable byte n-grams in encoder.
-        encoder_ngram_to_size_str (`str`, *optional*):
-            String defining n-gram sizes.
-        downsampling_by_pooling (`str`, *optional*):
-            Type of pooling for downsampling.
 
         # Model behavior
         share_encoder_decoder_emb (`bool`, *optional*, defaults to True):
             Whether to share encoder and decoder embeddings.
         weight_tying (`bool`, *optional*, defaults to False):
             Whether to tie input and output embeddings.
-
-        # Performance optimization
-        sequence_parallel (`bool`, *optional*, defaults to False):
-            Whether to use sequence parallelism.
-        loss_parallel (`bool`, *optional*, defaults to False):
-            Whether to use loss parallelism.
-        fuse_sequence_parallel (`bool`, *optional*, defaults to False):
-            Whether to fuse sequence parallel operations.
-        use_fsdp (`bool`, *optional*, defaults to True):
-            Whether to use fully sharded data parallel.
 
         # Parameter mixing
         pm_size (`int`, *optional*, defaults to 0):
@@ -543,14 +495,7 @@ class BLTConfig(PretrainedConfig):
         attn_impl="sdpa",
         _attn_implementation="sdpa",
         attn_bias_type="causal",
-        local_attention_window_len=None,
         use_rope=True,
-        # Initialization
-        init_base_std=None,
-        init_std_factor="disabled",
-        # Embedding dimensions
-        dim_token_emb=None,
-        dim_token=None,
         # Patching configuration
         patch_in_forward=False,
         realtime_patching=True,
@@ -572,7 +517,6 @@ class BLTConfig(PretrainedConfig):
         cross_attn_nheads=16,
         cross_attn_all_layers_decoder=False,
         cross_attn_all_layers_encoder=False,
-        cross_attn_use_flex_attention=True,
         cross_attn_init_by_pooling=False,
         # Encoder configurations
         use_local_encoder_transformer=False,
@@ -580,17 +524,9 @@ class BLTConfig(PretrainedConfig):
         encoder_hash_byte_group_size=None,
         encoder_hash_byte_group_vocab=30000,
         encoder_hash_byte_group_nb_functions=3,
-        encoder_enable_byte_ngrams=False,
-        encoder_ngram_to_size_str=None,
-        downsampling_by_pooling=None,
         # Model behavior
         share_encoder_decoder_emb=True,
         weight_tying=False,
-        # Performance optimization
-        sequence_parallel=False,
-        loss_parallel=False,
-        fuse_sequence_parallel=False,
-        use_fsdp=True,
         # Parameter mixing
         pm_size=0,
         # Special tokens
@@ -604,7 +540,6 @@ class BLTConfig(PretrainedConfig):
         **kwargs,
     ):
         
-        self.sliding_window = None
         # Basic model configuration
         self.vocab_size = vocab_size
         self.max_seqlen = max_seqlen
@@ -643,16 +578,7 @@ class BLTConfig(PretrainedConfig):
         self.attn_impl = attn_impl
         self._attn_implementation = _attn_implementation
         self.attn_bias_type = attn_bias_type
-        self.local_attention_window_len = local_attention_window_len
         self.use_rope = use_rope
-
-        # Initialization
-        self.init_base_std = init_base_std
-        self.init_std_factor = InitStdFactor(init_std_factor)
-
-        # Embedding dimensions
-        self.dim_token_emb = dim_token_emb
-        self.dim_token = dim_token
 
         # Patching configuration
         self.patch_in_forward = patch_in_forward
@@ -676,7 +602,6 @@ class BLTConfig(PretrainedConfig):
         self.cross_attn_nheads = cross_attn_nheads
         self.cross_attn_all_layers_decoder = cross_attn_all_layers_decoder
         self.cross_attn_all_layers_encoder = cross_attn_all_layers_encoder
-        self.cross_attn_use_flex_attention = cross_attn_use_flex_attention
         self.cross_attn_init_by_pooling = cross_attn_init_by_pooling
 
         # Encoder configurations
@@ -685,19 +610,10 @@ class BLTConfig(PretrainedConfig):
         self.encoder_hash_byte_group_size = encoder_hash_byte_group_size
         self.encoder_hash_byte_group_vocab = encoder_hash_byte_group_vocab
         self.encoder_hash_byte_group_nb_functions = encoder_hash_byte_group_nb_functions
-        self.encoder_enable_byte_ngrams = encoder_enable_byte_ngrams
-        self.encoder_ngram_to_size_str = encoder_ngram_to_size_str
-        self.downsampling_by_pooling = downsampling_by_pooling
 
         # Model behavior
         self.share_encoder_decoder_emb = share_encoder_decoder_emb
         self.weight_tying = weight_tying
-
-        # Performance optimization
-        self.sequence_parallel = sequence_parallel
-        self.loss_parallel = loss_parallel
-        self.fuse_sequence_parallel = fuse_sequence_parallel
-        self.use_fsdp = use_fsdp
 
         # Parameter mixing
         self.pm_size = pm_size
@@ -720,7 +636,7 @@ class BLTConfig(PretrainedConfig):
             dropout=dropout,
             max_position_embeddings=max_encoder_seq_length or max_seqlen,
             rope_theta=rope_theta,
-            rope_scaling={"type": "default", "rope_type": "default"},
+            rope_scaling={"rope_type": "default"},
             hidden_act=hidden_act,
             multiple_of=multiple_of,
         )
@@ -738,11 +654,10 @@ class BLTConfig(PretrainedConfig):
             dropout=dropout,
             max_position_embeddings=max_encoder_seq_length or max_seqlen,
             rope_theta=rope_theta,
-            rope_scaling={"type": "default", "rope_type": "default"},
+            rope_scaling={"rope_type": "default"},
             hidden_act=hidden_act,
             multiple_of=multiple_of,
         )
-
 
         self.global_config = BLTGlobalTransformerConfig(
             hidden_size=dim_global,
@@ -753,17 +668,15 @@ class BLTConfig(PretrainedConfig):
             dropout=dropout,
             max_position_embeddings=max_seqlen,
             rope_theta=rope_theta,
-            rope_scaling={"type": "default", "rope_type": "default"},
+            rope_scaling={"rope_type": "default"},
             hidden_act=hidden_act,
             multiple_of=multiple_of,
-            global_dim_patch_emb=self.global_dim_patch_emb,
+            global_dim_patch_emb=dim_local_encoder * cross_attn_k,
         )
 
-        # Initialize patcher configuration
         if patcher_args is not None:
             self.patcher_config = BLTPatcherConfig(**patcher_args)
         else:
-            # Use default values if no patcher_args provided
             self.patcher_config = BLTPatcherConfig()
 
         # Handle hash byte group size validation
@@ -772,16 +685,14 @@ class BLTConfig(PretrainedConfig):
                 int(x) for x in self.encoder_hash_byte_group_size.split(",") if len(x) > 0
             ]
 
-        # Rope
-        self.rope_scaling={
-            "type": "default",
-            "rope_type": "default"
-        }
+        # Rope scaling configuration
+        self.rope_scaling = {"rope_type": "default"}
 
-        self.num_key_value_heads=n_heads_local_encoder
-        self.max_position_embeddings=max_seqlen
-        self.hidden_size=dim_local_encoder
-        self.num_attention_heads=n_heads_local_encoder
+        # Set compatibility attributes for transformers
+        self.num_key_value_heads = n_heads_local_encoder
+        self.max_position_embeddings = max_seqlen
+        self.hidden_size = dim_local_encoder
+        self.num_attention_heads = n_heads_local_encoder
         
         # Calculate intermediate_size using BLTMLP logic for each component
         # Note: Each component uses its own hidden dimension, not the main dim
@@ -794,29 +705,6 @@ class BLTConfig(PretrainedConfig):
             **kwargs,
         )
 
-    @property
-    def global_dim_patch_emb(self):
-        return self.dim_local_encoder * self.cross_attn_k
-
-
-    def get_init_std_factor(self, depth: int) -> float:
-        """
-        Calculate the initialization standard deviation scaling factor for a given layer depth.
-
-        Args:
-            depth: Current layer depth (0-indexed)
-
-        Returns:
-            Scaling factor to divide the base initialization std by
-        """
-        if self.init_std_factor == InitStdFactor.CURRENT_DEPTH:
-            return (2 * (depth + 1)) ** 0.5
-        else:  # DISABLED
-            return 1.0
-
-
-
-
 __all__ = [
     "BLTConfig", 
     "BLTPatcherConfig", 
@@ -826,4 +714,3 @@ __all__ = [
     "InitStdFactor", 
     "PatchingModeEnum"
 ]
-

@@ -42,6 +42,7 @@ if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import BlockMask
     from ...integrations.flex_attention import make_flex_block_causal_mask
 
+
 logger = logging.get_logger(__name__)
 
 
@@ -56,20 +57,6 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
-class BLTMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
 
 def eager_attention_forward(
         module: nn.Module,
@@ -95,7 +82,6 @@ def eager_attention_forward(
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
-
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
@@ -129,6 +115,23 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     k_rot = torch.stack([k_real_rot, k_imag_rot], dim=-1).view(*k.shape)  # [B, H, S, D]
     
     return q_rot.type_as(q), k_rot.type_as(k)
+
+
+class BLTMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
+    
 
 class BLTRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
@@ -379,8 +382,6 @@ def _prepare_patch_cross_attention_mask(
     cross_attn_k: int = 1,
     dtype: torch.dtype = torch.float32,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-     #TODO: refactor to be more readable
-
     """
     Prepare cross-attention mask for patch-based attention, following mllama's robust approach.
     
@@ -640,11 +641,12 @@ class BLTLocalDecoder(nn.Module):
     def __init__(self, config: BLTLocalDecoderConfig):
         super().__init__()
 
+        # Extract config values to instance attributes
         self.hidden_size = config.hidden_size
         self.vocab_size=config.vocab_size
         self.num_hidden_layers = config.num_hidden_layers
         self.dropout = config.dropout
-        self.cross_attn_decoder = True
+        self.cross_attn_decoder = True #config.cross_attn_decoder #TODO: maybe remove
         self.cross_attn_all_layers = config.cross_attn_all_layers
         self.cross_attn_k = config.cross_attn_k
 
@@ -667,7 +669,11 @@ class BLTLocalDecoder(nn.Module):
                 BLTCrossAttention(config=config, layer_idx=layer_idx, hidden_size=self.hidden_size)
             )
 
-        self.lm_head = nn.Linear(self.hidden_size, self.vocab_size, bias=False,)
+        self.lm_head = nn.Linear(
+            self.hidden_size,
+            self.vocab_size,
+            bias=False,
+        )
 
 
     def forward(
@@ -838,18 +844,17 @@ class BLTGlobalTransformer(nn.Module):
 
     def forward(
         self,
-        input_ids: torch.Tensor,
-        input_embeds: Optional[torch.Tensor] = None,
+        input_embeds: torch.Tensor,
         mask: Optional[Union[BlockMask, torch.Tensor, str]] = None,
         cache: Optional[List[Tuple[torch.Tensor, torch.Tensor, int]]] = None,
     ):
-        batch_size, _, _ = input_embeds.shape
+        batch_size, seq_len, _ = input_embeds.shape
 
         hidden_states = input_embeds
 
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
 
-        position_ids = torch.arange(input_ids.shape[1], device=input_embeds.device).unsqueeze(0).expand(batch_size, -1)
+        position_ids = torch.arange(seq_len, device=input_embeds.device).unsqueeze(0).expand(batch_size, -1)
         position_embeddings = self.rotary_emb(hidden_states, position_ids)  
 
         for i, layer in enumerate(self.layers):
@@ -918,36 +923,19 @@ class BLTModel(BLTPreTrainedModel):
     def __init__(self, config: BLTConfig):
         super().__init__(config)
 
-        # Core configuration
-        self.patch_in_forward = config.patch_in_forward
-        self.patching_mode = config.patching_mode
-        self.patch_size = config.patch_size
-        self.patching_threshold = config.patching_threshold
-        self.max_patch_length = config.max_patch_length
-        self.patching_batch_size = config.patching_batch_size
-        self.patching_device = config.patching_device
-        
-        # Cross attention configuration (always enabled)
-        self.cross_attn_k = config.cross_attn_k
-        
-        # Token IDs
-        self.boe_id = config.boe_id
-        self.eos_token_id = config.eos_token_id
+        self.config = config
 
-        # Model components
         self.local_encoder = BLTLocalEncoder(config.encoder_config)
         self.global_transformer = BLTGlobalTransformer(config.global_config)
         self.local_decoder = BLTLocalDecoder(config.decoder_config)
 
-        # Hash embeddings
         self.encoder_hash_tok_embedding = init_hash_embeddings(
             config,
             local_encoder_dim=config.dim_local_encoder,
             encoder_hash_byte_group_size=config.encoder_hash_byte_group_size,
         )
 
-        # Patcher initialization
-        if self.patch_in_forward:
+        if self.config.patch_in_forward:
             self.patcher = BLTPatcher(config.patcher_config)
             self.patcher.eval()
             for param in self.patcher.parameters():
@@ -960,29 +948,27 @@ class BLTModel(BLTPreTrainedModel):
 
         # Handle patching
         if patch_lengths is None:
-            if self.patching_mode == PatchingModeEnum.entropy:
+            if self.config.patching_mode == PatchingModeEnum.entropy:
                 _, patch_lengths, _ = self.patcher(
                     tokens,
-                    patch_size=self.patch_size,
-                    threshold=self.patching_threshold,
-                    max_patch_length=self.max_patch_length,
-                    patching_batch_size=self.patching_batch_size,
-                    device=self.patching_device,
+                    patch_size=self.config.patch_size,
+                    threshold=self.config.patching_threshold,
+                    max_patch_length=self.config.max_patch_length,
+                    patching_batch_size=self.config.patching_batch_size,
+                    device=self.config.patching_device,
                 )
             else:
                 # Default to byte-level patching
                 patch_lengths = process_patch_lengths(
                     torch.ones((batch_size, sequence_length + 1), dtype=tokens.dtype, device=tokens.device),
-                    self.max_patch_length
+                    self.config.max_patch_length
                 )
 
-        # Generate patch IDs and prepare cross-attention masks
         patch_ids = self._patch_ids_from_lengths(patch_lengths, sequence_length)
         cross_attn_mask_enc, full_text_row_masked_out_mask_enc = _prepare_patch_cross_attention_mask(
-            patch_ids, patch_lengths.shape[1], sequence_length, True, self.cross_attn_k, torch.float32
+            patch_ids, patch_lengths.shape[1], sequence_length, True, self.config.cross_attn_k, torch.float32
         )
 
-        # Compute embeddings with hashing
         encoder_embeds = compute_hash_embeddings(
             tokens, self.local_encoder, self.encoder_hash_tok_embedding,
             self.config.encoder_hash_byte_group_nb_functions,
@@ -990,7 +976,6 @@ class BLTModel(BLTPreTrainedModel):
             self.config.encoder_hash_byte_group_vocab,
         )
 
-        # Local encoder forward pass
         encoder_hidden_states, encoder_cross_states = self.local_encoder(
             input_ids=tokens,
             input_embeds=encoder_embeds,
@@ -1001,21 +986,15 @@ class BLTModel(BLTPreTrainedModel):
             patch_ids=patch_ids,
         )
 
-        # Global transformer forward pass
         global_hidden_states = encoder_cross_states.view(batch_size, patch_lengths.shape[1], -1)
-        global_tokens = tokens.new_full((batch_size, global_hidden_states.shape[1]), self.boe_id)
-        eos_positions = torch.where(tokens == self.eos_token_id)
-        global_tokens[eos_positions[0], patch_ids[eos_positions]] = self.eos_token_id
 
         global_hidden_states, _ = self.global_transformer(
-            input_ids=global_tokens,
             input_embeds=global_hidden_states,
         )
 
-        # Local decoder forward pass
         decoder_patch_ids = self._patch_ids_from_lengths(patch_lengths[:, 1:], sequence_length)
         cross_attn_mask_dec, full_text_row_masked_out_mask_dec = _prepare_patch_cross_attention_mask(
-            decoder_patch_ids, patch_lengths.shape[1], sequence_length, False, self.cross_attn_k, torch.float32
+            decoder_patch_ids, patch_lengths.shape[1], sequence_length, False, self.config.cross_attn_k, torch.float32
         )
 
         output, _ = self.local_decoder(
