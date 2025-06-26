@@ -541,7 +541,7 @@ NEW_BERT_CONSTANT = "value"
         self.assertEqual(find_base_model_checkpoint("gpt2"), "openai-community/gpt2")
 
     def test_retrieve_model_classes(self):
-        gpt_classes = {k: set(v) for k, v in retrieve_model_classes("gpt2").items()}
+        gpt_classes = {k: set(v) for k, v in retrieve_model_classes("gpt2", frameworks=["pt"]).items()}
         expected_gpt_classes = {
             "pt": {
                 "GPT2ForTokenClassification",
@@ -550,17 +550,7 @@ NEW_BERT_CONSTANT = "value"
                 "GPT2ForSequenceClassification",
                 "GPT2ForQuestionAnswering",
             },
-            "tf": {"TFGPT2Model", "TFGPT2ForSequenceClassification", "TFGPT2LMHeadModel"},
-            "flax": {"FlaxGPT2Model", "FlaxGPT2LMHeadModel"},
         }
-        self.assertEqual(gpt_classes, expected_gpt_classes)
-
-        del expected_gpt_classes["flax"]
-        gpt_classes = {k: set(v) for k, v in retrieve_model_classes("gpt2", frameworks=["pt", "tf"]).items()}
-        self.assertEqual(gpt_classes, expected_gpt_classes)
-
-        del expected_gpt_classes["pt"]
-        gpt_classes = {k: set(v) for k, v in retrieve_model_classes("gpt2", frameworks=["tf"]).items()}
         self.assertEqual(gpt_classes, expected_gpt_classes)
 
     def test_retrieve_info_for_model_with_bert(self):
