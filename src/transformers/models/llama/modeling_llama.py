@@ -20,7 +20,6 @@
 from typing import Callable, Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
@@ -198,6 +197,8 @@ def eager_attention_forward(
 class LlamaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
+    return_hooks = {"attention", 0}
+
     def __init__(self, config: LlamaConfig, layer_idx: int):
         super().__init__()
         self.config = config
@@ -266,6 +267,8 @@ class LlamaAttention(nn.Module):
 
 
 class LlamaDecoderLayer(GradientCheckpointingLayer):
+    return_hooks = {"hidden_states", 0}
+
     def __init__(self, config: LlamaConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -287,12 +290,12 @@ class LlamaDecoderLayer(GradientCheckpointingLayer):
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.FloatTensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
-        hidden_states, self_attn_weights = self.self_attn(
+        hidden_states = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -302,7 +305,7 @@ class LlamaDecoderLayer(GradientCheckpointingLayer):
             cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
-        )
+        )[0]
         hidden_states = residual + hidden_states
 
         # Fully Connected
@@ -310,7 +313,7 @@ class LlamaDecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
-        return hidden_states, self_attn_weights
+        return hidden_states
 
 
 @auto_docstring
