@@ -1142,7 +1142,7 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        if past_key_values and not past_key_values.has_previous_state:
+        if past_key_values is not None and not past_key_values.has_previous_state:
             past_key_values.has_previous_state = True
 
         output = BaseModelOutputWithPast(

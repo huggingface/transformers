@@ -246,7 +246,7 @@ class Cache:
         - SlidingWindow layers are limited to sliding window size, Static layers use full max_cache_len
     """
 
-    layers = None
+    layers = []
     pattern_block = ()  # Subclasses can define their layer pattern statically
 
     def __init__(

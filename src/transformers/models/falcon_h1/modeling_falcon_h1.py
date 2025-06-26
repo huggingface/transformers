@@ -81,6 +81,7 @@ class FalconHybridMambaAttentionDynamicCache(Cache):
 
     key_cache = None
     value_cache = None
+    is_compileable = False
 
     def __init__(
         self,

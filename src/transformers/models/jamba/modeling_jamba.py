@@ -198,6 +198,7 @@ class HybridMambaAttentionDynamicCache(Cache):
 
     key_cache = None
     value_cache = None
+    is_compileable = False
 
     def __init__(self, config, batch_size, dtype=torch.float16, device=None):
         super().__init__()

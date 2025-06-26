@@ -113,6 +113,7 @@ class Zamba2HybridDynamicCache(Cache):
 
     key_cache = None
     value_cache = None
+    is_compileable = False
 
     def __init__(
         self, config: Zamba2Config, batch_size: int, dtype: torch.dtype = torch.float16, device: Optional[str] = None
@@ -1390,7 +1391,7 @@ class Zamba2Model(Zamba2PreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        if past_key_values and not past_key_values.has_previous_state:
+        if past_key_values is not None and not past_key_values.has_previous_state:
             past_key_values.has_previous_state = True
 
         output = BaseModelOutputWithPast(

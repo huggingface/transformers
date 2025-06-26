@@ -109,9 +109,12 @@ class ZambaHybridDynamicCache(Cache):
 
     key_cache = None
     value_cache = None
+    is_compileable = False
+
 
     def __init__(self, config, batch_size, dtype=torch.float16, device=None):
         self.dtype = dtype
+        self.is_compileable = False
         self.layers_block_type = config.layers_block_type
         self.has_previous_state = False  # only used by mamba
         self.intermediate_size = config.mamba_expand * config.hidden_size
