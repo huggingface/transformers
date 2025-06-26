@@ -110,6 +110,13 @@ outputs = model.generate(**inputs, max_new_tokens=100)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
+## FalconMambaCache
+
+[[autodoc]] FalconMambaCache
+    - update_conv_state
+    - update_ssm_state
+    - reset
+
 ## FalconMambaConfig
 
 [[autodoc]] FalconMambaConfig

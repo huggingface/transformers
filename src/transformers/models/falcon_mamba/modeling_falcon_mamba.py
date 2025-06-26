@@ -28,35 +28,14 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
-from ...utils.import_utils import (
-    is_causal_conv1d_available,
-    is_mamba_ssm_available,
-    is_mambapy_available,
-)
+from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
+from ...utils.import_utils import is_mambapy_available as is_falcon_mambapy_available
 from .configuration_falcon_mamba import FalconMambaConfig
-
-
-if is_mambapy_available():
-    from mambapy.pscan import pscan
-else:
-    pscan = None
-
-if is_mamba_ssm_available():
-    from mamba_ssm.ops.selective_scan_interface import selective_scan_fn
-    from mamba_ssm.ops.triton.selective_state_update import selective_state_update
-
-    from ...kernels.falcon_mamba import mamba_inner_fn
-else:
-    selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
-
-if is_causal_conv1d_available():
-    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-else:
-    causal_conv1d_update, causal_conv1d_fn = None, None
 
 
 logger = logging.get_logger(__name__)
@@ -99,7 +78,7 @@ class FalconMambaCache:
     # TODO (joao): add layer_device_map arg and update code in `generate` accordingly
     def __init__(
         self,
-        config,
+        config: PretrainedConfig,
         max_batch_size: int,
         dtype: torch.dtype = torch.float16,
         device: Union[torch.device, str, None] = None,
@@ -162,9 +141,26 @@ class FalconMambaCache:
             self.ssm_states[layer_idx].zero_()
 
 
-is_fast_path_available = all(
-    (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
-)
+def is_fast_path_available():
+    if is_mamba_ssm_available():
+        from mamba_ssm.ops.selective_scan_interface import mamba_inner_fn, selective_scan_fn
+        from mamba_ssm.ops.triton.selective_state_update import selective_state_update
+    else:
+        selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
+
+    if is_causal_conv1d_available():
+        from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
+    else:
+        causal_conv1d_update, causal_conv1d_fn = None, None
+
+    return (
+        all((selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)),
+        selective_state_update,
+        selective_scan_fn,
+        mamba_inner_fn,
+        causal_conv1d_update,
+        causal_conv1d_fn,
+    )
 
 
 def rms_forward(hidden_states, variance_epsilon=1e-6):
@@ -216,7 +212,7 @@ class FalconMambaMixer(nn.Module):
         self.activation = config.hidden_act
         self.act = ACT2FN[config.hidden_act]
 
-        self.use_mambapy = config.use_mambapy
+        self.use_falcon_mambapy = config.use_falcon_mambapy
 
         # projection of the input hidden states
         self.in_proj = nn.Linear(self.hidden_size, self.intermediate_size * 2, bias=config.use_bias)
@@ -235,6 +231,24 @@ class FalconMambaMixer(nn.Module):
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
         self.use_bias = config.use_bias
 
+        if not is_fast_path_available:
+            if self.use_falcon_mambapy:
+                if is_falcon_mambapy_available():
+                    logger.warning_once(
+                        "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, falcon_mamba_inner_fn)`"
+                        " is None. Falling back to the falcon_mamba.py backend. To install follow https://github.com/state-spaces/falcon_mamba/#installation and"
+                        " https://github.com/Dao-AILab/causal-conv1d"
+                    )
+                else:
+                    raise ImportError(
+                        "use_falcon_mambapy is set to True but the falcon_mambapy package is not installed. To install it follow https://github.com/alxndrTL/falcon_mamba.py."
+                    )
+            else:
+                logger.warning_once(
+                    "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, falcon_mamba_inner_fn)`"
+                    " is None. Falling back to the sequential implementation of FalconMamba, as use_falcon_mambapy is set to False. To install follow https://github.com/state-spaces/falcon_mamba/#installation and"
+                    " https://github.com/Dao-AILab/causal-conv1d. For the falcon_mamba.py backend, follow https://github.com/alxndrTL/falcon_mamba.py."
+                )
         # Triton expects to pass RMS weights even if they are non learnable, thus we need to create these weights here
         self.register_buffer(
             "b_c_rms", torch.nn.Parameter(torch.ones(self.ssm_state_size), requires_grad=False), persistent=False
@@ -244,25 +258,6 @@ class FalconMambaMixer(nn.Module):
         )
         self.rms_eps = config.mixer_rms_eps
 
-        if not is_fast_path_available:
-            if self.use_mambapy:
-                if is_mambapy_available():
-                    logger.warning_once(
-                        "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
-                        " is None. Falling back to the mamba.py backend. To install follow https://github.com/state-spaces/mamba/#installation and"
-                        " https://github.com/Dao-AILab/causal-conv1d"
-                    )
-                else:
-                    raise ImportError(
-                        "use_mambapy is set to True but the mambapy package is not installed. To install it follow https://github.com/alxndrTL/mamba.py."
-                    )
-            else:
-                logger.warning_once(
-                    "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
-                    " is None. Falling back to the sequential implementation of Mamba, as use_mambapy is set to False. To install follow https://github.com/state-spaces/mamba/#installation and"
-                    " https://github.com/Dao-AILab/causal-conv1d. For the mamba.py backend, follow https://github.com/alxndrTL/mamba.py."
-                )
-
     def cuda_kernels_forward(
         self,
         hidden_states: torch.Tensor,
@@ -270,6 +265,17 @@ class FalconMambaMixer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
+        if is_mamba_ssm_available():
+            from mamba_ssm.ops.selective_scan_interface import mamba_inner_fn, selective_scan_fn
+            from mamba_ssm.ops.triton.selective_state_update import selective_state_update
+        else:
+            selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
+
+        if is_causal_conv1d_available():
+            from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
+        else:
+            causal_conv1d_update, causal_conv1d_fn = None, None
+
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
 
@@ -378,13 +384,17 @@ class FalconMambaMixer(nn.Module):
             contextualized_states = self.out_proj(scan_outputs.transpose(1, 2))
         return contextualized_states
 
-    def slow_forward(
-        self,
+    # fmt: off
+    def slow_forward(self,
         input_states,
         cache_params: Optional[FalconMambaCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
+        if is_falcon_mambapy_available():
+            from mambapy.pscan import pscan
+        else:
+            pscan = None
         batch_size, seq_len, _ = input_states.shape
         dtype = input_states.dtype
         # 1. Gated MLP's linear projection
@@ -453,7 +463,7 @@ class FalconMambaMixer(nn.Module):
         deltaB_u = discrete_B * hidden_states[:, :, :, None].float()
 
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
-        if self.use_mambapy and self.training and cache_params is None:
+        if self.use_falcon_mambapy and self.training and cache_params is None:
             hs = pscan(
                 discrete_A.transpose(1, 2), deltaB_u.transpose(1, 2)
             )  # [batch, seq_len, intermediate_size, ssm_state_size]
@@ -480,8 +490,8 @@ class FalconMambaMixer(nn.Module):
         # 4. Final linear projection
         contextualized_states = self.out_proj(scan_output.transpose(1, 2))  # [batch, seq_len, hidden_size]
         return contextualized_states
+    # fmt: on
 
-    # Copied from transformers.models.mamba.modeling_mamba.MambaMixer.forward
     def forward(
         self,
         hidden_states,
@@ -494,7 +504,6 @@ class FalconMambaMixer(nn.Module):
         return self.slow_forward(hidden_states, cache_params, cache_position, attention_mask)
 
 
-# Copied from transformers.models.mamba.modeling_mamba.MambaRMSNorm with Mamba->FalconMamba
 class FalconMambaRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -504,17 +513,15 @@ class FalconMambaRMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def extra_repr(self):
-        return f"{self.weight.shape[0]}, eps={self.variance_epsilon}"
-
-    # Ignore copy
     def forward(self, hidden_states):
         return self.weight.to(hidden_states.device) * rms_forward(
             hidden_states, variance_epsilon=self.variance_epsilon
         )
 
+    def extra_repr(self):
+        return f"{self.weight.shape[0]}, eps={self.variance_epsilon}"
 
-# Copied from transformers.models.mamba.modeling_mamba.MambaBlock with Mamba->FalconMamba,FalconMambaCache->MambaCache
+
 class FalconMambaBlock(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx):
         super().__init__()
@@ -544,7 +551,6 @@ class FalconMambaBlock(GradientCheckpointingLayer):
 
 
 @auto_docstring
-# Copied from transformers.models.mamba.modeling_mamba.MambaPreTrainedModel with Mamba->FalconMamba
 class FalconMambaPreTrainedModel(PreTrainedModel):
     config_class = FalconMambaConfig
     base_model_prefix = "backbone"
@@ -603,10 +609,9 @@ class FalconMambaPreTrainedModel(PreTrainedModel):
 @dataclass
 @auto_docstring(
     custom_intro="""
-    Class for the FALCONMAMBA model outputs.
+    Class for the FALCON_MAMBA model outputs.
     """
 )
-# Copied from transformers.models.mamba.modeling_mamba.MambaOutput with MAMBA->FALCONMAMBA,Mamba->FalconMamba,FalconMambaCache->MambaCache
 class FalconMambaOutput(ModelOutput):
     r"""
     cache_params (`FalconMambaCache`):
@@ -627,7 +632,6 @@ class FalconMambaOutput(ModelOutput):
     Base class for causal language model (or autoregressive) outputs.
     """
 )
-# Copied from transformers.models.mamba.modeling_mamba.MambaCausalLMOutput with Mamba->FalconMamba,FalconMambaCache->MambaCache
 class FalconMambaCausalLMOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -660,7 +664,14 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
         self.gradient_checkpointing = False
         self.norm_f = FalconMambaRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         # Initialize weights and apply final processing
+        self._register_load_state_dict_pre_hook(self.load_hook)
         self.post_init()
+
+    def load_hook(self, state_dict, prefix, *args):
+        for k in state_dict:
+            if "embedding." in k:
+                state_dict[k.replace("embedding.", "embeddings.")] = state_dict.pop(k)
+                break
 
     def get_input_embeddings(self):
         return self.embeddings
@@ -719,6 +730,7 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
                 )
         else:
             cache_params = None
+
         hidden_states = inputs_embeds
         all_hidden_states = () if output_hidden_states else None
         for mixer_block in self.layers:
@@ -749,11 +761,10 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The FALCONMAMBA Model transformer with a language modeling head on top (linear layer with weights tied to the input
+    The FALCON_MAMBA Model transformer with a language modeling head on top (linear layer with weights tied to the input
     embeddings).
     """
 )
-# Copied from transformers.models.mamba.modeling_mamba.MambaForCausalLM with MAMBA->FALCONMAMBA,Mamba->FalconMamba,mamba->falcon_mamba,FalconMambaCache->MambaCache
 class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
