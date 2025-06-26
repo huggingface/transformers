@@ -15,9 +15,7 @@ import os
 import re
 import tempfile
 import unittest
-from pathlib import Path
 
-import transformers
 from transformers.commands.add_new_model_like import (
     ModelPatterns,
     _re_class_func,
@@ -80,12 +78,12 @@ WAV2VEC2_MODEL_FILES = {
     "transformers/models/wav2vec2/tokenization_wav2vec2.py",
 }
 
-REPO_PATH = Path(transformers.__path__[0]).parent.parent
 
-
-# `Path(f).relative_to(REPO_PATH)` may fail for source files if `transformers` is not an editable install.
-def get_relative_path_in_lib(f, components=4):
-    return os.path.sep.join(os.path.normpath(f).split(os.path.sep)[-components:])
+def get_last_n_components_of_path(path, n):
+    """
+    Get the last `components` of the path. E.g. `get_last_n_components_of_path("/foo/bar/baz", 2)` returns `bar/baz`
+    """
+    return os.path.sep.join(os.path.normpath(path).split(os.path.sep)[-n:])
 
 
 @require_torch
@@ -473,10 +471,10 @@ NEW_BERT_CONSTANT = "value"
         # BERT
         bert_files = get_model_files("bert", frameworks=["pt"])
 
-        doc_file = str(Path(bert_files["doc_file"]).relative_to(REPO_PATH))
+        doc_file = get_last_n_components_of_path(bert_files["doc_file"], n=5)
         self.assertEqual(doc_file, "docs/source/en/model_doc/bert.md")
 
-        model_files = {get_relative_path_in_lib(f) for f in bert_files["model_files"]}
+        model_files = {get_last_n_components_of_path(f, n=4) for f in bert_files["model_files"]}
         bert_model_files = BERT_MODEL_FILES - {
             "transformers/models/bert/modeling_tf_bert.py",
             "transformers/models/bert/modeling_flax_bert.py",
@@ -485,7 +483,7 @@ NEW_BERT_CONSTANT = "value"
 
         self.assertEqual(bert_files["module_name"], "bert")
 
-        test_files = {str(Path(f).relative_to(REPO_PATH)) for f in bert_files["test_files"]}
+        test_files = {get_last_n_components_of_path(f, n=4) for f in bert_files["test_files"]}
         bert_test_files = {
             "tests/models/bert/test_tokenization_bert.py",
             "tests/models/bert/test_modeling_bert.py",
@@ -494,10 +492,10 @@ NEW_BERT_CONSTANT = "value"
 
         # VIT
         vit_files = get_model_files("vit", frameworks=["pt"])
-        doc_file = str(Path(vit_files["doc_file"]).relative_to(REPO_PATH))
+        doc_file = get_last_n_components_of_path(vit_files["doc_file"], n=5)
         self.assertEqual(doc_file, "docs/source/en/model_doc/vit.md")
 
-        model_files = {get_relative_path_in_lib(f) for f in vit_files["model_files"]}
+        model_files = {get_last_n_components_of_path(f, n=4) for f in vit_files["model_files"]}
         vit_model_files = VIT_MODEL_FILES - {
             "transformers/models/vit/modeling_tf_vit.py",
             "transformers/models/vit/modeling_flax_vit.py",
@@ -506,7 +504,7 @@ NEW_BERT_CONSTANT = "value"
 
         self.assertEqual(vit_files["module_name"], "vit")
 
-        test_files = {str(Path(f).relative_to(REPO_PATH)) for f in vit_files["test_files"]}
+        test_files = {get_last_n_components_of_path(f, n=4) for f in vit_files["test_files"]}
         vit_test_files = {
             "tests/models/vit/test_image_processing_vit.py",
             "tests/models/vit/test_modeling_vit.py",
@@ -515,10 +513,10 @@ NEW_BERT_CONSTANT = "value"
 
         # Wav2Vec2
         wav2vec2_files = get_model_files("wav2vec2", frameworks=["pt"])
-        doc_file = str(Path(wav2vec2_files["doc_file"]).relative_to(REPO_PATH))
+        doc_file = get_last_n_components_of_path(wav2vec2_files["doc_file"], n=5)
         self.assertEqual(doc_file, "docs/source/en/model_doc/wav2vec2.md")
 
-        model_files = {get_relative_path_in_lib(f) for f in wav2vec2_files["model_files"]}
+        model_files = {get_last_n_components_of_path(f, n=4) for f in wav2vec2_files["model_files"]}
         wav2vec2_model_files = WAV2VEC2_MODEL_FILES - {
             "transformers/models/wav2vec2/modeling_tf_wav2vec2.py",
             "transformers/models/wav2vec2/modeling_flax_wav2vec2.py",
@@ -527,7 +525,7 @@ NEW_BERT_CONSTANT = "value"
 
         self.assertEqual(wav2vec2_files["module_name"], "wav2vec2")
 
-        test_files = {str(Path(f).relative_to(REPO_PATH)) for f in wav2vec2_files["test_files"]}
+        test_files = {get_last_n_components_of_path(f, n=4) for f in wav2vec2_files["test_files"]}
         wav2vec2_test_files = {
             "tests/models/wav2vec2/test_feature_extraction_wav2vec2.py",
             "tests/models/wav2vec2/test_modeling_wav2vec2.py",
@@ -575,21 +573,21 @@ NEW_BERT_CONSTANT = "value"
         self.assertEqual(model_classes, expected_model_classes)
 
         all_bert_files = bert_info["model_files"]
-        model_files = {get_relative_path_in_lib(f) for f in all_bert_files["model_files"]}
+        model_files = {get_last_n_components_of_path(f, 4) for f in all_bert_files["model_files"]}
         bert_model_files = BERT_MODEL_FILES - {
             "transformers/models/bert/modeling_tf_bert.py",
             "transformers/models/bert/modeling_flax_bert.py",
         }
         self.assertEqual(model_files, bert_model_files)
 
-        test_files = {str(Path(f).relative_to(REPO_PATH)) for f in all_bert_files["test_files"]}
+        test_files = {get_last_n_components_of_path(f, n=4) for f in all_bert_files["test_files"]}
         bert_test_files = {
             "tests/models/bert/test_tokenization_bert.py",
             "tests/models/bert/test_modeling_bert.py",
         }
         self.assertEqual(test_files, bert_test_files)
 
-        doc_file = str(Path(all_bert_files["doc_file"]).relative_to(REPO_PATH))
+        doc_file = get_last_n_components_of_path(all_bert_files["doc_file"], n=5)
         self.assertEqual(doc_file, "docs/source/en/model_doc/bert.md")
 
         self.assertEqual(all_bert_files["module_name"], "bert")
@@ -619,28 +617,28 @@ NEW_BERT_CONSTANT = "value"
         self.assertEqual(model_classes, expected_model_classes)
 
         all_vit_files = vit_info["model_files"]
-        model_files = {get_relative_path_in_lib(f) for f in all_vit_files["model_files"]}
+        model_files = {get_last_n_components_of_path(f, 4) for f in all_vit_files["model_files"]}
         vit_model_files = VIT_MODEL_FILES - {
             "transformers/models/vit/modeling_tf_vit.py",
             "transformers/models/vit/modeling_flax_vit.py",
         }
         self.assertEqual(model_files, vit_model_files)
 
-        test_files = {str(Path(f).relative_to(REPO_PATH)) for f in all_vit_files["test_files"]}
+        test_files = {get_last_n_components_of_path(f, n=4) for f in all_vit_files["test_files"]}
         vit_test_files = {
             "tests/models/vit/test_image_processing_vit.py",
             "tests/models/vit/test_modeling_vit.py",
         }
         self.assertEqual(test_files, vit_test_files)
 
-        doc_file = str(Path(all_vit_files["doc_file"]).relative_to(REPO_PATH))
+        doc_file = get_last_n_components_of_path(all_vit_files["doc_file"], n=5)
         self.assertEqual(doc_file, "docs/source/en/model_doc/vit.md")
 
         self.assertEqual(all_vit_files["module_name"], "vit")
 
         vit_model_patterns = vit_info["model_patterns"]
         self.assertEqual(vit_model_patterns.model_name, "ViT")
-        self.assertEqual(vit_model_patterns.checkpoint, "google/vit-base-patch16-224-in21k")
+        self.assertEqual(vit_model_patterns.checkpoint, "google/vit-base-patch16-224")
         self.assertEqual(vit_model_patterns.model_type, "vit")
         self.assertEqual(vit_model_patterns.model_lower_cased, "vit")
         self.assertEqual(vit_model_patterns.model_camel_cased, "ViT")
@@ -671,14 +669,14 @@ NEW_BERT_CONSTANT = "value"
         self.assertEqual(model_classes, expected_model_classes)
 
         all_wav2vec2_files = wav2vec2_info["model_files"]
-        model_files = {get_relative_path_in_lib(f) for f in all_wav2vec2_files["model_files"]}
+        model_files = {get_last_n_components_of_path(f, 4) for f in all_wav2vec2_files["model_files"]}
         wav2vec2_model_files = WAV2VEC2_MODEL_FILES - {
             "transformers/models/wav2vec2/modeling_tf_wav2vec2.py",
             "transformers/models/wav2vec2/modeling_flax_wav2vec2.py",
         }
         self.assertEqual(model_files, wav2vec2_model_files)
 
-        test_files = {str(Path(f).relative_to(REPO_PATH)) for f in all_wav2vec2_files["test_files"]}
+        test_files = {get_last_n_components_of_path(f, n=4) for f in all_wav2vec2_files["test_files"]}
         wav2vec2_test_files = {
             "tests/models/wav2vec2/test_feature_extraction_wav2vec2.py",
             "tests/models/wav2vec2/test_modeling_wav2vec2.py",
@@ -687,7 +685,7 @@ NEW_BERT_CONSTANT = "value"
         }
         self.assertEqual(test_files, wav2vec2_test_files)
 
-        doc_file = str(Path(all_wav2vec2_files["doc_file"]).relative_to(REPO_PATH))
+        doc_file = get_last_n_components_of_path(all_wav2vec2_files["doc_file"], n=5)
         self.assertEqual(doc_file, "docs/source/en/model_doc/wav2vec2.md")
 
         self.assertEqual(all_wav2vec2_files["module_name"], "wav2vec2")
