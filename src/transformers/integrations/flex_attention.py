@@ -145,9 +145,9 @@ def make_flex_block_causal_mask(
         key_length = total_seq_len
     if not query_length:
         query_length = total_seq_len
-    # older torch cannot handle < 128 (default block size)
-    pad_len = max(key_length, flex_default_block_size)
-    attention_mask_2d = torch.nn.functional.pad(attention_mask_2d, value=0, pad=(0, pad_len))
+    # older torch (2.5.x) cannot handle sequences not in multiples of 128 (default block size)
+    pad_len = ((key_length // flex_default_block_size) + 1) * flex_default_block_size
+    attention_mask_2d = torch.nn.functional.pad(attention_mask_2d, value=0, pad=(0, pad_len - key_length))
     device = attention_mask_2d.device
     document_ids = attention_mask_2d.clone()
 
