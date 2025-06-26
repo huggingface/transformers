@@ -2756,10 +2756,15 @@ class OneFormerPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module: nn.Module):
         xavier_std = self.config.init_xavier_std
         std = self.config.init_std
-        if isinstance(module, OneFormerTransformerDecoder):
+        if isinstance(module, OneFormerTransformerModule):
+            if module.input_projections is not None:
+                for input_projection in module.input_projections:
+                    if not isinstance(input_projection, nn.Sequential):
+                        nn.init.xavier_uniform_(input_projection.weight, gain=xavier_std)
+                        nn.init.constant_(input_projection.bias, 0)
+        elif isinstance(module, OneFormerTransformerDecoder):
             nn.init.xavier_uniform_(module.query_input_projection.weight, gain=xavier_std)
             nn.init.constant_(module.query_input_projection.bias, 0)
-            module.query_input_projection._is_hf_initialized = True
         elif isinstance(module, OneFormerPixelDecoderEncoderMultiscaleDeformableAttention):
             nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
             thetas = torch.arange(module.n_heads, dtype=torch.int64).float() * (2.0 * math.pi / module.n_heads)
@@ -2799,8 +2804,8 @@ class OneFormerPreTrainedModel(PreTrainedModel):
                 nn.init.normal_(layer.mlp.fc1.weight, std=fc_std)
                 nn.init.normal_(layer.mlp.fc2.weight, std=proj_std)
         elif isinstance(module, OneFormerTextEncoder):
-            nn.init.normal_(module.token_embedding.weight, std=std)
-            nn.init.normal_(module.positional_embedding, std=std)
+            nn.init.normal_(module.token_embedding.weight, std=0.02)
+            nn.init.normal_(module.positional_embedding, std=0.01)
         if hasattr(module, "reference_points"):
             nn.init.xavier_uniform_(module.reference_points.weight.data, gain=1.0)
             nn.init.constant_(module.reference_points.bias.data, 0.0)

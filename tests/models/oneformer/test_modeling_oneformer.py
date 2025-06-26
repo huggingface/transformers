@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch OneFormer model."""
 
-import copy
 import inspect
 import unittest
 
@@ -35,7 +34,7 @@ from transformers.testing_utils import (
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -49,14 +48,6 @@ if is_torch_available():
 
 if is_vision_available():
     from PIL import Image
-
-
-def _config_zero_init(config):
-    configs_no_init = copy.deepcopy(config)
-    for key in configs_no_init.__dict__.keys():
-        if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
-            setattr(configs_no_init, key, 1e-10)
-    return configs_no_init
 
 
 class OneFormerModelTester:
@@ -377,7 +368,6 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.is_training = True
         config.contrastive_temperature = 1
-        config.backbone_config.initializer_range = 0
 
         configs_no_init = _config_zero_init(config)
         for model_class in self.all_model_classes:
@@ -392,6 +382,8 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
                         or "self_attn.out_proj.weight" in name
                         or "mlp.fc1.weight" in name
                         or "mlp.fc2.weight" in name
+                        or "text_mapper.text_encoder.positional_embedding" in name
+                        or "text_mapper.text_encoder.token_embedding.weight" in name
                     ):
                         continue
                     self.assertIn(
