@@ -129,8 +129,6 @@ class EvollaConfig(PretrainedConfig):
             Whether or not to return the hidden states of all layers.
         use_cache (`bool`, *optional*, defaults to `False`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        return_dict (`bool`, *optional*, defaults to `True`):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether or not to tie the input and output word embeddings.
 
@@ -198,7 +196,6 @@ class EvollaConfig(PretrainedConfig):
         output_attentions=False,
         output_hidden_states=False,
         use_cache=False,
-        return_dict=True,
         tie_word_embeddings=False,
         **kwargs,
     ):
@@ -258,7 +255,6 @@ class EvollaConfig(PretrainedConfig):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             use_cache=use_cache,
-            return_dict=return_dict,
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
