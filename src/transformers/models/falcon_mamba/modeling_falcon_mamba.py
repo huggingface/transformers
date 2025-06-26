@@ -33,29 +33,9 @@ from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
-from ...utils.import_utils import (
-    is_causal_conv1d_available,
-    is_falcon_mamba_ssm_available,
-    is_falcon_mambapy_available,
-)
+from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
+from ...utils.import_utils import is_mambapy_available as is_falcon_mambapy_available
 from .configuration_falcon_mamba import FalconMambaConfig
-
-
-if is_falcon_mambapy_available():
-    from falcon_mambapy.pscan import pscan
-else:
-    pscan = None
-
-if is_falcon_mamba_ssm_available():
-    from falcon_mamba_ssm.ops.selective_scan_interface import falcon_mamba_inner_fn, selective_scan_fn
-    from falcon_mamba_ssm.ops.triton.selective_state_update import selective_state_update
-else:
-    selective_state_update, selective_scan_fn, falcon_mamba_inner_fn = None, None, None
-
-if is_causal_conv1d_available():
-    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-else:
-    causal_conv1d_update, causal_conv1d_fn = None, None
 
 
 logger = logging.get_logger(__name__)
@@ -161,9 +141,26 @@ class FalconMambaCache:
             self.ssm_states[layer_idx].zero_()
 
 
-is_fast_path_available = all(
-    (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, falcon_mamba_inner_fn)
-)
+def is_fast_path_available():
+    if is_mamba_ssm_available():
+        from mamba_ssm.ops.selective_scan_interface import mamba_inner_fn, selective_scan_fn
+        from mamba_ssm.ops.triton.selective_state_update import selective_state_update
+    else:
+        selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
+
+    if is_causal_conv1d_available():
+        from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
+    else:
+        causal_conv1d_update, causal_conv1d_fn = None, None
+
+    return (
+        all((selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)),
+        selective_state_update,
+        selective_scan_fn,
+        mamba_inner_fn,
+        causal_conv1d_update,
+        causal_conv1d_fn,
+    )
 
 
 def rms_forward(hidden_states, variance_epsilon=1e-6):
@@ -252,6 +249,14 @@ class FalconMambaMixer(nn.Module):
                     " is None. Falling back to the sequential implementation of FalconMamba, as use_falcon_mambapy is set to False. To install follow https://github.com/state-spaces/falcon_mamba/#installation and"
                     " https://github.com/Dao-AILab/causal-conv1d. For the falcon_mamba.py backend, follow https://github.com/alxndrTL/falcon_mamba.py."
                 )
+        # Triton expects to pass RMS weights even if they are non learnable, thus we need to create these weights here
+        self.register_buffer(
+            "b_c_rms", torch.nn.Parameter(torch.ones(self.ssm_state_size), requires_grad=False), persistent=False
+        )
+        self.register_buffer(
+            "dt_rms", torch.nn.Parameter(torch.ones(self.intermediate_size), requires_grad=False), persistent=False
+        )
+        self.rms_eps = config.mixer_rms_eps
 
     def cuda_kernels_forward(
         self,
@@ -260,6 +265,17 @@ class FalconMambaMixer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
+        if is_mamba_ssm_available():
+            from mamba_ssm.ops.selective_scan_interface import mamba_inner_fn, selective_scan_fn
+            from mamba_ssm.ops.triton.selective_state_update import selective_state_update
+        else:
+            selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
+
+        if is_causal_conv1d_available():
+            from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
+        else:
+            causal_conv1d_update, causal_conv1d_fn = None, None
+
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
 
@@ -375,6 +391,10 @@ class FalconMambaMixer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
+        if is_falcon_mambapy_available():
+            from mambapy.pscan import pscan
+        else:
+            pscan = None
         batch_size, seq_len, _ = input_states.shape
         dtype = input_states.dtype
         # 1. Gated MLP's linear projection
@@ -443,7 +463,7 @@ class FalconMambaMixer(nn.Module):
         deltaB_u = discrete_B * hidden_states[:, :, :, None].float()
 
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
-        if self.use_mambapy and self.training and cache_params is None:
+        if self.use_falcon_mambapy and self.training and cache_params is None:
             hs = pscan(
                 discrete_A.transpose(1, 2), deltaB_u.transpose(1, 2)
             )  # [batch, seq_len, intermediate_size, ssm_state_size]

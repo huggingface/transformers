@@ -20,8 +20,9 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ...utils import auto_docstring, logging
-from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available, is_mambapy_available
+from ...utils import auto_docstring
+from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
+from ...utils.import_utils import is_mambapy_available as is_falcon_mambapy_available
 from ..mamba.configuration_mamba import MambaConfig
 from ..mamba.modeling_mamba import (
     MambaBlock,
@@ -35,8 +36,97 @@ from ..mamba.modeling_mamba import (
     MambaRMSNorm,
 )
 
+
+def is_fast_path_available():
+    if is_mamba_ssm_available():
+        from mamba_ssm.ops.selective_scan_interface import mamba_inner_fn, selective_scan_fn
+        from mamba_ssm.ops.triton.selective_state_update import selective_state_update
+    else:
+        selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
+
+    if is_causal_conv1d_available():
+        from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
+    else:
+        causal_conv1d_update, causal_conv1d_fn = None, None
+
+    return (
+        all((selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)),
+        selective_state_update,
+        selective_scan_fn,
+        mamba_inner_fn,
+        causal_conv1d_update,
+        causal_conv1d_fn,
+    )
+
+
+(
+    is_fast_path_available,
+    selective_state_update,
+    selective_scan_fn,
+    mamba_inner_fn,
+    causal_conv1d_update,
+    causal_conv1d_fn,
+) = is_fast_path_available()
+
+
 class FalconMambaConfig(MambaConfig):
-    pass
+    def __init__(
+        self,
+        vocab_size=50280,
+        hidden_size=768,
+        state_size=16,
+        num_hidden_layers=32,
+        layer_norm_epsilon=1e-5,
+        pad_token_id=0,
+        bos_token_id=0,
+        eos_token_id=0,
+        expand=2,
+        conv_kernel=4,
+        use_bias=False,
+        use_conv_bias=True,
+        hidden_act="silu",
+        initializer_range=0.1,
+        residual_in_fp32=True,
+        time_step_rank="auto",
+        time_step_scale=1.0,
+        time_step_min=0.001,
+        time_step_max=0.1,
+        time_step_init_scheme="random",
+        time_step_floor=1e-4,
+        rescale_prenorm_residual=False,
+        use_cache=True,
+        use_falcon_mambapy=False,
+        mixer_rms_eps=1e-6,
+        **kwargs,
+    ):
+        super().__init__(
+            vocab_size=vocab_size,
+            hidden_size=hidden_size,
+            state_size=state_size,
+            num_hidden_layers=num_hidden_layers,
+            layer_norm_epsilon=layer_norm_epsilon,
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            expand=expand,
+            conv_kernel=conv_kernel,
+            use_bias=use_bias,
+            use_conv_bias=use_conv_bias,
+            hidden_act=hidden_act,
+            initializer_range=initializer_range,
+            residual_in_fp32=residual_in_fp32,
+            time_step_rank=time_step_rank,
+            time_step_scale=time_step_scale,
+            time_step_min=time_step_min,
+            time_step_max=time_step_max,
+            time_step_init_scheme=time_step_init_scheme,
+            time_step_floor=time_step_floor,
+            rescale_prenorm_residual=rescale_prenorm_residual,
+            use_cache=use_cache,
+            use_falcon_mambapy=use_falcon_mambapy,
+            **kwargs,
+        )
+        self.mixer_rms_eps = mixer_rms_eps
 
 
 class FalconMambaCache(MambaCache):
@@ -63,6 +153,17 @@ def rms_forward(hidden_states, variance_epsilon=1e-6):
 
 
 class FalconMambaMixer(MambaMixer):
+    def __init__(self, config: FalconMambaConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        # Triton expects to pass RMS weights even if they are non learnable, thus we need to create these weights here
+        self.register_buffer(
+            "b_c_rms", torch.nn.Parameter(torch.ones(self.ssm_state_size), requires_grad=False), persistent=False
+        )
+        self.register_buffer(
+            "dt_rms", torch.nn.Parameter(torch.ones(self.intermediate_size), requires_grad=False), persistent=False
+        )
+        self.rms_eps = config.mixer_rms_eps
+
     def cuda_kernels_forward(
         self,
         hidden_states: torch.Tensor,
@@ -70,6 +171,17 @@ class FalconMambaMixer(MambaMixer):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
+        if is_mamba_ssm_available():
+            from mamba_ssm.ops.selective_scan_interface import mamba_inner_fn, selective_scan_fn
+            from mamba_ssm.ops.triton.selective_state_update import selective_state_update
+        else:
+            selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
+
+        if is_causal_conv1d_available():
+            from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
+        else:
+            causal_conv1d_update, causal_conv1d_fn = None, None
+
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
 
@@ -185,6 +297,10 @@ class FalconMambaMixer(MambaMixer):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
+        if is_falcon_mambapy_available():
+            from mambapy.pscan import pscan
+        else:
+            pscan = None
         batch_size, seq_len, _ = input_states.shape
         dtype = input_states.dtype
         # 1. Gated MLP's linear projection
@@ -253,7 +369,7 @@ class FalconMambaMixer(MambaMixer):
         deltaB_u = discrete_B * hidden_states[:, :, :, None].float()
 
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
-        if self.use_mambapy and self.training and cache_params is None:
+        if self.use_falcon_mambapy and self.training and cache_params is None:
             hs = pscan(
                 discrete_A.transpose(1, 2), deltaB_u.transpose(1, 2)
             )  # [batch, seq_len, intermediate_size, ssm_state_size]

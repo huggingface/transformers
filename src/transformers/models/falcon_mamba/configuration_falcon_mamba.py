@@ -127,8 +127,10 @@ class FalconMambaConfig(PretrainedConfig):
         rescale_prenorm_residual=False,
         use_cache=True,
         use_falcon_mambapy=False,
+        mixer_rms_eps=1e-6,
         **kwargs,
     ):
+        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, pad_token_id=pad_token_id, **kwargs)
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.state_size = state_size
@@ -154,8 +156,7 @@ class FalconMambaConfig(PretrainedConfig):
         self.residual_in_fp32 = residual_in_fp32
         self.use_cache = use_cache
         self.use_falcon_mambapy = use_falcon_mambapy
-
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, pad_token_id=pad_token_id, **kwargs)
+        self.mixer_rms_eps = mixer_rms_eps
 
 
 __all__ = ["FalconMambaConfig"]

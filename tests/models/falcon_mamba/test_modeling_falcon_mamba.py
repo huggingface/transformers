@@ -41,10 +41,10 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        FalconMambaCache,
         FalconMambaForCausalLM,
         FalconMambaModel,
     )
-    from transformers.cache_utils import MambaCache
 
 
 # Copied from transformers.tests.models.mamba.MambaModelTester with Mamba->FalconMamba,mamba->falcon_mamba
@@ -396,7 +396,7 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, MambaCache):  # MODIFIED PART START
+                    if isinstance(tuple_object, FalconMambaCache):  # MODIFIED PART START
                         recursive_check(tuple_object.conv_states, dict_object.conv_states)
                         recursive_check(tuple_object.ssm_states, dict_object.ssm_states)
                     elif isinstance(tuple_object, (list, tuple)):  # MODIFIED PART END

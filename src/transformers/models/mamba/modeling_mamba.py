@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
@@ -38,25 +39,38 @@ from .configuration_mamba import MambaConfig
 
 logger = logging.get_logger(__name__)
 
-if is_mambapy_available():
-    from mambapy.pscan import pscan
-else:
-    pscan = None
 
-if is_mamba_ssm_available():
-    from mamba_ssm.ops.selective_scan_interface import mamba_inner_fn, selective_scan_fn
-    from mamba_ssm.ops.triton.selective_state_update import selective_state_update
-else:
-    selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
+def is_fast_path_available():
+    if is_mamba_ssm_available():
+        from mamba_ssm.ops.selective_scan_interface import mamba_inner_fn, selective_scan_fn
+        from mamba_ssm.ops.triton.selective_state_update import selective_state_update
+    else:
+        selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
 
-if is_causal_conv1d_available():
-    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-else:
-    causal_conv1d_update, causal_conv1d_fn = None, None
+    if is_causal_conv1d_available():
+        from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
+    else:
+        causal_conv1d_update, causal_conv1d_fn = None, None
 
-is_fast_path_available = all(
-    (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
-)
+    return (
+        all((selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)),
+        selective_state_update,
+        selective_scan_fn,
+        mamba_inner_fn,
+        causal_conv1d_update,
+        causal_conv1d_fn,
+    )
+
+
+(
+    is_fast_path_available,
+    selective_state_update,
+    selective_scan_fn,
+    mamba_inner_fn,
+    causal_conv1d_update,
+    causal_conv1d_fn,
+) = is_fast_path_available()
+
 
 class MambaCache:
     """
@@ -329,6 +343,10 @@ class MambaMixer(nn.Module):
 
     # fmt: off
     def slow_forward(self, input_states, cache_params: Optional[MambaCache]=None, cache_position:Optional[torch.LongTensor]=None, attention_mask: Optional[torch.LongTensor] = None):
+        if is_mambapy_available():
+            from mambapy.pscan import pscan
+        else:
+            pscan = None
         batch_size, seq_len, _ = input_states.shape
         dtype = input_states.dtype
         # 1. Gated MLP's linear projection
