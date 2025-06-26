@@ -13,7 +13,5 @@
     },
     "frameworks": [
         "pt",
-        "tf",
-        "flax"
     ]
-} 
+}

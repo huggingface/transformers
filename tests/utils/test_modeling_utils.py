@@ -76,7 +76,6 @@ from transformers.utils import (
 from transformers.utils.import_utils import (
     is_flash_attn_2_available,
     is_flash_attn_3_available,
-    is_flax_available,
     is_torch_npu_available,
     is_torch_sdpa_available,
 )
@@ -314,10 +313,6 @@ class TestModelGammaBeta(PreTrainedModel):
 
     def forward(self):
         return self.LayerNorm()
-
-
-if is_flax_available():
-    pass
 
 
 TINY_T5 = "patrickvonplaten/t5-tiny-random"
