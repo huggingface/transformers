@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # Tensor parallelism in transformers
 
-[Tensor parallelism](./perf_train_gpu_many#tensor-parallelism) shards a model onto multiple accelerators(e.g. CUDA GPU, Intel XPU) and parallelizes computations such as matrix multiplication. It enables fitting larger model sizes into memory and is faster because each accelerator can process a tensor slice.
+[Tensor parallelism](./perf_train_gpu_many#tensor-parallelism) shards a model onto multiple accelerators (CUDA GPU, Intel XPU, etc.) and parallelizes computations such as matrix multiplication. It enables fitting larger model sizes into memory and is faster because each accelerator can process a tensor slice.
 This document assumes that you are already familiar with the basics of tensor parallelism. If you are not, please refer to the [Ultra-Scale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook?section=tensor_parallelism) section on tensor parallelism.
 
 > [!TIP]
