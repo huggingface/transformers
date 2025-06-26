@@ -656,35 +656,39 @@ class KyutaiSpeechToTextBf16Test(unittest.TestCase):
             self.assertTrue(model.model.dtype == torch.bfloat16)
             self.assertTrue(model.lm_head.weight.data.dtype == torch.bfloat16)
 
-        # # Load using `accelerate` in bf16
-        # model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(
-        #     model_checkpoint, torch_dtype=torch.bfloat16, device_map="auto"
-        # )
-        # self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.bfloat16)
-        # self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.bfloat16)
+        # Load using `accelerate` in bf16
+        model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(
+            model_checkpoint, torch_dtype=torch.bfloat16, device_map="auto"
+        )
+        self.assertTrue(model.codec_model.dtype == torch.float32)
+        self.assertTrue(model.model.dtype == torch.bfloat16)
+        self.assertTrue(model.lm_head.weight.data.dtype == torch.bfloat16)
 
-        # # Load using `accelerate` in bf16
-        # model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(
-        #     model_checkpoint,
-        #     torch_dtype=torch.bfloat16,
-        # )
-        # self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.bfloat16)
-        # self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.bfloat16)
+        # Load using `accelerate` in bf16
+        model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(
+            model_checkpoint,
+            torch_dtype=torch.bfloat16,
+        )
+        self.assertTrue(model.codec_model.dtype == torch.float32)
+        self.assertTrue(model.model.dtype == torch.bfloat16)
+        self.assertTrue(model.lm_head.weight.data.dtype == torch.bfloat16)
 
-        # # Load without using `accelerate`
-        # model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(
-        #     model_checkpoint,
-        #     torch_dtype=torch.float16,
-        # )
-        # self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
-        # self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.float16)
+        # Load without using `accelerate`
+        model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(
+            model_checkpoint,
+            torch_dtype=torch.float16,
+        )
+        self.assertTrue(model.codec_model.dtype == torch.float32)
+        self.assertTrue(model.model.dtype == torch.float16)
+        self.assertTrue(model.lm_head.weight.data.dtype == torch.float16)
 
-        # # Load using `accelerate`
-        # model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(
-        #     model_checkpoint, torch_dtype=torch.float16, device_map="auto"
-        # )
-        # self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
-        # self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.float16)
+        # Load using `accelerate`
+        model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(
+            model_checkpoint, torch_dtype=torch.float16, device_map="auto"
+        )
+        self.assertTrue(model.codec_model.dtype == torch.float32)
+        self.assertTrue(model.model.dtype == torch.float16)
+        self.assertTrue(model.lm_head.weight.data.dtype == torch.float16)
 
 
 class KyutaiSpeechToTextForConditionalGenerationIntegrationTests(unittest.TestCase):
