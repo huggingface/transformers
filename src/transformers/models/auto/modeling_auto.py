@@ -99,6 +99,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("depth_pro", "DepthProModel"),
         ("deta", "DetaModel"),
         ("detr", "DetrModel"),
+        ("dia", "DiaModel"),
         ("diffllama", "DiffLlamaModel"),
         ("dinat", "DinatModel"),
         ("dinov2", "Dinov2Model"),
@@ -174,6 +175,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("jetmoe", "JetMoeModel"),
         ("jukebox", "JukeboxModel"),
         ("kosmos-2", "Kosmos2Model"),
+        ("kyutai_speech_to_text", "KyutaiSpeechToTextModel"),
         ("layoutlm", "LayoutLMModel"),
         ("layoutlmv2", "LayoutLMv2Model"),
         ("layoutlmv3", "LayoutLMv3Model"),
@@ -304,7 +306,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("squeezebert", "SqueezeBertModel"),
         ("stablelm", "StableLmModel"),
         ("starcoder2", "Starcoder2Model"),
-        ("stt", "KyutaiSpeechToTextModel"),
         ("superglue", "SuperGlueForKeypointMatching"),
         ("swiftformer", "SwiftFormerModel"),
         ("swin", "SwinModel"),
@@ -472,6 +473,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("data2vec-text", "Data2VecTextForMaskedLM"),
         ("deberta", "DebertaForMaskedLM"),
         ("deberta-v2", "DebertaV2ForMaskedLM"),
+        ("dia", "DiaForConditionalGeneration"),
         ("distilbert", "DistilBertForMaskedLM"),
         ("electra", "ElectraForMaskedLM"),
         ("encoder-decoder", "EncoderDecoderModel"),
@@ -1059,7 +1061,9 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
     [
+        ("dia", "DiaForConditionalGeneration"),
         ("granite_speech", "GraniteSpeechForConditionalGeneration"),
+        ("kyutai_speech_to_text", "KyutaiSpeechToTextForConditionalGeneration"),
         ("moonshine", "MoonshineForConditionalGeneration"),
         ("pop2piano", "Pop2PianoForConditionalGeneration"),
         ("seamless_m4t", "SeamlessM4TForSpeechToText"),
@@ -1067,7 +1071,6 @@ MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
         ("speech-encoder-decoder", "SpeechEncoderDecoderModel"),
         ("speech_to_text", "Speech2TextForConditionalGeneration"),
         ("speecht5", "SpeechT5ForSpeechToText"),
-        ("stt", "KyutaiSpeechToTextForConditionalGeneration"),
         ("whisper", "WhisperForConditionalGeneration"),
     ]
 )
@@ -1629,6 +1632,12 @@ MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+MODEL_FOR_AUDIO_TOKENIZATION_NAMES = OrderedDict(
+    [
+        ("dac", "DacModel"),
+    ]
+)
+
 MODEL_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_MAPPING_NAMES)
 MODEL_FOR_PRETRAINING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_PRETRAINING_MAPPING_NAMES)
 MODEL_WITH_LM_HEAD_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_WITH_LM_HEAD_MAPPING_NAMES)
@@ -1736,6 +1745,8 @@ MODEL_FOR_TIME_SERIES_PREDICTION_MAPPING = _LazyAutoMapping(
 )
 
 MODEL_FOR_IMAGE_TO_IMAGE_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES)
+
+MODEL_FOR_AUDIO_TOKENIZATION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_AUDIO_TOKENIZATION_NAMES)
 
 
 class AutoModelForMaskGeneration(_BaseAutoModelClass):
@@ -2034,6 +2045,15 @@ class AutoModelForMaskedImageModeling(_BaseAutoModelClass):
 AutoModelForMaskedImageModeling = auto_class_update(AutoModelForMaskedImageModeling, head_doc="masked image modeling")
 
 
+class AutoModelForAudioTokenization(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_AUDIO_TOKENIZATION_MAPPING
+
+
+AutoModelForAudioTokenization = auto_class_update(
+    AutoModelForAudioTokenization, head_doc="audio tokenization through codebooks"
+)
+
+
 class AutoModelWithLMHead(_AutoModelWithLMHead):
     @classmethod
     def from_config(cls, config):
@@ -2059,6 +2079,7 @@ class AutoModelWithLMHead(_AutoModelWithLMHead):
 __all__ = [
     "MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING",
     "MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING",
+    "MODEL_FOR_AUDIO_TOKENIZATION_MAPPING",
     "MODEL_FOR_AUDIO_XVECTOR_MAPPING",
     "MODEL_FOR_BACKBONE_MAPPING",
     "MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING",
@@ -2106,6 +2127,7 @@ __all__ = [
     "AutoBackbone",
     "AutoModelForAudioClassification",
     "AutoModelForAudioFrameClassification",
+    "AutoModelForAudioTokenization",
     "AutoModelForAudioXVector",
     "AutoModelForCausalLM",
     "AutoModelForCTC",

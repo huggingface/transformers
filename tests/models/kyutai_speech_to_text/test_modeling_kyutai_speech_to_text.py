@@ -619,7 +619,7 @@ class KyutaiSpeechToTextForConditionalGenerationIntegrationTests(unittest.TestCa
     _dataset = None
 
     def setUp(self):
-        self.model_checkpoint = "kyutai/stt-2.6b-en"
+        self.model_checkpoint = "kyutai/stt-2.6b-en-trfs"
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
