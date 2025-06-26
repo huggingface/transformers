@@ -26,6 +26,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -406,7 +407,7 @@ class UMT5LayerCrossAttention(nn.Module):
         return outputs
 
 
-class UMT5Block(nn.Module):
+class UMT5Block(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx: Optional[int] = None):
         super().__init__()
         self.is_decoder = config.is_decoder
@@ -765,35 +766,20 @@ class UMT5Stack(UMT5PreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.forward,
-                    hidden_states,
-                    causal_mask,
-                    encoder_hidden_states,
-                    encoder_extended_attention_mask,
-                    layer_head_mask,
-                    cross_attn_layer_head_mask,
-                    None,  # past_key_value is always None with gradient checkpointing
-                    use_cache,
-                    output_attentions,
-                    cache_position,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask=causal_mask,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_extended_attention_mask,
-                    layer_head_mask=layer_head_mask,
-                    cross_attn_layer_head_mask=cross_attn_layer_head_mask,
-                    past_key_value=past_key_values,
-                    use_cache=use_cache,
-                    output_attentions=output_attentions,
-                    cache_position=cache_position,
-                )
+            layer_outputs = layer_module(
+                hidden_states,
+                causal_mask,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                encoder_attention_mask=encoder_extended_attention_mask,
+                layer_head_mask=layer_head_mask,
+                cross_attn_layer_head_mask=cross_attn_layer_head_mask,
+                past_key_value=past_key_values,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                cache_position=cache_position,
+            )
 
-                hidden_states = layer_outputs[0]
+            hidden_states = layer_outputs[0]
 
             if use_cache:
                 next_decoder_cache = layer_outputs[1]

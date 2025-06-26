@@ -619,7 +619,7 @@ ALL_FILE_TYPES = (
     "processing",
     "image_processing",
     "video_processing",
-    "feature_extractor",
+    "feature_extraction",
 )
 
 
@@ -1137,7 +1137,7 @@ TYPE_TO_FILE_TYPE = {
     "VideoProcessor": "video_processing",
     "VideoProcessorInitKwargs": "video_processing",
     "FastImageProcessorKwargs": "image_processing*_fast",
-    "FeatureExtractor": "feature_extractor",
+    "FeatureExtractor": "feature_extraction",
     "ProcessorKwargs": "processing",
     "VideosKwargs": "processing",
     "ImagesKwargs": "processing",
@@ -1439,7 +1439,7 @@ class ModularFileMapper(ModuleMapper):
 
         original_dependencies = []
         other_files_dependencies = defaultdict(list)
-        for dep in tuple(missing_dependencies):
+        for dep in sorted(missing_dependencies):
             if dep in self.added_objects_file_mapping:
                 file = self.added_objects_file_mapping[dep]
                 other_files_dependencies[file].append(dep)
@@ -1490,7 +1490,7 @@ class ModularFileMapper(ModuleMapper):
                 suffix = common_partial_suffix(class_name, modeling_bases[0])
                 if len(suffix) > 0 and suffix[0].isupper():
                     cased_model_name = class_name.replace(suffix, "")
-                    # If both the old model and new model share the last part of their name, is is detected as a common
+                    # If both the old model and new model share the last part of their name, is detected as a common
                     # suffix, but it should not be the case -> use the full name in this case
                     if len(cased_model_name) < len(cased_default_name) and cased_default_name in class_name:
                         cased_model_name = cased_default_name
@@ -1778,19 +1778,31 @@ def save_modeling_file(modular_file, converted_file):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    # Same arg as both positional and optional, just for convenience
     parser.add_argument(
+        "files",
+        nargs="*",
+        help="A list of `modular_xxxx` files that should be converted to single model file",
+    )
+    parser.add_argument(
+        "--files-to-parse",
         "--files_to_parse",
+        "--files",
+        "-f",
         default=["all"],
         nargs="+",
         help="A list of `modular_xxxx` files that should be converted to single model file",
     )
     args = parser.parse_args()
-    if args.files_to_parse == ["all"]:
-        args.files_to_parse = glob.glob("src/transformers/models/**/modular_*.py", recursive=True)
-    if args.files_to_parse == ["examples"]:
-        args.files_to_parse = glob.glob("examples/**/modular_*.py", recursive=True)
+    # Both arg represent the same data, but as positional and optional
+    files_to_parse = args.files if len(args.files) > 0 else args.files_to_parse
+
+    if files_to_parse == ["all"]:
+        files_to_parse = glob.glob("src/transformers/models/**/modular_*.py", recursive=True)
+    if files_to_parse == ["examples"]:
+        files_to_parse = glob.glob("examples/**/modular_*.py", recursive=True)
     else:
-        for i, model_name in enumerate(args.files_to_parse):
+        for i, model_name in enumerate(files_to_parse):
             if os.sep not in model_name:
                 full_path = os.path.join("src", "transformers", "models", model_name, f"modular_{model_name}.py")
                 # If it does not exist, try in the examples section
@@ -1799,10 +1811,10 @@ if __name__ == "__main__":
                 # We did not find it anywhere
                 if not os.path.isfile(full_path):
                     raise ValueError(f"Cannot find a modular file for {model_name}. Please provide the full path.")
-                args.files_to_parse[i] = full_path
+                files_to_parse[i] = full_path
 
-    priority_list, _ = find_priority_list(args.files_to_parse)
-    assert len(priority_list) == len(args.files_to_parse), "Some files will not be converted"
+    priority_list, _ = find_priority_list(files_to_parse)
+    assert len(priority_list) == len(files_to_parse), "Some files will not be converted"
 
     for file_name in priority_list:
         print(f"Converting {file_name} to a single model single file format")
