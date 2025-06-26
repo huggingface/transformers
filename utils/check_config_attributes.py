@@ -277,7 +277,7 @@ SPECIAL_CASES_TO_ALLOW = {
     ],
     "Llama4VisionConfig": ["multi_modal_projector_bias", "norm_eps"],
     "SmolLM3Config": ["no_rope_layer_interval"],
-    "Gemma3nVisionConfig": ["architecture", "do_pooling"],  # this is for use in `timm`
+    "Gemma3nVisionConfig": ["architecture", "do_pooling", "model_args"],  # this is for use in `timm`
 }
 
 
