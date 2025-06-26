@@ -854,4 +854,4 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
         )
 
 
-__all__ = ["MambaForCausalLM", "MambaModel", "MambaPreTrainedModel"]
+__all__ = ["MambaForCausalLM", "MambaModel", "MambaPreTrainedModel", "MambaCache"]
