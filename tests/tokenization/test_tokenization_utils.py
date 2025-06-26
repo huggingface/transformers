@@ -186,6 +186,17 @@ class TokenizerUtilsTest(unittest.TestCase):
         self.assertEqual(tensor_batch["inputs"].shape, (1, 3))
         self.assertEqual(tensor_batch["labels"].shape, (1,))
 
+    def test_padding_accepts_tensors(self):
+        features = [{"input_ids": np.array([0, 1, 2])}, {"input_ids": np.array([0, 1, 2, 3])}]
+        tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
+
+        batch = tokenizer.pad(features, padding=True)
+        self.assertTrue(isinstance(batch["input_ids"], np.ndarray))
+        self.assertEqual(batch["input_ids"].tolist(), [[0, 1, 2, tokenizer.pad_token_id], [0, 1, 2, 3]])
+        batch = tokenizer.pad(features, padding=True, return_tensors="np")
+        self.assertTrue(isinstance(batch["input_ids"], np.ndarray))
+        self.assertEqual(batch["input_ids"].tolist(), [[0, 1, 2, tokenizer.pad_token_id], [0, 1, 2, 3]])
+
     @require_tokenizers
     def test_decoding_single_token(self):
         for tokenizer_class in [BertTokenizer, BertTokenizerFast]:

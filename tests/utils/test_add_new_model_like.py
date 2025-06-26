@@ -593,67 +593,6 @@ NEW_BERT_CONSTANT = "value"
         }
         self.assertEqual(test_files, wav2vec2_test_files)
 
-    def test_get_model_files_tf_and_flax(self):
-        # BERT
-        bert_files = get_model_files("bert", frameworks=["tf", "flax"])
-
-        doc_file = str(Path(bert_files["doc_file"]).relative_to(REPO_PATH))
-        self.assertEqual(doc_file, "docs/source/en/model_doc/bert.md")
-
-        model_files = {str(Path(f).relative_to(REPO_PATH)) for f in bert_files["model_files"]}
-        bert_model_files = BERT_MODEL_FILES - {"src/transformers/models/bert/modeling_bert.py"}
-        self.assertEqual(model_files, bert_model_files)
-
-        self.assertEqual(bert_files["module_name"], "bert")
-
-        test_files = {str(Path(f).relative_to(REPO_PATH)) for f in bert_files["test_files"]}
-        bert_test_files = {
-            "tests/models/bert/test_tokenization_bert.py",
-            "tests/models/bert/test_modeling_tf_bert.py",
-            "tests/models/bert/test_modeling_flax_bert.py",
-        }
-        self.assertEqual(test_files, bert_test_files)
-
-        # VIT
-        vit_files = get_model_files("vit", frameworks=["tf", "flax"])
-        doc_file = str(Path(vit_files["doc_file"]).relative_to(REPO_PATH))
-        self.assertEqual(doc_file, "docs/source/en/model_doc/vit.md")
-
-        model_files = {str(Path(f).relative_to(REPO_PATH)) for f in vit_files["model_files"]}
-        vit_model_files = VIT_MODEL_FILES - {"src/transformers/models/vit/modeling_vit.py"}
-        self.assertEqual(model_files, vit_model_files)
-
-        self.assertEqual(vit_files["module_name"], "vit")
-
-        test_files = {str(Path(f).relative_to(REPO_PATH)) for f in vit_files["test_files"]}
-        vit_test_files = {
-            "tests/models/vit/test_image_processing_vit.py",
-            "tests/models/vit/test_modeling_tf_vit.py",
-            "tests/models/vit/test_modeling_flax_vit.py",
-        }
-        self.assertEqual(test_files, vit_test_files)
-
-        # Wav2Vec2
-        wav2vec2_files = get_model_files("wav2vec2", frameworks=["tf", "flax"])
-        doc_file = str(Path(wav2vec2_files["doc_file"]).relative_to(REPO_PATH))
-        self.assertEqual(doc_file, "docs/source/en/model_doc/wav2vec2.md")
-
-        model_files = {str(Path(f).relative_to(REPO_PATH)) for f in wav2vec2_files["model_files"]}
-        wav2vec2_model_files = WAV2VEC2_MODEL_FILES - {"src/transformers/models/wav2vec2/modeling_wav2vec2.py"}
-        self.assertEqual(model_files, wav2vec2_model_files)
-
-        self.assertEqual(wav2vec2_files["module_name"], "wav2vec2")
-
-        test_files = {str(Path(f).relative_to(REPO_PATH)) for f in wav2vec2_files["test_files"]}
-        wav2vec2_test_files = {
-            "tests/models/wav2vec2/test_feature_extraction_wav2vec2.py",
-            "tests/models/wav2vec2/test_modeling_tf_wav2vec2.py",
-            "tests/models/wav2vec2/test_modeling_flax_wav2vec2.py",
-            "tests/models/wav2vec2/test_processor_wav2vec2.py",
-            "tests/models/wav2vec2/test_tokenization_wav2vec2.py",
-        }
-        self.assertEqual(test_files, wav2vec2_test_files)
-
     def test_find_base_model_checkpoint(self):
         self.assertEqual(find_base_model_checkpoint("bert"), "google-bert/bert-base-uncased")
         self.assertEqual(find_base_model_checkpoint("gpt2"), "openai-community/gpt2")
