@@ -330,9 +330,9 @@ class EvollaSequenceAlignerCrossAttention(nn.Module):
         self.attention_head_size = int(self.hidden_size / self.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        attention_probs_dropout_prob = (config.aligner_attention_probs_dropout_prob,)
-        enable_bias = (config.aligner_enable_bias,)
-        ffn_mult = (config.aligner_ffn_mult,)
+        attention_probs_dropout_prob = config.aligner_attention_probs_dropout_prob
+        enable_bias = config.aligner_enable_bias
+        ffn_mult = config.aligner_ffn_mult
 
         self.query = nn.Linear(self.hidden_size, self.all_head_size)
         if protein_encoder_dim is not None:
@@ -570,7 +570,7 @@ class EvollaDecoderLayer(GradientCheckpointingLayer):
         self.mlp = EvollaMLP(config)
         self.input_layernorm = EvollaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = EvollaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        if not (layer_idx + 1) % max(config.num_hidden_layers // config.aligner_num_add_layers, 1) == 0:
+        if (layer_idx + 1) % max(config.num_hidden_layers // config.aligner_num_add_layers, 1) == 0:
             self.adapter = EvollaSequenceAlignerCrossAttention(
                 config,
                 protein_encoder_dim=config.hidden_size,
