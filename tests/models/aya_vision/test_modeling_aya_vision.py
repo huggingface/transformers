@@ -22,7 +22,6 @@ from transformers import (
     AutoProcessor,
     AyaVisionConfig,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
     Expectations,
@@ -49,10 +48,6 @@ if is_torch_available():
         AyaVisionForConditionalGeneration,
         AyaVisionModel,
     )
-
-
-if is_vision_available():
-    pass
 
 
 class AyaVisionVisionText2TextModelTester:
@@ -338,7 +333,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        del cls.model_checkpoint
+        del cls.model
         cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
