@@ -182,7 +182,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ### A100 GPU
 <hfoptions id="examples-A100-GPU">
-<hfoption id="int8-dynamic-and-weight-only">
+<hfoption id="int8_dynamic_activation_int8_weight-and-int8_weight_only">
     
 ```py
 import torch
@@ -281,7 +281,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ### Intel XPU
 <hfoptions id="examples-Intel-XPU">
-<hfoption id="int8-dynamic-and-weight-only">
+<hfoption id="int8_dynamic_activation_int8_weight-and-int8_weight_only">
     
 ```py
 import torch
