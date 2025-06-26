@@ -221,6 +221,9 @@ class MambaMixer(nn.Module):
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
         self.use_bias = config.use_bias
 
+        self.warn_slow_implementation()
+
+    def warn_slow_implementation(self):
         if not is_fast_path_available:
             if self.use_mambapy:
                 if is_mambapy_available():

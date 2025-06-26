@@ -14,6 +14,7 @@
 # limitations under the License.
 """PyTorch FALCONMAMBA model."""
 
+import logging
 from typing import Optional
 
 import torch
@@ -21,8 +22,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...utils import auto_docstring
-from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
-from ...utils.import_utils import is_mambapy_available as is_falcon_mambapy_available
+from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available, is_mambapy_available
 from ..mamba.configuration_mamba import MambaConfig
 from ..mamba.modeling_mamba import (
     MambaBlock,
@@ -35,6 +35,9 @@ from ..mamba.modeling_mamba import (
     MambaPreTrainedModel,
     MambaRMSNorm,
 )
+
+
+logger = logging.get_logger(__name__)
 
 
 def is_fast_path_available():
@@ -229,6 +232,26 @@ def rms_forward(hidden_states, variance_epsilon=1e-6):
 
 
 class FalconMambaMixer(MambaMixer):
+    def warn_slow_implementation(self):
+        if not is_fast_path_available:
+            if self.use_mambapy:
+                if is_mambapy_available():
+                    logger.warning_once(
+                        "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
+                        " is None. Falling back to the mamba.py backend. To install follow https://github.com/state-spaces/mamba/#installation and"
+                        " https://github.com/Dao-AILab/causal-conv1d"
+                    )
+                else:
+                    raise ImportError(
+                        "use_mambapy is set to True but the mambapy package is not installed. To install it follow https://github.com/alxndrTL/mamba.py."
+                    )
+            else:
+                logger.warning_once(
+                    "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
+                    " is None. Falling back to the sequential implementation of Mamba, as use_mambapy is set to False. To install follow https://github.com/state-spaces/mamba/#installation and"
+                    " https://github.com/Dao-AILab/causal-conv1d. For the mamba.py backend, follow https://github.com/alxndrTL/mamba.py."
+                )
+
     def __init__(self, config: FalconMambaConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         # Triton expects to pass RMS weights even if they are non learnable, thus we need to create these weights here
@@ -373,7 +396,7 @@ class FalconMambaMixer(MambaMixer):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
-        if is_falcon_mambapy_available():
+        if is_mambapy_available():
             from mambapy.pscan import pscan
         else:
             pscan = None
