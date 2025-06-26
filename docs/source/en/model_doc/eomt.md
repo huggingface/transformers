@@ -69,7 +69,6 @@ model = EomtForUniversalSegmentation.from_pretrained(model_id)
 
 image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
-# Preprocess the image for semantic segmentation by setting `segmentation_type` arg
 inputs = processor(
     images=image,
     return_tensors="pt",
@@ -122,7 +121,6 @@ model = EomtForUniversalSegmentation.from_pretrained(model_id)
 
 image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
-# Preprocess the image for semantic segmentation by setting `segmentation_type` arg
 inputs = processor(
     images=image,
     return_tensors="pt",
@@ -166,7 +164,6 @@ model = EomtForUniversalSegmentation.from_pretrained(model_id)
 
 image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
-# Preprocess the image for panoptic segmentation by setting `segmentation_type` arg
 inputs = processor(
     images=image,
     return_tensors="pt",
