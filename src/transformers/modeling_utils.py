@@ -26,6 +26,7 @@ import re
 import shutil
 import tempfile
 import warnings
+from abc import abstractmethod
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
@@ -5902,3 +5903,26 @@ class AttentionInterface(GeneralInterface):
 
 # Global AttentionInterface shared by all models which do not need to overwrite any of the existing ones
 ALL_ATTENTION_FUNCTIONS: AttentionInterface = AttentionInterface()
+
+
+class PreTrainedAudioTokenizerBase(PreTrainedModel):
+    """
+    Class that additionally defines the behavior of any `audio_tokenizer` to be added.
+    Characteristic for any of them:
+        1. Encode raw audio into discrete audio codebooks (with x channels)
+        2. Decode from discrete audio codebooks back to raw audio
+    It is possible that they can decode in different ways given a different representation
+    but they are forced to support 2. nonetheless, e.g. see `DAC`.
+    """
+
+    @abstractmethod
+    def encode(self, input_values: torch.Tensor, *args, **kwargs):
+        """
+        Encode raw audio retrieved from a respective `FeatureExtractor` into discrete audio codebooks (with x channels)
+        """
+        pass
+
+    @abstractmethod
+    def decode(self, audio_codes: torch.Tensor, *args, **kwargs):
+        """Decode from discrete audio codebooks back to raw audio"""
+        pass
