@@ -258,7 +258,7 @@ class BLTPatcherConfig(PretrainedConfig):
         **kwargs,
     ):
         self.vocab_size = vocab_size
-        self.dim = dim
+        self.hidden_size = dim
         self.n_layers = n_layers
         self.n_heads = n_heads
         self.head_dim = head_dim if head_dim is not None else (dim // n_heads)
@@ -288,7 +288,7 @@ class BLTPatcherConfig(PretrainedConfig):
         self.hidden_act = "silu"  # BLT uses silu activation
         
         # Calculate intermediate_size using BLTMLP logic based on actual hidden_size
-        self.intermediate_size = multiple_of * ((int(8 * dim / 3) + multiple_of - 1) // multiple_of)
+        self.intermediate_size = multiple_of * ((int(8 * self.hidden_size / 3) + multiple_of - 1) // multiple_of)
         
         # Set simple rope scaling for patcher (no complex dynamic rope)
         self.rope_scaling = {"rope_type": "default"}
@@ -305,20 +305,20 @@ class BLTConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 256):
             Vocabulary size of the BLT model. Defines the number of different tokens (bytes) that can be represented.
-        max_seqlen (`int`, *optional*, defaults to 1024):
+        max_position_embeddings (`int`, *optional*, defaults to 1024):
             The maximum sequence length that this model can handle.
 
         # Main architecture dimensions
-        dim (`int`, *optional*, defaults to 512):
+        hidden_size (`int`, *optional*, defaults to 512):
             Main dimension of the model.
-        n_layers (`int`, *optional*, defaults to 8):
+        num_hidden_layers (`int`, *optional*, defaults to 8):
             Number of layers in the main transformer.
-        n_heads (`int`, *optional*, defaults to 8):
+        num_attention_heads (`int`, *optional*, defaults to 8):
             Number of attention heads in the main transformer.
         head_dim (`int`, *optional*):
-            Dimension of each attention head. If not specified, computed as dim // n_heads.
-        n_kv_heads (`int`, *optional*):
-            Number of key-value heads for grouped query attention. If not specified, defaults to n_heads.
+            Dimension of each attention head. If not specified, computed as hidden_size // num_attention_heads.
+        num_key_value_heads (`int`, *optional*):
+            Number of key-value heads for grouped query attention. If not specified, defaults to num_attention_heads.
 
         # Component-specific dimensions
         dim_global (`int`, *optional*, defaults to 512):
@@ -464,13 +464,13 @@ class BLTConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=256,
-        max_seqlen=1024,
+        max_position_embeddings=1024,
         # Main architecture dimensions
-        dim=512,
-        n_layers=8,
-        n_heads=8,
+        hidden_size=512,
+        num_hidden_layers=8,
+        num_attention_heads=8,
         head_dim=None,
-        n_kv_heads=None,
+        num_key_value_heads=None,
         # Component-specific dimensions
         dim_global=512,
         dim_local_decoder=512,
@@ -542,14 +542,14 @@ class BLTConfig(PretrainedConfig):
         
         # Basic model configuration
         self.vocab_size = vocab_size
-        self.max_seqlen = max_seqlen
+        self.max_position_embeddings = max_position_embeddings
 
         # Main architecture dimensions
-        self.dim = dim
-        self.n_layers = n_layers
-        self.n_heads = n_heads
-        self.head_dim = head_dim if head_dim is not None else (dim // n_heads)
-        self.n_kv_heads = n_kv_heads
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.head_dim = head_dim if head_dim is not None else (hidden_size // num_attention_heads)
+        self.num_key_value_heads = num_key_value_heads
 
         # Component-specific dimensions
         self.dim_global = dim_global
@@ -630,11 +630,11 @@ class BLTConfig(PretrainedConfig):
             pm_size=pm_size,
             hidden_size=dim_local_encoder,
             num_attention_heads=n_heads_local_encoder,
-            num_key_value_heads=n_kv_heads,
+            num_key_value_heads=num_key_value_heads,
             num_hidden_layers=n_layers_local_encoder,
             norm_eps=norm_eps,
             dropout=dropout,
-            max_position_embeddings=max_encoder_seq_length or max_seqlen,
+            max_position_embeddings=max_encoder_seq_length or max_position_embeddings,
             rope_theta=rope_theta,
             rope_scaling={"rope_type": "default"},
             hidden_act=hidden_act,
@@ -648,11 +648,11 @@ class BLTConfig(PretrainedConfig):
             dim_global=dim_global,
             hidden_size=dim_local_decoder,
             num_attention_heads=n_heads_local_decoder,
-            num_key_value_heads=n_kv_heads,
+            num_key_value_heads=num_key_value_heads,
             num_hidden_layers=n_layers_local_decoder,
             norm_eps=norm_eps,
             dropout=dropout,
-            max_position_embeddings=max_encoder_seq_length or max_seqlen,
+            max_position_embeddings=max_encoder_seq_length or max_position_embeddings,
             rope_theta=rope_theta,
             rope_scaling={"rope_type": "default"},
             hidden_act=hidden_act,
@@ -666,7 +666,7 @@ class BLTConfig(PretrainedConfig):
             num_hidden_layers=n_layers_global,
             norm_eps=norm_eps,
             dropout=dropout,
-            max_position_embeddings=max_seqlen,
+            max_position_embeddings=max_position_embeddings,
             rope_theta=rope_theta,
             rope_scaling={"rope_type": "default"},
             hidden_act=hidden_act,
@@ -690,7 +690,7 @@ class BLTConfig(PretrainedConfig):
 
         # Set compatibility attributes for transformers
         self.num_key_value_heads = n_heads_local_encoder
-        self.max_position_embeddings = max_seqlen
+        self.max_position_embeddings = max_position_embeddings
         self.hidden_size = dim_local_encoder
         self.num_attention_heads = n_heads_local_encoder
         
@@ -705,6 +705,8 @@ class BLTConfig(PretrainedConfig):
             **kwargs,
         )
 
+
+
 __all__ = [
     "BLTConfig", 
     "BLTPatcherConfig", 
@@ -714,3 +716,4 @@ __all__ = [
     "InitStdFactor", 
     "PatchingModeEnum"
 ]
+
