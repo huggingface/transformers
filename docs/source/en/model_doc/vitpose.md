@@ -37,13 +37,15 @@ import supervision as sv
 from PIL import Image
 from transformers import AutoProcessor, RTDetrForObjectDetection, VitPoseForPoseEstimation
 
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
 url = "https://media.cnn.com/api/v1/images/stellar/prod/160204101907-nba-slam-dunk-5.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 
 person_image_processor = AutoProcessor.from_pretrained("PekingU/rtdetr_r50vd_coco_o365")
-person_model = RTDetrForObjectDetection.from_pretrained("PekingU/rtdetr_r50vd_coco_o365", device_map="cuda")
+person_model = RTDetrForObjectDetection.from_pretrained("PekingU/rtdetr_r50vd_coco_o365", device_map="device")
 
-inputs = person_image_processor(images=image, return_tensors="pt").to("cuda")
+inputs = person_image_processor(images=image, return_tensors="pt").to("device")
 
 with torch.no_grad():
     outputs = person_model(**inputs)
@@ -60,9 +62,9 @@ person_boxes[:, 2] = person_boxes[:, 2] - person_boxes[:, 0]
 person_boxes[:, 3] = person_boxes[:, 3] - person_boxes[:, 1]
 
 image_processor = AutoProcessor.from_pretrained("usyd-community/vitpose-base-simple")
-model = VitPoseForPoseEstimation.from_pretrained("usyd-community/vitpose-base-simple", device_map="cuda")
+model = VitPoseForPoseEstimation.from_pretrained("usyd-community/vitpose-base-simple", device_map="device")
 
-inputs = image_processor(image, boxes=[person_boxes], return_tensors="pt").to("cuda")
+inputs = image_processor(image, boxes=[person_boxes], return_tensors="pt").to("device")
 
 with torch.no_grad():
     outputs = model(**inputs)
@@ -117,9 +119,9 @@ url = "https://media.cnn.com/api/v1/images/stellar/prod/160204101907-nba-slam-du
 image = Image.open(requests.get(url, stream=True).raw)
 
 person_image_processor = AutoProcessor.from_pretrained("PekingU/rtdetr_r50vd_coco_o365")
-person_model = RTDetrForObjectDetection.from_pretrained("PekingU/rtdetr_r50vd_coco_o365", device_map="cuda")
+person_model = RTDetrForObjectDetection.from_pretrained("PekingU/rtdetr_r50vd_coco_o365", device_map="device")
 
-inputs = person_image_processor(images=image, return_tensors="pt").to("cuda")
+inputs = person_image_processor(images=image, return_tensors="pt").to("device")
 
 with torch.no_grad():
     outputs = person_model(**inputs)
@@ -138,9 +140,9 @@ person_boxes[:, 3] = person_boxes[:, 3] - person_boxes[:, 1]
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 
 image_processor = AutoProcessor.from_pretrained("usyd-community/vitpose-plus-huge")
-model = VitPoseForPoseEstimation.from_pretrained("usyd-community/vitpose-plus-huge", device_map="cuda", quantization_config=quantization_config)
+model = VitPoseForPoseEstimation.from_pretrained("usyd-community/vitpose-plus-huge", device_map="device", quantization_config=quantization_config)
 
-inputs = image_processor(image, boxes=[person_boxes], return_tensors="pt").to("cuda")
+inputs = image_processor(image, boxes=[person_boxes], return_tensors="pt").to("device")
 
 with torch.no_grad():
     outputs = model(**inputs)
@@ -159,9 +161,9 @@ image_pose_result = pose_results[0]
     from transformers import AutoProcessor, VitPoseForPoseEstimation
 
     image_processor = AutoProcessor.from_pretrained("usyd-community/vitpose-plus-base")
-    model = VitPoseForPoseEstimation.from_pretrained("usyd-community/vitpose-plus-base", device="cuda")
+    model = VitPoseForPoseEstimation.from_pretrained("usyd-community/vitpose-plus-base", device="device")
 
-    inputs = image_processor(image, boxes=[person_boxes], return_tensors="pt").to("cuda")
+    inputs = image_processor(image, boxes=[person_boxes], return_tensors="pt").to("device")
     dataset_index = torch.tensor([0], device=device) # must be a tensor of shape (batch_size,)
 
     with torch.no_grad():
