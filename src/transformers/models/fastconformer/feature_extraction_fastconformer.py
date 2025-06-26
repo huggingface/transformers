@@ -19,12 +19,13 @@ Feature extractor class for FastConformer
 import warnings
 from typing import Optional, Union
 
-import torch
-
 from ... import is_torch_available
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, is_librosa_available, logging, requires_backends
+
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)
@@ -154,7 +155,7 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
 
         return self._filterbanks.to(device=device, dtype=dtype)
 
-    def get_window(self, win_length: int, window_type: str, device, dtype) -> torch.Tensor:
+    def get_window(self, win_length: int, window_type: str, device, dtype) -> "torch.Tensor":
         """Get window function based on type."""
         window_fns = {
             "hann": torch.hann_window,
@@ -175,14 +176,14 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
         seq_len = (audio_len + pad_amount - n_fft) // hop_length + 1
         return max(1, int(seq_len))  # Ensure at least 1 frame
 
-    def preemphasis_batch(self, x: torch.Tensor, preemph: float) -> torch.Tensor:
+    def preemphasis_batch(self, x: "torch.Tensor", preemph: float) -> "torch.Tensor":
         """Apply preemphasis filter to batch of audio signals."""
         # x: (B, T)
         x0 = x[:, :1]
         x_rest = x[:, 1:] - preemph * x[:, :-1]
         return torch.cat([x0, x_rest], dim=1)
 
-    def get_log_zero_guard_value(self, value, dtype: torch.dtype) -> float:
+    def get_log_zero_guard_value(self, value, dtype: "torch.dtype") -> float:
         """Get log zero guard value from config."""
         if isinstance(value, str):
             if value == "tiny":
@@ -194,8 +195,8 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
         return float(value)
 
     def normalize_mel_features(
-        self, mel: torch.Tensor, mask: torch.Tensor, normalize_type: str, eps: float = EPSILON
-    ) -> torch.Tensor:
+        self, mel: "torch.Tensor", mask: "torch.Tensor", normalize_type: str, eps: float = EPSILON
+    ) -> "torch.Tensor":
         """Apply normalization to mel features with proper masking."""
         mel_masked = mel * mask
 
@@ -223,7 +224,7 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
         normalized_mel = (mel - mean) / (std + eps)
         return normalized_mel
 
-    def get_logmel(self, x: torch.Tensor, seq_len: torch.Tensor) -> torch.Tensor:
+    def get_logmel(self, x: "torch.Tensor", seq_len: "torch.Tensor") -> "torch.Tensor":
         """
         Convert audio to log-mel spectrograms for inference (matching NeMo exactly).
 

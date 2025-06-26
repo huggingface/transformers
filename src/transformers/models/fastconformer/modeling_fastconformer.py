@@ -17,15 +17,16 @@
 import math
 from typing import Optional, Tuple, Union
 
-import torch
-import torch.utils.checkpoint
-from torch import nn
-
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, logging
+from ...utils import add_start_docstrings, is_torch_available, logging
 from .configuration_fastconformer import FastConformerConfig
+
+if is_torch_available():
+    import torch
+    import torch.utils.checkpoint
+    from torch import nn
 
 
 logger = logging.get_logger(__name__)
@@ -69,7 +70,7 @@ class FastConformerRelPositionalEncoding(nn.Module):
 
         self.pe = None
 
-    def extend_pe(self, length: int, device: torch.device, dtype: torch.dtype):
+    def extend_pe(self, length: int, device: "torch.device", dtype: "torch.dtype"):
         """Reset and extend the positional encodings if needed."""
         needed_size = 2 * length - 1
         if hasattr(self, "pe") and self.pe is not None and self.pe.size(1) >= needed_size:
@@ -78,7 +79,7 @@ class FastConformerRelPositionalEncoding(nn.Module):
         positions = torch.arange(length - 1, -length, -1, dtype=torch.float32, device=device).unsqueeze(1)
         self.create_pe(positions=positions, dtype=dtype)
 
-    def create_pe(self, positions: torch.Tensor, dtype: torch.dtype):
+    def create_pe(self, positions: "torch.Tensor", dtype: "torch.dtype"):
         """Create positional encoding matrix."""
         d_model = self.d_model
         pe = torch.zeros(positions.size(0), d_model, dtype=dtype, device=positions.device)
@@ -98,7 +99,7 @@ class FastConformerRelPositionalEncoding(nn.Module):
             del self.pe  # Remove existing buffer
             self.register_buffer("pe", pe_tensor, persistent=False)
 
-    def forward(self, x: torch.Tensor, cache_len: int = 0) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, x: "torch.Tensor", cache_len: int = 0) -> Tuple["torch.Tensor", "torch.Tensor"]:
         batch_size, seq_len, _ = x.shape
         input_len = seq_len + cache_len
         self.extend_pe(input_len, x.device, x.dtype)
@@ -149,11 +150,11 @@ class FastConformerMultiHeadAttention(nn.Module):
 
     def forward(
         self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        pos_emb: Optional[torch.Tensor] = None,
+        hidden_states: "torch.Tensor",
+        attention_mask: Optional["torch.Tensor"] = None,
+        pos_emb: Optional["torch.Tensor"] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> Tuple["torch.Tensor", Optional["torch.Tensor"]]:
         batch_size, seq_len, _ = hidden_states.shape
 
         q = self.linear_q(hidden_states).view(batch_size, seq_len, self.n_heads, self.d_k)
@@ -210,7 +211,7 @@ class FastConformerFeedForward(nn.Module):
         self.linear2 = nn.Linear(config.encoder_ffn_dim, config.d_model, bias=config.use_bias)
         self.activation_dropout = config.activation_dropout
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: "torch.Tensor") -> "torch.Tensor":
         x = self.linear1(x)
         x = self.activation(x)
         x = nn.functional.dropout(x, p=self.activation_dropout, training=self.training)
@@ -236,7 +237,7 @@ class FastConformerConvModule(nn.Module):
         self.activation = ACT2FN[config.activation_function]
         self.pointwise_conv2 = nn.Conv1d(d_model, d_model, kernel_size=1, bias=use_bias)
 
-    def forward(self, hidden_states: torch.Tensor, pad_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, hidden_states: "torch.Tensor", pad_mask: Optional["torch.Tensor"] = None) -> "torch.Tensor":
         hidden_states = hidden_states.transpose(1, 2)
         hidden_states = self.pointwise_conv1(hidden_states)
         hidden_states = nn.functional.glu(hidden_states, dim=1)
@@ -273,12 +274,12 @@ class FastConformerBlock(nn.Module):
 
     def forward(
         self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        pos_emb: Optional[torch.Tensor] = None,
-        pad_mask: Optional[torch.Tensor] = None,
+        hidden_states: "torch.Tensor",
+        attention_mask: Optional["torch.Tensor"] = None,
+        pos_emb: Optional["torch.Tensor"] = None,
+        pad_mask: Optional["torch.Tensor"] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> Tuple["torch.Tensor", Optional["torch.Tensor"]]:
         hidden_states = hidden_states + 0.5 * self.feed_forward1(self.norm_feed_forward1(hidden_states))
 
         x_norm = self.norm_self_att(hidden_states)
@@ -375,7 +376,7 @@ class FastConformerSubsamplingConv2D(nn.Module):
 
         self.out = nn.Linear(self.conv_channels * out_length_val, config.d_model, bias=True)
 
-    def forward(self, x: torch.Tensor, lengths: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, x: "torch.Tensor", lengths: "torch.Tensor") -> Tuple["torch.Tensor", "torch.Tensor"]:
         lengths = calc_length(
             lengths,
             all_paddings=self.left_padding + self.right_padding,
@@ -433,9 +434,9 @@ class FastConformerEncoder(FastConformerPreTrainedModel):
 
     def forward(
         self,
-        input_features: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        input_lengths: Optional[torch.Tensor] = None,
+        input_features: "torch.Tensor",
+        attention_mask: Optional["torch.Tensor"] = None,
+        input_lengths: Optional["torch.Tensor"] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -544,9 +545,9 @@ class FastConformerModel(FastConformerPreTrainedModel):
 
     def forward(
         self,
-        input_features: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        input_lengths: Optional[torch.Tensor] = None,
+        input_features: "torch.Tensor",
+        attention_mask: Optional["torch.Tensor"] = None,
+        input_lengths: Optional["torch.Tensor"] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
