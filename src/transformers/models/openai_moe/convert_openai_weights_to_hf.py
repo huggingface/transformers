@@ -94,7 +94,8 @@ def write_model(
         "beta_slow": float(original_config.pop("rope_ntk_alpha")),
         "factor": float(original_config.pop('rope_scaling_factor')),
         "rope_type": "yarn",
-        "truncate": False
+        "truncate": False,
+        "original_max_position_embeddings": 4096
       }
 
     config = OpenAIMoeConfig(num_local_experts=num_local_experts, rope_scaling=rope_scaling, **original_config)
