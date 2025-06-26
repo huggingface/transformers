@@ -325,33 +325,24 @@ class Gemma3nAudioConfig(PretrainedConfig):
             The epsilon used by the rms normalization layers.
         gradient_clipping (`float`, *optional*, defaults to 10000000000.0):
             Clipping value used to stablize extremely large gradient values.
-        conf_attention_chunk_size (`int`, *optional*, defaults to 12):
-            The sub-sequence size for local attention processing inside the Conformer ("conf") section of the
-            Universal Speech Model.
-        conf_attention_context_left (`int`, *optional*, defaults to 13):
-            The left context size of the local attention inside the Conformer ("conf") section of the
-            Universal Speech Model.
-        conf_attention_context_right (`int`, *optional*, defaults to 0):
-            The right context size of the local attention inside the Conformer ("conf") section of the
-            Universal Speech Model.
-        conf_attention_logit_cap (`float`, *optional*, defaults to 50.0):
-            Logit cap applied during local attention inside the Conformer ("conf") section of the
-            Universal Speech Model.
-        conf_num_attention_heads (`int`, *optional*, defaults to 8):
-            The number of attention heads in local attention inside the Conformer ("conf") section of the
-            Universal Speech Model.
-        conf_num_hidden_layers (`int`, *optional*, defaults to 12):
-            The number of layers that use local attention inside the Conformer ("conf") section of the
-            Universal Speech Model.
-        conf_conv_kernel_size (`int`, *optional*, defaults to 5):
-            Convolution kernel size for the conformer block inside the Conformer ("conf") section of the
-            Universal Speech Model.
-        conf_reduction_factor (`int`, *optional*, defaults to 4):
-            Reduction factor used in the conformer block inside the Conformer ("conf") section of the
-            Universal Speech Model.
-        conf_residual_weight (`float`, *optional*, defaults to 0.5):
-            Residual connection weight inside the Conformer ("conf") section of the
-            Universal Speech Model.
+        attention_chunk_size (`int`, *optional*, defaults to 12):
+            The sub-sequence size for local attention processing.
+        attention_context_left (`int`, *optional*, defaults to 13):
+            The left context size of the local attention.
+        attention_context_right (`int`, *optional*, defaults to 0):
+            The right context size of the local attention.
+        attention_logit_cap (`float`, *optional*, defaults to 50.0):
+            Logit cap applied during local attention.
+        num_attention_heads (`int`, *optional*, defaults to 8):
+            The number of attention heads in local attention.
+        num_hidden_layers (`int`, *optional*, defaults to 12):
+            The number of layers that use local attention.
+        conv_kernel_size (`int`, *optional*, defaults to 5):
+            Convolution kernel size for the conformer block.
+        reduction_factor (`int`, *optional*, defaults to 4):
+            Reduction factor used in the conformer block.
+        residual_weight (`float`, *optional*, defaults to 0.5):
+            Residual connection weight.
         sscp_conv_channel_size (`tuple(int, int)`, *optional*, defaults to `(128, 32)`):
             The channel sizes for the first and second convolutional layers in the Sub-sample Convolution Projection
             ("sscp") section of the Universal Speech Model.
@@ -395,15 +386,15 @@ class Gemma3nAudioConfig(PretrainedConfig):
         hidden_size: int = 1536,
         rms_norm_eps: float = 1e-6,
         gradient_clipping: float = 10_000_000_000.0,
-        conf_attention_chunk_size: int = 12,
-        conf_attention_context_left: int = 13,
-        conf_attention_context_right: int = 0,
-        conf_attention_logit_cap: float = 50.0,
-        conf_num_attention_heads: int = 8,
-        conf_num_hidden_layers: int = 12,
-        conf_conv_kernel_size: int = 5,
-        conf_reduction_factor: int = 4,
-        conf_residual_weight: float = 0.5,
+        attention_chunk_size: int = 12,
+        attention_context_left: int = 13,
+        attention_context_right: int = 0,
+        attention_logit_cap: float = 50.0,
+        num_attention_heads: int = 8,
+        num_hidden_layers: int = 12,
+        conv_kernel_size: int = 5,
+        reduction_factor: int = 4,
+        residual_weight: float = 0.5,
         sscp_conv_channel_size: tuple[int, int] = (128, 32),
         sscp_conv_group_norm_eps: float = 1e-3,
         sscp_conv_kernel_size: tuple[tuple[int, int], tuple[int, int]] = (
@@ -423,15 +414,15 @@ class Gemma3nAudioConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.vocab_offset = vocab_offset
         self.gradient_clipping = gradient_clipping
-        self.conf_attention_chunk_size = conf_attention_chunk_size
-        self.conf_attention_context_left = conf_attention_context_left
-        self.conf_attention_context_right = conf_attention_context_right
-        self.conf_attention_logit_cap = conf_attention_logit_cap
-        self.conf_num_attention_heads = conf_num_attention_heads
-        self.conf_num_hidden_layers = conf_num_hidden_layers
-        self.conf_conv_kernel_size = conf_conv_kernel_size
-        self.conf_reduction_factor = conf_reduction_factor
-        self.conf_residual_weight = conf_residual_weight
+        self.attention_chunk_size = attention_chunk_size
+        self.attention_context_left = attention_context_left
+        self.attention_context_right = attention_context_right
+        self.attention_logit_cap = attention_logit_cap
+        self.num_attention_heads = num_attention_heads
+        self.num_hidden_layers = num_hidden_layers
+        self.conv_kernel_size = conv_kernel_size
+        self.reduction_factor = reduction_factor
+        self.residual_weight = residual_weight
         self.sscp_conv_channel_size = sscp_conv_channel_size
         self.sscp_conv_group_norm_eps = sscp_conv_group_norm_eps
         self.sscp_conv_kernel_size = sscp_conv_kernel_size
