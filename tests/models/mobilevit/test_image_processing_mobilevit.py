@@ -14,6 +14,7 @@
 
 
 import unittest
+
 import requests
 from datasets import load_dataset
 
@@ -90,9 +91,8 @@ class MobileViTImageProcessingTester:
 
 def prepare_semantic_single_inputs():
     dataset = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
-
-    image = Image.open(dataset[0]["file"])
-    map = Image.open(dataset[1]["file"])
+    image = dataset[0]["image"]
+    map = dataset[1]["map"]
 
     return image, map
 
@@ -100,10 +100,10 @@ def prepare_semantic_single_inputs():
 def prepare_semantic_batch_inputs():
     dataset = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
 
-    image1 = Image.open(dataset[0]["file"])
-    map1 = Image.open(dataset[1]["file"])
-    image2 = Image.open(dataset[2]["file"])
-    map2 = Image.open(dataset[3]["file"])
+    image1 = dataset[0]["image"]
+    map1 = dataset[0]["map"]
+    image2 = dataset[1]["image"]
+    map2 = dataset[1]["map"]
 
     return [image1, image2], [map1, map2]
 

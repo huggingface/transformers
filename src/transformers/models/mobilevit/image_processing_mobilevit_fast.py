@@ -58,6 +58,10 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
     do_normalize = None
     do_convert_rgb = None
     do_flip_channel_order = True
+    valid_kwargs = MobileVitFastImageProcessorKwargs
+
+    def __init__(self, **kwargs: Unpack[MobileVitFastImageProcessorKwargs]):
+        super().__init__(**kwargs)
 
     def _preprocess(
         self,
@@ -70,7 +74,6 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
         do_center_crop: bool,
         crop_size: Optional[dict],
         do_flip_channel_order: bool,
-        do_convert_rgb: bool,
         return_tensors: Optional[str],
         **kwargs,
     ):
@@ -133,6 +136,8 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
             processed_segmentation_maps.append(segmentation_map)
 
         kwargs["do_rescale"] = False
+        kwargs["do_flip_channel_order"] = False
+        kwargs["interpolation"] = pil_torch_interpolation_mapping[PILImageResampling.NEAREST]
         processed_segmentation_maps = self._preprocess(images=processed_segmentation_maps, **kwargs)
 
         processed_segmentation_maps = processed_segmentation_maps.squeeze(1)
