@@ -22,7 +22,7 @@
 
 import math
 from functools import cached_property
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -184,12 +184,12 @@ class Emu3Attention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -246,9 +246,9 @@ class Emu3DecoderLayer(GradientCheckpointingLayer):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -362,8 +362,8 @@ class Emu3VQVAEConv3d(nn.Module):
         self,
         in_channel: int,
         out_channel: int,
-        kernel_size: Tuple[int],
-        stride: Tuple[int],
+        kernel_size: tuple[int],
+        stride: tuple[int],
     ):
         super().__init__()
 
@@ -607,7 +607,7 @@ class Emu3VQVAEAttentionBlock(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
         batch_size, seq_length, embed_dim = hidden_states.shape
@@ -959,7 +959,8 @@ class Emu3VQVAEDecoder(nn.Module):
     custom_intro="""
     The VQ-VAE model used in Emu3 for encoding/decoding images into discrete tokens.
     This model follows the "Make-a-scene: Scene-based text-to-image generation with human priors" paper from
-    [ Oran Gafni, Adam Polyak, Oron Ashual, Shelly Sheynin, Devi Parikh, and Yaniv Taigman](https://arxiv.org/abs/2203.13131).
+    [ Oran Gafni, Adam Polyak, Oron Ashual, Shelly Sheynin, Devi Parikh, and Yaniv
+    Taigman](https://huggingface.co/papers/2203.13131).
     """
 )
 class Emu3VQVAE(PreTrainedModel):
@@ -1113,7 +1114,7 @@ class Emu3ImageVocabularyMapping:
             mapping[k] = v
         return mapping
 
-    def convert_img2bpe(self, img_batch: List[torch.Tensor]) -> torch.Tensor:
+    def convert_img2bpe(self, img_batch: list[torch.Tensor]) -> torch.Tensor:
         device = img_batch.device
         eol_row = torch.ones((img_batch.shape[0], 1), dtype=torch.int) * self.eol_token_id
         img_tokens = self.img2bpe_mapping_tensor[img_batch.to("cpu")]
@@ -1142,8 +1143,8 @@ class Emu3PreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
     _supports_static_cache = True
     _supports_param_buffer_assignment = False
-    _supports_attention_backend = True
     _supports_flex_attn = True
+    _supports_attention_backend = True
 
     def _init_weights(self, module):
         std = self.config.get_text_config().initializer_range
@@ -1450,13 +1451,13 @@ class Emu3Model(Emu3PreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.set_input_embeddings(value)
 
-    def get_image_tokens(self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor):
-        logger.warning(
-            "`model.get_image_tokens()` is deprecated and will be removed in v4.58. To obtain discrete token use `model.get_image_features()`"
-        )
-        return self.get_image_featues(pixel_values)
+    def set_decoder(self, decoder):
+        self.text_model = decoder
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor):
+    def get_decoder(self):
+        return self.text_model
+
+    def get_image_tokens(self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor):
         """
         Tokenizes images into discrete tokens with VQGAN module. Converts
         obtained image tokens into BPE tokens and wraps with "boi" and "eoi"
@@ -1472,6 +1473,24 @@ class Emu3Model(Emu3PreTrainedModel):
         bpe_tokens_list = [self.vocabulary_mapping.convert_img2bpe(tokens).flatten() for tokens in image_tokens_list]
         bpe_tokens = torch.cat(bpe_tokens_list)
         return bpe_tokens
+
+    def get_image_features(self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor):
+        """
+        Tokenizes images into discrete tokens with VQGAN module and embeds
+        them with text embeddings layer
+
+        Args:
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
+                The tensors corresponding to the input images.
+        """
+        image_tokens = self.get_image_tokens(pixel_values, image_sizes)
+        split_sizes = [
+            (height // self.vqmodel.vision_spatial_factor) * (width // self.vqmodel.vision_spatial_factor + 1)
+            for height, width in image_sizes
+        ]
+        image_features = self.get_input_embeddings()(image_tokens)
+        image_features = torch.split(image_features, split_sizes)
+        return image_features
 
     @torch.no_grad
     def decode_image_tokens(self, image_tokens: torch.LongTensor, height: int, width: int):
@@ -1509,7 +1528,7 @@ class Emu3Model(Emu3PreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
         image_sizes (`torch.LongTensor` of shape `(batch_size, 2)`):
             The sizes of the images in the batch, being (height, width) for each image. Image sizes can be obtained using
@@ -1533,7 +1552,7 @@ class Emu3Model(Emu3PreTrainedModel):
             )
 
         if pixel_values is not None:
-            image_tokens = self.get_image_features(pixel_values, image_sizes)
+            image_tokens = self.get_image_tokens(pixel_values, image_sizes)
             special_image_mask = input_ids == self.vocabulary_mapping.image_token_id
             image_tokens = image_tokens.to(input_ids.device, input_ids.dtype)
             input_ids = input_ids.masked_scatter(special_image_mask, image_tokens)
@@ -1586,10 +1605,10 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
-        self.model = decoder
+        self.model.set_decoder(decoder)
 
     def get_decoder(self):
-        return self.model
+        return self.model.get_decoder()
 
     # Make modules available throught conditional class for BC
     @property
@@ -1626,7 +1645,7 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         labels: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[KwargsForCausalLM],
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
         image_sizes (`torch.LongTensor` of shape `(batch_size, 2)`):
             The sizes of the images in the batch, being (height, width) for each image. Image sizes can be obtained using

@@ -90,22 +90,14 @@ class MobileViTImageProcessingTester:
 
 
 def prepare_semantic_single_inputs():
-    dataset = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
-    image = dataset[0]["image"]
-    map = dataset[1]["map"]
-
-    return image, map
+    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+    example = ds[0]
+    return example["image"], example["map"]
 
 
 def prepare_semantic_batch_inputs():
-    dataset = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
-
-    image1 = dataset[0]["image"]
-    map1 = dataset[0]["map"]
-    image2 = dataset[1]["image"]
-    map2 = dataset[1]["map"]
-
-    return [image1, image2], [map1, map2]
+    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+    return list(ds["image"][:2]), list(ds["map"][:2])
 
 
 @require_torch

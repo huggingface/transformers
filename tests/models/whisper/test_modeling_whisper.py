@@ -1645,9 +1645,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large-v3")
         model.to(torch_device)
 
-        ds = load_dataset(
-            "facebook/multilingual_librispeech", "german", split="test", streaming=True, trust_remote_code=True
-        )
+        ds = load_dataset("facebook/multilingual_librispeech", "german", split="test", streaming=True)
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
 
         input_speech = next(iter(ds))["audio"]["array"]
@@ -1714,11 +1712,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         token = os.getenv("HF_HUB_READ_TOKEN", True)
         ds = load_dataset(
-            "mozilla-foundation/common_voice_6_1",
+            "hf-internal-testing/fixtures_common_voice",
             "ja",
             split="test",
             streaming=True,
-            trust_remote_code=True,
             token=token,
         )
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
@@ -1728,7 +1725,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             torch_device
         )
 
-        EXPECTED_TRANSCRIPTS = ["木村さんに電話を貸してもらいました", " Kimura-san called me."]
+        EXPECTED_TRANSCRIPTS = [
+            "夏の時期の時期でした",
+            " It was the time of day and all of the pens left during the summer.",
+        ]
 
         generated_ids = model.generate(
             input_features.repeat(2, 1, 1),
@@ -2031,11 +2031,13 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         ).input_features
         input_features = input_features.to(torch_device)
 
-        generated_ids = model.generate(input_features, max_length=448, return_timestamps=True).to("cpu")
+        generated_ids = model.generate(
+            input_features, max_length=448, return_timestamps=True, condition_on_prev_tokens=True
+        ).to("cpu")
 
         # fmt: off
         EXPECTED_OUTPUT = torch.tensor([
-            50365, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 11, 293, 321, 366, 5404, 281, 2928, 702, 14943, 13, 50629, 50682, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50870, 50911, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 11, 365, 5272, 293, 12904, 9256, 450, 10539, 949, 505, 11, 51245, 51287, 1034, 4680, 10117, 490, 3936, 293, 1080, 3542, 5160, 881, 26336, 281, 264, 1575, 13, 51494, 51523, 634, 575, 12525, 22618, 1968, 6144, 35617, 1456, 397, 266, 311, 589, 307, 534, 10281, 934, 439, 11, 51799, 51815, 50365, 293, 393, 4411, 50430
+            [50365, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 11, 293, 321, 366, 5404, 281, 2928, 702, 14943, 13, 50629, 50682, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50870, 50911, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 11, 365, 5272, 293, 12904, 9256, 450, 10539, 949, 505, 11, 51245, 51287, 1034, 4680, 10117, 490, 3936, 293, 1080, 3542, 5160, 881, 26336, 281, 264, 1575, 13, 51494, 51523, 634, 575, 12525, 22618, 1968, 6144, 35617, 1456, 397, 266, 311, 589, 307, 534, 10281, 934, 439, 11, 51799, 51815, 50365, 293, 393, 4411, 50431]
         ])
         # fmt: on
         torch.testing.assert_close(generated_ids[0], EXPECTED_OUTPUT)
@@ -2078,7 +2080,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
                     },
                     {
                         "text": (" and can discover"),
-                        "timestamp": (28.68, 29.98),
+                        "timestamp": (28.68, 30.0),
                     },
                 ],
             }
@@ -2431,7 +2433,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         torch_dtype = torch.float16 if (torch.cuda.is_available() or is_torch_xpu_available()) else torch.float32
         model_id = "openai/whisper-large-v2"
         model = WhisperForConditionalGeneration.from_pretrained(
-            model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
+            model_id, torch_dtype=torch_dtype, use_safetensors=True
         )
         model.to(torch_device)
 
@@ -2439,7 +2441,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         assistant_model_id = "distil-whisper/distil-large-v2"
         assistant_model = WhisperForCausalLM.from_pretrained(
-            assistant_model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
+            assistant_model_id, torch_dtype=torch_dtype, use_safetensors=True
         )
         assistant_model.to(torch_device)
 
@@ -2481,7 +2483,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         torch_dtype = torch.float16 if torch_device in ["cuda", "xpu"] else torch.float32
         model_id = "openai/whisper-large-v2"
         model = WhisperForConditionalGeneration.from_pretrained(
-            model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
+            model_id, torch_dtype=torch_dtype, use_safetensors=True
         )
         model.to(torch_device)
 
@@ -2489,7 +2491,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         assistant_model_id = "openai/whisper-tiny"
         assistant_model = WhisperForConditionalGeneration.from_pretrained(
-            assistant_model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
+            assistant_model_id, torch_dtype=torch_dtype, use_safetensors=True
         )
         assistant_model.to(torch_device)
 
@@ -3353,22 +3355,6 @@ class WhisperEncoderModelTest(ModelTesterMixin, unittest.TestCase):
     def test_forward_pass_weighted_layer_sum(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_forward(*config_and_inputs, use_weighted_layer_sum=True)
-
-    @unittest.skip(reason="Some undefined behavior encountered with tiny versions of this model. Skip for now.")
-    def test_cpu_offload(self):
-        pass
-
-    @unittest.skip(reason="Some undefined behavior encountered with tiny versions of this model. Skip for now.")
-    def test_disk_offload_bin(self):
-        pass
-
-    @unittest.skip(reason="Some undefined behavior encountered with tiny versions of this model. Skip for now.")
-    def test_disk_offload_safetensors(self):
-        pass
-
-    @unittest.skip(reason="Some undefined behavior encountered with tiny versions of this model. Skip for now.")
-    def test_model_parallelism(self):
-        pass
 
     @unittest.skip(reason="Not applicable for an encoder-only acoustic model")
     def test_inputs_embeds(self):

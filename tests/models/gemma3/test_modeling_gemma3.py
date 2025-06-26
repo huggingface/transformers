@@ -28,11 +28,15 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
+    is_flash_attn_2_available,
+    require_deterministic_for_xpu,
     require_flash_attn,
     require_read_token,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
+    require_torch_large_accelerator,
     slow,
     torch_device,
 )
@@ -348,12 +352,6 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def test_initialization(self):
         pass
 
-    @unittest.skip(
-        reason="Siglip has no FLEX attention, and we don't have a proper way to set/test attn in VLMs. TODO @raushan"
-    )
-    def test_flex_attention_with_grads(self):
-        pass
-
     def test_automodelforcausallm(self):
         """
         Regression test for #36741/#36917 -- make sure `AutoModelForCausalLM` works with a Gemma3 config, i.e. that
@@ -368,7 +366,7 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
 
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 @require_read_token
 class Gemma3IntegrationTest(unittest.TestCase):
     def setUp(self):
@@ -389,12 +387,11 @@ class Gemma3IntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
+    @require_deterministic_for_xpu
     def test_model_4b_bf16(self):
         model_id = "google/gemma-3-4b-it"
 
-        model = Gemma3ForConditionalGeneration.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
-        ).to(torch_device)
+        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(torch_device)
 
         inputs = self.processor.apply_chat_template(
             self.messages,
@@ -407,15 +404,23 @@ class Gemma3IntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
-        EXPECTED_TEXTS = ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown cow standing on a sandy beach with clear turquoise water and a blue sky in the background. It looks like']  # fmt: skip
-        self.assertEqual(output_text, EXPECTED_TEXTS)
+        EXPECTED_TEXTS = Expectations(
+            {
+                ("xpu", 3): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown and white cow standing on a sandy beach with turquoise water in the background. It looks like a lovely,'],
+                ("cuda", 7): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown and white cow standing on a sandy beach with turquoise water in the background. It looks like a lovely,'],
+                ("cuda", 8): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. It looks like a very sunny and'],
+                ("rocm", (9, 5)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown and white cow standing on a sandy beach with turquoise water and a distant coastline in the background. It looks'],
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
+        self.assertEqual(output_text, EXPECTED_TEXT)
 
+    @require_torch_large_accelerator
+    @require_deterministic_for_xpu
     def test_model_4b_batch(self):
         model_id = "google/gemma-3-4b-it"
 
-        model = Gemma3ForConditionalGeneration.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
-        ).to(torch_device)
+        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(torch_device)
 
         messages_2 = [
             {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
@@ -444,18 +449,34 @@ class Gemma3IntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
-        EXPECTED_TEXTS = [
-            'user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown cow standing on a sandy beach with clear turquoise water and a blue sky in the background. It looks like',
-            "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, these images are not identical. \n\nHere's a breakdown of the differences:\n\n*   **Image 1:** Shows a cow"
-        ]  # fmt: skip
-        self.assertEqual(output_text, EXPECTED_TEXTS)
+        EXPECTED_TEXTS = Expectations(
+            {
+                ("xpu", 3):
+                    [
+                        'user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. It looks like a very sunny and',
+                        'user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, these images are not identical. They depict very different scenes:\n\n*   **Image 1** shows a cow standing on a beach.',
+                    ],
+                ("cuda", 7): [],
+                ("cuda", 8):
+                    [
+                        'user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. It looks like a very sunny and',
+                        'user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, these images are not identical. They depict very different scenes:\n\n*   **Image 1** shows a cow standing on a beach.',
+                    ],
+                ("rocm", (9, 5)):
+                    [
+                        'user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. There are some clouds in the blue',
+                        'user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, these images are not identical. They depict very different scenes. \n\n*   **Image 1** shows a cow standing on a beach',
+                    ],
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
+        self.assertEqual(output_text, EXPECTED_TEXT)
 
+    @require_torch_large_accelerator
     def test_model_4b_crops(self):
         model_id = "google/gemma-3-4b-it"
 
-        model = Gemma3ForConditionalGeneration.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
-        ).to(torch_device)
+        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(torch_device)
 
         crop_config = {
             "images_kwargs": {
@@ -479,16 +500,23 @@ class Gemma3IntegrationTest(unittest.TestCase):
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
         EXPECTED_NUM_IMAGES = 3  # one for the origin image and two crops of images
-        EXPECTED_TEXTS = ['user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a beach with a turquoise ocean and blue sky in the background. It looks like the cow is enjoying the beach']  # fmt: skip
+        EXPECTED_TEXTS = Expectations(
+            {
+                ("xpu", 3): ['user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a sandy beach next to a turquoise ocean. There are clouds in the blue sky above.'],
+                ("cuda", 7): [],
+                ("cuda", 8): ['user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a sandy beach next to a turquoise ocean. There are clouds in the blue sky above.'],
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
         self.assertEqual(len(inputs["pixel_values"]), EXPECTED_NUM_IMAGES)
-        self.assertEqual(output_text, EXPECTED_TEXTS)
+        self.assertEqual(output_text, EXPECTED_TEXT)
 
+    @require_torch_large_accelerator
+    @require_deterministic_for_xpu
     def test_model_4b_batch_crops(self):
         model_id = "google/gemma-3-4b-it"
 
-        model = Gemma3ForConditionalGeneration.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
-        ).to(torch_device)
+        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(torch_device)
         crop_config = {
             "images_kwargs": {
                 "do_pan_and_scan": True,
@@ -525,19 +553,32 @@ class Gemma3IntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
         EXPECTED_NUM_IMAGES = 9  # 3 * (one for the origin image and two crops of images) = 9
-        EXPECTED_TEXTS = [
-            "user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a beach with a turquoise ocean and blue sky in the background. It looks like the cow is enjoying the beach",
-            "user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nWhile they all feature a brown cow in the foreground and a similar background (including the stop signs and",
-        ]  # fmt: skip
+        EXPECTED_TEXTS = Expectations(
+            {
+                ("xpu", 3): [
+                    'user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a sandy beach next to a turquoise ocean. There are clouds in the blue sky above.',
+                    'user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nThe first image shows a cow on a beach, while the second image shows a street scene with a',
+                ],
+                ("cuda", 7): [],
+                ("cuda", 8): [
+                    'user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a sandy beach next to a turquoise ocean. There are clouds in the blue sky above.',
+                    'user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nThe first image shows a cow on a beach, while the second image shows a street scene with a',
+                ],
+                ("rocm", (9, 5)) : [
+                    'user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a sandy beach next to a turquoise ocean. There are clouds in the blue sky above.',
+                    'user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nThe first image shows a cow on a beach, while the second image shows a street scene with a',
+                ],
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
         self.assertEqual(len(inputs["pixel_values"]), EXPECTED_NUM_IMAGES)
-        self.assertEqual(output_text, EXPECTED_TEXTS)
+        self.assertEqual(output_text, EXPECTED_TEXT)
 
+    @require_torch_large_accelerator
     def test_model_4b_multiimage(self):
         model_id = "google/gemma-3-4b-it"
 
-        model = Gemma3ForConditionalGeneration.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
-        ).to(torch_device)
+        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(torch_device)
 
         messages = [
             {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
@@ -561,28 +602,41 @@ class Gemma3IntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
+        EXPECTED_TEXTS = Expectations(
+            {
+                ("xpu", 3): ["user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nOkay, let's break down what I see in this image!\n\nHere's a description of the scene:\n\n*   **Chinese Arch"],
+                ("cuda", 7): [],
+                ("cuda", 8): ["user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nOkay, let's break down what I see in this image:\n\n**Main Features:**\n\n*   **Chinese Archway:** The most prominent"],
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
+        self.assertEqual(output_text, EXPECTED_TEXT)
 
-        EXPECTED_TEXTS = ["user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nOkay, let's break down what I see in this image:\n\n**Overall Scene:**\n\nIt looks like a street scene in a vibrant,"]  # fmt: skip
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
+    @require_deterministic_for_xpu
     def test_model_1b_text_only(self):
         model_id = "google/gemma-3-1b-it"
 
-        model = Gemma3ForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
-            torch_device
-        )
+        model = Gemma3ForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
         inputs = tokenizer("Write a poem about Machine Learning.", return_tensors="pt").to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
-        EXPECTED_TEXTS = ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a river deep,\nWith patterns hidden, secrets sleep.\nA neural net, a watchful eye,\nLearning']  # fmt: skip
-        self.assertEqual(output_text, EXPECTED_TEXTS)
+        EXPECTED_TEXTS = Expectations(
+            {
+                ("xpu", 3): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a river deep,\nWith patterns hidden, secrets sleep.\nA neural net, a watchful eye,\nLearning'],
+                ("cuda", 7): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a silent stream,\nInto the neural net, a waking dream.\nAlgorithms hum, a coded grace,\n'],
+                ("cuda", 8): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a silent stream,\nInto the neural net, a waking dream.\nAlgorithms hum, a coded grace,\n'],
+                ("rocm", (9, 5)): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a river deep,\nWith patterns hidden, secrets sleep.\nA neural net, a watchful eye,\nLearning'],
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
+        self.assertEqual(output_text, EXPECTED_TEXT)
 
     # TODO: raushan FA2 generates gibberish for no reason, check later
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_large_accelerator
     @pytest.mark.flash_attn_test
     def test_model_4b_flash_attn(self):
         model_id = "google/gemma-3-4b-it"
@@ -602,8 +656,16 @@ class Gemma3IntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
-        EXPECTED_TEXTS = ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. It looks like a very sunny and']  # fmt: skip
-        self.assertEqual(output_text, EXPECTED_TEXTS)
+        EXPECTED_TEXTS = Expectations(
+            {
+                ("xpu", 3): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach with turquoise water and a distant island in the background. It looks like a sunny day'],
+                ("cuda", 7): [],
+                ("cuda", 8): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach with turquoise water and a distant island in the background. It looks like a sunny day'],
+                ("rocm", (9, 5)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach with a turquoise ocean and a distant island in the background. It looks like a sunny'],
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
+        self.assertEqual(output_text, EXPECTED_TEXT)
 
     @parameterized.expand([("flash_attention_2",), ("sdpa",), ("eager",)])
     def test_generation_beyond_sliding_window(self, attn_implementation: str):
@@ -612,6 +674,9 @@ class Gemma3IntegrationTest(unittest.TestCase):
         Outputs for every attention functions should be coherent and identical.
         """
         model_id = "google/gemma-3-1b-it"
+
+        if attn_implementation == "flash_attention_2" and not is_flash_attn_2_available():
+            self.skipTest("FlashAttention2 is required for this test.")
 
         input_text = [
             "This is a nice place. " * 800 + "I really enjoy the scenery,",  # This is larger than 4096 tokens

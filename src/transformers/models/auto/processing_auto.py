@@ -27,13 +27,7 @@ from ...feature_extraction_utils import FeatureExtractionMixin
 from ...image_processing_utils import ImageProcessingMixin
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils import TOKENIZER_CONFIG_FILE
-from ...utils import (
-    FEATURE_EXTRACTOR_NAME,
-    PROCESSOR_NAME,
-    VIDEO_PROCESSOR_NAME,
-    cached_file,
-    logging,
-)
+from ...utils import FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, VIDEO_PROCESSOR_NAME, cached_file, logging
 from ...video_processing_utils import BaseVideoProcessor
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
@@ -66,11 +60,15 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("clipseg", "CLIPSegProcessor"),
         ("clvp", "ClvpProcessor"),
         ("colpali", "ColPaliProcessor"),
+        ("colqwen2", "ColQwen2Processor"),
+        ("dia", "DiaProcessor"),
         ("emu3", "Emu3Processor"),
         ("flava", "FlavaProcessor"),
         ("fuyu", "FuyuProcessor"),
         ("gemma3", "Gemma3Processor"),
+        ("gemma3n", "Gemma3nProcessor"),
         ("git", "GitProcessor"),
+        ("glm4v", "Glm4vProcessor"),
         ("got_ocr2", "GotOcr2Processor"),
         ("granite_speech", "GraniteSpeechProcessor"),
         ("grounding-dino", "GroundingDinoProcessor"),
@@ -84,6 +82,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("internvl", "InternVLProcessor"),
         ("janus", "JanusProcessor"),
         ("kosmos-2", "Kosmos2Processor"),
+        ("kyutai_speech_to_text", "KyutaiSpeechToTextProcessor"),
         ("layoutlmv2", "LayoutLMv2Processor"),
         ("layoutlmv3", "LayoutLMv3Processor"),
         ("llama4", "Llama4Processor"),
@@ -117,6 +116,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("shieldgemma2", "ShieldGemma2Processor"),
         ("siglip", "SiglipProcessor"),
         ("siglip2", "Siglip2Processor"),
+        ("smolvlm", "SmolVLMProcessor"),
         ("speech_to_text", "Speech2TextProcessor"),
         ("speech_to_text_2", "Speech2Text2Processor"),
         ("speecht5", "SpeechT5Processor"),
@@ -175,7 +175,7 @@ class AutoProcessor:
     """
 
     def __init__(self):
-        raise EnvironmentError(
+        raise OSError(
             "AutoProcessor is designed to be instantiated "
             "using the `AutoProcessor.from_pretrained(pretrained_model_name_or_path)` method."
         )
@@ -208,7 +208,7 @@ class AutoProcessor:
             resume_download:
                 Deprecated and ignored. All downloads are now resumed by default when possible.
                 Will be removed in v5 of Transformers.
-            proxies (`Dict[str, str]`, *optional*):
+            proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
             token (`str` or *bool*, *optional*):
@@ -227,7 +227,7 @@ class AutoProcessor:
                 Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
                 should only be set to `True` for repositories you trust and in which you have read the code, as it will
                 execute code present on the Hub on your local machine.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 The values in kwargs of any keys which are feature extractor attributes will be used to override the
                 loaded values. Behavior concerning key/value pairs whose keys are *not* feature extractor attributes is
                 controlled by the `return_unused_kwargs` keyword parameter.

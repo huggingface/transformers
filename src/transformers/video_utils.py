@@ -14,10 +14,12 @@
 # limitations under the License.
 
 import os
+import warnings
+from collections.abc import Iterable
 from contextlib import redirect_stdout
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 from urllib.parse import urlparse
 
 import numpy as np
@@ -32,6 +34,7 @@ from .utils import (
     is_numpy_array,
     is_torch_available,
     is_torch_tensor,
+    is_torchcodec_available,
     is_torchvision_available,
     is_vision_available,
     is_yt_dlp_available,
@@ -55,14 +58,14 @@ logger = logging.get_logger(__name__)
 
 
 VideoInput = Union[
-    List["PIL.Image.Image"],
+    list["PIL.Image.Image"],
     "np.ndarray",
     "torch.Tensor",
-    List["np.ndarray"],
-    List["torch.Tensor"],
-    List[List["PIL.Image.Image"]],
-    List[List["np.ndarrray"]],
-    List[List["torch.Tensor"]],
+    list["np.ndarray"],
+    list["torch.Tensor"],
+    list[list["PIL.Image.Image"]],
+    list[list["np.ndarrray"]],
+    list[list["torch.Tensor"]],
 ]  # noqa
 
 
@@ -72,6 +75,9 @@ class VideoMetadata:
     fps: float
     duration: float
     video_backend: str
+
+    def __getitem__(self, item):
+        return getattr(self, item)
 
 
 def is_valid_video_frame(frame):
@@ -114,7 +120,7 @@ def is_scaled_video(video: np.ndarray) -> bool:
     return np.min(video) >= 0 and np.max(video) <= 1
 
 
-def convert_pil_frames_to_video(videos: List[VideoInput]) -> List[Union["np.ndarray", "torch.Tensor"]]:
+def convert_pil_frames_to_video(videos: list[VideoInput]) -> list[Union["np.ndarray", "torch.Tensor"]]:
     """
     Given a batch of videos, converts each video to a 4D array. If video is already in array type,
     it is simply returned. We assume that all inputs in the list are in the same format, based on the type of the first element.
@@ -135,7 +141,7 @@ def convert_pil_frames_to_video(videos: List[VideoInput]) -> List[Union["np.ndar
     return video_converted
 
 
-def make_batched_videos(videos) -> List[Union["np.ndarray", "torch.Tensor"]]:
+def make_batched_videos(videos) -> list[Union["np.ndarray", "torch.Tensor"]]:
     """
     Ensure that the input is a list of videos. If the input is a single video, it is converted to a list of length 1.
     If the input is a batch of videos, it is converted to a list of 4D video arrays. Videos passed as list `PIL.Image`
@@ -162,11 +168,11 @@ def make_batched_videos(videos) -> List[Union["np.ndarray", "torch.Tensor"]]:
         videos = [np.array(videos)[None, ...]]
     # nested batch so we need to unflatten
     elif isinstance(videos[0], (list, tuple)) and is_valid_video(videos[0][0]):
-        return [video for sublist in videos for video in sublist]
+        videos = [video for sublist in videos for video in sublist]
     return convert_pil_frames_to_video(videos)
 
 
-def get_video_size(video: np.ndarray, channel_dim: ChannelDimension = None) -> Tuple[int, int]:
+def get_video_size(video: np.ndarray, channel_dim: ChannelDimension = None) -> tuple[int, int]:
     """
     Returns the (height, width) dimensions of the video.
 
@@ -266,7 +272,7 @@ def read_video_opencv(
                 return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int)
 
     Returns:
-        Tuple[`np.array`, `VideoMetadata`]: A tuple containing:
+        tuple[`np.array`, `VideoMetadata`]: A tuple containing:
             - Numpy array of frames in RGB (shape: [num_frames, height, width, 3]).
             - `VideoMetadata` object.
     """
@@ -323,7 +329,7 @@ def read_video_decord(
                 return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int)
 
     Returns:
-        Tuple[`np.array`, `VideoMetadata`]: A tuple containing:
+        tuple[`np.array`, `VideoMetadata`]: A tuple containing:
             - Numpy array of frames in RGB (shape: [num_frames, height, width, 3]).
             - `VideoMetadata` object.
     """
@@ -366,7 +372,7 @@ def read_video_pyav(
                 return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int)
 
     Returns:
-        Tuple[`np.array`, `VideoMetadata`]: A tuple containing:
+        tuple[`np.array`, `VideoMetadata`]: A tuple containing:
             - Numpy array of frames in RGB (shape: [num_frames, height, width, 3]).
             - `VideoMetadata` object.
     """
@@ -417,10 +423,14 @@ def read_video_torchvision(
                 return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int)
 
     Returns:
-        Tuple[`np.array`, `VideoMetadata`]: A tuple containing:
+        tuple[`np.array`, `VideoMetadata`]: A tuple containing:
             - Numpy array of frames in RGB (shape: [num_frames, height, width, 3]).
             - `VideoMetadata` object.
     """
+    warnings.warn(
+        "Using `torchvision` for video decoding is deprecated and will be removed in future versions. "
+        "Please use `torchcodec` instead."
+    )
     video, _, info = torchvision_io.read_video(
         video_path,
         start_pts=0.0,
@@ -445,11 +455,59 @@ def read_video_torchvision(
     return video, metadata
 
 
+def read_video_torchcodec(
+    video_path: str,
+    sample_indices_fn: Callable,
+    **kwargs,
+):
+    """
+    Decode the video with torchcodec decoder.
+
+    Args:
+        video_path (`str`):
+            Path to the video file.
+        sample_indices_fn (`Callable`, *optional*):
+            A callable function that will return indices at which the video should be sampled. If the video has to be loaded using
+            by a different sampling technique than provided by `num_frames` or `fps` arguments, one should provide their own `sample_indices_fn`.
+            If not provided, simple uniform sampling with fps is performed.
+            Example:
+            def sample_indices_fn(metadata, **kwargs):
+                return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int)
+
+    Returns:
+        Tuple[`torch.Tensor`, `VideoMetadata`]: A tuple containing:
+            - Numpy array of frames in RGB (shape: [num_frames, height, width, 3]).
+            - `VideoMetadata` object.
+    """
+    # Lazy import torchcodec
+    requires_backends(read_video_torchcodec, ["torchcodec"])
+    from torchcodec.decoders import VideoDecoder
+
+    decoder = VideoDecoder(
+        video_path,
+        dimension_order="NHWC",  # to be consistent with other decoders
+        # Interestingly `exact` mode takes less than approximate when we load the whole video
+        seek_mode="exact",
+    )
+    metadata = VideoMetadata(
+        total_num_frames=decoder.metadata.num_frames,
+        fps=decoder.metadata.average_fps,
+        duration=decoder.metadata.duration_seconds,
+        video_backend="torchcodec",
+    )
+    indices = sample_indices_fn(metadata=metadata, **kwargs)
+
+    video = decoder.get_frames_at(indices=indices).data.contiguous()
+    metadata.frames_indices = indices
+    return video, metadata
+
+
 VIDEO_DECODERS = {
     "decord": read_video_decord,
     "opencv": read_video_opencv,
     "pyav": read_video_pyav,
     "torchvision": read_video_torchvision,
+    "torchcodec": read_video_torchcodec,
 }
 
 
@@ -473,7 +531,7 @@ def load_video(
             Number of frames to sample per second. Should be passed only when `num_frames=None`.
             If not specified and `num_frames==None`, all frames are sampled.
         backend (`str`, *optional*, defaults to `"pyav"`):
-            The backend to use when loading the video. Can be any of ["decord", "pyav", "opencv", "torchvision"]. Defaults to "pyav".
+            The backend to use when loading the video. Can be any of ["decord", "pyav", "opencv", "torchvision", "torchcodec"]. Defaults to "pyav".
         sample_indices_fn (`Callable`, *optional*):
             A callable function that will return indices at which the video should be sampled. If the video has to be loaded using
             by a different sampling technique than provided by `num_frames` or `fps` arguments, one should provide their own `sample_indices_fn`.
@@ -486,7 +544,7 @@ def load_video(
                 return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int)
 
     Returns:
-        Tuple[`np.array`, Dict]: A tuple containing:
+        tuple[`np.array`, Dict]: A tuple containing:
             - Numpy array of frames in RGB (shape: [num_frames, height, width, 3]).
             - Metadata dictionary.
     """
@@ -531,7 +589,7 @@ def load_video(
     video_is_url = video.startswith("http://") or video.startswith("https://")
     if video_is_url and backend in ["opencv", "torchvision"]:
         raise ValueError(
-            "If you are trying to load a video from URL, you can decode the video only with `pyav` or `decord` as backend"
+            "If you are trying to load a video from URL, you can decode the video only with `pyav`, `decord` or `torchcodec` as backend"
         )
 
     if file_obj is None:
@@ -542,6 +600,7 @@ def load_video(
         or (not is_av_available() and backend == "pyav")
         or (not is_cv2_available() and backend == "opencv")
         or (not is_torchvision_available() and backend == "torchvision")
+        or (not is_torchcodec_available() and backend == "torchcodec")
     ):
         raise ImportError(
             f"You chose backend={backend} for loading the video but the required library is not found in your environment "
@@ -597,7 +656,7 @@ def convert_to_rgb(
 
 def pad(
     video: np.ndarray,
-    padding: Union[int, Tuple[int, int], Iterable[Tuple[int, int]]],
+    padding: Union[int, tuple[int, int], Iterable[tuple[int, int]]],
     mode: PaddingMode = PaddingMode.CONSTANT,
     constant_values: Union[float, Iterable[float]] = 0.0,
     data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -609,7 +668,7 @@ def pad(
     Args:
         video (`np.ndarray`):
             The video to pad.
-        padding (`int` or `Tuple[int, int]` or `Iterable[Tuple[int, int]]`):
+        padding (`int` or `tuple[int, int]` or `Iterable[tuple[int, int]]`):
             Padding to apply to the edges of the height, width axes. Can be one of three formats:
             - `((before_height, after_height), (before_width, after_width))` unique pad widths for each axis.
             - `((before, after),)` yields same before and after pad for height and width.
@@ -685,8 +744,8 @@ def pad(
 
 
 def group_videos_by_shape(
-    videos: List["torch.Tensor"],
-) -> Tuple[Dict[Tuple[int, int], List["torch.Tensor"]], Dict[int, Tuple[Tuple[int, int], int]]]:
+    videos: list["torch.Tensor"],
+) -> tuple[dict[tuple[int, int], list["torch.Tensor"]], dict[int, tuple[tuple[int, int], int]]]:
     """
     Groups videos by shape.
     Returns a dictionary with the shape as key and a list of videos with that shape as value,
@@ -708,8 +767,8 @@ def group_videos_by_shape(
 
 
 def reorder_videos(
-    processed_videos: Dict[Tuple[int, int], "torch.Tensor"], grouped_videos_index: Dict[int, Tuple[int, int]]
-) -> List["torch.Tensor"]:
+    processed_videos: dict[tuple[int, int], "torch.Tensor"], grouped_videos_index: dict[int, tuple[int, int]]
+) -> list["torch.Tensor"]:
     """
     Reconstructs a list of videos in the original order.
     """

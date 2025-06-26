@@ -15,8 +15,9 @@
 """PyTorch TimesFM model."""
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Callable, Optional, Sequence, Union
+from typing import Callable, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -36,13 +37,13 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
+@auto_docstring
 class TimesFmOutput(BaseModelOutput):
-    """
-    Args:
-        loc (`torch.Tensor` of shape `(batch_size, )`):
-            The mean of the time series inputs.
-        scale (`torch.Tensor` of shape `(batch_size,)`):
-            The scale of the time series inputs.
+    r"""
+    loc (`torch.Tensor` of shape `(batch_size, )`):
+        The mean of the time series inputs.
+    scale (`torch.Tensor` of shape `(batch_size,)`):
+        The scale of the time series inputs.
     """
 
     loc: Optional[torch.Tensor] = None
@@ -50,15 +51,15 @@ class TimesFmOutput(BaseModelOutput):
 
 
 @dataclass
+@auto_docstring
 class TimesFmOutputForPrediction(BaseModelOutput):
-    """
-    Args:
-        mean_predictions (`torch.Tensor` of shape `(batch_size, sequence_length)`):
-            The mean predictions of the time series.
-        full_predictions (`torch.Tensor` of shape `(batch_size, sequence_length)`):
-            The full predictions of the time series including the mean and the quantiles.
-        loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `future_values` is provided):
-            The loss of the TimesFM model.
+    r"""
+    mean_predictions (`torch.Tensor` of shape `(batch_size, sequence_length)`):
+        The mean predictions of the time series.
+    full_predictions (`torch.Tensor` of shape `(batch_size, sequence_length)`):
+        The full predictions of the time series including the mean and the quantiles.
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `future_values` is provided):
+        The loss of the TimesFM model.
     """
 
     mean_predictions: Optional[torch.Tensor] = None
@@ -333,10 +334,10 @@ class TimesFmModel(TimesFmPreTrainedModel):
         output_hidden_states: bool = False,
     ) -> TimesFmOutput:
         r"""
-        past_values_padding (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            The padding indicator of the time series.
         past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Past values of the time series that serves as input to the model.
+        past_values_padding (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            The padding indicator of the time series.
         freq (`torch.LongTensor` of shape `(batch_size,)`):
             Frequency indices for the time series data.
         """
@@ -648,6 +649,10 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
     ) -> TimesFmOutputForPrediction:
         r"""
+        past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Past values of the time series that serves as input to the model.
+        freq (`torch.LongTensor` of shape `(batch_size,)`):
+            Frequency indices for the time series data.
         window_size (`int`, *optional*):
             Window size of trend + residual decomposition. If None then we do not do decomposition.
         future_values (`torch.Tensor`, *optional*):
@@ -663,10 +668,6 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
             Whether to output the attentions.
         output_hidden_states (`bool`, *optional*):
             Whether to output the hidden states.
-        past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Past values of the time series that serves as input to the model.
-        freq (`torch.LongTensor` of shape `(batch_size,)`):
-            Frequency indices for the time series data.
 
         Example:
 
