@@ -70,7 +70,7 @@ class BLTLocalEncoderConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.cross_attn_all_layers = cross_attn_all_layers
         self.cross_attn_k = cross_attn_k
-        self.dim_global=dim_global
+        self.hidden_size_global=dim_global
         self.pm_size=pm_size
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
@@ -124,7 +124,7 @@ class BLTLocalDecoderConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.cross_attn_all_layers = cross_attn_all_layers
         self.cross_attn_k = cross_attn_k
-        self.dim_global=dim_global
+        self.hidden_size_global=dim_global
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads or num_attention_heads
@@ -259,14 +259,14 @@ class BLTPatcherConfig(PretrainedConfig):
     ):
         self.vocab_size = vocab_size
         self.hidden_size = dim
-        self.n_layers = n_layers
-        self.n_heads = n_heads
+        self.num_hidden_layers = n_layers
+        self.num_attention_heads = n_heads
         self.head_dim = head_dim if head_dim is not None else (dim // n_heads)
-        self.n_kv_heads = n_kv_heads if n_kv_heads is not None else n_heads
+        self.num_key_value_heads = n_kv_heads if n_kv_heads is not None else n_heads
         self.max_seqlen = max_seqlen
         self.norm_eps = norm_eps
         self.dropout = dropout
-        self.ffn_dim_multiplier = ffn_dim_multiplier
+        self.intermediate_size = ffn_dim_multiplier
         self.multiple_of = multiple_of
         self.rope_theta = rope_theta
         self.rope_use_fp32_in_outer_product = rope_use_fp32_in_outer_product
@@ -283,7 +283,7 @@ class BLTPatcherConfig(PretrainedConfig):
         # Add attributes needed for compatibility with transformer models
         self.hidden_size = dim
         self.num_attention_heads = n_heads
-        self.num_key_value_heads = self.n_kv_heads  # Use the computed n_kv_heads
+        self.num_key_value_heads = self.num_key_value_heads  # Use the computed n_kv_heads
         self.max_position_embeddings = max_seqlen
         self.hidden_act = "silu"  # BLT uses silu activation
         
@@ -355,64 +355,36 @@ class BLTConfig(PretrainedConfig):
         # Positional encoding
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
-        rope_use_fp32_in_outer_product (`bool`, *optional*, defaults to False):
-            Whether to use fp32 in RoPE outer product computation.
 
         # Attention configuration
         attn_impl (`str`, *optional*, defaults to "sdpa"):
             Attention implementation to use ("sdpa" or "flex_attention").
-        attn_bias_type (`str`, *optional*, defaults to "causal"):
-            Type of attention bias to apply.
-        use_rope (`bool`, *optional*, defaults to True):
-            Whether to use rotary position embeddings.
 
         # Patching configuration
         patch_in_forward (`bool`, *optional*, defaults to False):
             Whether to perform patching during forward pass.
-        realtime_patching (`bool`, *optional*, defaults to True):
-            Whether to use realtime patching.
         patch_size (`float`, *optional*):
             Size of patches for static patching.
         patching_mode (`str`, *optional*):
             Mode for patching ("entropy", "static", etc.).
         patching_threshold (`float`, *optional*):
             Threshold for entropy-based patching.
-        patching_threshold_add (`float`, *optional*):
-            Additional threshold parameter for patching.
-        monotonicity (`bool`, *optional*, defaults to False):
-            Whether to enforce monotonicity in patching.
         patching_batch_size (`int`, *optional*, defaults to 1):
             Batch size for patching operations.
         patching_device (`str`, *optional*, defaults to "cuda"):
             Device to use for patching operations.
         max_patch_length (`int`, *optional*):
             Maximum length of patches.
-        entropy_model_checkpoint_dir (`str`, *optional*):
-            Directory containing entropy model checkpoint.
 
         # Cross attention configurations
-        cross_attn_encoder (`bool`, *optional*, defaults to False):
-            Whether to use cross attention in encoder.
-        cross_attn_decoder (`bool`, *optional*, defaults to False):
-            Whether to use cross attention in decoder.
-        cross_attn_window_encoder (`int`, *optional*):
-            Cross attention window for encoder.
-        cross_attn_window_decoder (`int`, *optional*):
-            Cross attention window for decoder.
         cross_attn_k (`int`, *optional*):
             Number of cross attention components.
-        cross_attn_nheads (`int`, *optional*):
-            Number of heads for cross attention.
         cross_attn_all_layers_decoder (`bool`, *optional*, defaults to False):
             Whether to apply cross attention to all decoder layers.
         cross_attn_all_layers_encoder (`bool`, *optional*, defaults to False):
             Whether to apply cross attention to all encoder layers.
-        cross_attn_init_by_pooling (`bool`, *optional*, defaults to False):
-            Whether to initialize cross attention by pooling.
 
         # Encoder configurations
-        use_local_encoder_transformer (`bool`, *optional*, defaults to False):
-            Whether to use transformer in local encoder.
         max_encoder_seq_length (`int`, *optional*):
             Maximum sequence length for encoder.
         encoder_hash_byte_group_size (`Any`, *optional*):
@@ -423,8 +395,6 @@ class BLTConfig(PretrainedConfig):
             Number of hash functions for byte groups.
 
         # Model behavior
-        share_encoder_decoder_emb (`bool`, *optional*, defaults to True):
-            Whether to share encoder and decoder embeddings.
         weight_tying (`bool`, *optional*, defaults to False):
             Whether to tie input and output embeddings.
 
@@ -490,42 +460,27 @@ class BLTConfig(PretrainedConfig):
         hidden_act="silu",
         # Positional encoding
         rope_theta=10000.0,
-        rope_use_fp32_in_outer_product=False,
         # Attention configuration
         attn_impl="sdpa",
         _attn_implementation="sdpa",
-        attn_bias_type="causal",
-        use_rope=True,
         # Patching configuration
         patch_in_forward=False,
-        realtime_patching=True,
         patch_size=None,
         patching_mode=None,
         patching_threshold=None,
-        patching_threshold_add=None,
-        monotonicity=False,
         patching_batch_size=1,
         patching_device="cuda",
         max_patch_length=None,
-        entropy_model_checkpoint_dir=None,
         # Cross attention configurations
-        cross_attn_encoder=False,
-        cross_attn_decoder=False,
-        cross_attn_window_encoder=None,
-        cross_attn_window_decoder=None,
         cross_attn_k=2,
-        cross_attn_nheads=16,
         cross_attn_all_layers_decoder=False,
         cross_attn_all_layers_encoder=False,
-        cross_attn_init_by_pooling=False,
         # Encoder configurations
-        use_local_encoder_transformer=False,
         max_encoder_seq_length=None,
         encoder_hash_byte_group_size=None,
         encoder_hash_byte_group_vocab=30000,
         encoder_hash_byte_group_nb_functions=3,
         # Model behavior
-        share_encoder_decoder_emb=True,
         weight_tying=False,
         # Parameter mixing
         pm_size=0,
@@ -552,67 +507,52 @@ class BLTConfig(PretrainedConfig):
         self.num_key_value_heads = num_key_value_heads
 
         # Component-specific dimensions
-        self.dim_global = dim_global
-        self.dim_local_decoder = dim_local_decoder
-        self.dim_local_encoder = dim_local_encoder
-        self.n_layers_global = n_layers_global
-        self.n_layers_local_decoder = n_layers_local_decoder
-        self.n_layers_local_encoder = n_layers_local_encoder
-        self.n_heads_global = n_heads_global
-        self.n_heads_local_decoder = n_heads_local_decoder
-        self.n_heads_local_encoder = n_heads_local_encoder
-        self.n_kv_heads_global = n_kv_heads_global
+        self.hidden_size_global = dim_global
+        self.hidden_size_local_decoder = dim_local_decoder
+        self.hidden_size_local_encoder = dim_local_encoder
+        self.num_hidden_layers_global = n_layers_global
+        self.num_hidden_layers_local_decoder = n_layers_local_decoder
+        self.num_hidden_layers_local_encoder = n_layers_local_encoder
+        self.num_attention_heads_global = n_heads_global
+        self.num_attention_heads_local_decoder = n_heads_local_decoder
+        self.num_attention_heads_local_encoder = n_heads_local_encoder
+        self.num_key_value_heads_global = n_kv_heads_global
 
         # Transformer configuration
         self.norm_eps = norm_eps
         self.dropout = dropout
-        self.ffn_dim_multiplier = ffn_dim_multiplier
+        self.intermediate_size = ffn_dim_multiplier
         self.multiple_of = multiple_of
         self.hidden_act = hidden_act
 
         # Positional encoding
         self.rope_theta = rope_theta
-        self.rope_use_fp32_in_outer_product = rope_use_fp32_in_outer_product
 
         # Attention configuration
         self.attn_impl = attn_impl
         self._attn_implementation = _attn_implementation
-        self.attn_bias_type = attn_bias_type
-        self.use_rope = use_rope
 
         # Patching configuration
         self.patch_in_forward = patch_in_forward
-        self.realtime_patching = realtime_patching
         self.patch_size = patch_size
         self.patching_mode = patching_mode
         self.patching_threshold = patching_threshold
-        self.patching_threshold_add = patching_threshold_add
-        self.monotonicity = monotonicity
         self.patching_batch_size = patching_batch_size
         self.patching_device = patching_device
         self.max_patch_length = max_patch_length
-        self.entropy_model_checkpoint_dir = entropy_model_checkpoint_dir
 
         # Cross attention configurations
-        self.cross_attn_encoder = cross_attn_encoder
-        self.cross_attn_decoder = cross_attn_decoder
-        self.cross_attn_window_encoder = cross_attn_window_encoder
-        self.cross_attn_window_decoder = cross_attn_window_decoder
         self.cross_attn_k = cross_attn_k
-        self.cross_attn_nheads = cross_attn_nheads
         self.cross_attn_all_layers_decoder = cross_attn_all_layers_decoder
         self.cross_attn_all_layers_encoder = cross_attn_all_layers_encoder
-        self.cross_attn_init_by_pooling = cross_attn_init_by_pooling
 
         # Encoder configurations
-        self.use_local_encoder_transformer = use_local_encoder_transformer
         self.max_encoder_seq_length = max_encoder_seq_length
         self.encoder_hash_byte_group_size = encoder_hash_byte_group_size
         self.encoder_hash_byte_group_vocab = encoder_hash_byte_group_vocab
         self.encoder_hash_byte_group_nb_functions = encoder_hash_byte_group_nb_functions
 
         # Model behavior
-        self.share_encoder_decoder_emb = share_encoder_decoder_emb
         self.weight_tying = weight_tying
 
         # Parameter mixing
