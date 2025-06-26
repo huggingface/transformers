@@ -1006,15 +1006,15 @@ class HubertModel(HubertPreTrainedModel):
         ```python
         >>> from transformers import AutoProcessor, HubertModel
         >>> from datasets import load_dataset
-        >>> import soundfile as sf
+        >>> from torchcodec.decoders import AudioDecoder
 
         >>> processor = AutoProcessor.from_pretrained("facebook/hubert-large-ls960-ft")
         >>> model = HubertModel.from_pretrained("facebook/hubert-large-ls960-ft")
 
 
         >>> def map_to_array(batch):
-        ...     speech, _ = sf.read(batch["file"])
-        ...     batch["speech"] = speech
+        ...     decoder = AudioDecoder(batch["file"])
+        ...     batch["speech"] = decoder.get_all_samples().data
         ...     return batch
 
 
@@ -1282,9 +1282,10 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
-            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
-            conversion into a tensor of type `torch.FloatTensor`. See [`HubertProcessor.__call__`] for details.
+            into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via the torchcodec library (`pip install
+            torchcodec`) or the soundfile library (`pip install soundfile`). To prepare the array into `input_values`,
+            the [`AutoProcessor`] should be used for padding and conversion into a tensor of type `torch.FloatTensor`.
+            See [`HubertProcessor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If

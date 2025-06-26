@@ -1459,15 +1459,15 @@ class TFHubertModel(TFHubertPreTrainedModel):
         ```python
         >>> from transformers import AutoProcessor, TFHubertModel
         >>> from datasets import load_dataset
-        >>> import soundfile as sf
+        >>> from torchcodec.decoders import AudioDecoder
 
         >>> processor = AutoProcessor.from_pretrained("facebook/hubert-large-ls960-ft")
         >>> model = TFHubertModel.from_pretrained("facebook/hubert-large-ls960-ft")
 
 
         >>> def map_to_array(batch):
-        ...     speech, _ = sf.read(batch["file"])
-        ...     batch["speech"] = speech
+        ...     decoder = AudioDecoder(batch["file"])
+        ...     batch["speech"] = decoder.get_all_samples().data
         ...     return batch
 
 
@@ -1571,15 +1571,15 @@ class TFHubertForCTC(TFHubertPreTrainedModel):
         >>> import tensorflow as tf
         >>> from transformers import AutoProcessor, TFHubertForCTC
         >>> from datasets import load_dataset
-        >>> import soundfile as sf
+        >>> from torchcodec.decoders import AudioDecoder
 
         >>> processor = AutoProcessor.from_pretrained("facebook/hubert-large-ls960-ft")
         >>> model = TFHubertForCTC.from_pretrained("facebook/hubert-large-ls960-ft")
 
 
         >>> def map_to_array(batch):
-        ...     speech, _ = sf.read(batch["file"])
-        ...     batch["speech"] = speech
+        ...     decoder = AudioDecoder(batch["file"])
+        ...     batch["speech"] = decoder.get_all_samples().data
         ...     return batch
 
 

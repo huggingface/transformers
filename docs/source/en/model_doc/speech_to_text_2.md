@@ -64,15 +64,15 @@ predicted token ids.
 >>> import torch
 >>> from transformers import Speech2Text2Processor, SpeechEncoderDecoderModel
 >>> from datasets import load_dataset
->>> import soundfile as sf
+>>> from torchcodec.decoders import AudioDecoder
 
 >>> model = SpeechEncoderDecoderModel.from_pretrained("facebook/s2t-wav2vec2-large-en-de")
 >>> processor = Speech2Text2Processor.from_pretrained("facebook/s2t-wav2vec2-large-en-de")
 
 
 >>> def map_to_array(batch):
-...     speech, _ = sf.read(batch["file"])
-...     batch["speech"] = speech
+...     decoder = AudioDecoder(batch["file"])
+...     batch["speech"] = decoder.get_all_samples().data
 ...     return batch
 
 
