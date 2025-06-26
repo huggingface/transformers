@@ -839,6 +839,8 @@
         title: CSM
       - local: model_doc/dac
         title: dac
+      - local: model_doc/dia
+        title: Dia
       - local: model_doc/encodec
         title: EnCodec
       - local: model_doc/fastspeech2_conformer
@@ -847,7 +849,7 @@
         title: GraniteSpeech
       - local: model_doc/hubert
         title: Hubert
-      - local: model_doc/stt
+      - local: model_doc/kyutai_speech_to_text
         title: Kyutai Speech-To-Text
       - local: model_doc/mctct
         title: MCTCT
