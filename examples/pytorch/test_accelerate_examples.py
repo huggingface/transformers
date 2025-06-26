@@ -341,7 +341,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         testargs = f"""
             {self.examples_dir}/pytorch/object-detection/run_object_detection_no_trainer.py
             --model_name_or_path qubvel-hf/detr-resnet-50-finetuned-10k-cppe5
-            --dataset_name hf-internal-testing/cppe-5-sample
+            --dataset_name qubvel-hf/cppe-5-sample
             --output_dir {tmp_dir}
             --max_train_steps=10
             --num_warmup_steps=2
