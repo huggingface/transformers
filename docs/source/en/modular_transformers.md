@@ -1,4 +1,4 @@
-# Modular Transformers
+# Contributing a new model to Transformers
 
 Modular Transformers lowers the bar for contributing models and significantly reduces the code required to add a model by allowing imports and inheritance.
 
