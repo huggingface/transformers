@@ -991,7 +991,10 @@ def check_model_inputs(func):
         capture_flags = self._can_record_outputs.keys()
         recordable_keys = {f"output_{k}": kwargs.get(f"output_{k}", False) for k in capture_flags}
         if any(recordable_keys.values()):
-            for _, layer in self.named_modules():
+            for (
+                _,
+                layer,
+            ) in self.named_modules():  # pretty sure we gotta attache the hooks to an instance and not a class
                 for key, (cls, idx) in self._can_record_outputs.items():
                     if capture_flags.get(key, False) and isinstance(layer, cls):
                         hook_fn = make_capture_fn(key, idx)
