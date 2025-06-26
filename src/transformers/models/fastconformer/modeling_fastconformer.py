@@ -23,6 +23,7 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, is_torch_available, logging
 from .configuration_fastconformer import FastConformerConfig
 
+
 if is_torch_available():
     import torch
     import torch.utils.checkpoint
