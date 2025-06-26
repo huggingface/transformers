@@ -257,7 +257,6 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 self.assertAlmostEqual(image_cropped_python.float().mean().item(), 237.43881150708458, delta=0.001)
             else:
                 image_processor = image_processing_class(**self.image_processor_dict)
-                print(image.shape)
                 image_cropped_python = image_processor.crop_margin(image)
                 self.assertEqual(image_cropped_python.shape, (3, 850, 685))
                 self.assertAlmostEqual(image_cropped_python.mean(), 237.43881150708458, delta=0.001)
