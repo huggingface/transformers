@@ -23,18 +23,17 @@ from torch import nn
 
 from transformers.generation.utils import GenerationMixin
 
-# from ...generation import GenerationMixin
 from ...utils import (
     auto_docstring,
+    can_return_tuple,
     logging,
 )
 from ..auto import AutoModel
 from ..llava.modeling_llava import (
-    LlavaCausalLMOutputWithPast as PerceptionLMCausalLMOutputWithPast,
-)
-from ..llava.modeling_llava import (
     LlavaModel,
     LlavaPreTrainedModel,
+    LlavaModelOutputWithPast,
+    LlavaCausalLMOutputWithPast,
 )
 from .configuration_perception_lm import PerceptionLMConfig
 
@@ -56,7 +55,9 @@ class AdaptiveAvgPooling(nn.Module):
         b, num_tokens, c = hidden_states.shape
         h = int(math.sqrt(num_tokens))
         if h * h != num_tokens:
-            raise ValueError(f"num_tokens {num_tokens} is expected to be a square number")
+            raise ValueError(
+                f"num_tokens {num_tokens} is expected to be a square number"
+            )
 
         shape = (h // self.pooling_ratio, h // self.pooling_ratio)
         hidden_states = hidden_states.permute(0, 2, 1).reshape(b, -1, h, h)
@@ -87,7 +88,9 @@ class PerceptionLMMultiModalProjector(nn.Module):
             ]
         )
         self.pooling = (
-            AdaptiveAvgPooling(config.projector_pooling_ratio) if config.projector_pooling_ratio > 1 else nn.Identity()
+            AdaptiveAvgPooling(config.projector_pooling_ratio)
+            if config.projector_pooling_ratio > 1
+            else nn.Identity()
         )
 
     def forward(self, features):
@@ -101,6 +104,13 @@ class PerceptionLMMultiModalProjector(nn.Module):
 
 class PerceptionLMPreTrainedModel(LlavaPreTrainedModel):
     base_model_prefix = ""
+
+class PerceptionLMModelOutputWithPast(LlavaModelOutputWithPast):
+    video_hidden_states: Optional[torch.FloatTensor] = None
+
+
+class PerceptionLMCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
+    video_hidden_states: Optional[torch.FloatTensor] = None
 
 
 @auto_docstring
@@ -141,6 +151,8 @@ class PerceptionLMModel(LlavaModel):
                 f"The number of tokens in the media mask ({media_token_count}) does not match the number of features in the media features ({media_feature_size}. Features shape: {media_features.shape})"
             )
 
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -157,7 +169,7 @@ class PerceptionLMModel(LlavaModel):
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **lm_kwargs,
-    ) -> Union[tuple, PerceptionLMCausalLMOutputWithPast]:
+    ) -> Union[tuple, PerceptionLMModelOutputWithPast]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of input sequence tokens in the vocabulary.
@@ -210,14 +222,26 @@ class PerceptionLMModel(LlavaModel):
         "USER:  \nWhat's the content of the image? ASSISTANT: The image features a busy city street with a stop sign prominently displayed"
         ```"""
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-        if (pixel_values is not None or pixel_values_videos is not None) and inputs_embeds is not None:
+            raise ValueError(
+                "You must specify exactly one of input_ids or inputs_embeds"
+            )
+        if (
+            pixel_values is not None or pixel_values_videos is not None
+        ) and inputs_embeds is not None:
             raise ValueError(
                 "You cannot specify both (pixel_values or pixel_values_videos) and inputs_embeds at the same time, and must specify either one"
             )
@@ -232,19 +256,28 @@ class PerceptionLMModel(LlavaModel):
             )
             special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
             self.check_mask_feature_size_match(special_image_mask, image_features)
-            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(
+                inputs_embeds.device
+            )
             image_features = image_features.to(inputs_embeds)
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+            inputs_embeds = inputs_embeds.masked_scatter(
+                special_image_mask, image_features
+            )
 
+        video_features = None
         if pixel_values_videos is not None:
             video_features = self.get_image_features(
                 pixel_values=pixel_values_videos.to(inputs_embeds),
             )
             special_video_mask = (input_ids == self.config.video_token_id).unsqueeze(-1)
             self.check_mask_feature_size_match(special_video_mask, video_features)
-            special_video_mask = special_video_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+            special_video_mask = special_video_mask.expand_as(inputs_embeds).to(
+                inputs_embeds.device
+            )
             video_features = video_features.to(inputs_embeds)
-            inputs_embeds = inputs_embeds.masked_scatter(special_video_mask, video_features)
+            inputs_embeds = inputs_embeds.masked_scatter(
+                special_video_mask, video_features
+            )
 
         outputs = self.language_model(
             attention_mask=attention_mask,
@@ -254,23 +287,52 @@ class PerceptionLMModel(LlavaModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             **lm_kwargs,
         )
-        return outputs, image_features
+        return PerceptionLMModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            hidden_states=outputs.hidden_states,
+            past_key_values=outputs.past_key_values,
+            attentions=outputs.attentions,
+            image_hidden_states=image_features if pixel_values is not None else None,
+            video_hidden_states=(
+                video_features if pixel_values_videos is not None else None
+            ),
+        )
 
 
 @auto_docstring
-class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, GenerationMixin):
+class PerceptionLMForConditionalGeneration(
+    PerceptionLMPreTrainedModel, GenerationMixin
+):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: PerceptionLMConfig, **super_kwargs):
         super().__init__(config, **super_kwargs)
         self.model = PerceptionLMModel(config)
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(
+            config.text_config.hidden_size, config.text_config.vocab_size, bias=False
+        )
         self.post_init()
+
+    # Make modules available throught conditional class for BC
+    @property
+    def language_model(self):
+        return self.model.language_model
+
+    @property
+    def vision_tower(self):
+        return self.model.vision_tower
+
+    @property
+    def multi_modal_projector(self):
+        return self.model.multi_modal_projector
+
+    def set_input_embeddings(self, new_embeddings):
+        self.model.set_input_embeddings(new_embeddings)
 
     def get_input_embeddings(self):
         return self.model.get_input_embeddings()
@@ -318,6 +380,8 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
             model_inputs["pixel_values_videos"] = pixel_values_videos
         return model_inputs
 
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -365,7 +429,7 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
         "USER:  \nWhat's the content of the image? ASSISTANT: The image features a busy city street with a stop sign prominently displayed"
         ```"""
 
-        outputs, image_features = self.model(
+        outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
             pixel_values_videos=pixel_values_videos,
@@ -384,7 +448,11 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
 
         hidden_states = outputs[0]
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        slice_indices = (
+            slice(-logits_to_keep, None)
+            if isinstance(logits_to_keep, int)
+            else logits_to_keep
+        )
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
@@ -402,11 +470,13 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
+            image_hidden_states=outputs.image_hidden_states,
+            video_hidden_states=outputs.video_hidden_states,
         )
 
 
 __all__ = [
     "PerceptionLMForConditionalGeneration",
     "PerceptionLMPreTrainedModel",
+    "PerceptionLMModel",
 ]
