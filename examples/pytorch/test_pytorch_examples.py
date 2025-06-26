@@ -620,7 +620,7 @@ class ExamplesTests(TestCasePlus):
             run_object_detection.py
             --model_name_or_path qubvel-hf/detr-resnet-50-finetuned-10k-cppe5
             --output_dir {tmp_dir}
-            --dataset_name qubvel-hf/cppe-5-sample
+            --dataset_name hf-internal-testing/cppe-5-sample
             --do_train
             --do_eval
             --remove_unused_columns False
