@@ -37,6 +37,7 @@ from ...utils import (
     auto_docstring,
     can_return_tuple,
     is_torch_flex_attn_available,
+    is_torchdynamo_compiling,
     logging,
 )
 from ..gemma2.configuration_gemma2 import Gemma2Config
@@ -1058,7 +1059,7 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
         self.model = T5GemmaModel(config)
         self.vocab_size = config.decoder.vocab_size
         self.lm_head = T5GemmaLMHead(config.decoder.hidden_size, self.vocab_size)
-        self.loss_type = "ForMaskedLMLoss"
+        self.loss_type = "ForMaskedLM"
 
         self.post_init()
 
@@ -1114,7 +1115,7 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
-        if self.training and self.config._attn_implementation != "eager":
+        if self.training and self.config._attn_implementation != "eager" and not is_torchdynamo_compiling():
             logger.warning_once(
                 "It is strongly recommended to train T5Gemma models with the `eager` attention implementation "
                 f"instead of `{self.config._attn_implementation}`. Use `eager` with `AutoModelForCausalLM.from_pretrained('<path-to-checkpoint>', attn_implementation='eager')`."
