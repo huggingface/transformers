@@ -16,6 +16,7 @@ import json
 import os
 from functools import partial
 from multiprocessing import Pool, cpu_count
+from multiprocessing.pool import ThreadPool
 from typing import Optional
 
 import numpy as np
@@ -286,7 +287,6 @@ def squad_convert_example_to_features(
 
                 start_position = tok_start_position - doc_start + doc_offset
                 end_position = tok_end_position - doc_start + doc_offset
-
         features.append(
             SquadFeatures(
                 span["input_ids"],
@@ -362,28 +362,9 @@ def squad_convert_examples_to_features(
     )
     ```"""
 
-    if not is_torch_hpu_available():
-        threads = min(threads, cpu_count())
-        with Pool(threads, initializer=squad_convert_example_to_features_init, initargs=(tokenizer,)) as p:
-            annotate_ = partial(
-                squad_convert_example_to_features,
-                max_seq_length=max_seq_length,
-                doc_stride=doc_stride,
-                max_query_length=max_query_length,
-                padding_strategy=padding_strategy,
-                is_training=is_training,
-            )
-            features = list(
-                tqdm(
-                    p.imap(annotate_, examples, chunksize=32),
-                    total=len(examples),
-                    desc="convert squad examples to features",
-                    disable=not tqdm_enabled,
-                )
-            )
-    else:
-        # Non-parallel version for hpu https://github.com/huggingface/transformers/pull/38790#discussion_r2156470902
-        squad_convert_example_to_features_init(tokenizer_for_convert=tokenizer)
+    threads = min(threads, cpu_count())
+    pool_cls = ThreadPool if is_torch_hpu_available() else Pool
+    with pool_cls(threads, initializer=squad_convert_example_to_features_init, initargs=(tokenizer,)) as p:
         annotate_ = partial(
             squad_convert_example_to_features,
             max_seq_length=max_seq_length,
@@ -394,7 +375,7 @@ def squad_convert_examples_to_features(
         )
         features = list(
             tqdm(
-                map(annotate_, examples),
+                p.imap(annotate_, examples, chunksize=32),
                 total=len(examples),
                 desc="convert squad examples to features",
                 disable=not tqdm_enabled,
