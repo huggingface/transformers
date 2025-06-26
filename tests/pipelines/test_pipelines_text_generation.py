@@ -445,7 +445,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
         pipe = pipeline(
             model="hf-internal-testing/tiny-random-bloom", device_map="auto", max_new_tokens=5, do_sample=False
         )
-        self.assertEqual(pipe.model.lm_head.weight.dtype, torch.float32)
+        self.assertEqual(pipe.model.lm_head.weight.dtype, torch.bfloat16)
         out = pipe("This is a test")
         self.assertEqual(
             out,
