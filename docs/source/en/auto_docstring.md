@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Documenting a model
 
-The `@auto_docstring` decorator in the Transformers generates consistent docstrings for model classes and their methods. It reduces boilerplate by automatically including standard argument descriptions while also allowing overrides to add new or custom arguments. [Contributing a new model](./modular_transformers) is easier because you don't need to manually add the standard docstrings, and only focus on documenting new arguments.
+The `@auto_docstring` decorator in Transformers generates consistent docstrings for model classes and their methods. It reduces boilerplate by automatically including standard argument descriptions while also allowing overrides to add new or custom arguments. [Contributing a new model](./modular_transformers) is easier because you don't need to manually add the standard docstrings, and only focus on documenting new arguments.
 
 This guide describes how to use the `@auto_docstring` decorator and how it works.
 
