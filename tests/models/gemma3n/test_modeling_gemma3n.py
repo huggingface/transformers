@@ -590,7 +590,7 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
 @require_read_token
 class Gemma3nIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("gg-hf-gm/gemma-3n-E4B-it", padding_side="left")
+        self.processor = AutoProcessor.from_pretrained("Google/gemma-3n-E4B-it", padding_side="left")
 
         url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
         self.messages = [
@@ -613,7 +613,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     def test_model_4b_bf16(self):
-        model_id = "gg-hf-gm/gemma-3n-E4B-it"
+        model_id = "Google/gemma-3n-E4B-it"
 
         model = Gemma3nForConditionalGeneration.from_pretrained(
             model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
@@ -639,7 +639,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         This ensures the processor correctly loads and processes audio files.
         """
 
-        model_id = "gg-hf-gm/gemma-3n-E4B-it"
+        model_id = "Google/gemma-3n-E4B-it"
 
         model = Gemma3nForConditionalGeneration.from_pretrained(
             model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
@@ -676,7 +676,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_4b_batch(self):
-        model_id = "gg-hf-gm/gemma-3n-E4B-it"
+        model_id = "Google/gemma-3n-E4B-it"
 
         model = Gemma3nForConditionalGeneration.from_pretrained(
             model_id, low_cpu_mem_usage=False, torch_dtype=torch.bfloat16
@@ -716,7 +716,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_4b_crops(self):
-        model_id = "gg-hf-gm/gemma-3n-E4B-it"
+        model_id = "Google/gemma-3n-E4B-it"
 
         model = Gemma3nForConditionalGeneration.from_pretrained(
             model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
@@ -749,7 +749,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_4b_multiimage(self):
-        model_id = "gg-hf-gm/gemma-3n-E4B-it"
+        model_id = "Google/gemma-3n-E4B-it"
 
         model = Gemma3nForConditionalGeneration.from_pretrained(
             model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
@@ -801,7 +801,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
     @require_torch_gpu
     @pytest.mark.flash_attn_test
     def test_model_4b_flash_attn(self):
-        model_id = "gg-hf-gm/gemma-3n-E4B-it"
+        model_id = "Google/gemma-3n-E4B-it"
 
         model = Gemma3nForConditionalGeneration.from_pretrained(
             model_id, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"

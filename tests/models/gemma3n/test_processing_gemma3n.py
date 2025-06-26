@@ -36,7 +36,7 @@ if is_speech_available():
 class Gemma3nProcessorTest(unittest.TestCase):
     def setUp(self):
         # TODO: update to google?
-        self.model_id = "gg-hf-gm/gemma-3n-E4B-it"
+        self.model_id = "Google/gemma-3n-E4B-it"
         self.tmpdirname = tempfile.mkdtemp(suffix="gemma3n")
         self.maxDiff = None
 
