@@ -1,4 +1,4 @@
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,17 +13,14 @@
 # limitations under the License.
 """Testing suite for the PyTorch FastConformer model."""
 
-import math
 import unittest
-
-import numpy as np
 
 from transformers import is_torch_available
 from transformers.models.fastconformer import FastConformerConfig
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, random_attention_mask
 
 
 if is_torch_available():
@@ -42,6 +39,7 @@ class FastConformerModelTester:
         batch_size=13,
         seq_length=1024,  # mel-spectrogram frames
         is_training=False,
+        vocab_size=1024,  # Required by HF framework
         d_model=64,
         encoder_layers=2,
         encoder_attention_heads=4,
@@ -59,13 +57,13 @@ class FastConformerModelTester:
         num_mel_bins=128,
         xscaling=False,
         dropout_emb=0.0,
-        vocab_size=32,
         scope=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
         self.seq_length = seq_length
         self.is_training = is_training
+        self.vocab_size = vocab_size
         self.d_model = d_model
         self.encoder_layers = encoder_layers
         self.encoder_attention_heads = encoder_attention_heads
@@ -83,7 +81,6 @@ class FastConformerModelTester:
         self.num_mel_bins = num_mel_bins
         self.xscaling = xscaling
         self.dropout_emb = dropout_emb
-        self.vocab_size = vocab_size
         self.scope = scope
 
         # Add compatibility attributes for common tests
@@ -93,7 +90,7 @@ class FastConformerModelTester:
         # Calculate output sequence length after subsampling
         # This is a simplified calculation based on the subsampling factor
         self.output_seq_length = self.seq_length // self.subsampling_factor
-        
+
         # For attention tests, we need to provide the actual sequence length after subsampling
         self.encoder_seq_length = self.output_seq_length
         self.key_length = self.output_seq_length
@@ -101,7 +98,7 @@ class FastConformerModelTester:
     def prepare_config_and_inputs(self):
         input_features = floats_tensor([self.batch_size, self.seq_length, self.num_mel_bins])
         attention_mask = random_attention_mask([self.batch_size, self.seq_length])
-        
+
         # Calculate input_lengths based on attention_mask
         input_lengths = attention_mask.sum(-1)
 
@@ -111,6 +108,7 @@ class FastConformerModelTester:
 
     def get_config(self):
         return FastConformerConfig(
+            vocab_size=self.vocab_size,
             d_model=self.d_model,
             encoder_layers=self.encoder_layers,
             encoder_attention_heads=self.encoder_attention_heads,
@@ -128,7 +126,6 @@ class FastConformerModelTester:
             num_mel_bins=self.num_mel_bins,
             xscaling=self.xscaling,
             dropout_emb=self.dropout_emb,
-            vocab_size=self.vocab_size,
         )
 
     def create_and_check_model(self, config, input_features, attention_mask, input_lengths):
@@ -136,24 +133,22 @@ class FastConformerModelTester:
         model.to(torch_device)
         model.eval()
         result = model(input_features, attention_mask=attention_mask, input_lengths=input_lengths)
-        
+
         # Check output shape - should be reduced due to subsampling
         expected_seq_length = input_features.shape[1] // config.subsampling_factor
-        self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, expected_seq_length, self.d_model)
-        )
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, expected_seq_length, self.d_model))
 
     def create_and_check_model_with_attention_mask(self, config, input_features, attention_mask, input_lengths):
         model = FastConformerModel(config=config)
         model.to(torch_device)
         model.eval()
-        
+
         # Test with attention mask
         result_with_mask = model(input_features, attention_mask=attention_mask, input_lengths=input_lengths)
-        
+
         # Test without attention mask (should default to full length)
         result_without_mask = model(input_features)
-        
+
         # Both should have the same shape but potentially different values
         self.parent.assertEqual(result_with_mask.last_hidden_state.shape, result_without_mask.last_hidden_state.shape)
 
@@ -163,33 +158,39 @@ class FastConformerModelTester:
         model = FastConformerModel(config=config)
         model.to(torch_device)
         model.eval()
-        
+
         result_with_xscaling = model(input_features, attention_mask=attention_mask, input_lengths=input_lengths)
-        
+
         # Test with xscaling disabled
         config.xscaling = False
         model_no_xscaling = FastConformerModel(config=config)
         model_no_xscaling.to(torch_device)
         model_no_xscaling.eval()
-        
-        result_without_xscaling = model_no_xscaling(input_features, attention_mask=attention_mask, input_lengths=input_lengths)
-        
+
+        result_without_xscaling = model_no_xscaling(
+            input_features, attention_mask=attention_mask, input_lengths=input_lengths
+        )
+
         # Should have same shape but different values
-        self.parent.assertEqual(result_with_xscaling.last_hidden_state.shape, result_without_xscaling.last_hidden_state.shape)
+        self.parent.assertEqual(
+            result_with_xscaling.last_hidden_state.shape, result_without_xscaling.last_hidden_state.shape
+        )
         # Values should be different due to different scaling
-        self.parent.assertFalse(torch.allclose(result_with_xscaling.last_hidden_state, result_without_xscaling.last_hidden_state))
+        self.parent.assertFalse(
+            torch.allclose(result_with_xscaling.last_hidden_state, result_without_xscaling.last_hidden_state)
+        )
 
     def create_and_check_forward_signature(self, config, input_features, attention_mask, input_lengths):
         model = FastConformerModel(config)
         model.to(torch_device)
         model.eval()
-        
+
         # Test different combinations of inputs
         result1 = model(input_features)
         result2 = model(input_features, attention_mask=attention_mask)
         result3 = model(input_features, input_lengths=input_lengths)
         result4 = model(input_features, attention_mask=attention_mask, input_lengths=input_lengths)
-        
+
         # All should work without errors
         self.parent.assertIsNotNone(result1.last_hidden_state)
         self.parent.assertIsNotNone(result2.last_hidden_state)
@@ -200,13 +201,15 @@ class FastConformerModelTester:
         model = FastConformerModel(config)
         model.to(torch_device)
         model.eval()
-        
-        result = model(input_features, attention_mask=attention_mask, input_lengths=input_lengths, output_hidden_states=True)
-        
+
+        result = model(
+            input_features, attention_mask=attention_mask, input_lengths=input_lengths, output_hidden_states=True
+        )
+
         # Should have hidden states for each layer + input
         expected_num_hidden_states = config.encoder_layers + 1  # +1 for input embeddings
         self.parent.assertEqual(len(result.hidden_states), expected_num_hidden_states)
-        
+
         # Each hidden state should have the correct shape
         for hidden_state in result.hidden_states:
             expected_seq_length = input_features.shape[1] // config.subsampling_factor
@@ -216,19 +219,21 @@ class FastConformerModelTester:
         model = FastConformerModel(config)
         model.to(torch_device)
         model.eval()
-        
-        result = model(input_features, attention_mask=attention_mask, input_lengths=input_lengths, output_attentions=True)
-        
+
+        result = model(
+            input_features, attention_mask=attention_mask, input_lengths=input_lengths, output_attentions=True
+        )
+
         # Should have attention weights for each layer
         self.parent.assertEqual(len(result.attentions), config.encoder_layers)
-        
+
         # Each attention tensor should have the correct shape
         for attention in result.attentions:
             if attention is not None:  # Some layers might not return attention
                 expected_seq_length = input_features.shape[1] // config.subsampling_factor
                 self.parent.assertEqual(
-                    attention.shape, 
-                    (self.batch_size, config.encoder_attention_heads, expected_seq_length, expected_seq_length)
+                    attention.shape,
+                    (self.batch_size, config.encoder_attention_heads, expected_seq_length, expected_seq_length),
                 )
 
     def prepare_config_and_inputs_for_common(self):
@@ -244,11 +249,11 @@ class FastConformerModelTester:
 @require_torch
 class FastConformerModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (FastConformerModel,) if is_torch_available() else ()
-    
+
     test_pruning = False
     test_headmasking = False
     test_resize_embeddings = False
-    
+
     def setUp(self):
         self.model_tester = FastConformerModelTester(self)
         self.config_tester = ConfigTester(self, config_class=FastConformerConfig, d_model=37)
@@ -280,10 +285,6 @@ class FastConformerModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_attentions_output(*config_and_inputs)
 
-    @unittest.skip(reason="FastConformer has input_features instead of input_ids")
-    def test_forward_signature(self):
-        pass
-
     @unittest.skip(reason="FastConformer has no input_embeds")
     def test_inputs_embeds(self):
         pass
@@ -307,14 +308,10 @@ class FastConformerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_name_list(self):
         pass
 
-
-
-
-
     def test_subsampling_factor(self):
         """Test that subsampling reduces sequence length by the expected factor."""
         config, input_features, attention_mask, input_lengths = self.model_tester.prepare_config_and_inputs()
-        
+
         model = FastConformerModel(config)
         model.to(torch_device)
         model.eval()
@@ -331,14 +328,14 @@ class FastConformerModelTest(ModelTesterMixin, unittest.TestCase):
         for kernel_size in [7, 9, 15]:
             config, input_features, attention_mask, input_lengths = self.model_tester.prepare_config_and_inputs()
             config.conv_kernel_size = kernel_size
-            
+
             model = FastConformerModel(config)
             model.to(torch_device)
             model.eval()
 
             with torch.no_grad():
                 outputs = model(input_features, attention_mask=attention_mask, input_lengths=input_lengths)
-            
+
             # Should work without errors
             self.assertIsNotNone(outputs.last_hidden_state)
 
@@ -347,14 +344,14 @@ class FastConformerModelTest(ModelTesterMixin, unittest.TestCase):
         for subsampling_factor in [4, 8, 16]:
             config, input_features, attention_mask, input_lengths = self.model_tester.prepare_config_and_inputs()
             config.subsampling_factor = subsampling_factor
-            
+
             model = FastConformerModel(config)
             model.to(torch_device)
             model.eval()
 
             with torch.no_grad():
                 outputs = model(input_features, attention_mask=attention_mask, input_lengths=input_lengths)
-            
+
             # Check that subsampling factor is correctly applied
             expected_seq_length = input_features.shape[1] // subsampling_factor
             self.assertEqual(outputs.last_hidden_state.shape[1], expected_seq_length)
@@ -362,13 +359,13 @@ class FastConformerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_batch_inference(self):
         """Test batched inference with different sequence lengths."""
         config, input_features, attention_mask, input_lengths = self.model_tester.prepare_config_and_inputs()
-        
+
         model = FastConformerModel(config)
         model.to(torch_device)
         model.eval()
 
         # Modify attention mask to simulate different sequence lengths
-        attention_mask[0, input_lengths[0] // 2:] = 0  # Make first sequence shorter
+        attention_mask[0, input_lengths[0] // 2 :] = 0  # Make first sequence shorter
         input_lengths[0] = input_lengths[0] // 2
 
         with torch.no_grad():
@@ -385,25 +382,25 @@ class FastConformerModelTest(ModelTesterMixin, unittest.TestCase):
             feature_size=self.model_tester.num_mel_bins,
             sampling_rate=16000,
         )
-        
+
         # Create dummy raw audio
         raw_audio = torch.randn(2, 16000)  # 1 second of audio for 2 samples
         audio_lengths = torch.tensor([16000, 12000])  # Different lengths
-        
+
         # Pad second audio to same length
         padded_audio = torch.zeros(2, 16000)
         padded_audio[0] = raw_audio[0]
         padded_audio[1, :12000] = raw_audio[1, :12000]
-        
+
         # Extract features
         features = feature_extractor(padded_audio, audio_lengths=audio_lengths, return_tensors="pt")
-        
+
         # Create model
         config = self.model_tester.get_config()
         model = FastConformerModel(config)
         model.to(torch_device)
         model.eval()
-        
+
         # Process through model
         with torch.no_grad():
             outputs = model(
@@ -411,7 +408,7 @@ class FastConformerModelTest(ModelTesterMixin, unittest.TestCase):
                 attention_mask=features.attention_mask.to(torch_device),
                 input_lengths=features.input_lengths.to(torch_device),
             )
-        
+
         # Should work without errors
         self.assertIsNotNone(outputs.last_hidden_state)
 
@@ -423,4 +420,4 @@ class FastConformerModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_equivalence_pt_jax(self):
         # Skip JAX equivalence test for now
-        pass 
+        pass

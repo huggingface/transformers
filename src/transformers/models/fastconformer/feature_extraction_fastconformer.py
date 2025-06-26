@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 The HuggingFace Inc. team.
+# Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,7 +31,7 @@ from ...utils import TensorType, logging
 logger = logging.get_logger(__name__)
 
 # Constants for preprocessing (matching NeMo implementation)
-LOG_ZERO_GUARD_VALUE = 2 ** -24
+LOG_ZERO_GUARD_VALUE = 2**-24
 EPSILON = 1e-5
 
 
@@ -60,19 +60,19 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
             Window size in seconds.
         window_stride (`float`, *optional*, defaults to 0.01):
             Window stride in seconds.
-        window (`str`, *optional*, defaults to "hann"):
+        window (`str`, *optional*, defaults to `"hann"`):
             Window function type.
-        normalize (`str`, *optional*, defaults to "per_feature"):
+        normalize (`str`, *optional*, defaults to `"per_feature"`):
             Normalization type: "per_feature" or "all_features".
         preemph (`float`, *optional*, defaults to 0.97):
             Pre-emphasis factor.
         mag_power (`float`, *optional*, defaults to 2.0):
             Magnitude power for spectrogram.
-        mel_norm (`str`, *optional*, defaults to "slaney"):
+        mel_norm (`str`, *optional*, defaults to `"slaney"`):
             Mel filterbank normalization.
         padding_value (`float`, *optional*, defaults to 0.0):
             Padding value used to pad the audio. Should correspond to silences.
-        return_attention_mask (`bool`, *optional*, defaults to True):
+        return_attention_mask (`bool`, *optional*, defaults to `True`):
             Whether to return attention mask for proper sequence length handling.
     """
 
@@ -103,7 +103,7 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
             return_attention_mask=return_attention_mask,
             **kwargs,
         )
-        
+
         # Core parameters
         self.n_fft = n_fft
         self.hop_length = hop_length
@@ -115,13 +115,13 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
         self.preemph = preemph
         self.mag_power = mag_power
         self.mel_norm = mel_norm
-        
+
         # Validation
         if self.win_length > self.n_fft:
             warnings.warn(f"win_length ({self.win_length}) > n_fft ({self.n_fft}), truncating window")
         if self.normalize not in ["per_feature", "all_features"]:
             raise ValueError("normalize must be 'per_feature' or 'all_features'")
-        
+
         # Mel filterbank will be created on-demand
         self._filterbanks = None
 
@@ -130,7 +130,7 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
         if self._filterbanks is None:
             if not is_torch_available():
                 raise ImportError("PyTorch is required for FastConformer feature extraction")
-            
+
             self._filterbanks = torch.tensor(
                 librosa.filters.mel(
                     sr=self.sampling_rate,
@@ -142,21 +142,21 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
                 ),
                 dtype=torch.float32,
             )
-        
+
         return self._filterbanks.to(device=device, dtype=dtype)
 
     def get_window(self, win_length: int, window_type: str, device, dtype) -> torch.Tensor:
         """Get window function based on type."""
         window_fns = {
-            'hann': torch.hann_window,
-            'hamming': torch.hamming_window,
-            'blackman': torch.blackman_window,
-            'bartlett': torch.bartlett_window,
+            "hann": torch.hann_window,
+            "hamming": torch.hamming_window,
+            "blackman": torch.blackman_window,
+            "bartlett": torch.bartlett_window,
         }
-        
+
         if window_type not in window_fns:
             raise ValueError(f"Unsupported window type: {window_type}. Supported: {list(window_fns.keys())}")
-        
+
         return window_fns[window_type](win_length, periodic=False, device=device, dtype=dtype)
 
     def get_seq_len(self, audio_len: int, n_fft: int, hop_length: int) -> int:
@@ -185,47 +185,43 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
         return float(value)
 
     def normalize_mel_features(
-        self, 
-        mel: torch.Tensor, 
-        mask: torch.Tensor, 
-        normalize_type: str,
-        eps: float = EPSILON
+        self, mel: torch.Tensor, mask: torch.Tensor, normalize_type: str, eps: float = EPSILON
     ) -> torch.Tensor:
         """Apply normalization to mel features with proper masking."""
         mel_masked = mel * mask
-        
+
         if normalize_type == "per_feature":
             # Per-feature normalization: (B, T, F) -> normalize across T for each F
             lengths = mask.sum(dim=1)  # (B, F)
             mean = mel_masked.sum(dim=1) / lengths.clamp(min=1)  # (B, F)
             mean = mean.unsqueeze(1)  # (B, 1, F)
-            
+
             # Calculate std with bias correction
             variance = ((mel_masked - mean) ** 2 * mask).sum(dim=1) / (lengths - 1).clamp(min=1)
             std = torch.sqrt(variance).unsqueeze(1)  # (B, 1, F)
-            
+
         elif normalize_type == "all_features":
             # Global normalization: normalize across all valid T and F
             total_valid = mask.sum(dim=(1, 2)).clamp(min=1)  # (B,)
             mean = mel_masked.sum(dim=(1, 2)) / total_valid  # (B,)
             mean = mean.view(-1, 1, 1)
-            
+
             variance = ((mel_masked - mean) ** 2 * mask).sum(dim=(1, 2)) / (total_valid - 1).clamp(min=1)
             std = torch.sqrt(variance).view(-1, 1, 1)
         else:
             raise ValueError(f"Unsupported normalize_type: {normalize_type}")
-        
+
         normalized_mel = (mel - mean) / (std + eps)
         return normalized_mel
 
     def get_logmel(self, x: torch.Tensor, seq_len: torch.Tensor) -> torch.Tensor:
         """
         Convert audio to log-mel spectrograms for inference (matching NeMo exactly).
-        
+
         Args:
             x: Audio tensor of shape (B, T)
             seq_len: Sequence lengths of shape (B,)
-            
+
         Returns:
             Log-mel features of shape (B, F, T_frames)
         """
@@ -256,7 +252,7 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
             center=True,
             return_complex=True,
         )  # (B, F, T_frames)
-        
+
         # Convert to magnitude and apply power
         abs_stft = torch.abs(stft_out)
         if self.mag_power != 1.0:
@@ -278,13 +274,13 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
 
         # Apply normalization with masking
         normalized_mel = self.normalize_mel_features(mel, mask, self.normalize)
-        
+
         # Mask invalid frames
         normalized_mel = normalized_mel.masked_fill(~mask, self.padding_value)
-        
+
         # Return in NeMo format: (B, F, T)
         normalized_mel = normalized_mel.permute(0, 2, 1)
-        
+
         return normalized_mel.to(original_dtype)
 
     def __call__(
@@ -317,7 +313,7 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
         """
         if not is_torch_available():
             raise ImportError("PyTorch is required for FastConformer feature extraction")
-            
+
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
                 raise ValueError(
@@ -334,12 +330,12 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
         # Validate input format
         if not isinstance(raw_speech, torch.Tensor):
             raise ValueError(f"Expected raw_speech to be a torch.Tensor, got {type(raw_speech)}")
-        
+
         if raw_speech.dim() != 2:
             raise ValueError(f"Expected raw_speech to have shape (B, T), got shape {raw_speech.shape}")
-        
+
         batch_audio = raw_speech.float()
-        
+
         # Get sequence lengths
         if audio_lengths is None:
             # Assume all sequences use the full length
@@ -347,46 +343,54 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
         else:
             # Validate provided audio_lengths
             if audio_lengths.shape[0] != batch_audio.shape[0]:
-                raise ValueError(f"audio_lengths batch size {audio_lengths.shape[0]} != audio batch size {batch_audio.shape[0]}")
-        
+                raise ValueError(
+                    f"audio_lengths batch size {audio_lengths.shape[0]} != audio batch size {batch_audio.shape[0]}"
+                )
+
         # Determine target device: use explicit device parameter, otherwise use input tensor's device
         target_device = device if device is not None else batch_audio.device
-        
+
         # Move tensors to target device
         batch_audio = batch_audio.to(target_device)
         audio_lengths = audio_lengths.to(target_device)
-        
+
         # Compute sequence lengths for mel features
-        seq_lens = torch.tensor([
-            self.get_seq_len(length.item(), self.n_fft, self.hop_length) 
-            for length in audio_lengths
-        ], dtype=torch.long, device=target_device)
-        
+        seq_lens = torch.tensor(
+            [self.get_seq_len(length.item(), self.n_fft, self.hop_length) for length in audio_lengths],
+            dtype=torch.long,
+            device=target_device,
+        )
+
         # Extract mel features using NeMo-matching implementation
         logmel_features = self.get_logmel(batch_audio, seq_lens)  # (B, F, T)
-        
+
         # Transpose to HuggingFace format: (B, T, F)
         input_features = logmel_features.transpose(1, 2)
-        
+
         # Create attention mask based on sequence lengths
         max_frames = input_features.shape[1]
         attention_mask = torch.arange(max_frames, device=target_device).unsqueeze(0) < seq_lens.unsqueeze(1)
-        
+
         # Prepare output
-        encoded_inputs = BatchFeature({
-            "input_features": input_features,
-            "attention_mask": attention_mask,
-            "input_lengths": seq_lens,  # Add sequence lengths for encoder
-        })
+        encoded_inputs = BatchFeature(
+            {
+                "input_features": input_features,
+                "attention_mask": attention_mask,
+                "input_lengths": seq_lens,  # Add sequence lengths for encoder
+            }
+        )
 
         # Convert to requested tensor format
         if return_tensors is not None:
             encoded_inputs = encoded_inputs.convert_to_tensors(return_tensors)
-        
+
         # Handle attention mask return
         if return_attention_mask is False:
             encoded_inputs.pop("attention_mask", None)
         elif return_attention_mask is None and not self.return_attention_mask:
             encoded_inputs.pop("attention_mask", None)
 
-        return encoded_inputs 
+        return encoded_inputs
+
+
+__all__ = ["FastConformerFeatureExtractor"]
