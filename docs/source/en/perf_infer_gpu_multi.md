@@ -8,7 +8,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 
-**Note:** This file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -22,7 +22,7 @@ However, tensor parallelism adds communication overhead and should be used on si
 > [!TIP]
 > Refer to the [Ultra-Scale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook?section=tensor_parallelism) section on tensor parallelism to learn more.
 
-Refer to the list below for models that natively support tensor parallelism. Open a GitHub issue or pull request to add support for a model.
+Check the list below for models that natively support tensor parallelism. Open a GitHub issue or pull request to add support for a model.
 
 <details>
 <summary>Show supported models</summary>
@@ -48,7 +48,7 @@ This guide shows how to enable tensor parallelism with Transformers and differen
 Transformers supports tensor parallelism if a model has a `tp_plan`. There are two plans to partition a model.
 
 - The `auto` tensor parallelism plan partitions a model (see the supported models above) based on a predefined configuration.
-- You can also manually specify your own partitioning plan and pass it to the `tp_plan` parameter in [`~PretrainedModel.from_pretrained`].
+- You can also manually specify your own partitioning plan and pass it to the `tp_plan` parameter in [`~PreTrainedModel.from_pretrained`].
 
 <hfoptions id="sharding">
 <hfoption id="auto plan">
@@ -81,7 +81,7 @@ torchrun --nproc-per-node 4 demo.py
 </hfoption>
 <hfoption id="manual plan">
 
-Define a tensor parallel plan for each layer in `tp_plan` and pass it to [`~PretrainedModel.from_pretrained`]. The example below uses a combination of column and row partitioning. Refer to the [Partitioning strategies](#partitioning-strategies) section to learn about other supported partitioning strategies.
+Define a tensor parallel plan for each layer in `tp_plan` and pass it to [`~PreTrainedModel.from_pretrained`]. The example below uses a combination of column and row partitioning. Refer to the [Partitioning strategies](#partitioning-strategies) section to learn about other supported partitioning strategies.
 
 > [!WARNING]
 > Manually specifying your own partitioning plan requires a good understanding of the model architecture and how the partitioning strategies interact together. If you are not sure about the partitioning strategies, the resulting model can be very slow, even failing or incorrect. Refer to the [Ultra-Scale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook?section=tensor_parallelism) to learn more.
@@ -106,7 +106,7 @@ print(model._tp_plan)
 
 ## Partitioning strategies
 
-All partitioning strategies are defined in the [`ParallelInterface`] class which maps a string to the strategy implementation. You don't need to interact with this class directly since all the strategies are set with `tp_plan` in [`~PretrainedModel.from_pretrained`], but it is useful for checking what strategies are available.
+All partitioning strategies are defined in the [`ParallelInterface`] class which maps a string to the strategy implementation. You don't need to interact with this class directly since all the strategies are set with `tp_plan` in [`~PreTrainedModel.from_pretrained`], but it is useful for checking what strategies are available.
 
 ```py
 class ParallelInterface(MutableMapping):
@@ -187,70 +187,68 @@ The example below shows how to implement `ColwiseParallel` with this workflow.
 
 1. Inherit from `TensorParallelLayer`. In the `__init__` method, define `input_layouts` and `output_layouts` to describe how the input and output tensors should be placed on devices. The `desired_input_layouts` attribute is used to specify how the input *should* be placed on devices.
 
-```python
-class ColwiseParallel(TensorParallelLayer):
-    def __init__(
-        self,
-        *,
-        input_layouts: Optional[Placement] = None, # The input layout coming from the previous layer
-        output_layouts: Optional[Placement] = None, # The output layout we want to achieve
-        use_local_output: bool = True, # Whether to use local output or not
-        use_dtensor=True, # Whether to use DTensor or not
-    ):
-        self.input_layouts = (input_layouts or Replicate(),) # The input sharding coming from the previous layer
-        self.output_layouts = (output_layouts or Shard(-1),) # Desired output sharding
-        self.desired_input_layouts = (Replicate(),) # Desired input sharding, inputs should be replicated across GPUs
-        self.use_local_output = use_local_output
-        self.use_dtensor = use_dtensor
-```
+    ```python
+    class ColwiseParallel(TensorParallelLayer):
+        def __init__(
+            self,
+            *,
+            input_layouts: Optional[Placement] = None, # The input layout coming from the previous layer
+            output_layouts: Optional[Placement] = None, # The output layout we want to achieve
+            use_local_output: bool = True, # Whether to use local output or not
+            use_dtensor=True, # Whether to use DTensor or not
+        ):
+            self.input_layouts = (input_layouts or Replicate(),) # The input sharding coming from the previous layer
+            self.output_layouts = (output_layouts or Shard(-1),) # Desired output sharding
+            self.desired_input_layouts = (Replicate(),) # Desired input sharding, inputs should be replicated across GPUs
+            self.use_local_output = use_local_output
+            self.use_dtensor = use_dtensor
+    ```
 
 2. Implement the `partition_tensor`, `_prepare_input_fn` and `_prepare_output_fn` methods.
 
-The `partition_tensor` method partitions the tensor and fills `empty_param` with the partitioned tensor. Use the utility function `get_tensor_shard` to help you get the correct shard of the original parameter for a given rank and `get_packed_weights` to help with packed weights.
+    The `partition_tensor` method partitions the tensor and fills `empty_param` with the partitioned tensor. Use the utility function `get_tensor_shard` to help you get the correct shard of the original parameter for a given rank and `get_packed_weights` to help with packed weights.
 
-```python
-def partition_tensor(
-    self,
-    param, # Full tensor of the parameter
-    empty_param, # Empty tensor of the parameter, will be filled with the partitioned tensor
-    param_type, # Type of the parameter, `bias` or `weight`
-    param_casting_dtype, # The type to cast the parameter to
-    to_contiguous, # Whether to convert the tensor to a contiguous memory layout
-    rank, # The rank of the current device
-    device_mesh, # The device mesh
-) -> nn.Parameter: # Return the partitioned parameter
-    ...
-```
+    ```python
+    def partition_tensor(
+        self,
+        param, # Full tensor of the parameter
+        empty_param, # Empty tensor of the parameter, will be filled with the partitioned tensor
+        param_type, # Type of the parameter, `bias` or `weight`
+        param_casting_dtype, # The type to cast the parameter to
+        to_contiguous, # Whether to convert the tensor to a contiguous memory layout
+        rank, # The rank of the current device
+        device_mesh, # The device mesh
+    ) -> nn.Parameter: # Return the partitioned parameter
+        ...
+    ```
 
-The `_prepare_input_fn` and `_prepare_output_fn` methods are used in the [pre-forward](https://docs.pytorch.org/docs/stable/generated/torch.nn.modules.module.register_module_forward_pre_hook.html) and [forward](https://docs.pytorch.org/docs/stable/generated/torch.nn.modules.module.register_module_forward_hook.html) hooks. They redistribute the inputs and outputs to the desired layout as specified in the `__init__`.
+    The `_prepare_input_fn` and `_prepare_output_fn` methods are used in the [pre-forward](https://docs.pytorch.org/docs/stable/generated/torch.nn.modules.module.register_module_forward_pre_hook.html) and [forward](https://docs.pytorch.org/docs/stable/generated/torch.nn.modules.module.register_module_forward_hook.html) hooks. They redistribute the inputs and outputs to the desired layout as specified in the `__init__`.
 
-```python
-def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
-    ...
-    # Do some custom logic, cast to DTensor etc.
-    ...
-    return inputs.redistribute(placements=desired_input_layouts, device_mesh=device_mesh)
-
-def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
-    ...
-    # Do some custom logic, cast to DTensor etc.
-    ...
-    return outputs.redistribute(placements=output_layouts, device_mesh=device_mesh)
-```
+    ```python
+    def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
+        ...
+        # Do some custom logic, cast to DTensor etc.
+        ...
+        return inputs.redistribute(placements=desired_input_layouts, device_mesh=device_mesh)
+    def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
+        ...
+        # Do some custom logic, cast to DTensor etc.
+        ...
+        return outputs.redistribute(placements=output_layouts, device_mesh=device_mesh)
+    ```
 
 3. Register the strategy to [`ParallelInterface`] to enable it for use with `tp_plan`.
 
-```python
-from transformers.integrations.tensor_parallel import ParallelInterface
+    ```python
+    from transformers.integrations.tensor_parallel import ParallelInterface
 
-ParallelInterface.register_strategy("colwise_custom", ColwiseParallel)
-tp_plan = {
-    "model.layers.*.self_attn.q_proj": "colwise_custom",
-    ...
-}
-
-model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, tp_plan=tp_plan)
-```
+    ParallelInterface.register_strategy("colwise_custom", ColwiseParallel)
+    tp_plan = {
+        "model.layers.*.self_attn.q_proj": "colwise_custom",
+        ...
+    }
+    model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, tp_plan=tp_plan)
+    ```
 
 ## Benchmarks
 
@@ -286,7 +284,6 @@ Most of the `torch.distributed` defined parallelization strategies can be applie
 The most important part of DTensor is the `placement` attribute because it tells PyTorch how a tensor is placed on the devices in `DeviceMesh`. The `placement` attribute can take the following values.
 
 - `Shard(dimension)` - Indicates how a `DTensor` is sharded across a given dimension, over the `DeviceMesh` it was constructed under. The example below demonstrates how to shard weights over different dimensions for column-wise partitioning.
-
 
     ```python
     weight = ...
