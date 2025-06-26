@@ -2228,7 +2228,12 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         # otherwise we expand manually by concatenating
         if getattr(self.config, "image_token_id", None) is not None:
             special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)
+
+            inputs_embeds = inputs_embeds.to(language_model_inputs.device)
+            special_image_mask = special_image_mask.to(language_model_inputs.device)
             inputs_embeds[special_image_mask] = language_model_inputs.flatten()
+
+            attention_mask = attention_mask.to(language_attention_mask.device)
         else:
             logger.warning_once(
                 "Expanding inputs for image tokens in BLIP-2 should be done in processing. "
