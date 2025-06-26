@@ -408,13 +408,14 @@ class Blip2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
     _supports_attention_backend = True
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
+    _supports_flash_attn_2 = False
+    _supports_sdpa = False
+    _supports_flex_attn = False
 
     _no_split_modules = [
         "Blip2Attention",
         "Blip2QFormerMultiHeadAttention",
+        "Blip2EncoderLayer",
         "Blip2TextEmbeddings",
         "T5Block",
         "OPTDecoderLayer",
@@ -2086,9 +2087,9 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
             else:
                 special_image_mask = input_ids == self.config.image_token_id
 
-            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-            language_model_inputs = language_model_inputs.to(inputs_embeds.device, inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, language_model_inputs)
+            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(language_model_inputs.device)
+            language_model_inputs = language_model_inputs.to(inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds.to(language_model_inputs.device).masked_scatter(special_image_mask, language_model_inputs)
         else:
             logger.warning_once(
                 "Expanding inputs for image tokens in BLIP-2 should be done in processing. "
@@ -2226,17 +2227,8 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         # if the model already has "image_token_id" then the input is expanded to account for image embeds
         # otherwise we expand manually by concatenating
         if getattr(self.config, "image_token_id", None) is not None:
-            if input_ids is None:
-                special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                special_image_mask = special_image_mask.all(-1)
-            else:
-                special_image_mask = input_ids == self.config.image_token_id
-
-            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-            language_model_inputs = language_model_inputs.to(inputs_embeds.device, inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, language_model_inputs)
+            special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)
+            inputs_embeds[special_image_mask] = language_model_inputs.flatten()
         else:
             logger.warning_once(
                 "Expanding inputs for image tokens in BLIP-2 should be done in processing. "
@@ -2259,7 +2251,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
 
         inputs = {"inputs_embeds": inputs_embeds, "attention_mask": attention_mask}
         if not self.language_model.config.is_encoder_decoder:
-            inputs["input_ids"] = input_ids
+            inputs["input_ids"] = input_ids.to(language_model_inputs.device)
 
         outputs = self.language_model.generate(**inputs, **generate_kwargs)
         return outputs
