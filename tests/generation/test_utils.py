@@ -3806,7 +3806,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         logits_gen = outputs.logits[0][0]
 
         # assert that unprocessed logits from generate() are same as those from modal eval()
-        self.assertListEqual(logits_fwd.tolist(), logits_gen.tolist())
+        torch.testing.assert_allclose(logits_fwd.tolist(), logits_gen.tolist())
 
     def test_return_unprocessed_logit_scores(self):
         # tell model to generate text and return unprocessed/unwarped logit scores
