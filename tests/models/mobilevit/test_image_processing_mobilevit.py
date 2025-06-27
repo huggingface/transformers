@@ -248,6 +248,22 @@ class MobileViTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(encoding["labels"].min().item() >= 0)
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
+    def test_reduce_labels(self):
+        for image_processing_class in self.image_processor_list:
+            # Initialize image_processing
+            image_processing = self.image_processing_class(**self.image_processor_dict)
+
+            # ADE20k has 150 classes, and the background is included, so labels should be between 0 and 150
+            image, map = prepare_semantic_single_inputs()
+            encoding = image_processing(image, map, return_tensors="pt")
+            self.assertTrue(encoding["labels"].min().item() >= 0)
+            self.assertTrue(encoding["labels"].max().item() <= 150)
+
+            image_processing.do_reduce_labels = True
+            encoding = image_processing(image, map, return_tensors="pt")
+            self.assertTrue(encoding["labels"].min().item() >= 0)
+            self.assertTrue(encoding["labels"].max().item() <= 255)
+
     @require_vision
     @require_torch
     def test_slow_fast_equivalence(self):
@@ -275,19 +291,3 @@ class MobileViTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         encoding_fast = image_processor_fast(image, segmentation_map, return_tensors="pt")
         self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
         torch.testing.assert_close(encoding_slow.labels, encoding_fast.labels, atol=1e-1, rtol=1e-3)
-
-    def test_reduce_labels(self):
-        for image_processing_class in self.image_processor_list:
-            # Initialize image_processing
-            image_processing = self.image_processing_class(**self.image_processor_dict)
-
-            # ADE20k has 150 classes, and the background is included, so labels should be between 0 and 150
-            image, map = prepare_semantic_single_inputs()
-            encoding = image_processing(image, map, return_tensors="pt")
-            self.assertTrue(encoding["labels"].min().item() >= 0)
-            self.assertTrue(encoding["labels"].max().item() <= 150)
-
-            image_processing.do_reduce_labels = True
-            encoding = image_processing(image, map, return_tensors="pt")
-            self.assertTrue(encoding["labels"].min().item() >= 0)
-            self.assertTrue(encoding["labels"].max().item() <= 255)

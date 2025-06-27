@@ -103,31 +103,38 @@ class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         do_center_crop: bool,
         do_normalize: bool,
-        size: SizeDict,
+        size: Optional[SizeDict],
         interpolation: Optional["F.InterpolationMode"],
-        rescale_factor: float,
-        crop_size: SizeDict,
+        rescale_factor: Optional[float],
+        crop_size: Optional[SizeDict],
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
+        disable_grouping: bool,
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> BatchFeature:
+        processed_images = []
+
         if do_reduce_labels:
             images = self.reduce_label(images)
 
-        # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        # Group images by shape for more efficient batch processing
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
+
+        # Process each group of images with the same shape
         for shape, stacked_images in grouped_images.items():
             if do_resize:
                 stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation)
             resized_images_grouped[shape] = stacked_images
+
+        # Reorder images to original sequence
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
-        # Group images by size for further processing
-        # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        # Group again after resizing (in case resize produced different sizes)
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
+
         for shape, stacked_images in grouped_images.items():
             if do_center_crop:
                 stacked_images = self.center_crop(stacked_images, crop_size)
@@ -138,7 +145,10 @@ class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+
+        # Stack all processed images if return_tensors is specified
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
+
         return processed_images
 
     def _preprocess_images(
@@ -170,12 +180,7 @@ class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
 
         kwargs["do_normalize"] = False
         kwargs["do_rescale"] = False
-        kwargs["interpolation"] = (
-            pil_torch_interpolation_mapping[PILImageResampling.NEAREST]
-            if PILImageResampling.NEAREST in pil_torch_interpolation_mapping
-            else kwargs.get("interpolation")
-        )
-        kwargs["input_data_format"] = ChannelDimension.FIRST
+        kwargs["interpolation"] = pil_torch_interpolation_mapping[PILImageResampling.NEAREST]
         processed_segmentation_maps = self._preprocess(images=processed_segmentation_maps, **kwargs)
 
         processed_segmentation_maps = processed_segmentation_maps.squeeze(1)
@@ -233,15 +238,15 @@ class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
             images=images,
             **kwargs,
         )
-        data = {"pixel_values": images}
 
         if segmentation_maps is not None:
             segmentation_maps = self._preprocess_segmentation_maps(
                 segmentation_maps=segmentation_maps,
                 **kwargs,
             )
-            data["labels"] = segmentation_maps
-        return BatchFeature(data=data)
+            return BatchFeature(data={"pixel_values": images, "labels": segmentation_maps})
+
+        return BatchFeature(data={"pixel_values": images})
 
     # Copied from transformers.models.beit.image_processing_beit_fast.BeitImageProcessorFast.post_process_semantic_segmentation with Beit->MobileNetV2
     def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple]] = None):
