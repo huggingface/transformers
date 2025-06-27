@@ -1657,7 +1657,7 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
 
         # Expand hidden_states to support per-layer inputs
         target_magnitude: torch.Tensor = torch.mean(hidden_states_0**2, dim=-1, keepdim=True) ** 0.5
-        epsilon_tensor = torch.tensor(torch.finfo().min)
+        epsilon_tensor = torch.tensor(1e-5)
 
         temp_hidden_states = [hidden_states_0]
         for i in range(1, self.config.altup_num_inputs):
