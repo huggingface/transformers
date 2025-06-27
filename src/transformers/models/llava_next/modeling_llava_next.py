@@ -474,7 +474,16 @@ class LlavaNextModel(LlavaNextPreTrainedModel):
             )
 
         if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
+            if self.config.image_token_index >= self.language_model.get_input_embeddings().num_embeddings:
+                # There is no embedding corresponding to the image token
+                is_image_idx = input_ids == self.config.image_token_index
+                # Create a copy and set the llm inputs corresponding to the out of range image
+                # embeddings to a throwaway value, which will later be clobbered by image features
+                llm_input_ids = input_ids.clone()
+                llm_input_ids[is_image_idx] = 0
+            else:
+                llm_input_ids = input_ids
+            inputs_embeds = self.get_input_embeddings()(llm_input_ids)
 
         if pixel_values is not None and pixel_values.size(0) > 0:
             image_features = self.get_image_features(
