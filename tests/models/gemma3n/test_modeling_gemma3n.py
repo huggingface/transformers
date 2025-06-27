@@ -400,6 +400,34 @@ class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
             self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels, atols=atols
         )
 
+    @pytest.mark.generate
+    @unittest.skip(
+        "Gemma3n has a special shape for hidden states (due to per-layer projs) which is not compatible with contrastive decoding"
+    )
+    def test_contrastive_generate(self):
+        pass
+
+    @pytest.mark.generate
+    @unittest.skip(
+        "Gemma3n has a special shape for hidden states (due to per-layer projs) which is not compatible with contrastive decoding"
+    )
+    def test_contrastive_generate_dict_outputs_use_cache(self):
+        pass
+
+    @pytest.mark.generate
+    @unittest.skip(
+        "Gemma3n has a special shape for hidden states (due to per-layer projs) which is not compatible with contrastive decoding"
+    )
+    def test_contrastive_generate_low_memory(self):
+        pass
+
+    @pytest.mark.generate
+    @unittest.skip(
+        "Gemma3n has a special shape for hidden states (due to per-layer projs) which is not compatible with dola decoding"
+    )
+    def test_dola_decoding_sample(self):
+        pass
+
 
 class Gemma3nVision2TextModelTester:
     text_config = {"activation_sparsity_pattern": None}
