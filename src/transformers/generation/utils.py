@@ -3764,8 +3764,8 @@ class GenerationMixin(ContinuousMixin):
         return gathered_tensor
 
     @staticmethod
-    def _get_improvement_possibility(
-        is_improvement_possible: torch.Tensor,
+    def _check_early_stop_heuristic(
+        is_early_stop_heuristic_unsatisfied: torch.Tensor,
         running_beam_scores: torch.Tensor,
         beam_scores: torch.Tensor,
         is_sent_finished: torch.Tensor,
@@ -3784,13 +3784,13 @@ class GenerationMixin(ContinuousMixin):
             best_hypothetical_length = cur_len - decoder_prompt_len
         best_possible_running_score = running_beam_scores[:, :1] / (best_hypothetical_length**length_penalty)
         worst_finished_score = torch.where(is_sent_finished, torch.min(beam_scores, dim=1, keepdim=True)[0], -1.0e9)
-        return is_improvement_possible & torch.any(
+        return is_early_stop_heuristic_unsatisfied & torch.any(
             best_possible_running_score > worst_finished_score, dim=-1, keepdim=True
         )
 
     @staticmethod
     def _beam_search_has_unfinished_sequences(
-        is_improvement_possible: torch.Tensor,
+        is_early_stop_heuristic_unsatisfied: torch.Tensor,
         is_sent_finished: torch.Tensor,
         next_token_hits_stopping_criteria: torch.Tensor,
         early_stopping: Union[bool, str],
@@ -3803,7 +3803,7 @@ class GenerationMixin(ContinuousMixin):
         # early_stopping == "never" -> compute the best score from `max_length` or `cur_len`, depending on the
         #   sign of `length_penalty`. Positive `length_penalty` favors longer sequences, thus we use
         #   `max_length` there.
-        improvement_possible = torch.any(is_improvement_possible)
+        improvement_possible = torch.any(is_early_stop_heuristic_unsatisfied)
 
         # b. Is there still a beam without fully completed sequences? This is only relevant if early_stopping is
         # enabled, where we want to finish as soon as all beams have a completed sequence.
@@ -3899,7 +3899,7 @@ class GenerationMixin(ContinuousMixin):
         topk_log_probs: torch.Tensor,
         beam_indices: torch.Tensor,
         topk_running_beam_indices: torch.Tensor,
-        is_improvement_possible: torch.Tensor,
+        is_early_stop_heuristic_unsatisfied: torch.Tensor,
         is_sent_finished: torch.Tensor,
         next_token_hits_stopping_criteria: torch.Tensor,
         top_num_beam_mask: torch.Tensor,
@@ -3925,7 +3925,7 @@ class GenerationMixin(ContinuousMixin):
         beams_in_batch_are_full = torch.all(is_sent_finished, axis=-1, keepdims=True) & (early_stopping is True)
         topk_log_probs += beams_in_batch_are_full.to(torch.float32) * -1.0e9
         # - make sure no scores can be added anymore if improvement is not possible
-        topk_log_probs += (~is_improvement_possible).to(torch.float32) * -1.0e9
+        topk_log_probs += (~is_early_stop_heuristic_unsatisfied).to(torch.float32) * -1.0e9
 
         # - make sure still running sequences cannot be chosen as finalized beam
         topk_log_probs += (~did_top_num_beams_just_finished) * -1.0e9
@@ -4079,7 +4079,7 @@ class GenerationMixin(ContinuousMixin):
         is_sent_finished = torch.zeros((batch_size, num_beams), dtype=torch.bool, device=input_ids.device)
 
         # per batch state bit indicating if there is a possibility to improve the best finished sentence.
-        is_improvement_possible = torch.ones((batch_size, 1), dtype=torch.bool, device=input_ids.device)
+        is_early_stop_heuristic_unsatisfied = torch.ones((batch_size, 1), dtype=torch.bool, device=input_ids.device)
 
         # per batch, beam-item state bit indicating if there are valid continuations.
         next_token_hits_stopping_criteria = torch.zeros(
@@ -4193,7 +4193,7 @@ class GenerationMixin(ContinuousMixin):
                 topk_log_probs=topk_log_probs,
                 beam_indices=beam_indices,
                 topk_running_beam_indices=topk_running_beam_indices,
-                is_improvement_possible=is_improvement_possible,
+                is_early_stop_heuristic_unsatisfied=is_early_stop_heuristic_unsatisfied,
                 is_sent_finished=is_sent_finished,
                 next_token_hits_stopping_criteria=next_token_hits_stopping_criteria,
                 top_num_beam_mask=top_num_beam_mask,
@@ -4215,8 +4215,8 @@ class GenerationMixin(ContinuousMixin):
                 )
 
             cur_len = cur_len + 1
-            is_improvement_possible = self._get_improvement_possibility(
-                is_improvement_possible=is_improvement_possible,
+            is_early_stop_heuristic_unsatisfied = self._check_early_stop_heuristic(
+                is_early_stop_heuristic_unsatisfied=is_early_stop_heuristic_unsatisfied,
                 running_beam_scores=running_beam_scores,
                 beam_scores=beam_scores,
                 is_sent_finished=is_sent_finished,
@@ -4227,7 +4227,7 @@ class GenerationMixin(ContinuousMixin):
                 length_penalty=length_penalty,
             )
             this_peer_finished = not self._beam_search_has_unfinished_sequences(
-                is_improvement_possible,
+                is_early_stop_heuristic_unsatisfied,
                 is_sent_finished,
                 next_token_hits_stopping_criteria,
                 early_stopping,
