@@ -2040,7 +2040,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             [50365, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 11, 293, 321, 366, 5404, 281, 2928, 702, 14943, 13, 50629, 50682, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50870, 50911, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 11, 365, 5272, 293, 12904, 9256, 450, 10539, 949, 505, 11, 51245, 51287, 1034, 4680, 10117, 490, 3936, 293, 1080, 3542, 5160, 881, 26336, 281, 264, 1575, 13, 51494, 51523, 634, 575, 12525, 22618, 1968, 6144, 35617, 1456, 397, 266, 311, 589, 307, 534, 10281, 934, 439, 11, 51799, 51815, 50365, 293, 393, 4411, 50431]
         ])
         # fmt: on
-        torch.testing.assert_close(generated_ids[0], EXPECTED_OUTPUT)
+        torch.testing.assert_close(generated_ids, EXPECTED_OUTPUT)
 
         EXPECTED_TRANSCRIPT = [
             {
@@ -3354,22 +3354,6 @@ class WhisperEncoderModelTest(ModelTesterMixin, unittest.TestCase):
     def test_forward_pass_weighted_layer_sum(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_forward(*config_and_inputs, use_weighted_layer_sum=True)
-
-    @unittest.skip(reason="Some undefined behavior encountered with tiny versions of this model. Skip for now.")
-    def test_cpu_offload(self):
-        pass
-
-    @unittest.skip(reason="Some undefined behavior encountered with tiny versions of this model. Skip for now.")
-    def test_disk_offload_bin(self):
-        pass
-
-    @unittest.skip(reason="Some undefined behavior encountered with tiny versions of this model. Skip for now.")
-    def test_disk_offload_safetensors(self):
-        pass
-
-    @unittest.skip(reason="Some undefined behavior encountered with tiny versions of this model. Skip for now.")
-    def test_model_parallelism(self):
-        pass
 
     @unittest.skip(reason="Not applicable for an encoder-only acoustic model")
     def test_inputs_embeds(self):
