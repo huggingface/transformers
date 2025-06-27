@@ -1,0 +1,13 @@
+{
+  "feature_extractor_type": "FastConformerFeatureExtractor",
+  "feature_size": 128,
+  "sampling_rate": 16000,
+  "hop_length": 160,
+  "chunk_length": 30,
+  "n_fft": 512,
+  "padding_value": 0.0,
+  "dither": 1e-05,
+  "return_attention_mask": false,
+  "window": "hann",
+  "normalize": "per_feature"
+} 
