@@ -3174,6 +3174,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertAlmostEqual(b, b1, delta=1e-5)
 
     @slow
+    @require_non_hpu
     @require_accelerate
     @require_torch_non_multi_accelerator
     def test_auto_batch_size_finder(self):
