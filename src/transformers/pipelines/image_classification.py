@@ -99,6 +99,10 @@ class ImageClassificationPipeline(Pipeline):
     """
 
     function_to_apply: ClassificationFunction = ClassificationFunction.NONE
+    _load_processor = False
+    _load_image_processor = True
+    _load_feature_extractor = False
+    _load_tokenizer = False
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

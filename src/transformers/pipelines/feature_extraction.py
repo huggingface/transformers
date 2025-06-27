@@ -37,6 +37,11 @@ class FeatureExtractionPipeline(Pipeline):
     [huggingface.co/models](https://huggingface.co/models).
     """
 
+    _load_processor = False
+    _load_image_processor = False
+    _load_feature_extractor = False
+    _load_tokenizer = True
+
     def _sanitize_parameters(self, truncation=None, tokenize_kwargs=None, return_tensors=None, **kwargs):
         if tokenize_kwargs is None:
             tokenize_kwargs = {}
