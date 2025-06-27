@@ -1573,7 +1573,7 @@ class QuartetConfig(QuantizationConfigMixin):
     def __init__(
         self,
         forward_dtype: str = "mxfp4",
-        forward_quest: bool = False,
+        forward_method: str = "abs_max",
         backward_dtype: str = "mxfp4",
         store_master_weights: bool = False,
         hadamard_group_size: int = 32,
@@ -1581,7 +1581,7 @@ class QuartetConfig(QuantizationConfigMixin):
         **kwargs,
     ):
         self.forward_dtype = forward_dtype
-        self.forward_quest = forward_quest
+        self.forward_method = forward_method
         self.backward_dtype = backward_dtype
         self.store_master_weights = store_master_weights
         self.hadamard_group_size = hadamard_group_size
@@ -1596,8 +1596,8 @@ class QuartetConfig(QuantizationConfigMixin):
         """
         if self.forward_dtype not in ["mxfp4"]:
             raise ValueError("forward_dtype must be mxfp4 for now")
-        if self.forward_quest not in [False]:
-            raise ValueError("forward_quest must be False for now")
+        if self.forward_method not in ["abs_max", "quest"]:
+            raise ValueError("forward_method must be abs_max or quest for now")
         if self.backward_dtype not in ["mxfp4", "bf16"]:
             raise ValueError("backward_dtype must be mxfp4 or bf16 for now")
         if self.hadamard_group_size not in [32]:
