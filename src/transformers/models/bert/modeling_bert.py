@@ -211,9 +211,7 @@ def eager_attn_forward(
     if module.position_embedding_type == "relative_key" or module.position_embedding_type == "relative_key_query":
         query_length, key_length = query.shape[2], key.shape[2]
         if use_cache:
-            position_ids_l = torch.tensor(key_length - 1, dtype=torch.long, device=query.device).view(
-                -1, 1
-            )
+            position_ids_l = torch.tensor(key_length - 1, dtype=torch.long, device=query.device).view(-1, 1)
         else:
             position_ids_l = torch.arange(query_length, dtype=torch.long, device=query.device).view(-1, 1)
         position_ids_r = torch.arange(key_length, dtype=torch.long, device=query.device).view(1, -1)
@@ -346,9 +344,12 @@ class BertSelfAttention(nn.Module):
         )
         attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
 
-        outputs = (attn_output, attn_weights,)
+        outputs = (
+            attn_output,
+            attn_weights,
+        )
         if self.is_decoder:
-            outputs = outputs + (past_key_value,)#"""
+            outputs = outputs + (past_key_value,)  # """
         return outputs
 
 
@@ -369,9 +370,7 @@ class BertSelfOutput(nn.Module):
 class BertAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None, is_causal=False):
         super().__init__()
-        self.self = BertSelfAttention(
-            config, position_embedding_type=position_embedding_type, is_causal=is_causal
-        )
+        self.self = BertSelfAttention(config, position_embedding_type=position_embedding_type, is_causal=is_causal)
         self.output = BertSelfOutput(config)
         self.pruned_heads = set()
 
