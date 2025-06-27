@@ -371,35 +371,6 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **lm_kwargs,
     ) -> Union[tuple, PerceptionLMCausalLMOutputWithPast]:
-        r"""
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-            logits_to_keep (`int` or `torch.Tensor`, *optional*):
-                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
-                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
-                This is useful when using packed tensor format (single dimension for batch and sequence length).
-        Returns:
-        Example:
-        ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoProcessor, PerceptionLMForConditionalGeneration
-        >>> model = PerceptionLMForConditionalGeneration.from_pretrained("facebook/Perception-LM-1B")
-        >>> processor = AutoProcessor.from_pretrained("facebook/Perception-LM-1B")
-        >>> prompt = "USER: <image>\nWhat's the content of the image? ASSISTANT:"
-        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
-        >>> # Generate
-        >>> generate_ids = model.generate(**inputs, max_new_tokens=15)
-        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "USER:  \nWhat's the content of the image? ASSISTANT: The image features a busy city street with a stop sign prominently displayed"
-        ```"""
-
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,

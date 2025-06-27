@@ -50,6 +50,18 @@ The original code can be found [here](https://github.com/facebookresearch/percep
 
 [[autodoc]] PerceptionLMProcessor
 
+## PerceptionLMImageProcessorFast
+
+[[autodoc]] PerceptionLMImageProcessorFast
+
+## PerceptionLMVideoProcessor
+
+[[autodoc]] PerceptionLMVideoProcessor
+
+## PerceptionLMModel
+
+[[autodoc]] PerceptionLMModel
+
 ## PerceptionLMForConditionalGeneration
 
 [[autodoc]] PerceptionLMForConditionalGeneration
