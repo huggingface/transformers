@@ -3776,7 +3776,25 @@ class GenerationMixin(ContinuousMixin):
         length_penalty: float,
     ):
         """
-        Check if there is a possibility to improve the finished beam_scores.
+        Determine whether early stopping is possible by checking if the best possible score of running beams
+        could still improve upon the finished ones.
+
+        Mechanism:
+        - Without a length penalty, beam scores typically decrease as more tokens are generated.
+        So, if the *best possible* score from any running beam is already worse than the *worst* finished beam,
+        we can safely stop early.
+        - With a length penalty, scores may increase with longer sequences. In this case, we use heuristics
+        to estimate the best possible score — though this estimate may not always be correct — and stop
+        if no further improvement seems likely.
+
+        We apply different heuristics depending on the value of `early_stopping`:
+        1. `early_stopping == False`:
+        -> Use a heuristic that assumes the best score comes from the current length minus the decoder prompt length.
+        -> See detailed discussion: https://github.com/huggingface/transformers/pull/20901#issuecomment-1369845565
+
+        2. `early_stopping == "never"`:
+        -> Estimate the best score using either `max_length` or `cur_len`, depending on the sign of `length_penalty`.
+        -> A positive length penalty favors longer sequences, so we use `max_length` in that case.
         """
         if early_stopping == "never" and length_penalty > 0.0:
             best_hypothetical_length = max_length - decoder_prompt_len
@@ -3799,10 +3817,6 @@ class GenerationMixin(ContinuousMixin):
         Beam Search stopping condition -- halts the generation loop if any of these conditions becomes False
         """
         # a. Can the open beams improve the top completed scores?
-        # early_stopping == False -> apply heuristic = always get the best score from `cur_len - decoder_prompt_len`.
-        # early_stopping == "never" -> compute the best score from `max_length` or `cur_len`, depending on the
-        #   sign of `length_penalty`. Positive `length_penalty` favors longer sequences, thus we use
-        #   `max_length` there.
         improvement_possible = torch.any(is_early_stop_heuristic_unsatisfied)
 
         # b. Is there still a beam without fully completed sequences? This is only relevant if early_stopping is
