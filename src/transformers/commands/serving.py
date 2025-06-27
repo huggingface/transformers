@@ -109,7 +109,17 @@ def serve_command_factory(args: Namespace):
     return ServeCommand(args)
 
 
-def create_generation_config_from_req(req: "ChatCompletionInput"):
+def create_generation_config_from_req(req: "ChatCompletionInput") -> "GenerationConfig":
+    """
+    Creates a generation config from the parameters of the request. Note that we can pass a `GenerationConfig`
+    (serialized into a `dict`) in `extra_body`, for full `generate` parameterization.
+
+    Args:
+        req (`ChatCompletionInput`): The request which may optionally contain generation parameters.
+
+    Returns:
+        The prepared `GenerationConfig` object.
+    """
     if req.extra_body is not None and "generation_config" in req.extra_body:
         for key in req.extra_body["generation_config"].keys():
             if key in ChatCompletionInput.base_field_names.keys():
@@ -137,12 +147,13 @@ def create_generation_config_from_req(req: "ChatCompletionInput"):
 
 
 class ToolState:
-    """Class to keep track of the tool call state."""
+    """Lightweight class to keep track of the tool call state."""
 
     def __init__(self):
         self.reset()
 
     def reset(self):
+        """Reset the tool call state (assumes we're outside a tool call)."""
         self.inside_tool_call = False
         self.has_tool_name_defined = False
         self.arg_nesting_level = 0
@@ -335,12 +346,26 @@ class ServeCommand(BaseTransformersCLICommand):
 
             return StreamingResponse(stream_response(inputs[0]), media_type="text/event-stream")
 
-    def is_continuation(self, req: ChatCompletionInput):
-        """Determines whether the current request is a continuation of the last request."""
+    def is_continuation(self, req: ChatCompletionInput) -> bool:
+        """
+        Determines whether the current request is a continuation of the last request. In other words, if it is the
+        same chat session.
+
+        Args:
+            req (`ChatCompletionInput`): The request to check.
+
+        Returns:
+            `True` if the request is a continuation of the last request, `False` otherwise.
+        """
         req_continues_last_messages = True
 
+        # No cached messages: this is a new request
         if self.last_messages is None:
             req_continues_last_messages = False
+        # The new request has fewer rounds of conversation: this is a new request
+        elif len(self.last_messages) > len(req.messages):
+            req_continues_last_messages = False
+        # Otherwise, check that the last messages are a subset of the new request
         else:
             for i in range(len(self.last_messages)):
                 if self.last_messages[i] != req.messages[i]:
@@ -355,6 +380,11 @@ class ServeCommand(BaseTransformersCLICommand):
         def _serve(req: ChatCompletionInput):
             if not req.stream:
                 return {"error": "Only streaming mode is supported."}
+
+            # HACK for tiny-agents: it sends a request after the assistant message (???). Let's assume we can't have a
+            # request whose last message is from the assistant.
+            if req.messages[-1].role == "assistant":
+                return
 
             # ====== TOOL PREPROCESSING LOGIC ======
             tool_model_family = None
@@ -478,7 +508,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
                         # All non-tool related tokens are emitted as assistant messages
                         yield self.build_chunk(result, _request_id, role="assistant")
-                    yield "data: [DONE]\n\n"
+                    yield self.build_chunk(None, _request_id, role=None, finish_reason="stop")
 
                     thread.join()
                 except Exception as e:
