@@ -677,7 +677,6 @@ class AIMv2ModelIntegrationTest(unittest.TestCase):
 @require_vision
 @require_torch
 class AIMv2VisionModelIntegrationTests(unittest.TestCase):
-
     @slow
     def test_inference(self):
         model_name = "yaswanthgali/aimv2-large-patch14-224-HF"
