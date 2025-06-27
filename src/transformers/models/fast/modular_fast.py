@@ -15,7 +15,6 @@
 """Image processor class for FAST."""
 
 import math
-from typing import List, Tuple
 
 import numpy as np
 
@@ -232,9 +231,9 @@ class FastImageProcessor(TextNetImageProcessor):
         keys: torch.Tensor,
         label: torch.Tensor,
         score: torch.Tensor,
-        scales: Tuple[float, float],
+        scales: tuple[float, float],
         threshold: float,
-    ) -> Tuple[List[List[Tuple[int, int]]], List[float]]:
+    ) -> tuple[list[list[tuple[int, int]]], list[float]]:
         """
         Generates rotated rectangular bounding boxes for connected components.
 
@@ -280,9 +279,9 @@ class FastImageProcessor(TextNetImageProcessor):
         keys: torch.Tensor,
         label: torch.Tensor,
         score: torch.Tensor,
-        scales: Tuple[float, float],
+        scales: tuple[float, float],
         threshold: float,
-    ) -> Tuple[List[List[int]], List[float]]:
+    ) -> tuple[list[list[int]], list[float]]:
         """
         Generates polygonal bounding boxes using OpenCV contours for connected components.
 

@@ -20,7 +20,7 @@
 # limitations under the License.
 
 import math
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -182,7 +182,7 @@ class FastImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by
             `do_resize` in the `preprocess` method.
-        size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 640}`):
+        size (`dict[str, int]` *optional*, defaults to `{"shortest_edge": 640}`):
             Size of the image after resizing. The shortest edge of the image is resized to size["shortest_edge"], with
             the longest edge resized to keep the input aspect ratio. Can be overridden by `size` in the `preprocess`
             method.
@@ -193,7 +193,7 @@ class FastImageProcessor(BaseImageProcessor):
         do_center_crop (`bool`, *optional*, defaults to `False`):
             Whether to center crop the image to the specified `crop_size`. Can be overridden by `do_center_crop` in the
             `preprocess` method.
-        crop_size (`Dict[str, int]` *optional*, defaults to 224):
+        crop_size (`dict[str, int]` *optional*, defaults to 224):
             Size of the output image after applying `center_crop`. Can be overridden by `crop_size` in the `preprocess`
             method.
         do_rescale (`bool`, *optional*, defaults to `True`):
@@ -204,10 +204,10 @@ class FastImageProcessor(BaseImageProcessor):
             method.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by `do_normalize` in the `preprocess` method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `[0.485, 0.456, 0.406]`):
+        image_mean (`float` or `list[float]`, *optional*, defaults to `[0.485, 0.456, 0.406]`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `[0.229, 0.224, 0.225]`):
+        image_std (`float` or `list[float]`, *optional*, defaults to `[0.229, 0.224, 0.225]`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
@@ -227,16 +227,16 @@ class FastImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         size_divisor: int = 32,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_center_crop: bool = False,
-        crop_size: Optional[Dict[str, int]] = None,
+        crop_size: Optional[dict[str, int]] = None,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = IMAGENET_DEFAULT_MEAN,
-        image_std: Optional[Union[float, List[float]]] = IMAGENET_DEFAULT_STD,
+        image_mean: Optional[Union[float, list[float]]] = IMAGENET_DEFAULT_MEAN,
+        image_std: Optional[Union[float, list[float]]] = IMAGENET_DEFAULT_STD,
         do_convert_rgb: bool = True,
         min_area: int = 250,
         pooling_size: int = 9,
@@ -285,7 +285,7 @@ class FastImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -298,7 +298,7 @@ class FastImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Size of the output image.
             size_divisor (`int`, *optional*, defaults to `32`):
                 Ensures height and width are rounded to a multiple of this value after resizing.
@@ -341,7 +341,7 @@ class FastImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         size_divisor: Optional[int] = None,
         resample: PILImageResampling = None,
         do_center_crop: Optional[bool] = None,
@@ -349,8 +349,8 @@ class FastImageProcessor(BaseImageProcessor):
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_convert_rgb: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
@@ -366,7 +366,7 @@ class FastImageProcessor(BaseImageProcessor):
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
                 Size of the image after resizing. Shortest edge of the image is resized to size["shortest_edge"], with
                 the longest edge resized to keep the input aspect ratio.
             size_divisor (`int`, *optional*, defaults to `32`):
@@ -376,7 +376,7 @@ class FastImageProcessor(BaseImageProcessor):
                 has an effect if `do_resize` is set to `True`.
             do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
                 Whether to center crop the image.
-            crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
+            crop_size (`dict[str, int]`, *optional*, defaults to `self.crop_size`):
                 Size of the center crop. Only has an effect if `do_center_crop` is set to `True`.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
                 Whether to rescale the image.
@@ -384,9 +384,9 @@ class FastImageProcessor(BaseImageProcessor):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
                 Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
                 `True`.
             do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
@@ -558,9 +558,9 @@ class FastImageProcessor(BaseImageProcessor):
         keys: torch.Tensor,
         label: torch.Tensor,
         score: torch.Tensor,
-        scales: Tuple[float, float],
+        scales: tuple[float, float],
         threshold: float,
-    ) -> Tuple[List[List[Tuple[int, int]]], List[float]]:
+    ) -> tuple[list[list[tuple[int, int]]], list[float]]:
         """
         Generates rotated rectangular bounding boxes for connected components.
 
@@ -606,9 +606,9 @@ class FastImageProcessor(BaseImageProcessor):
         keys: torch.Tensor,
         label: torch.Tensor,
         score: torch.Tensor,
-        scales: Tuple[float, float],
+        scales: tuple[float, float],
         threshold: float,
-    ) -> Tuple[List[List[int]], List[float]]:
+    ) -> tuple[list[list[int]], list[float]]:
         """
         Generates polygonal bounding boxes using OpenCV contours for connected components.
 

@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Tuple
 
 import torch
 import torch.nn.functional as F
@@ -122,7 +121,7 @@ def emb_loss(
     training_mask: torch.Tensor,
     delta_v: float = 0.5,
     delta_d: float = 1.5,
-    weights: Tuple[float, float] = (1.0, 1.0),
+    weights: tuple[float, float] = (1.0, 1.0),
     bg_sample: bool = False,
 ) -> torch.Tensor:
     """

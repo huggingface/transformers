@@ -14,7 +14,7 @@
 # limitations under the License.
 """PyTorch FAST model."""
 
-from typing import Dict, Optional, Tuple
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -69,7 +69,7 @@ def get_same_padding(kernel_size):
 
 class FastRepConvLayer(nn.Module):
     def __init__(
-        self, in_channels: int, out_channels: int, kernel_size: Tuple[int, int], stride: int = 1, bias: bool = False
+        self, in_channels: int, out_channels: int, kernel_size: tuple[int, int], stride: int = 1, bias: bool = False
     ) -> None:
         super().__init__()
 
@@ -269,7 +269,7 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         output_hidden_states: Optional[bool] = True,
-        labels: Optional[Dict] = None,
+        labels: Optional[dict] = None,
     ):
         r"""
         labels (`Dict[str, torch.Tensor]`, *optional*):
