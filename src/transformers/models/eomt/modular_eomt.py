@@ -505,9 +505,9 @@ class EomtForUniversalSegmentation(Mask2FormerForUniversalSegmentation, nn.Modul
                 query = self.query.weight[None, :, :].expand(hidden_states.shape[0], -1, -1)
                 hidden_states = torch.cat((query, hidden_states), dim=1)
 
-            if (
-                self.training or self.attn_mask_probs.sum() > 0
-            ) and idx >= self.num_hidden_layers - self.config.num_blocks:
+            if idx >= self.num_hidden_layers - self.config.num_blocks and (
+                self.training or self.attn_mask_probs[idx - self.num_hidden_layers + self.config.num_blocks] > 0
+            ):
                 norm_hidden_states = self.layernorm(hidden_states)
                 masks_queries_logits, class_queries_logits = self.predict(norm_hidden_states)
 
