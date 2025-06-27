@@ -84,8 +84,6 @@ jobs:
       machine_type: ${{ matrix.machine_type }}
       folder_slices: ${{ needs.setup.outputs.folder_slices }}
       runner: ${{ inputs.runner_scale_set }}-${{ matrix.machine_type }}
-      report_name_prefix: run_models_gpu
-
     secrets: inherit
 
   run_trainer_and_fsdp_gpu:
@@ -104,7 +102,6 @@ jobs:
       folder_slices: ${{ needs.setup.outputs.folder_slices }}
       runner: ${{ inputs.runner_scale_set }}-${{ matrix.machine_type }}
       report_name_prefix: run_trainer_and_fsdp_gpu
-
     secrets: inherit
 
   run_pipelines_torch_gpu:
