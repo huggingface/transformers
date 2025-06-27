@@ -16,13 +16,13 @@ limitations under the License.
 
 # Image classification examples
 
-This directory contains 2 scripts that showcase how to fine-tune any model supported by the [`AutoModelForImageClassification` API](https://huggingface.co/docs/transformers/main/en/model_doc/auto#transformers.AutoModelForImageClassification) (such as [ViT](https://huggingface.co/docs/transformers/main/en/model_doc/vit), [ConvNeXT](https://huggingface.co/docs/transformers/main/en/model_doc/convnext), [ResNet](https://huggingface.co/docs/transformers/main/en/model_doc/resnet), [Swin Transformer](https://huggingface.co/docs/transformers/main/en/model_doc/swin)...) using PyTorch. They can be used to fine-tune models on both [datasets from the hub](#using-datasets-from-hub) as well as on [your own custom data](#using-your-own-data).
+This directory contains two scripts that showcase how to fine-tune any model supported by the [`AutoModelForImageClassification` API](https://huggingface.co/docs/transformers/main/en/model_doc/auto#transformers.AutoModelForImageClassification) (such as [ViT](https://huggingface.co/docs/transformers/main/en/model_doc/vit), [ConvNeXT](https://huggingface.co/docs/transformers/main/en/model_doc/convnext), [ResNet](https://huggingface.co/docs/transformers/main/en/model_doc/resnet), [Swin Transformer](https://huggingface.co/docs/transformers/main/en/model_doc/swin)...) using PyTorch. They can be used to fine-tune models on both [datasets from the Hub](#using-datasets-from-hub) as well as on [your own custom data](#using-your-own-data).
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/image_classification_inference_widget.png" height="400" />
 
 Try out the inference widget here: https://huggingface.co/google/vit-base-patch16-224
 
-Content:
+Contents:
 - [PyTorch version, Trainer](#pytorch-version-trainer)
 - [PyTorch version, no Trainer](#pytorch-version-no-trainer)
 
@@ -61,15 +61,15 @@ python run_image_classification.py \
 
 👀 See the results here: [nateraw/vit-base-beans](https://huggingface.co/nateraw/vit-base-beans).
 
-Note that you can replace the model and dataset by simply setting the `model_name_or_path` and `dataset_name` arguments respectively, with any model or dataset from the [hub](https://huggingface.co/). For an overview of all possible arguments, we refer to the [docs](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments) of the `TrainingArguments`, which can be passed as flags.
+Note that you can replace the model and dataset by simply setting the `model_name_or_path` and `dataset_name` arguments respectively, with any model or dataset from the [Hub](https://huggingface.co/). For an overview of all possible arguments, we refer to the [docs](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments) of the `TrainingArguments`, which can be passed as flags.
 
 > If your model classification head dimensions do not fit the number of labels in the dataset, you can specify `--ignore_mismatched_sizes` to adapt it.
 
 ### Using your own data
 
-To use your own dataset, there are 2 ways:
+To use your own dataset, there are two ways:
 - you can either provide your own folders as `--train_dir` and/or `--validation_dir` arguments
-- you can upload your dataset to the hub (possibly as a private repo, if you prefer so), and simply pass the `--dataset_name` argument.
+- you can upload your dataset to the Hub (possibly as a private repo, if you prefer so), and simply pass the `--dataset_name` argument.
 
 Below, we explain both in more detail.
 
@@ -104,9 +104,9 @@ Internally, the script will use the [`ImageFolder`](https://huggingface.co/docs/
   - To control the split amount, use the `--train_val_split` flag.
   - To provide your own validation split in its own directory, you can pass the `--validation_dir <path-to-val-root>` flag.
 
-#### Upload your data to the hub, as a (possibly private) repo
+#### Upload your data to the Hub, as a (possibly private) repo
 
-It's very easy (and convenient) to upload your image dataset to the hub using the [`ImageFolder`](https://huggingface.co/docs/datasets/v2.0.0/en/image_process#imagefolder) feature available in 🤗 Datasets. Simply do the following:
+It's very easy (and convenient) to upload your image dataset to the Hub using the [`ImageFolder`](https://huggingface.co/docs/datasets/v2.0.0/en/image_process#imagefolder) feature available in 🤗 Datasets. Simply do the following:
 
 ```python
 from datasets import load_dataset
@@ -126,17 +126,17 @@ dataset = load_dataset("imagefolder", data_files={"train": ["path/to/file1", "pa
 
 `ImageFolder` will create a `label` column, and the label name is based on the directory name.
 
-Next, push it to the hub!
+Next, push it to the Hub!
 
 ```python
-# assuming you have ran the huggingface-cli login command in a terminal
+# assuming you have run the huggingface-cli login command in a terminal
 dataset.push_to_hub("name_of_your_dataset")
 
 # if you want to push to a private repo, simply pass private=True:
 dataset.push_to_hub("name_of_your_dataset", private=True)
 ```
 
-and that's it! You can now train your model by simply setting the `--dataset_name` argument to the name of your dataset on the hub (as explained in [Using datasets from the 🤗 hub](#using-datasets-from-hub)).
+And that's it! You can now train your model by simply setting the `--dataset_name` argument to the name of your dataset on the Hub (as explained in [Using datasets from the 🤗 Hub](#using-datasets-from-hub)).
 
 More on this can also be found in [this blog post](https://huggingface.co/blog/image-search-datasets).
 
@@ -172,30 +172,27 @@ python run_image_classification.py \
 
 Based on the script [`run_image_classification_no_trainer.py`](https://github.com/huggingface/transformers/blob/main/examples/pytorch/image-classification/run_image_classification_no_trainer.py).
 
-Like `run_image_classification.py`, this script allows you to fine-tune any of the models on the [hub](https://huggingface.co/models) on an image classification task. The main difference is that this script exposes the bare training loop, to allow you to quickly experiment and add any customization you would like.
+Like [`run_image_classification.py`](https://github.com/huggingface/transformers/blob/main/examples/pytorch/image-classification/run_image_classification.py), this script allows you to fine-tune any of the models on the [Hub](https://huggingface.co/models) on an image classification task. The main difference is that this script exposes the bare training loop, to allow you to quickly experiment and add any customization you would like.
 
-It offers less options than the script with `Trainer` (for instance you can easily change the options for the optimizer
-or the dataloaders directly in the script) but still run in a distributed setup, and supports mixed precision by
-the means of the [🤗 `Accelerate`](https://github.com/huggingface/accelerate) library. You can use the script normally
-after installing it:
+It offers fewer options than the script with `Trainer` (for instance, you can easily change the options for the optimizer or the dataloaders directly in the script) but still runs in a distributed setup, and supports mixed precision by means of the [🤗 `Accelerate`](https://github.com/huggingface/accelerate) library. You can use the script normally after installing it:
 
 ```bash
 pip install git+https://github.com/huggingface/accelerate
 ```
 
-You can then use your usual launchers to run in it in a distributed environment, but the easiest way is to run
+You can then use your usual launchers to run it in a distributed environment, but the easiest way is to run:
 
 ```bash
 accelerate config
 ```
 
-and reply to the questions asked. Then
+and reply to the questions asked. Then:
 
 ```bash
 accelerate test
 ```
 
-that will check everything is ready for training. Finally, you can launch training with
+This will check that everything is ready for training. Finally, launch training with:
 
 ```bash
 accelerate launch run_image_classification_no_trainer.py --image_column_name img
@@ -209,4 +206,4 @@ This command is the same and will work for:
 
 Note that this library is in alpha release so your feedback is more than welcome if you encounter any problem using it.
 
-Regarding using custom data with this script, we refer to [using your own data](#using-your-own-data).
+Regarding using custom data with this script, we refer to [Using your own data](#using-your-own-data).
