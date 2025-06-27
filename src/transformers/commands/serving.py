@@ -46,7 +46,6 @@ if is_torch_available():
         PreTrainedModel,
     )
 
-
 if is_pydantic_available() and is_fastapi_available() and is_uvicorn_available():
     import uvicorn
     from fastapi import FastAPI
@@ -99,6 +98,67 @@ _TOOL_CALL_TOKENS = {
 }
 _MODELS_WITH_TOOL_SUPPORT = list(_TOOL_CALL_TOKENS.keys())
 
+class ToolState:
+    """Class to keep track of the tool call state."""
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.inside_tool_call = False
+        self.has_tool_name_defined = False
+        self.arg_nesting_level = 0
+        self.buffer = ""
+
+
+@dataclass
+class ServeArguments:
+    r"""
+    Arguments for the serve CLI.
+
+    See the metadata arg for each argument's description -- the metadata will be printed with
+    `transformers serve --help`
+    """
+
+    # Model loading
+    model_revision: str = field(
+        default="main",
+        metadata={"help": "Specific model version to use (can be a branch name, tag name or commit id)."},
+    )
+    device: str = field(default="cpu", metadata={"help": "Device to use for inference."})
+    torch_dtype: Optional[str] = field(
+        default="auto",
+        metadata={
+            "help": "Override the default `torch.dtype` and load the model under this dtype. If `'auto'` is passed, "
+            "the dtype will be automatically derived from the model's weights.",
+            "choices": ["auto", "bfloat16", "float16", "float32"],
+        },
+    )
+    trust_remote_code: bool = field(
+        default=False, metadata={"help": "Whether to trust remote code when loading a model."}
+    )
+    attn_implementation: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "Which attention implementation to use; you can run --attn_implementation=flash_attention_2, in "
+            "which case you must install this manually by running `pip install flash-attn --no-build-isolation`."
+        },
+    )
+    load_in_8bit: bool = field(
+        default=False,
+        metadata={"help": "Whether to use 8 bit precision for the base model - works only with LoRA."},
+    )
+    load_in_4bit: bool = field(
+        default=False,
+        metadata={"help": "Whether to use 4 bit precision for the base model - works only with LoRA."},
+    )
+    bnb_4bit_quant_type: str = field(default="nf4", metadata={"help": "Quantization type.", "choices": ["fp4", "nf4"]})
+    use_bnb_nested_quant: bool = field(default=False, metadata={"help": "Whether to use nested quantization."})
+
+    # Serving settings
+    host: str = field(default="localhost", metadata={"help": "Interface the server will listen to.."})
+    port: int = field(default=8000, metadata={"help": "Port the server will listen to."})
+
 
 def serve_command_factory(args: Namespace):
     """
@@ -134,19 +194,6 @@ def create_generation_config_from_req(req: "ChatCompletionInput"):
         torch.manual_seed(req.seed)
 
     return generation_config
-
-
-class ToolState:
-    """Class to keep track of the tool call state."""
-
-    def __init__(self):
-        self.reset()
-
-    def reset(self):
-        self.inside_tool_call = False
-        self.has_tool_name_defined = False
-        self.arg_nesting_level = 0
-        self.buffer = ""
 
 
 @dataclass
