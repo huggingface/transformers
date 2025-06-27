@@ -720,8 +720,12 @@ class BertModelIntegrationTest(unittest.TestCase):
     def test_sdpa_ignored_mask(self):
         pkv = []
 
-        model = BertModel.from_pretrained("hf-internal-testing/tiny-random-BertModel", attn_implementation="eager")
-        model_sdpa = BertModel.from_pretrained("hf-internal-testing/tiny-random-BertModel", attn_implementation="sdpa")
+        # Note that model needs to be a decoder so we can use cache (ensured at load time)
+        config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-BertModel")
+        config.is_decoder = True
+
+        model = BertModel.from_pretrained("hf-internal-testing/tiny-random-BertModel", config=config, attn_implementation="eager")
+        model_sdpa = BertModel.from_pretrained("hf-internal-testing/tiny-random-BertModel", config=config, attn_implementation="sdpa")
 
         model = model.eval()
         model_sdpa = model_sdpa.eval()
@@ -743,9 +747,7 @@ class BertModelIntegrationTest(unittest.TestCase):
                 torch.allclose(res_eager.last_hidden_state, res_sdpa.last_hidden_state, atol=1e-5, rtol=1e-4)
             )
 
-            # Case where query length != kv_length. Note that model needs to be a decoder so we can use cache
-            model.config.is_decoder = True
-            model_sdpa.config.is_decoder = True
+            # Case where query length != kv_length.
             res_eager = model(**inp, past_key_values=pkv, use_cache=True)
             res_sdpa = model_sdpa(**inp, past_key_values=pkv, use_cache=True)
             self.assertTrue(

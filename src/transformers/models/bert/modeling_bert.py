@@ -27,6 +27,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...cache_utils import Cache, EncoderDecoderCache
 from ...generation import GenerationMixin
+from ...masking_utils import create_causal_mask
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask_for_sdpa, _prepare_4d_causal_attention_mask_for_sdpa
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -42,7 +43,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import ModelOutput, auto_docstring, logging
+from ...utils import ModelOutput, auto_docstring, is_torchdynamo_compiling, logging
 from .configuration_bert import BertConfig
 
 
@@ -544,7 +545,6 @@ class BertEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([BertLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -563,23 +563,6 @@ class BertEncoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
-
-        return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
-            logger.warning_once(
-                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
-                "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
-            )
-            return_legacy_cache = True
-            past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
 
         next_decoder_cache = None
         for i, layer_module in enumerate(self.layer):
@@ -611,8 +594,6 @@ class BertEncoder(nn.Module):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         next_cache = next_decoder_cache if use_cache else None
-        if return_legacy_cache:
-            next_cache = past_key_values.to_legacy_cache()
 
         if not return_dict:
             return tuple(
@@ -729,7 +710,9 @@ class BertPreTrainedModel(PreTrainedModel):
     base_model_prefix = "bert"
     supports_gradient_checkpointing = True
     _supports_sdpa = True
-    # TODO: mask prep for the other attention types :)
+    _supports_cache_class = True
+    # Not many will use bert as decoder so low prio
+    _supports_static_cache = False
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -797,6 +780,7 @@ class BertModel(BertPreTrainedModel):
         """
         super().__init__(config)
         self.config = config
+        self.gradient_checkpointing = False
 
         self.embeddings = BertEmbeddings(config)
         self.encoder = BertEncoder(config)
@@ -852,6 +836,23 @@ class BertModel(BertPreTrainedModel):
         else:
             use_cache = False
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
+        return_legacy_cache = False
+        if use_cache and not isinstance(past_key_values, Cache):
+            logger.warning_once(
+                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
+                "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
+                "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
+            )
+            return_legacy_cache = True
+            past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
+
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -865,12 +866,10 @@ class BertModel(BertPreTrainedModel):
         batch_size, seq_length = input_shape
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
-        past_key_values_length = 0
-        if past_key_values is not None:
-            past_key_values_length = (
-                past_key_values[0][0].shape[-2]
-                if not isinstance(past_key_values, Cache)
-                else past_key_values.get_seq_length()
+        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+        if cache_position is None:
+            cache_position = torch.arange(
+                past_key_values_length, past_key_values_length + seq_length, device=device
             )
 
         if token_type_ids is None:
@@ -890,7 +889,9 @@ class BertModel(BertPreTrainedModel):
         )
 
         if attention_mask is None:
-            attention_mask = torch.ones((batch_size, seq_length + past_key_values_length), device=device)
+            # required mask seq length can be calculated via length of past cache
+            mask_seq_length = past_key_values_length + seq_length
+            attention_mask = torch.ones(batch_size, mask_seq_length, device=device)
 
         use_sdpa_attention_masks = (
             self.attn_implementation == "sdpa"
@@ -904,11 +905,12 @@ class BertModel(BertPreTrainedModel):
             # Expand the attention mask for SDPA.
             # [bsz, seq_len] -> [bsz, 1, seq_len, seq_len]
             if self.config.is_decoder:
-                extended_attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
-                    attention_mask,
-                    input_shape,
-                    embedding_output,
-                    past_key_values_length,
+                extended_attention_mask = create_causal_mask(
+                    config=self.config,
+                    input_embeds=embedding_output,
+                    attention_mask=attention_mask,
+                    cache_position=cache_position,
+                    past_key_values=past_key_values,
                 )
             else:
                 extended_attention_mask = _prepare_4d_attention_mask_for_sdpa(
@@ -960,6 +962,9 @@ class BertModel(BertPreTrainedModel):
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+
+        if return_legacy_cache:
+            encoder_outputs.past_key_values = encoder_outputs.past_key_values.to_legacy_cache()
 
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
