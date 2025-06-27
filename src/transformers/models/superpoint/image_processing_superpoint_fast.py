@@ -210,7 +210,7 @@ class SuperPointImageProcessorFast(BaseImageProcessorFast):
         if do_resize is None:
             do_resize = self.do_resize
 
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=False)
         processed_images_grouped = {}
         do_grayscale = kwargs.get("do_grayscale", self.do_grayscale)
         input_data_format = kwargs.get("input_data_format", ChannelDimension.FIRST)
