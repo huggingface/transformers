@@ -184,6 +184,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
                 "LlamaTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
+        ("dia", ("DiaTokenizer", None)),
         (
             "diffllama",
             (
@@ -237,6 +238,20 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ),
         (
             "gemma3_text",
+            (
+                "GemmaTokenizer" if is_sentencepiece_available() else None,
+                "GemmaTokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
+        (
+            "gemma3n",
+            (
+                "GemmaTokenizer" if is_sentencepiece_available() else None,
+                "GemmaTokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
+        (
+            "gemma3n_text",
             (
                 "GemmaTokenizer" if is_sentencepiece_available() else None,
                 "GemmaTokenizerFast" if is_tokenizers_available() else None,

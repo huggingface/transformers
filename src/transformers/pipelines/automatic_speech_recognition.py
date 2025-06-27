@@ -283,13 +283,20 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         # No parameters on this pipeline right now
         preprocess_params = {}
         if chunk_length_s is not None:
-            if self.type == "seq2seq" and not ignore_warning:
-                logger.warning(
+            if self.type in ["seq2seq", "seq2seq_whisper"] and not ignore_warning:
+                type_warning = (
                     "Using `chunk_length_s` is very experimental with seq2seq models. The results will not necessarily"
                     " be entirely accurate and will have caveats. More information:"
                     " https://github.com/huggingface/transformers/pull/20104. Ignore this warning with pipeline(...,"
-                    " ignore_warning=True)"
+                    " ignore_warning=True)."
                 )
+                if self.type == "seq2seq_whisper":
+                    type_warning += (
+                        " To use Whisper for long-form transcription, use rather the model's `generate` method directly "
+                        "as the model relies on it's own chunking mechanism (cf. Whisper original paper, section 3.8. "
+                        "Long-form Transcription)."
+                    )
+                logger.warning(type_warning)
             preprocess_params["chunk_length_s"] = chunk_length_s
         if stride_length_s is not None:
             preprocess_params["stride_length_s"] = stride_length_s
