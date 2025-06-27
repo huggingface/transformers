@@ -138,13 +138,13 @@ dataset.push_to_hub("name_of_your_dataset", private=True)
 
 And that's it! You can now train your model by simply setting the `--dataset_name` argument to the name of your dataset on the Hub (as explained in [Using datasets from the 🤗 Hub](#using-datasets-from-hub)).
 
-More on this can also be found in [this blog post](https://huggingface.co/blog/image-search-datasets).
+More information can be found in [this blog post](https://huggingface.co/blog/image-search-datasets).
 
 ### Sharing your model on 🤗 Hub
 
-0. If you haven't already, [sign up](https://huggingface.co/join) for a 🤗 account
+0. If you haven't already, [sign up](https://huggingface.co/join) for a 🤗 account.
 
-1. Make sure you have `git-lfs` installed and git set up.
+1. Make sure you have `git-lfs` installed and git set up:
 
 ```bash
 $ apt install git-lfs
@@ -204,6 +204,6 @@ This command is the same and will work for:
 - single/multiple GPUs
 - TPUs
 
-Note that this library is in alpha release so your feedback is more than welcome if you encounter any problem using it.
+Note that this library is in alpha release, so your feedback is more than welcome if you encounter any problem using it.
 
 Regarding using custom data with this script, we refer to [Using your own data](#using-your-own-data).
