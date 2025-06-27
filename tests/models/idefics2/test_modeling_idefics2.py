@@ -624,6 +624,7 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_generated_texts = Expectations(
             {
+                ("xpu", 3): "In this image, we see the Statue of Liberty, the Hudson River,",
                 ("cuda", None): "In this image, we see the Statue of Liberty, the Hudson River,",
                 ("rocm", (9, 5)): "In this image, we see the Statue of Liberty, the New York City",
             }

@@ -441,11 +441,11 @@ class TextGenerationPipelineTests(unittest.TestCase):
             [{"generated_text": ("This is a test test test test test test")}],
         )
 
-        # torch_dtype will be automatically set to float32 if not provided - check: https://github.com/huggingface/transformers/pull/20602
+        # torch_dtype will be automatically set to torch.bfloat16 if not provided - check: https://github.com/huggingface/transformers/pull/38882
         pipe = pipeline(
             model="hf-internal-testing/tiny-random-bloom", device_map="auto", max_new_tokens=5, do_sample=False
         )
-        self.assertEqual(pipe.model.lm_head.weight.dtype, torch.float32)
+        self.assertEqual(pipe.model.lm_head.weight.dtype, torch.bfloat16)
         out = pipe("This is a test")
         self.assertEqual(
             out,

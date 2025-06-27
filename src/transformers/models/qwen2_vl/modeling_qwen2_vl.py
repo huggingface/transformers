@@ -19,7 +19,6 @@
 # limitations under the License.
 """PyTorch Qwen2-VL model."""
 
-import math
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, Union
 
@@ -323,7 +322,7 @@ class VisionAttention(nn.Module):
         self.num_key_value_groups = 1  # needed for eager attention
         self.qkv = nn.Linear(self.dim, self.dim * 3, bias=True)
         self.proj = nn.Linear(self.dim, self.dim)
-        self.scaling = math.sqrt(self.head_dim)
+        self.scaling = self.head_dim**-0.5
         self.config = config
 
     def forward(

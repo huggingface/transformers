@@ -66,6 +66,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("flava", "FlavaProcessor"),
         ("fuyu", "FuyuProcessor"),
         ("gemma3", "Gemma3Processor"),
+        ("gemma3n", "Gemma3nProcessor"),
         ("git", "GitProcessor"),
         ("glm4v", "Glm4vProcessor"),
         ("got_ocr2", "GotOcr2Processor"),

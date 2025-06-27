@@ -925,7 +925,7 @@ class Qwen2_5OmniVisionAttention(nn.Module):
         self.k = nn.Linear(self.dim, self.dim, bias=True)
         self.v = nn.Linear(self.dim, self.dim, bias=True)
         self.proj = nn.Linear(self.dim, self.dim)
-        self.scaling = math.sqrt(self.head_dim)
+        self.scaling = self.head_dim**-0.5
         self.num_key_value_groups = 1  # needed for eager attention
         self.config = config
 

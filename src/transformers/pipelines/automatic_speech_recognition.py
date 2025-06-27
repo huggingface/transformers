@@ -64,7 +64,12 @@ def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right, 
     for chunk_start_idx in range(0, inputs_len, step):
         chunk_end_idx = chunk_start_idx + chunk_len
         chunk = inputs[chunk_start_idx:chunk_end_idx]
-        processed = feature_extractor(chunk, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")
+        processed = feature_extractor(
+            chunk,
+            sampling_rate=feature_extractor.sampling_rate,
+            return_tensors="pt",
+            return_attention_mask=True,
+        )
         if dtype is not None:
             processed = processed.to(dtype=dtype)
         _stride_left = 0 if chunk_start_idx == 0 else stride_left
@@ -283,13 +288,20 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         # No parameters on this pipeline right now
         preprocess_params = {}
         if chunk_length_s is not None:
-            if self.type == "seq2seq" and not ignore_warning:
-                logger.warning(
+            if self.type in ["seq2seq", "seq2seq_whisper"] and not ignore_warning:
+                type_warning = (
                     "Using `chunk_length_s` is very experimental with seq2seq models. The results will not necessarily"
                     " be entirely accurate and will have caveats. More information:"
                     " https://github.com/huggingface/transformers/pull/20104. Ignore this warning with pipeline(...,"
-                    " ignore_warning=True)"
+                    " ignore_warning=True)."
                 )
+                if self.type == "seq2seq_whisper":
+                    type_warning += (
+                        " To use Whisper for long-form transcription, use rather the model's `generate` method directly "
+                        "as the model relies on it's own chunking mechanism (cf. Whisper original paper, section 3.8. "
+                        "Long-form Transcription)."
+                    )
+                logger.warning(type_warning)
             preprocess_params["chunk_length_s"] = chunk_length_s
         if stride_length_s is not None:
             preprocess_params["stride_length_s"] = stride_length_s
@@ -500,11 +512,14 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             if "generation_config" not in generate_kwargs:
                 generate_kwargs["generation_config"] = self.generation_config
 
-            tokens = self.model.generate(
-                inputs=inputs,
-                attention_mask=attention_mask,
+            main_input_name = self.model.main_input_name if hasattr(self.model, "main_input_name") else "inputs"
+            generate_kwargs = {
+                main_input_name: inputs,
+                "attention_mask": attention_mask,
                 **generate_kwargs,
-            )
+            }
+            tokens = self.model.generate(**generate_kwargs)
+
             # whisper longform generation stores timestamps in "segments"
             if return_timestamps == "word" and self.type == "seq2seq_whisper":
                 if "segments" not in tokens:

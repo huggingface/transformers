@@ -252,7 +252,7 @@ class KyutaiSpeechToTextModel(MoshiModel):
 
 
 class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMixin, PreTrainedModel):
-    _keep_in_fp32_modules = ["codec_model"]
+    _keep_in_fp32_modules_strict = ["codec_model"]
 
     def __init__(self, config):
         super().__init__(config)

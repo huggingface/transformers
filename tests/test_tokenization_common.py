@@ -43,8 +43,6 @@ from transformers import (
     SpecialTokensMixin,
     Trainer,
     TrainingArguments,
-    is_flax_available,
-    is_tf_available,
     is_torch_available,
     logging,
 )
@@ -3105,7 +3103,6 @@ class TokenizerTesterMixin:
         #     model(**encoded_sequence_fast)
         #     model(**batch_encoded_sequence_fast)
 
-    # TODO: Check if require_torch is the best to test for numpy here ... Maybe move to require_flax when available
     @require_torch
     @slow
     def test_np_encode_plus_sent_to_model(self):
@@ -3131,7 +3128,6 @@ class TokenizerTesterMixin:
                 encoded_sequence = tokenizer.encode_plus(sequence, return_tensors="np")
                 batch_encoded_sequence = tokenizer.batch_encode_plus([sequence, sequence], return_tensors="np")
 
-                # TODO: add forward through JAX/Flax when PR is merged
                 # This is currently here to make ruff happy !
                 if encoded_sequence is None:
                     raise ValueError("Cannot convert list to numpy tensor on  encode_plus()")
@@ -3146,7 +3142,6 @@ class TokenizerTesterMixin:
                         [sequence, sequence], return_tensors="np"
                     )
 
-                    # TODO: add forward through JAX/Flax when PR is merged
                     # This is currently here to make ruff happy !
                     if encoded_sequence_fast is None:
                         raise ValueError("Cannot convert list to numpy tensor on  encode_plus() (fast)")
@@ -3617,12 +3612,8 @@ class TokenizerTesterMixin:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name}, {tokenizer.__class__.__name__})"):
                 if is_torch_available():
                     returned_tensor = "pt"
-                elif is_tf_available():
-                    returned_tensor = "tf"
-                elif is_flax_available():
-                    returned_tensor = "jax"
                 else:
-                    self.skipTest(reason="No expected framework from PT, TF or JAX found")
+                    self.skipTest(reason="No expected framework (PT) found")
 
                 if not tokenizer.pad_token or tokenizer.pad_token_id < 0:
                     self.skipTest(reason="This tokenizer has no padding token set, or pad_token_id < 0")
