@@ -269,7 +269,7 @@ class EomtForUniversalSegmentationTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 class EomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.model_id = "yaswanthgali/coco_panoptic_eomt_large_640-hf"
+        self.model_id = "tue-mps/coco_panoptic_eomt_large_640"
 
     @slow
     def test_inference(self):
@@ -333,7 +333,7 @@ class EomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
 
     @slow
     def test_semantic_segmentation_inference(self):
-        model_id = "yaswanthgali/ade20k_semantic_eomt_large_512-hf"
+        model_id = "tue-mps/ade20k_semantic_eomt_large_512"
         model = EomtForUniversalSegmentation.from_pretrained(model_id, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(model_id)
 
@@ -424,7 +424,7 @@ class EomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
 
     @slow
     def test_instance_segmentation_inference(self):
-        model_id = "yaswanthgali/coco_instance_eomt_large_640-hf"
+        model_id = "tue-mps/coco_instance_eomt_large_640"
         model = EomtForUniversalSegmentation.from_pretrained(model_id, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(model_id)
 

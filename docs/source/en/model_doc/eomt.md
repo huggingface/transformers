@@ -63,7 +63,7 @@ from PIL import Image
 from transformers import EomtForUniversalSegmentation, AutoImageProcessor
 
 
-model_id = "yaswanthgali/ade20k_semantic_eomt_large_512-hf"
+model_id = "tue-mps/ade20k_semantic_eomt_large_512"
 processor = AutoImageProcessor.from_pretrained(model_id)
 model = EomtForUniversalSegmentation.from_pretrained(model_id)
 
@@ -115,7 +115,7 @@ from PIL import Image
 from transformers import EomtForUniversalSegmentation, AutoImageProcessor
 
 
-model_id = "yaswanthgali/coco_instance_eomt_large_640-hf"
+model_id = "tue-mps/coco_instance_eomt_large_640"
 processor = AutoImageProcessor.from_pretrained(model_id)
 model = EomtForUniversalSegmentation.from_pretrained(model_id)
 
@@ -158,7 +158,7 @@ from PIL import Image
 from transformers import EomtForUniversalSegmentation, AutoImageProcessor
 
 
-model_id = "yaswanthgali/coco_panoptic_eomt_large_640-hf"
+model_id = "tue-mps/coco_panoptic_eomt_large_640"
 processor = AutoImageProcessor.from_pretrained(model_id)
 model = EomtForUniversalSegmentation.from_pretrained(model_id)
 
