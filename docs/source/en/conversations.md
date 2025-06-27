@@ -75,7 +75,7 @@ At the moment, MCP tool usage in `transformers` has the following constraints:
 The first step to use MCP tools is to let the model know which tools are available. As an example, let's consider a `tiny-agents` configuration file with a reference to an [image generation MCP server](https://evalstate-flux1-schnell.hf.space/).
 
 > [!TIP]
-> Many [Hugging Face Spaces](https://huggingface.co/spaces) can be used as MCP servers.
+> Many Hugging Face Spaces can be used as MCP servers. You can find all compatible Spaces [here](https://huggingface.co/spaces?filter=mcp-server).
 
 ```json
 {
