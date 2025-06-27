@@ -619,7 +619,7 @@ ALL_FILE_TYPES = (
     "processing",
     "image_processing",
     "video_processing",
-    "feature_extractor",
+    "feature_extraction",
 )
 
 
@@ -1137,7 +1137,7 @@ TYPE_TO_FILE_TYPE = {
     "VideoProcessor": "video_processing",
     "VideoProcessorInitKwargs": "video_processing",
     "FastImageProcessorKwargs": "image_processing*_fast",
-    "FeatureExtractor": "feature_extractor",
+    "FeatureExtractor": "feature_extraction",
     "ProcessorKwargs": "processing",
     "VideosKwargs": "processing",
     "ImagesKwargs": "processing",
@@ -1490,7 +1490,7 @@ class ModularFileMapper(ModuleMapper):
                 suffix = common_partial_suffix(class_name, modeling_bases[0])
                 if len(suffix) > 0 and suffix[0].isupper():
                     cased_model_name = class_name.replace(suffix, "")
-                    # If both the old model and new model share the last part of their name, is is detected as a common
+                    # If both the old model and new model share the last part of their name, is detected as a common
                     # suffix, but it should not be the case -> use the full name in this case
                     if len(cased_model_name) < len(cased_default_name) and cased_default_name in class_name:
                         cased_model_name = cased_default_name
