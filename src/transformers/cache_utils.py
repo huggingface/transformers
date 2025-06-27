@@ -126,7 +126,7 @@ class CacheProcessorList(list):
 
 
 class KVList:
-    """Simulates layer-indexed key or value lists from a layered cache."""
+    """Efficiently simulates layer-indexed key or value lists from a layered cache."""
 
     def __init__(self, layers, cache_type="key"):
         self.layers = layers
@@ -301,12 +301,12 @@ class Cache:
 
     @property
     def key_cache(self) -> KVList:
-        """Returns a list-like object of key cache tensors for each layer."""
+        """Returns a list-like object of key cache tensors indexed by layer."""
         return KVList(self.layers, "key")
 
     @property
     def value_cache(self) -> KVList:
-        """Returns a list-like object of value cache tensors for each layer."""
+        """Returns a list-like object of value cache tensors indexed by layer."""
         return KVList(self.layers, "value")
 
     def update(
@@ -478,6 +478,9 @@ class Cache:
         return cache
 
     def __repr__(self):
+        #print stack trace
+        import traceback
+        traceback.print_stack()
         return f"{self.__class__.__name__}(layers={self.layers})"
 
 

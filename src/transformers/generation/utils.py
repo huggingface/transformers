@@ -2203,7 +2203,6 @@ class GenerationMixin(ContinuousMixin):
         valid_hardware = self.device.type == "cuda" or bool(
             generation_config.compile_config is not None and generation_config.compile_config._compile_all_devices
         )
-        print(model_kwargs.get("past_key_values"))
         using_compilable_cache = (
             isinstance(model_kwargs.get("past_key_values"), Cache) and model_kwargs["past_key_values"].is_compileable
         )
