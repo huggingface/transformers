@@ -111,7 +111,6 @@ class ZambaHybridDynamicCache(Cache):
     value_cache = None
     is_compileable = False
 
-
     def __init__(self, config, batch_size, dtype=torch.float16, device=None):
         self.dtype = dtype
         self.is_compileable = False
