@@ -444,6 +444,8 @@ class Aimv2PreTrainedModel(PreTrainedModel):
         "Aimv2TextEmbeddings",
     ]
     _supports_sdpa = True
+    _supports_flash_attn_2 = True
+    _supports_flex_attn = True
 
     def _init_weights(self, module):
         std = (
@@ -590,15 +592,14 @@ class Aimv2TextModel(Aimv2PreTrainedModel):
         hidden_states = self.embeddings(input_ids)
         _, seq_len, _ = hidden_states.shape
 
-        if attention_mask is not None:
-            cache_position = torch.arange(seq_len, device=hidden_states.device)
-            attention_mask = create_causal_mask(
-                config=self.config,
-                input_embeds=hidden_states,
-                attention_mask=attention_mask,
-                cache_position=cache_position,
-                past_key_values=None,
-            )
+        cache_position = torch.arange(seq_len, device=hidden_states.device)
+        attention_mask = create_causal_mask(
+            config=self.config,
+            input_embeds=hidden_states,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=None,
+        )
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
@@ -750,8 +751,8 @@ class Aimv2Model(Aimv2PreTrainedModel):
 
         return image_features
 
-    @can_return_tuple
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
