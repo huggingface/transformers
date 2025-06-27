@@ -97,7 +97,7 @@
     - local: perf_infer_gpu_one
       title: GPU
     - local: perf_infer_gpu_multi
-      title: Distributed GPU inference
+      title: Distributed inference
     - local: perf_infer_cpu
       title: CPU
     - local: tf_xla
@@ -737,6 +737,8 @@
         title: EfficientFormer
       - local: model_doc/efficientnet
         title: EfficientNet
+      - local: model_doc/eomt
+        title: EoMT
       - local: model_doc/focalnet
         title: FocalNet
       - local: model_doc/glpn
