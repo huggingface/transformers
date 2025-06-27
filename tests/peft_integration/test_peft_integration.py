@@ -531,7 +531,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
             peft_params = list(peft_pipe.model.parameters())
             base_params = list(base_pipe.model.parameters())
             self.assertNotEqual(len(peft_params), len(base_params))  # Assert we actually loaded the adapter too
-            _ = peft_pipe("Hello")
+            _ = peft_pipe("Hello", max_new_tokens=20)
 
     def test_peft_add_adapter_with_state_dict(self):
         """
@@ -858,4 +858,4 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
             )
 
             # Generate text to verify pipeline works
-            _ = lora_generator(text)
+            _ = lora_generator(text, max_new_tokens=20)
