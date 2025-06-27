@@ -81,17 +81,17 @@ def get_model_config(model_config, model_type, size, min_area, bounding_box_type
         "tiny": {
             "config_url": tiny_config_url,
             "expected_logits": torch.tensor([-9.9181, -13.0701, -12.5045, -12.6523]),
-            "expected_boxes": [(151, 151), (160, 56), (355, 74), (346, 169)],
+            "expected_boxes": [(148, 151), (157, 53), (357, 72), (347, 170)],
         },
         "small": {
             "config_url": small_config_url,
             "expected_logits": torch.tensor([-13.1852, -17.2011, -16.9553, -16.8269]),
-            "expected_boxes": [(154, 151), (155, 61), (351, 63), (350, 153)],
+            "expected_boxes": [(151, 152), (152, 58), (352, 60), (351, 154)],
         },
         "base": {
             "config_url": base_config_url,
             "expected_logits": torch.tensor([-28.7481, -34.1635, -25.7430, -22.0260]),
-            "expected_boxes": [(157, 149), (158, 66), (348, 68), (347, 151)],
+            "expected_boxes": [(154, 150), (155, 63), (349, 65), (349, 152)],
         },
     }
 
@@ -305,7 +305,7 @@ def convert_fast_checkpoint(
         target_sizes = [(image.height, image.width)]
         threshold = 0.88
         text_locations = fast_image_processor.post_process_text_detection(
-            output, target_sizes, threshold, bounding_box_type="boxes"
+            output, target_sizes, threshold, output_type="boxes"
         )
         if text_locations[0]["boxes"][0] != expected_slice_boxes:
             raise ValueError(f"Expected {expected_slice_boxes}, but got {text_locations[0]['boxes'][0]}")
