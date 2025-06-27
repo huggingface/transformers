@@ -304,7 +304,9 @@ def convert_fast_checkpoint(
         torch.testing.assert_close(output.logits[0][0][0][:4], expected_slice_logits, rtol=1e-4, atol=1e-4)
         target_sizes = [(image.height, image.width)]
         threshold = 0.88
-        text_locations = fast_image_processor.post_process_text_detection(output, target_sizes, threshold, bounding_box_type="boxes")
+        text_locations = fast_image_processor.post_process_text_detection(
+            output, target_sizes, threshold, bounding_box_type="boxes"
+        )
         if text_locations[0]["boxes"][0] != expected_slice_boxes:
             raise ValueError(f"Expected {expected_slice_boxes}, but got {text_locations[0]['boxes'][0]}")
 
