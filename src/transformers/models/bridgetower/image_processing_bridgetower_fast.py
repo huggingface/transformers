@@ -165,13 +165,18 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
             raise ValueError(f"The `size` dictionary must contain the key `shortest_edge`. Got {size.keys()}")
         shorter = size.shortest_edge
         longer = int(1333 / 800 * shorter)
-        output_size = get_resize_output_image_size(
+        output_height, output_width = get_resize_output_image_size(
             image,
             shorter=shorter,
             longer=longer,
             size_divisor=size_divisor,
         )
-        return F.resize(image, output_size, interpolation=interpolation, antialias=antialias)
+        return super().resize(
+            image=image,
+            size=SizeDict(height=output_height, width=output_width),
+            interpolation=interpolation,
+            antialias=antialias,
+        )
 
     def center_crop(
         self,
