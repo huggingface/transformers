@@ -662,6 +662,11 @@ class TrainerIntegrationCommon:
         metrics = trainer.evaluate()
         self.assertEqual(metrics[metric], best_value)
 
+    def remove_nan_logs(self, log):
+        for key in list(log.keys()):
+            if log[key] != log[key]:  # Check if the value is NaN
+                del log[key]
+
     def check_trainer_state_are_the_same(self, trainer_state, trainer_state1):
         # We'll pop things so operate on copies.
         state = trainer_state.copy()
@@ -675,6 +680,10 @@ class TrainerIntegrationCommon:
             for key in skip_log_keys:
                 _ = log.pop(key, None)
                 _ = log1.pop(key, None)
+
+            self.remove_nan_logs(log)
+            self.remove_nan_logs(log1)
+
             self.assertEqual(log, log1)
 
     def convert_to_sharded_checkpoint(self, folder, save_safe=True, load_safe=True):
@@ -2908,9 +2917,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         )
         trainer.train()
         # Check that we have the last known step:
-        assert os.path.exists(os.path.join(tmp_dir, f"checkpoint-{trainer.state.max_steps}")), (
-            f"Could not find checkpoint-{trainer.state.max_steps}"
-        )
+        assert os.path.exists(
+            os.path.join(tmp_dir, f"checkpoint-{trainer.state.max_steps}")
+        ), f"Could not find checkpoint-{trainer.state.max_steps}"
         # And then check the last step
         assert os.path.exists(os.path.join(tmp_dir, "checkpoint-9")), "Could not find checkpoint-9"
 
