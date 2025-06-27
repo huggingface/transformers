@@ -32,7 +32,7 @@ You can find all the original [DeBERTa-v2] checkpoints under the [Microsoft](htt
 > [!TIP]
 > This model was contributed by [Pengcheng He](https://huggingface.co/DeBERTa).
 >
-> Click on the [DeBERTa-v2] models in the right sidebar for more examples of how to apply [DeBERTa-v2] to different language tasks.
+> Click on the DeBERTa-v2 models in the right sidebar for more examples of how to apply DeBERTa-v2 to different language tasks.
 
 The example below demonstrates how to classify text with [`Pipeline`] or the [`AutoModel`] class.
 
@@ -110,25 +110,15 @@ model = AutoModelForSequenceClassification.from_pretrained(
     torch_dtype="float16"
 )
 
-text = "Hugging Face Transformers make NLP easy!"
-inputs = tokenizer(text, return_tensors="pt")
-inputs = {k: v.to(model.device) for k, v in inputs.items()}
-
+inputs = tokenizer("DeBERTa-v2 is great at understanding context!", return_tensors="pt").to("cuda")
 outputs = model(**inputs)
 logits = outputs.logits
-
-print("Logits:", logits)
+predicted_class_id = logits.argmax().item()
+predicted_label = model.config.id2label[predicted_class_id]
+print(f"Predicted label: {predicted_label}")
 
 ```
 
-
-## Resources
-
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
-- [Multiple choice task guide](../tasks/multiple_choice)
 
 ## DebertaV2Config
 
