@@ -1573,20 +1573,18 @@ class QuartetConfig(QuantizationConfigMixin):
     def __init__(
         self,
         forward_dtype: str = "mxfp4",
-        exponent_dtype: str = "e8m0",
+        forward_quest: bool = False,
         backward_dtype: str = "mxfp4",
         store_master_weights: bool = False,
-        do_hadamard: bool = True,
-        group_size: int = 32,
+        hadamard_group_size: int = 32,
         modules_to_not_convert: Optional[List[str]] = None,
         **kwargs,
     ):
         self.forward_dtype = forward_dtype
-        self.exponent_dtype = exponent_dtype
+        self.forward_quest = forward_quest
         self.backward_dtype = backward_dtype
         self.store_master_weights = store_master_weights
-        self.group_size = group_size
-        self.do_hadamard = do_hadamard
+        self.hadamard_group_size = hadamard_group_size
         self.modules_to_not_convert = modules_to_not_convert
 
         self.quant_method = QuantizationMethod.QUARTET
@@ -1598,14 +1596,12 @@ class QuartetConfig(QuantizationConfigMixin):
         """
         if self.forward_dtype not in ["mxfp4"]:
             raise ValueError("forward_dtype must be mxfp4 for now")
-        if self.exponent_dtype not in ["e8m0"]:
-            raise ValueError("exponent_dtype must be e8m0 for now")
+        if self.forward_quest not in [False]:
+            raise ValueError("forward_quest must be False for now")
         if self.backward_dtype not in ["mxfp4", "bf16"]:
             raise ValueError("backward_dtype must be mxfp4 or bf16 for now")
-        if self.group_size not in [32]:
-            raise ValueError("group_size must be 32 for now")
-        if self.do_hadamard not in [True]:
-            raise ValueError("do_hadamard must be True for now")
+        if self.hadamard_group_size not in [32]:
+            raise ValueError("hadamard_group_size must be 32 for now")
         if self.modules_to_not_convert is None:
             self.modules_to_not_convert = ["lm_head"]
 

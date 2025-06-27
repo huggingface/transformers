@@ -45,8 +45,9 @@ def adapt_quartet_config(config: QuartetConfig):
 
     return QuartetLinearConfig(
         forward_dtype=forward_dtype,
+        forward_quest=config.forward_quest,
         backward_dtype=backward_dtype,
         store_master_weights=config.store_master_weights,
-        hadamard_group_size=config.group_size,
+        hadamard_group_size=config.hadamard_group_size,
         modules_to_not_convert=config.modules_to_not_convert,
     )
