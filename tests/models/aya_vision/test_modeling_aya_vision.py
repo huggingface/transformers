@@ -22,7 +22,6 @@ from transformers import (
     AutoProcessor,
     AyaVisionConfig,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
     Expectations,
@@ -49,10 +48,6 @@ if is_torch_available():
         AyaVisionForConditionalGeneration,
         AyaVisionModel,
     )
-
-
-if is_vision_available():
-    pass
 
 
 class AyaVisionVisionText2TextModelTester:
@@ -338,7 +333,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        del cls.model_checkpoint
+        del cls.model
         cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
@@ -427,7 +422,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
 
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "Whispers on the breeze,\nLeaves dance under moonlit sky,\nNature's quiet song.",
+                ("xpu", 3): "Whispers on the breeze,\nLeaves dance under moonlit skies,\nNature's quiet song.",
                 # 4-bit
                 ("cuda", 7): "Sure, here's a haiku for you:\n\nMorning dew sparkles,\nPetals unfold in sunlight,\n",
                 ("cuda", 8): "Whispers on the breeze,\nLeaves dance under moonlit skies,\nNature's quiet song.",
@@ -439,6 +434,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
 
     @slow
     @require_torch_accelerator
+    @require_deterministic_for_xpu
     def test_small_model_integration_generate_chat_template(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         model = self.get_model()
@@ -463,7 +459,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
 
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "The image depicts a cozy scene of two cats resting on a bright pink blanket. The cats,",
+                ("xpu", 3): 'The image depicts a cozy scene of two cats resting on a bright pink blanket. The cats,',
                 # 4-bit
                 ("cuda", 7): 'The image depicts two cats comfortably resting on a pink blanket spread across a sofa. The cats,',
                 ("cuda", 8): 'The image depicts a cozy scene of two cats resting on a bright pink blanket. The cats,',

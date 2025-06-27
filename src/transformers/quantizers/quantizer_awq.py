@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import importlib.metadata
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Optional
 
 from packaging import version
 
@@ -82,7 +82,9 @@ class AwqQuantizer(HfQuantizer):
                     "your model on a GPU device in order to run your model."
                 )
             elif device_map is not None:
-                if isinstance(device_map, dict) and ("cpu" in device_map.values() or "disk" in device_map.values()):
+                if isinstance(device_map, dict) and any(
+                    forbidden in device_map.values() for forbidden in ("cpu", torch.device("cpu"), "disk")
+                ):
                     raise ValueError(
                         "You are attempting to load an AWQ model with a device_map that contains a CPU or disk device."
                         " This is not supported. Please remove the CPU or disk device from the device_map."
@@ -100,7 +102,7 @@ class AwqQuantizer(HfQuantizer):
         return torch_dtype
 
     def _process_model_before_weight_loading(
-        self, model: "PreTrainedModel", keep_in_fp32_modules: Optional[List[str]] = None, **kwargs
+        self, model: "PreTrainedModel", keep_in_fp32_modules: Optional[list[str]] = None, **kwargs
     ):
         from ..integrations import replace_quantization_scales, replace_with_awq_linear
 
