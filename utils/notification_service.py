@@ -50,8 +50,8 @@ test_to_result_name = {
     "PyTorch pipelines": "torch_pipeline",
     "TensorFlow pipelines": "tf_pipeline",
     "Examples directory": "example",
-    "Quantization": "quantization",
     "DeepSpeed": "deepspeed",
+    "Quantization": "quantization",
 }
 
 NON_MODEL_TEST_MODULES = [
