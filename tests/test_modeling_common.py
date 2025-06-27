@@ -3748,7 +3748,7 @@ class ModelTesterMixin:
                 self.skipTest(
                     "PaliGemma-like models currently (transformers==4.41.0) requires an attention_mask input"
                 )
-            if config.model_type in ["modernbert", "gemma3", "t5gemma", "diffllama", "dpr", "eomt", "gpt_bigcode", "jamba", "kosmos2", "mllama", "pixtral", "sam", "sam_hq", "zamba2"]:
+            if config.model_type in ["modernbert", "gemma3", "t5gemma", "diffllama", "dpr", "eomt", "gpt_bigcode", "jamba", "kosmos-2", "mllama", "pixtral", "sam", "sam_hq", "zamba2", "sam_vision_model", "sam_hq_vision_model"]:
                 self.skipTest(
                     reason=f"{config.model_type} currently (transformers==4.52.0) automatically adds an attention_mask input"
                 )
