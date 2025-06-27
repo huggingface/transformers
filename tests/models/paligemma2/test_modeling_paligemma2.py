@@ -23,9 +23,9 @@ from transformers import (
     PaliGemmaConfig,
     PaliGemmaForConditionalGeneration,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
+    is_flaky,
     require_torch,
     torch_device,
 )
@@ -37,10 +37,6 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
-
-
-if is_vision_available():
-    pass
 
 
 class PaliGemma2VisionText2TextModelTester:
@@ -315,18 +311,6 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="PaliGemma does not support low_cpu_mem_usage.")
-    def test_save_load_low_cpu_mem_usage(self):
-        pass
-
-    @unittest.skip(reason="PaliGemma does not support low_cpu_mem_usage.")
-    def test_save_load_low_cpu_mem_usage_checkpoints(self):
-        pass
-
-    @unittest.skip(reason="PaliGemma does not support low_cpu_mem_usage.")
-    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
-        pass
-
     @unittest.skip(
         reason="VLMs doesn't accept inputs embeds and pixel values at the same time. So if the test passed for backbone LM, it passes for VLM also"
     )
@@ -381,3 +365,8 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     @unittest.skip("Gemma2 has HybridCache and doesn't support StaticCache")
     def test_generate_with_static_cache(self):
         pass
+
+    @pytest.mark.generate
+    @is_flaky
+    def test_generate_compile_model_forward(self):
+        super().test_generate_compile_model_forward()

@@ -16,7 +16,7 @@
 Processor class for VideoLlava.
 """
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -61,14 +61,6 @@ class VideoLlavaProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "video_processor", "tokenizer"]
-    valid_kwargs = [
-        "chat_template",
-        "patch_size",
-        "vision_feature_select_strategy",
-        "image_token",
-        "video_token",
-        "num_additional_image_tokens",
-    ]
     image_processor_class = "VideoLlavaImageProcessor"
     video_processor_class = "AutoVideoProcessor"
     tokenizer_class = "AutoTokenizer"
@@ -97,7 +89,7 @@ class VideoLlavaProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         images: ImageInput = None,
         videos: ImageInput = None,
         padding: Union[bool, str, PaddingStrategy] = False,
@@ -113,15 +105,15 @@ class VideoLlavaProcessor(ProcessorMixin):
         of the above two methods for more information.
 
         Args:
-            text (`TextInput`, `PreTokenizedInput`, `List[TextInput]`, `List[PreTokenizedInput]`):
+            text (`TextInput`, `PreTokenizedInput`, `list[TextInput]`, `list[PreTokenizedInput]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
-            videos (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            videos (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 Video frames to preprocess. Expects a single or batch of video frames in NumPy array or PyTorch
                 tensor. Each video should be of shape (T, C, H, W), where T is number of frames, C is
                 number of channels, H and W are image height and width.
@@ -156,21 +148,17 @@ class VideoLlavaProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
             - **pixel_values_videos** -- Pixel values to be fed to a model. Returned when `videos` is not `None`.
         """
-        data = {}
-        if images is not None:
-            encoded_images = self.image_processor(images=images, return_tensors=return_tensors)
-            data.update(encoded_images)
-
-        if videos is not None:
-            encoded_videos = self.video_processor(videos=videos, return_tensors=return_tensors)
-            data.update(encoded_videos)
 
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
             raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
-        if encoded_images is not None:
+        data = {}
+        if images is not None:
+            encoded_images = self.image_processor(images=images, return_tensors=return_tensors)
+            data.update(encoded_images)
+
             height, width = get_image_size(to_numpy_array(encoded_images.get("pixel_values_images")[0]))
             num_image_tokens = (height // self.patch_size) * (width // self.patch_size)
             num_image_tokens += self.num_additional_image_tokens
@@ -178,7 +166,10 @@ class VideoLlavaProcessor(ProcessorMixin):
                 num_image_tokens -= 1
             text = [sample.replace(self.image_token, self.image_token * num_image_tokens) for sample in text]
 
-        if encoded_videos is not None:
+        if videos is not None:
+            encoded_videos = self.video_processor(videos=videos, return_tensors=return_tensors)
+            data.update(encoded_videos)
+
             one_video = encoded_videos.get("pixel_values_videos")[0]
             if isinstance(encoded_videos.get("pixel_values_videos")[0], (list, tuple)):
                 one_video = np.array(one_video)

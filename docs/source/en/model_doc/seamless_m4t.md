@@ -56,7 +56,7 @@ Here is how to use the processor to process text and audio:
 ```python
 >>> # let's load an audio sample from an Arabic speech corpus
 >>> from datasets import load_dataset
->>> dataset = load_dataset("arabic_speech_corpus", split="test", streaming=True, trust_remote_code=True)
+>>> dataset = load_dataset("halabi2016/arabic_speech_corpus", split="test", streaming=True)
 >>> audio_sample = next(iter(dataset))["audio"]
 
 >>> # now, process it
@@ -132,7 +132,7 @@ Use `return_intermediate_token_ids=True` with [`SeamlessM4TModel`] to return bot
 
 SeamlessM4T features a versatile architecture that smoothly handles the sequential generation of text and speech. This setup comprises two sequence-to-sequence (seq2seq) models. The first model translates the input modality into translated text, while the second model generates speech tokens, known as "unit tokens," from the translated text.
 
-Each modality has its own dedicated encoder with a unique architecture. Additionally, for speech output, a vocoder inspired by the [HiFi-GAN](https://arxiv.org/abs/2010.05646) architecture is placed on top of the second seq2seq model.
+Each modality has its own dedicated encoder with a unique architecture. Additionally, for speech output, a vocoder inspired by the [HiFi-GAN](https://huggingface.co/papers/2010.05646) architecture is placed on top of the second seq2seq model.
 
 Here's how the generation process works:
 
