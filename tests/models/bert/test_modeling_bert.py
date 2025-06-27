@@ -683,7 +683,9 @@ class BertModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_no_head_relative_embedding_key(self):
-        model = BertModel.from_pretrained("zhiheng-huang/bert-base-uncased-embedding-relative-key")
+        model = BertModel.from_pretrained(
+            "zhiheng-huang/bert-base-uncased-embedding-relative-key", attn_implementation="eager"
+        )
         input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
         with torch.no_grad():
@@ -698,7 +700,9 @@ class BertModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_no_head_relative_embedding_key_query(self):
-        model = BertModel.from_pretrained("zhiheng-huang/bert-base-uncased-embedding-relative-key-query")
+        model = BertModel.from_pretrained(
+            "zhiheng-huang/bert-base-uncased-embedding-relative-key-query", attn_implementation="eager"
+        )
         input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
         with torch.no_grad():
