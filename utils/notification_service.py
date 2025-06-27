@@ -40,6 +40,8 @@ job_to_test_map = {
     "run_examples_gpu": "Examples directory",
     "run_torch_cuda_extensions_gpu": "DeepSpeed",
     "run_quantization_torch_gpu": "Quantization",
+    "run_pipelines_gpu": "Pipelines",
+    "run_deepspeed_gpu": "DeepSpeed",
 }
 
 # The values are used as the file names where to save the corresponding CI job results.
@@ -49,8 +51,9 @@ test_to_result_name = {
     "PyTorch pipelines": "torch_pipeline",
     "TensorFlow pipelines": "tf_pipeline",
     "Examples directory": "example",
-    "DeepSpeed": "deepspeed",
     "Quantization": "quantization",
+    "DeepSpeed": "deepspeed",
+    "Pipelines": "pipelines",
 }
 
 NON_MODEL_TEST_MODULES = [
