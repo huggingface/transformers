@@ -15,9 +15,7 @@
 # limitations under the License.
 import copy
 from collections.abc import Callable
-from dataclasses import dataclass
-from functools import partial
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -27,6 +25,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -82,8 +81,8 @@ class Gemma3TextConfig(Gemma2Config, PretrainedConfig):
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
             `num_attention_heads`.
         head_dim (`int`, *optional*, defaults to 256):
             The attention head dimension.
@@ -148,11 +147,11 @@ class Gemma3TextConfig(Gemma2Config, PretrainedConfig):
                 `beta_slow` (`float`, *optional*):
                     Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
                     ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`List[float]`, *optional*):
+                `short_factor` (`list[float]`, *optional*):
                     Only used with 'longrope'. The scaling factor to be applied to short contexts (<
                     `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
                     size divided by the number of attention heads divided by 2
-                `long_factor` (`List[float]`, *optional*):
+                `long_factor` (`list[float]`, *optional*):
                     Only used with 'longrope'. The scaling factor to be applied to long contexts (<
                     `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
                     size divided by the number of attention heads divided by 2
@@ -314,8 +313,8 @@ class Gemma3Config(PretrainedConfig):
 
     def __init__(
         self,
-        text_config: Optional[Union[Gemma3TextConfig, Dict[str, Any]]] = None,
-        vision_config: Optional[Union[SiglipVisionConfig, Dict[str, Any]]] = None,
+        text_config: Optional[Union[Gemma3TextConfig, dict[str, Any]]] = None,
+        vision_config: Optional[Union[SiglipVisionConfig, dict[str, Any]]] = None,
         mm_tokens_per_image: int = 256,
         boi_token_index: int = 255_999,
         eoi_token_index: int = 256_000,
@@ -346,12 +345,10 @@ class Gemma3Config(PretrainedConfig):
         super().__init__(**kwargs)
 
 
-@dataclass
 class Gemma3ModelOutputWithPast(PaligemmaModelOutputWithPast):
     pass
 
 
-@dataclass
 class Gemma3CausalLMOutputWithPast(PaligemmaCausalLMOutputWithPast):
     pass
 
@@ -424,14 +421,7 @@ class Gemma3Attention(Gemma2Attention):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. "
-                    "Falling back to eager attention. This warning can be removed using the argument "
-                    '`attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -450,7 +440,7 @@ class Gemma3Attention(Gemma2Attention):
         return attn_output, attn_weights
 
 
-class Gemma3DecoderLayer(nn.Module):
+class Gemma3DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Gemma3TextConfig, layer_idx: int):
         super().__init__()
         self.config = config
@@ -617,7 +607,6 @@ class Gemma3TextModel(Gemma2Model):
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
-                "output_attentions": output_attentions,
             }
             # Create the masks
             causal_mask_mapping = {
@@ -640,32 +629,18 @@ class Gemma3TextModel(Gemma2Model):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    partial(decoder_layer.__call__, **flash_attn_kwargs),
-                    hidden_states,
-                    position_embeddings_global,
-                    position_embeddings_local,
-                    causal_mask_mapping[decoder_layer.attention_type],
-                    position_ids,
-                    past_key_values,
-                    output_attentions,
-                    use_cache,
-                    cache_position,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    position_embeddings_global=position_embeddings_global,
-                    position_embeddings_local=position_embeddings_local,
-                    attention_mask=causal_mask_mapping[decoder_layer.attention_type],
-                    position_ids=position_ids,
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                    **flash_attn_kwargs,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                position_embeddings_global=position_embeddings_global,
+                position_embeddings_local=position_embeddings_local,
+                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                position_ids=position_ids,
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                **flash_attn_kwargs,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -730,7 +705,7 @@ class Gemma3MultiModalProjector(nn.Module):
         return projected_vision_outputs.type_as(vision_outputs)
 
 
-def token_type_ids_mask_function(token_type_ids: Optional[torch.Tensor]) -> Optional[Callable]:
+def token_type_ids_mask_function(token_type_ids: Optional[torch.Tensor], tokens_per_image: int) -> Optional[Callable]:
     """
     This function adds the correct offsets to the `q_idx` and `kv_idx` as the torch API can only accept lengths,
     not start and end indices.
@@ -740,13 +715,21 @@ def token_type_ids_mask_function(token_type_ids: Optional[torch.Tensor]) -> Opti
         return None
 
     def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
-        # If it's 1, we need to unmask it
-        return token_type_ids[batch_idx, kv_idx] == 1
+        # If the difference is less than image size, both are part of the same image block
+        same_image_block = torch.abs(kv_idx - q_idx) <= tokens_per_image
+        # If it's 1 for both query and key/value, we are in an image block
+        is_image_block = (token_type_ids[batch_idx, q_idx] == 1) & (token_type_ids[batch_idx, kv_idx] == 1)
+
+        # This is bidirectional attention whenever we are dealing with image tokens
+        return is_image_block & same_image_block
 
     return inner_mask
 
 
 class Gemma3Model(PaliGemmaModel):
+    # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
+    accepts_loss_kwargs = False
+
     def get_image_features(self, pixel_values: torch.Tensor) -> torch.Tensor:
         """
         Projects the last hidden state from the vision model into language model space.
@@ -772,7 +755,7 @@ class Gemma3Model(PaliGemmaModel):
         pixel_values: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None,
+        past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -782,7 +765,7 @@ class Gemma3Model(PaliGemmaModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **lm_kwargs,
-    ) -> Union[Tuple, Gemma3ModelOutputWithPast]:
+    ) -> Union[tuple, Gemma3ModelOutputWithPast]:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -840,12 +823,11 @@ class Gemma3Model(PaliGemmaModel):
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
-                "output_attentions": output_attentions,
             }
             if token_type_ids is not None and inputs_embeds.shape[1] != 1:
                 # We need to pass an additional mask function to account for token type ids, and it needs to be an `or`
                 mask_kwargs["or_mask_function"] = token_type_ids_mask_function(
-                    token_type_ids.to(cache_position.device)
+                    token_type_ids.to(cache_position.device), self.config.mm_tokens_per_image
                 )
 
             # Create the masks
@@ -884,7 +866,7 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         pixel_values: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None,
+        past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -895,7 +877,7 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         return_dict: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **lm_kwargs,
-    ) -> Union[Tuple, Gemma3CausalLMOutputWithPast]:
+    ) -> Union[tuple, Gemma3CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -929,7 +911,7 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
 
         >>> inputs = processor.apply_chat_template(
         ...     messages,
-        ...     tokenizer=True,
+        ...     tokenize=True,
         ...     return_dict=True,
         ...     return_tensors="pt",
         ...     add_generation_prompt=True
@@ -1050,7 +1032,6 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         attention_mask: Optional[torch.Tensor],
         cache_position: torch.Tensor,
         past_key_values: Optional[Cache],
-        output_attentions: bool = False,
         token_type_ids: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> dict:
@@ -1061,12 +1042,13 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
             "attention_mask": attention_mask,
             "cache_position": cache_position,
             "past_key_values": past_key_values,
-            "output_attentions": output_attentions,
         }
         # Add the token type ids mask for generate as well
         if token_type_ids is not None and input_embeds.shape[1] != 1:
             # We need to pass an additional mask function to account for token type ids, and it needs to be an `or`
-            mask_kwargs["or_mask_function"] = token_type_ids_mask_function(token_type_ids.to(cache_position.device))
+            mask_kwargs["or_mask_function"] = token_type_ids_mask_function(
+                token_type_ids.to(cache_position.device), config.mm_tokens_per_image
+            )
 
         return create_masks_for_generate(**mask_kwargs)
 

@@ -16,9 +16,8 @@
 import unittest
 
 from packaging import version
-from parameterized import parameterized
 
-from transformers import AutoTokenizer, LlamaConfig, StaticCache, is_torch_available, set_seed
+from transformers import AutoTokenizer, StaticCache, is_torch_available
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     Expectations,
@@ -30,16 +29,14 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
-from ...test_pipeline_mixin import PipelineTesterMixin
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 if is_torch_available():
     import torch
 
     from transformers import (
+        LlamaConfig,
         LlamaForCausalLM,
         LlamaForQuestionAnswering,
         LlamaForSequenceClassification,
@@ -50,124 +47,17 @@ if is_torch_available():
     from transformers.models.llama.modeling_llama import LlamaRotaryEmbedding
 
 
-class LlamaModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_token_type_ids=False,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
-        pad_token_id=0,
-        scope=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.pad_token_id = pad_token_id
-        self.scope = scope
-
-    def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-
-        input_mask = None
-        if self.use_input_mask:
-            input_mask = torch.tril(torch.ones_like(input_ids).to(torch_device))
-
-        token_type_ids = None
-        if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
-
-        sequence_labels = None
-        token_labels = None
-        choice_labels = None
-        if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-            choice_labels = ids_tensor([self.batch_size], self.num_choices)
-
-        config = self.get_config()
-
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-
-    def get_config(self):
-        return LlamaConfig(
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            intermediate_size=self.intermediate_size,
-            hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            max_position_embeddings=self.max_position_embeddings,
-            type_vocab_size=self.type_vocab_size,
-            is_decoder=False,
-            initializer_range=self.initializer_range,
-            pad_token_id=self.pad_token_id,
-        )
-
-    def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        model = LlamaModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask)
-        result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
-        return config, inputs_dict
+class LlamaModelTester(CausalLMModelTester):
+    if is_torch_available():
+        config_class = LlamaConfig
+        base_model_class = LlamaModel
+        causal_lm_class = LlamaForCausalLM
+        sequence_class = LlamaForSequenceClassification
+        token_class = LlamaForTokenClassification
 
 
 @require_torch
-class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class LlamaModelTest(CausalLMModelTest, unittest.TestCase):
     all_model_classes = (
         (
             LlamaModel,
@@ -194,6 +84,8 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     test_headmasking = False
     test_pruning = False
     fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
+    model_tester_class = LlamaModelTester
+    rotary_embedding_layer = LlamaRotaryEmbedding  # Enables RoPE tests if set
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
@@ -201,230 +93,6 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = LlamaForCausalLM if is_torch_available() else None
-
-    def setUp(self):
-        self.model_tester = LlamaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LlamaConfig, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_llama_sequence_classification_model(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = LlamaForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    def test_llama_sequence_classification_model_for_single_label(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        config.problem_type = "single_label_classification"
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = LlamaForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    def test_llama_sequence_classification_model_for_multi_label(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        config.problem_type = "multi_label_classification"
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor(
-            [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
-        ).to(torch.float)
-        model = LlamaForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    def test_llama_token_classification_model(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        token_labels = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.num_labels)
-        model = LlamaForTokenClassification(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=token_labels)
-        self.assertEqual(
-            result.logits.shape,
-            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
-        )
-
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    def test_model_rope_scaling_from_config(self, scaling_type):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        short_input = ids_tensor([1, 10], config.vocab_size)
-        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
-
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        original_model = LlamaModel(config)
-        original_model.to(torch_device)
-        original_model.eval()
-        original_short_output = original_model(short_input).last_hidden_state
-        original_long_output = original_model(long_input).last_hidden_state
-
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        config.rope_scaling = {"type": scaling_type, "factor": 10.0}
-        scaled_model = LlamaModel(config)
-        scaled_model.to(torch_device)
-        scaled_model.eval()
-        scaled_short_output = scaled_model(short_input).last_hidden_state
-        scaled_long_output = scaled_model(long_input).last_hidden_state
-
-        # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
-        # maximum sequence length, so the outputs for the short input should match.
-        if scaling_type == "dynamic":
-            torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
-        else:
-            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
-
-        # The output should be different for long inputs
-        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
-
-    def test_model_rope_scaling(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        scaling_factor = 10
-        short_input_length = 10
-        long_input_length = int(config.max_position_embeddings * 1.5)
-
-        # Inputs
-        x = torch.randn(
-            1, dtype=torch.float32, device=torch_device
-        )  # used exclusively to get the dtype and the device
-        position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
-        position_ids_short = position_ids_short.unsqueeze(0)
-        position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
-        position_ids_long = position_ids_long.unsqueeze(0)
-
-        # Sanity check original RoPE
-        original_rope = LlamaRotaryEmbedding(config=config).to(torch_device)
-        original_cos_short, original_sin_short = original_rope(x, position_ids_short)
-        original_cos_long, original_sin_long = original_rope(x, position_ids_long)
-        torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(original_sin_short, original_sin_long[:, :short_input_length, :])
-
-        # Sanity check linear RoPE scaling
-        # New position "x" should match original position with index "x/scaling_factor"
-        config.rope_scaling = {"type": "linear", "factor": scaling_factor}
-        linear_scaling_rope = LlamaRotaryEmbedding(config=config).to(torch_device)
-        linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short)
-        linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long)
-        torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(linear_sin_short, linear_sin_long[:, :short_input_length, :])
-        for new_position in range(0, long_input_length, scaling_factor):
-            original_position = int(new_position // scaling_factor)
-            torch.testing.assert_close(linear_cos_long[:, new_position, :], original_cos_long[:, original_position, :])
-            torch.testing.assert_close(linear_sin_long[:, new_position, :], original_sin_long[:, original_position, :])
-
-        # Sanity check Dynamic NTK RoPE scaling
-        # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
-        # with scaling_factor (or that `inv_freq` decreases)
-        config.rope_scaling = {"type": "dynamic", "factor": scaling_factor}
-        ntk_scaling_rope = LlamaRotaryEmbedding(config=config).to(torch_device)
-        ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short)
-        ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long)
-        torch.testing.assert_close(ntk_cos_short, original_cos_short)
-        torch.testing.assert_close(ntk_sin_short, original_sin_short)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(ntk_cos_long, original_cos_long)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(ntk_sin_long, original_sin_long)
-        self.assertTrue((ntk_scaling_rope.inv_freq <= original_rope.inv_freq).all())
-
-        # Sanity check Yarn RoPE scaling
-        # Scaling should be over the entire input
-        config.rope_scaling = {"type": "yarn", "factor": scaling_factor}
-        yarn_scaling_rope = LlamaRotaryEmbedding(config=config).to(torch_device)
-        yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short)
-        yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long)
-        torch.testing.assert_close(yarn_cos_short, yarn_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(yarn_sin_short, yarn_sin_long[:, :short_input_length, :])
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(yarn_cos_short, original_cos_short)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(yarn_sin_short, original_sin_short)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(yarn_cos_long, original_cos_long)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(yarn_sin_long, original_sin_long)
-
-    def test_model_loading_old_rope_configs(self):
-        def _reinitialize_config(base_config, new_kwargs):
-            # Reinitialize the config with the new kwargs, forcing the config to go through its __init__ validation
-            # steps.
-            base_config_dict = base_config.to_dict()
-            new_config = LlamaConfig.from_dict(config_dict={**base_config_dict, **new_kwargs})
-            return new_config
-
-        # from untouched config -> ✅
-        base_config, model_inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        original_model = LlamaForCausalLM(base_config).to(torch_device)
-        original_model(**model_inputs)
-
-        # from a config with the expected rope configuration -> ✅
-        config = _reinitialize_config(base_config, {"rope_scaling": {"rope_type": "linear", "factor": 10.0}})
-        original_model = LlamaForCausalLM(config).to(torch_device)
-        original_model(**model_inputs)
-
-        # from a config with the old rope configuration ('type' instead of 'rope_type')  -> ✅ we gracefully handle BC
-        config = _reinitialize_config(base_config, {"rope_scaling": {"type": "linear", "factor": 10.0}})
-        original_model = LlamaForCausalLM(config).to(torch_device)
-        original_model(**model_inputs)
-
-        # from a config with both 'type' and 'rope_type'  -> ✅ they can coexist (and both are present in the config)
-        config = _reinitialize_config(
-            base_config, {"rope_scaling": {"type": "linear", "rope_type": "linear", "factor": 10.0}}
-        )
-        self.assertTrue(config.rope_scaling["type"] == "linear")
-        self.assertTrue(config.rope_scaling["rope_type"] == "linear")
-        original_model = LlamaForCausalLM(config).to(torch_device)
-        original_model(**model_inputs)
-
-        # from a config with parameters in a bad range ('factor' should be >= 1.0) -> ⚠️ throws a warning
-        with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
-            config = _reinitialize_config(base_config, {"rope_scaling": {"rope_type": "linear", "factor": -999.0}})
-            original_model = LlamaForCausalLM(config).to(torch_device)
-            original_model(**model_inputs)
-            self.assertEqual(len(logs.output), 1)
-            self.assertIn("factor field", logs.output[0])
-
-        # from a config with unknown parameters ('foo' isn't a rope option) -> ⚠️ throws a warning
-        with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
-            config = _reinitialize_config(
-                base_config, {"rope_scaling": {"rope_type": "linear", "factor": 10.0, "foo": "bar"}}
-            )
-            original_model = LlamaForCausalLM(config).to(torch_device)
-            original_model(**model_inputs)
-            self.assertEqual(len(logs.output), 1)
-            self.assertIn("Unrecognized keys", logs.output[0])
-
-        # from a config with specific rope type but missing one of its mandatory parameters -> ❌ throws exception
-        with self.assertRaises(KeyError):
-            config = _reinitialize_config(base_config, {"rope_scaling": {"rope_type": "linear"}})  # missing "factor"
 
 
 @require_torch_accelerator
@@ -445,7 +113,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         """
         # diff on `EXPECTED_TEXT`:
         # 2024-08-26: updating from torch 2.3.1 to 2.4.0 slightly changes the results.
-        EXPECTED_TEXT = (
+        expected_base_text = (
             "Tell me about the french revolution. The french revolution was a period of radical political and social "
             "upheaval in France that lasted from 1789 until 1799. It was a time of great change and upheaval, marked "
             "by the overthrow of the monarchy, the rise of the middle class, and the eventual establishment of the "
@@ -454,6 +122,13 @@ class LlamaIntegrationTest(unittest.TestCase):
             "demanded greater representation and eventually broke away to form the National Assembly. This marked "
             "the beginning of the end of the absolute monarchy and the rise of the middle class.\n"
         )
+        expected_texts = Expectations(
+            {
+                ("rocm", (9, 5)): expected_base_text.replace("political and social", "social and political"),
+                ("cuda", None): expected_base_text,
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT = expected_texts.get_expectation()
 
         tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3.1-8B-Instruct")
         model = LlamaForCausalLM.from_pretrained(
@@ -638,7 +313,6 @@ class LlamaIntegrationTest(unittest.TestCase):
 
         from transformers.integrations.executorch import (
             TorchExportableModuleWithStaticCache,
-            convert_and_export_with_cache,
         )
 
         llama_models = {
@@ -684,7 +358,10 @@ class LlamaIntegrationTest(unittest.TestCase):
             max_new_tokens = max_generation_length - prompt_token_ids.shape[-1]
 
             # Static Cache + export
-            exported_program = convert_and_export_with_cache(model)
+            from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
+
+            exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
+            exported_program = exportable_module.export()
             ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
                 exported_program=exported_program, prompt_token_ids=prompt_token_ids, max_new_tokens=max_new_tokens
             )

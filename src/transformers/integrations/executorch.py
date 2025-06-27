@@ -11,7 +11,6 @@
 # specific language governing permissions and limitations under the License.
 
 import logging
-from contextlib import contextmanager
 from typing import Callable, Optional
 
 import torch
@@ -57,13 +56,19 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
         if not hasattr(model.config, "use_cache") or model.config.use_cache is False:
             raise ValueError("The model must have caching enabled to be performant.")
 
-        if not hasattr(model.config, "layer_types"):
-            # If `layer_types` is not specified explicitly in the config, there is only 1 type of layers, so
-            # export will use `StaticCache` by default.
-            logging.info("Using `StaticCache` for export as `layer_types` is not specified in the config.")
-            self.model = TorchExportableModuleWithStaticCache(model)
-        else:
+        if hasattr(model.config, "layer_types") and getattr(model.config, "sliding_window", None) is not None:
             self.model = TorchExportableModuleWithHybridCache(model, max_batch_size, max_cache_len)
+        else:
+            # If `layer_types` is not specified explicitly in the config or `sliding_window` is null,
+            # there is only 1 type of layers, so export will use `StaticCache` by default.
+            logging.info(
+                "Using `StaticCache` for export as `layer_types` is not specified or `sliding_window` is `null` in the config."
+            )
+            self.model = TorchExportableModuleWithStaticCache(model)
+        # This is the same as sdpa, but mask creation does not use `vmap` which is not exportable
+        ALL_MASK_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", sdpa_mask_without_vmap)
+        ALL_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", ALL_ATTENTION_FUNCTIONS["sdpa"])
+        self.model.model.config._attn_implementation = "sdpa_without_vmap"
 
     def forward(
         self,
@@ -102,22 +107,17 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
             strict(`Optional[bool]`):
                 Flag to instruct `torch.export` to use `torchdynamo`.
         """
-        # This is the same as sdpa, but mask creation does not use `vmap` which is not exportable
-        ALL_MASK_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", sdpa_mask_without_vmap)
-        ALL_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", ALL_ATTENTION_FUNCTIONS["sdpa"])
-        self.model.model.config._attn_implementation = "sdpa_without_vmap"
 
         example_input_ids = input_ids if input_ids is not None else torch.tensor([[1]], dtype=torch.long)
         example_cache_position = cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long)
 
-        with patch_mask_interface():
-            exported_program = torch.export.export(
-                self.model,
-                args=(example_input_ids, example_cache_position),
-                kwargs={},
-                dynamic_shapes=dynamic_shapes,
-                strict=strict if strict is not None else True,
-            )
+        exported_program = torch.export.export(
+            self.model,
+            args=(example_input_ids, example_cache_position),
+            kwargs={},
+            dynamic_shapes=dynamic_shapes,
+            strict=strict if strict is not None else True,
+        )
         return exported_program
 
     @staticmethod
@@ -402,12 +402,6 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
         if not self.model.config.use_cache:
             raise AssertionError("Model must have caching enabled")
 
-        if (
-            not hasattr(self.model.config, "cache_implementation")
-            or self.model.config.cache_implementation != "hybrid"
-        ):
-            raise AssertionError("Model must use 'hybrid' cache implementation")
-
         # Initialize the HybridCache
         self.cache = HybridCache(
             config=self.model.config,
@@ -456,24 +450,6 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
         return outputs.logits
 
 
-@contextmanager
-def patch_mask_interface():
-    """
-    Context manager to locally use a simple dict instead of `AttentionMaskInterface`, as otherwise export will fail
-    with `strict=True` due to dynamo skip rules, i.e. `torch._dynamo.exc.Unsupported: 'inline in skipfiles:
-    Mapping.__contains__ | __contains__, skipped according trace_rules.lookup SKIP_DIRS'`.
-    Note that this seem to be an issue only for python<3.11.
-    """
-    import transformers
-
-    original = transformers.masking_utils.ALL_MASK_ATTENTION_FUNCTIONS
-    transformers.masking_utils.ALL_MASK_ATTENTION_FUNCTIONS = ALL_MASK_ATTENTION_FUNCTIONS._global_mapping
-    try:
-        yield
-    finally:
-        transformers.masking_utils.ALL_MASK_ATTENTION_FUNCTIONS = original
-
-
 def convert_and_export_with_cache(
     model: PreTrainedModel,
     example_input_ids: Optional[torch.Tensor] = None,
@@ -515,14 +491,13 @@ def convert_and_export_with_cache(
         )
 
         if is_torch_greater_or_equal("2.6.0"):
-            with patch_mask_interface():
-                exported_program = torch.export.export(
-                    TorchExportableModuleWithStaticCache(model),
-                    args=(example_input_ids, example_cache_position),
-                    kwargs={},
-                    dynamic_shapes=dynamic_shapes,
-                    strict=strict if strict is not None else True,
-                )
+            exported_program = torch.export.export(
+                TorchExportableModuleWithStaticCache(model),
+                args=(example_input_ids, example_cache_position),
+                kwargs={},
+                dynamic_shapes=dynamic_shapes,
+                strict=strict if strict is not None else True,
+            )
         else:
             if dynamic_shapes is not None:
                 logging.warning(
@@ -534,14 +509,13 @@ def convert_and_export_with_cache(
             #
             # Due to issue https://github.com/pytorch/pytorch/issues/128394, we need to switch to use an internal
             # export API and pre_dispatch=False. Switch to use the public API once the issue is included in 2.5 release.
-            with patch_mask_interface():
-                exported_program = torch.export._trace._export(
-                    TorchExportableModuleWithStaticCache(model),
-                    args=(example_input_ids,),
-                    kwargs={"cache_position": example_cache_position},
-                    pre_dispatch=False,
-                    strict=True,
-                )
+            exported_program = torch.export._trace._export(
+                TorchExportableModuleWithStaticCache(model),
+                args=(example_input_ids,),
+                kwargs={"cache_position": example_cache_position},
+                pre_dispatch=False,
+                strict=True,
+            )
         return exported_program
 
 
@@ -634,10 +608,9 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
 
         # Export the encoder
         with torch.no_grad():
-            with patch_mask_interface():
-                exported_encoder = torch.export.export(
-                    wrapped_encoder, (encoder_input_ids,), dynamic_shapes={"input_ids": {1: seq_len_dim}}, strict=True
-                )
+            exported_encoder = torch.export.export(
+                wrapped_encoder, (encoder_input_ids,), dynamic_shapes={"input_ids": {1: seq_len_dim}}, strict=True
+            )
 
         return exported_encoder
 
@@ -657,17 +630,16 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
 
         # Export the decoder
         with torch.no_grad():
-            with patch_mask_interface():
-                exported_decoder = torch.export.export(
-                    wrapped_decoder,
-                    (decoder_input_ids, encoder_hidden_states, cache_position),
-                    dynamic_shapes={
-                        "decoder_input_ids": None,
-                        "encoder_hidden_states": {1: encoder_seq_len_dim},
-                        "cache_position": None,
-                    },
-                    strict=True,
-                )
+            exported_decoder = torch.export.export(
+                wrapped_decoder,
+                (decoder_input_ids, encoder_hidden_states, cache_position),
+                dynamic_shapes={
+                    "decoder_input_ids": None,
+                    "encoder_hidden_states": {1: encoder_seq_len_dim},
+                    "cache_position": None,
+                },
+                strict=True,
+            )
 
         return exported_decoder
 

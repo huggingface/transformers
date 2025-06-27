@@ -14,9 +14,9 @@
 # limitations under the License.
 """PyTorch PEGASUS-X model."""
 
-import dataclasses
 import math
-from typing import Callable, Optional, Tuple, Union
+from dataclasses import dataclass
+from typing import Callable, Optional, Union
 
 import numpy as np
 import torch
@@ -33,6 +33,7 @@ from ...modeling_attn_mask_utils import (
     _prepare_4d_attention_mask_for_sdpa,
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -41,12 +42,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    auto_docstring,
-    is_torch_flex_attn_available,
-    is_torchdynamo_compiling,
-    logging,
-)
+from ...utils import auto_docstring, is_torch_flex_attn_available, is_torchdynamo_compiling, logging
 from .configuration_pegasus_x import PegasusXConfig
 
 
@@ -57,7 +53,7 @@ if is_torch_flex_attn_available():
 logger = logging.get_logger(__name__)
 
 
-@dataclasses.dataclass
+@dataclass
 class DimensionInfo:
     """Wrapper for dimension info."""
 
@@ -222,7 +218,7 @@ class PegasusXAttention(nn.Module):
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -334,7 +330,7 @@ class PegasusXGlobalLocalAttention(nn.Module):
         global_hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
         dim = DimensionInfo(
             batch_size=token_hidden_states.shape[0],
@@ -528,7 +524,7 @@ class PegasusXGlobalLocalAttention(nn.Module):
         return attn_output, attn_probs
 
 
-class PegasusXEncoderLayer(nn.Module):
+class PegasusXEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, stagger_blocks_this_layer: bool, config: PegasusXConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -643,7 +639,7 @@ class PegasusXEncoderLayer(nn.Module):
         return padded_hidden_states[:, pad_size:-pad_size, :]
 
 
-class PegasusXDecoderLayer(nn.Module):
+class PegasusXDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: PegasusXConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.embed_dim = config.d_model
@@ -764,8 +760,7 @@ class PegasusXPreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = True
     # Flaky logits
     _supports_sdpa = False
-    # Compile issues
-    _supports_flex_attn = False
+    _supports_flex_attn = True
     _supports_cache_class = True
     _supports_static_cache = True
 
@@ -1139,7 +1134,7 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             to_drop = False
             if self.training:
                 dropout_probability = torch.rand([])
@@ -1149,21 +1144,12 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
             if to_drop:
                 layer_outputs = (None, None)
             else:
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        encoder_layer.__call__,
-                        hidden_states,
-                        global_hidden_states,
-                        attention_mask,
-                        output_attentions,
-                    )
-                else:
-                    layer_outputs = encoder_layer(
-                        hidden_states,
-                        global_hidden_states,
-                        attention_mask,
-                        output_attentions=output_attentions,
-                    )
+                layer_outputs = encoder_layer(
+                    hidden_states,
+                    global_hidden_states,
+                    attention_mask,
+                    output_attentions=output_attentions,
+                )
 
                 hidden_states = layer_outputs[0]
                 global_hidden_states = layer_outputs[1]
@@ -1381,7 +1367,7 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
         next_decoder_cache = None
 
         for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
             if self.training:
@@ -1389,29 +1375,16 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
                 if dropout_probability < self.layerdrop:
                     continue
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    causal_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    None,
-                    output_attentions,
-                    use_cache,
-                    cache_position,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=causal_mask,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                causal_mask,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                encoder_attention_mask=encoder_attention_mask,
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+            )
             hidden_states = layer_outputs[0]
 
             if use_cache:
@@ -1499,7 +1472,7 @@ class PegasusXModel(PegasusXPreTrainedModel):
         self.encoder.resize_position_embeddings(new_num_position_embeddings)
         self.decoder.resize_position_embeddings(new_num_position_embeddings)
 
-    def get_position_embeddings(self) -> Tuple[nn.Embedding]:
+    def get_position_embeddings(self) -> tuple[nn.Embedding]:
         """
         Returns the position embeddings matrix
         """
@@ -1512,8 +1485,8 @@ class PegasusXModel(PegasusXPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.Tensor] = None,
         decoder_attention_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[torch.FloatTensor]] = None,
-        past_key_values: Optional[Tuple[torch.FloatTensor]] = None,
+        encoder_outputs: Optional[tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[tuple[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
@@ -1521,7 +1494,7 @@ class PegasusXModel(PegasusXPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, Seq2SeqModelOutput]:
+    ) -> Union[tuple, Seq2SeqModelOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -1655,7 +1628,7 @@ class PegasusXForConditionalGeneration(PegasusXPreTrainedModel, GenerationMixin)
         self.model.encoder.resize_position_embeddings(new_num_position_embeddings)
         self.model.decoder.resize_position_embeddings(new_num_position_embeddings)
 
-    def get_position_embeddings(self) -> Tuple[nn.Embedding]:
+    def get_position_embeddings(self) -> tuple[nn.Embedding]:
         """
         Returns the position embeddings matrix
         """
@@ -1668,8 +1641,8 @@ class PegasusXForConditionalGeneration(PegasusXPreTrainedModel, GenerationMixin)
         attention_mask: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.Tensor] = None,
         decoder_attention_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[torch.FloatTensor]] = None,
-        past_key_values: Optional[Tuple[torch.FloatTensor]] = None,
+        encoder_outputs: Optional[tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[tuple[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
@@ -1678,7 +1651,7 @@ class PegasusXForConditionalGeneration(PegasusXPreTrainedModel, GenerationMixin)
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, Seq2SeqLMOutput]:
+    ) -> Union[tuple, Seq2SeqLMOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.

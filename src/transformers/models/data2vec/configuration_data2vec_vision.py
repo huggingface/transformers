@@ -15,7 +15,7 @@
 """Data2VecVision model configuration"""
 
 from collections import OrderedDict
-from typing import Mapping
+from collections.abc import Mapping
 
 from packaging import version
 
@@ -75,9 +75,9 @@ class Data2VecVisionConfig(PretrainedConfig):
         use_mean_pooling (`bool`, *optional*, defaults to `True`):
             Whether to mean pool the final hidden states of the patches instead of using the final hidden state of the
             CLS token, before applying the classification head.
-        out_indices (`List[int]`, *optional*, defaults to `[3, 5, 7, 11]`):
+        out_indices (`list[int]`, *optional*, defaults to `[3, 5, 7, 11]`):
             Indices of the feature maps to use for semantic segmentation.
-        pool_scales (`Tuple[int]`, *optional*, defaults to `[1, 2, 3, 6]`):
+        pool_scales (`tuple[int]`, *optional*, defaults to `[1, 2, 3, 6]`):
             Pooling scales used in Pooling Pyramid Module applied on the last feature map.
         use_auxiliary_head (`bool`, *optional*, defaults to `True`):
             Whether to use an auxiliary head during training.

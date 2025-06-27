@@ -37,8 +37,7 @@ class CsmProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        # TODO: @eustlb, change for hf-internal-testing/csm-1b
-        cls.checkpoint = "eustlb/csm-1b"
+        cls.checkpoint = "hf-internal-testing/namespace-sesame-repo_name_csm-1b"
         processor = CsmProcessor.from_pretrained(cls.checkpoint)
         cls.audio_token = processor.audio_token
         cls.audio_token_id = processor.audio_token_id
