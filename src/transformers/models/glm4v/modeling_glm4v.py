@@ -1016,7 +1016,7 @@ class Glm4vModel(Glm4vPreTrainedModel):
                 dtype=input_ids.dtype,
                 device=input_ids.device,
             )
-
+            image_index, video_index = 0, 0
             attention_mask = attention_mask.to(total_input_ids.device)
             for i, input_ids in enumerate(total_input_ids):
                 input_ids = input_ids[attention_mask[i] == 1]
@@ -1046,7 +1046,6 @@ class Glm4vModel(Glm4vPreTrainedModel):
 
                 llm_pos_ids_list = []
                 video_frame_num = 1
-                image_index, video_index = 0, 0
 
                 for modality_type, start_idx, end_idx in input_type_group:
                     st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
@@ -1088,9 +1087,7 @@ class Glm4vModel(Glm4vPreTrainedModel):
                             t_index = torch.tensor(t_idx).view(-1, 1).expand(-1, llm_grid_h * llm_grid_w).flatten()
 
                             h_index = torch.arange(llm_grid_h).view(1, -1, 1).expand(1, -1, llm_grid_w).flatten()
-
                             w_index = torch.arange(llm_grid_w).view(1, 1, -1).expand(1, llm_grid_h, -1).flatten()
-
                             llm_pos_ids_list.append(torch.stack([t_index, h_index, w_index]) + st_idx)
 
                         video_index += 1
