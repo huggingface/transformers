@@ -271,7 +271,6 @@ class PretrainedConfig(PushToHubMixin):
         self.pad_token_id = kwargs.pop("pad_token_id", None)
         self.eos_token_id = kwargs.pop("eos_token_id", None)
         self.sep_token_id = kwargs.pop("sep_token_id", None)
-
         self.decoder_start_token_id = kwargs.pop("decoder_start_token_id", None)
 
         # task specific arguments
@@ -338,7 +337,7 @@ class PretrainedConfig(PushToHubMixin):
 
     @output_attentions.setter
     def output_attentions(self, value):
-        if self._attn_implementation != "eager":
+        if value is True and self._attn_implementation != "eager":
             raise ValueError(
                 "The `output_attentions` attribute is not supported when using the `attn_implementation` set to "
                 f"{self._attn_implementation}. Please set it to 'eager' instead."

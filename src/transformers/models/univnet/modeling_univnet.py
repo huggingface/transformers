@@ -30,16 +30,18 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class UnivNetModelOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Output class for the [`UnivNetModel`], which includes the generated audio waveforms and the original unpadded
     lengths of those waveforms (so that the padding can be removed by [`UnivNetModel.batch_decode`]).
-
-    Args:
-        waveforms (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Batched 1D (mono-channel) output audio waveforms.
-        waveform_lengths (`torch.FloatTensor` of shape `(batch_size,)`):
-            The batched length in samples of each unpadded waveform in `waveforms`.
+    """
+)
+class UnivNetModelOutput(ModelOutput):
+    r"""
+    waveforms (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        Batched 1D (mono-channel) output audio waveforms.
+    waveform_lengths (`torch.FloatTensor` of shape `(batch_size,)`):
+        The batched length in samples of each unpadded waveform in `waveforms`.
     """
 
     waveforms: Optional[torch.FloatTensor] = None

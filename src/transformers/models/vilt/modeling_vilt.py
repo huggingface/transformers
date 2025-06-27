@@ -44,23 +44,21 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class ViltForImagesAndTextClassificationOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Class for outputs of [`ViltForImagesAndTextClassification`].
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Classification (or regression if config.num_labels==1) loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
-            Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        hidden_states (`list[tuple(torch.FloatTensor)]`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            List of tuples of `torch.FloatTensor` (one for each image-text pair, each tuple containing the output of
-            the embeddings + one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`list[tuple(torch.FloatTensor)]`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            List of tuples of `torch.FloatTensor` (one for each image-text pair, each tuple containing the attention
-            weights of shape `(batch_size, num_heads, sequence_length, sequence_length)`. Attentions weights after the
-            attention softmax, used to compute the weighted average in the self-attention heads.
+    """
+)
+class ViltForImagesAndTextClassificationOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Classification (or regression if config.num_labels==1) loss.
+    logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+        Classification (or regression if config.num_labels==1) scores (before SoftMax).
+    hidden_states (`list[tuple(torch.FloatTensor)]`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        List of tuples of `torch.FloatTensor` (one for each image-text pair, each tuple containing the output of
+        the embeddings + one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+        Hidden-states of the model at the output of each layer plus the initial embedding outputs.
     """
 
     loss: Optional[torch.FloatTensor] = None

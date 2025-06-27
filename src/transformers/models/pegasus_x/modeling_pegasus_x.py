@@ -14,8 +14,8 @@
 # limitations under the License.
 """PyTorch PEGASUS-X model."""
 
-import dataclasses
 import math
+from dataclasses import dataclass
 from typing import Callable, Optional, Union
 
 import numpy as np
@@ -42,12 +42,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    auto_docstring,
-    is_torch_flex_attn_available,
-    is_torchdynamo_compiling,
-    logging,
-)
+from ...utils import auto_docstring, is_torch_flex_attn_available, is_torchdynamo_compiling, logging
 from .configuration_pegasus_x import PegasusXConfig
 
 
@@ -58,7 +53,7 @@ if is_torch_flex_attn_available():
 logger = logging.get_logger(__name__)
 
 
-@dataclasses.dataclass
+@dataclass
 class DimensionInfo:
     """Wrapper for dimension info."""
 
