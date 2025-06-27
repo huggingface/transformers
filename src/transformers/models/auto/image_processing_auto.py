@@ -126,7 +126,7 @@ else:
             ("mobilevit", ("MobileViTImageProcessor",)),
             ("mobilevitv2", ("MobileViTImageProcessor",)),
             ("nat", ("ViTImageProcessor", "ViTImageProcessorFast")),
-            ("nougat", ("NougatImageProcessor",)),
+            ("nougat", ("NougatImageProcessor", "NougatImageProcessorFast")),
             ("oneformer", ("OneFormerImageProcessor",)),
             ("owlv2", ("Owlv2ImageProcessor",)),
             ("owlvit", ("OwlViTImageProcessor", "OwlViTImageProcessorFast")),
