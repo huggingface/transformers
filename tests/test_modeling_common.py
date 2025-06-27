@@ -2453,10 +2453,6 @@ class ModelTesterMixin:
 
         return new_tf_outputs, new_pt_outputs
 
-    def assert_almost_equals(self, a: np.ndarray, b: np.ndarray, tol: float):
-        diff = np.abs(a - b).max()
-        self.assertLessEqual(diff, tol, f"Difference between torch and flax is {diff} (>= {tol}).")
-
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -3752,7 +3748,7 @@ class ModelTesterMixin:
                 self.skipTest(
                     "PaliGemma-like models currently (transformers==4.41.0) requires an attention_mask input"
                 )
-            if config.model_type in ["modernbert", "gemma3"]:
+            if config.model_type in ["modernbert", "gemma3", "t5gemma"]:
                 self.skipTest(
                     reason=f"{config.model_type} currently (transformers==4.52.0) automatically adds an attention_mask input"
                 )
@@ -4418,6 +4414,10 @@ class ModelTesterMixin:
 
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         cls = self._torch_compile_train_cls
+        attn_implementation = getattr(self, "_torch_compile_train_attn_implementation", None)
+        if attn_implementation is not None:
+            config._attn_implementation = attn_implementation
+
         model = cls(config).to(torch_device)
 
         inputs = {
@@ -4574,6 +4574,11 @@ class ModelTesterMixin:
                     head_dim = config.head_dim
                     config.head_dim = max(16, config.head_dim)
 
+                cross_head_dim = None
+                if hasattr(config, "cross_head_dim") and config.cross_head_dim is not None:
+                    cross_head_dim = config.cross_head_dim
+                    config.cross_head_dim = max(16, config.cross_head_dim)
+
                 if (
                     getattr(config, "hidden_size", None) is not None
                     and getattr(config, "num_attention_heads", None) is not None
@@ -4587,6 +4592,17 @@ class ModelTesterMixin:
                 ):
                     decoder_head_dim = config.decoder_hidden_size // config.decoder_num_attention_heads
                     config.decoder_hidden_size *= max(16 // decoder_head_dim, 1)
+
+                if (
+                    getattr(config, "cross_hidden_size", None) is not None
+                    and getattr(config, "cross_num_attention_heads", None) is not None
+                ):
+                    cross_head_dim = (
+                        cross_head_dim
+                        if cross_head_dim is not None
+                        else config.cross_hidden_size // config.cross_num_attention_heads
+                    )
+                    config.cross_hidden_size *= max(16 // cross_head_dim, 1)
 
             # Set default attention to flex and update config values
             update_config_for_flex(config)
