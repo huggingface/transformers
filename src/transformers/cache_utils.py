@@ -478,8 +478,9 @@ class Cache:
         return cache
 
     def __repr__(self):
-        #print stack trace
+        # print stack trace
         import traceback
+
         traceback.print_stack()
         return f"{self.__class__.__name__}(layers={self.layers})"
 
