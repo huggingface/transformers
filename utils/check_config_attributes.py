@@ -280,6 +280,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "mlp_bias",
         "mlp_dropout",
         "classifier_activation",
+        "global_attn_every_n_layers",
     ],
 }
 

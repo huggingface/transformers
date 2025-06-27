@@ -99,11 +99,15 @@ class ModernBertDecoderConfig(PretrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
         local_attention (`int`, *optional*, defaults to 128):
-            The sliding window size for local attention. Only used for layers that use local attention.
+            The sliding window size for local attention. Only used for layers that use local attention. Note that for
+            the decoder to match ModernBERT this is actually half of the sliding window size, so 128 => 64.
         global_attn_every_n_layers (`int`, *optional*, defaults to 3):
             Every `global_attn_every_n_layers` layers will use global attention instead of local attention.
         local_rope_theta (`float`, *optional*):
             The base period of the local RoPE embeddings. If not specified, uses the same value as `global_rope_theta`.
+        layer_types (`list`, *optional*):
+            List of layer types, one for each layer. If not specified, will be automatically generated based on
+            `global_attn_every_n_layers`. Should contain "full_attention" or "sliding_window".
 
     Examples:
 
@@ -157,6 +161,7 @@ class ModernBertDecoderConfig(PretrainedConfig):
         local_attention=128,
         global_attn_every_n_layers=3,
         local_rope_theta=None,
+        layer_types=None,
         **kwargs,
     ):
         super().__init__(
@@ -194,6 +199,19 @@ class ModernBertDecoderConfig(PretrainedConfig):
         self.local_attention = local_attention
         self.global_attn_every_n_layers = global_attn_every_n_layers
         self.local_rope_theta = local_rope_theta
+
+        # Set up layer_types for standardized layer type detection
+        self.layer_types = layer_types
+        if self.layer_types is None:
+            # Create layer_types based on the alternating pattern
+            self.layer_types = []
+            for layer_id in range(num_hidden_layers):
+                if layer_id % global_attn_every_n_layers != 0:
+                    self.layer_types.append("sliding_attention")
+                else:
+                    self.layer_types.append("full_attention")
+
+        self.sliding_window = local_attention
 
     def to_dict(self):
         output = super().to_dict()
