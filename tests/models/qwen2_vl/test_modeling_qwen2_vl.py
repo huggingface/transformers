@@ -488,7 +488,7 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXTS = Expectations(
             {
                 ("xpu", 3): [
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices', 
+                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices',
                     'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices',
                 ],
                 ("cuda", None): [
@@ -498,7 +498,7 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
             }
         )  # fmt: skip
         EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
-        
+
         self.assertEqual(DECODED_TEXT, EXPECTED_DECODED_TEXT)
 
     @slow
