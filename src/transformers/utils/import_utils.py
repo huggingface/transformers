@@ -1120,7 +1120,7 @@ def is_flash_attn_2_available():
         return False
 
 
-@lru_cache()
+@lru_cache
 def is_flash_attn_3_available():
     if not is_torch_available():
         return False
