@@ -78,6 +78,7 @@ class MgpstrProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer)
 
+    #  TODO uniformize signature
     def __call__(self, text=None, images=None, return_tensors=None, **kwargs):
         """
         When used in normal mode, this method forwards all its arguments to ViTImageProcessor's
