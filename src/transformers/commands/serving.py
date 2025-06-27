@@ -229,6 +229,11 @@ class ServeCommand(BaseTransformersCLICommand):
         self.model, self.tokenizer = self.load_model_and_tokenizer(args)
         self.use_continuous_batching = self.args.attn_implementation == "sdpa_paged"
 
+        # State: preserves information about the last call and last KV cache, to determine whether we can reuse the KV
+        # cache and avoid re-running prefil
+        self.last_messages = None
+        self.last_kv_cache = None
+
         transformers_logger = logging.get_logger("transformers")
         transformers_logger.setLevel(logging.log_levels[self.args.log_level.lower()])
 
@@ -330,6 +335,21 @@ class ServeCommand(BaseTransformersCLICommand):
 
             return StreamingResponse(stream_response(inputs[0]), media_type="text/event-stream")
 
+    def is_continuation(self, req: ChatCompletionInput):
+        """Determines whether the current request is a continuation of the last request."""
+        req_continues_last_messages = True
+
+        if self.last_messages is None:
+            req_continues_last_messages = False
+        else:
+            for i in range(len(self.last_messages)):
+                if self.last_messages[i] != req.messages[i]:
+                    req_continues_last_messages = False
+                    break
+
+        self.last_messages = req.messages
+        return req_continues_last_messages
+
     def generate(self, app):
         @app.post("/v1/chat/completions")
         def _serve(req: ChatCompletionInput):
@@ -363,15 +383,26 @@ class ServeCommand(BaseTransformersCLICommand):
             max_new_tokens = req.max_tokens or generation_config.max_new_tokens or 256
             generation_config.max_new_tokens = max_new_tokens
 
+            last_kv_cache = None
+            if self.is_continuation(req):
+                last_kv_cache = self.last_kv_cache
+
             generation_kwargs = {
                 "inputs": inputs,
                 "attention_mask": torch.ones_like(inputs),
                 "streamer": generation_streamer,
                 "generation_config": generation_config,
+                "return_dict_in_generate": True,
+                "past_key_values": last_kv_cache,
             }
 
             def stream_response(streamer, _request_id):
-                thread = Thread(target=self.model.generate, kwargs=generation_kwargs)
+                # Thin wrapper to save the KV cache after generation
+                def generate_with_cache(**kwargs):
+                    generate_output = self.model.generate(**kwargs)
+                    self.last_kv_cache = generate_output.past_key_values
+
+                thread = Thread(target=generate_with_cache, kwargs=generation_kwargs)
 
                 try:
                     thread.start()
