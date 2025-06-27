@@ -13,11 +13,19 @@
 # limitations under the License.
 
 import json
+import re
 import time
 from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass, field
 from threading import Thread
-from typing import Dict, Optional
+from typing import Any, Optional
+
+from huggingface_hub import (
+    ChatCompletionStreamOutputChoice,
+    ChatCompletionStreamOutputDelta,
+    ChatCompletionStreamOutputDeltaToolCall,
+    ChatCompletionStreamOutputFunction,
+)
 
 from transformers.utils.import_utils import is_fastapi_available, is_pydantic_available, is_uvicorn_available
 
@@ -55,7 +63,7 @@ if is_pydantic_available() and is_fastapi_available() and is_uvicorn_available()
         stream: Optional[bool] = False
         model: Optional[str] = None
         request_id: Optional[str] = None
-        extra_body: Optional[Dict] = None
+        extra_body: Optional[dict] = None
         frequency_penalty: Optional[float] = None
         logit_bias: Optional[list[float]] = None
         max_tokens: Optional[int] = None
@@ -68,7 +76,7 @@ if is_pydantic_available() and is_fastapi_available() and is_uvicorn_available()
         # that aren't yet supported here.
 
         # logprobs: Optional[bool] = None
-        # tools: Any = None
+        tools: Any = None
         # n: Optional[int] = None
         # presence_penalty: Optional[float] = None
         # response_format: Optional[ChatCompletionInputGrammarType] = None
@@ -81,6 +89,17 @@ if is_pydantic_available() and is_fastapi_available() and is_uvicorn_available()
 logger = logging.get_logger(__name__)
 
 
+# Possible tokens that indicate the start/end of a tool call
+# TODO (joao, matt): streamline tool token detection logic
+_TOOL_CALL_TOKENS = {
+    "qwen": {
+        "start": "<tool_call>",
+        "end": "</tool_call>",
+    },
+}
+_MODELS_WITH_TOOL_SUPPORT = list(_TOOL_CALL_TOKENS.keys())
+
+
 def serve_command_factory(args: Namespace):
     """
     Factory function used to instantiate serving server from provided command line arguments.
@@ -90,7 +109,17 @@ def serve_command_factory(args: Namespace):
     return ServeCommand(args)
 
 
-def create_generation_config_from_req(req: "ChatCompletionInput"):
+def create_generation_config_from_req(req: "ChatCompletionInput") -> "GenerationConfig":
+    """
+    Creates a generation config from the parameters of the request. Note that we can pass a `GenerationConfig`
+    (serialized into a `dict`) in `extra_body`, for full `generate` parameterization.
+
+    Args:
+        req (`ChatCompletionInput`): The request which may optionally contain generation parameters.
+
+    Returns:
+        The prepared `GenerationConfig` object.
+    """
     if req.extra_body is not None and "generation_config" in req.extra_body:
         for key in req.extra_body["generation_config"].keys():
             if key in ChatCompletionInput.base_field_names.keys():
@@ -115,6 +144,20 @@ def create_generation_config_from_req(req: "ChatCompletionInput"):
         torch.manual_seed(req.seed)
 
     return generation_config
+
+
+class ToolState:
+    """Lightweight class to keep track of the tool call state."""
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        """Reset the tool call state (assumes we're outside a tool call)."""
+        self.inside_tool_call = False
+        self.has_tool_name_defined = False
+        self.arg_nesting_level = 0
+        self.buffer = ""
 
 
 @dataclass
@@ -197,13 +240,25 @@ class ServeCommand(BaseTransformersCLICommand):
         self.model, self.tokenizer = self.load_model_and_tokenizer(args)
         self.use_continuous_batching = self.args.attn_implementation == "sdpa_paged"
 
+        # State: preserves information about the last call and last KV cache, to determine whether we can reuse the KV
+        # cache and avoid re-running prefil
+        self.last_messages = None
+        self.last_kv_cache = None
+
         transformers_logger = logging.get_logger("transformers")
         transformers_logger.setLevel(logging.log_levels[self.args.log_level.lower()])
 
         cb_logger = logging.get_logger("transformers.generation.continuous_batching")
         cb_logger.setLevel(logging.log_levels[self.args.log_level.lower()])
 
-    def build_chunk(self, content: str, request_id: str, finish_reason: Optional[str] = None) -> str:
+    def build_chunk(
+        self,
+        content: str,
+        request_id: str,
+        role: Optional[str] = None,
+        finish_reason: Optional[str] = None,
+        tool_calls: Optional[list[ChatCompletionStreamOutputDeltaToolCall]] = None,
+    ) -> str:
         payload = {
             "object": "chat.completion.chunk",
             "id": request_id,
@@ -211,12 +266,16 @@ class ServeCommand(BaseTransformersCLICommand):
             "model": self.args.model_name_or_path,
             "system_fingerprint": "",
             "choices": [
-                {
-                    "index": 0,
-                    "delta": {"role": "assistant", "content": content, "tool_calls": []},
-                    "logprobs": None,
-                    "finish_reason": finish_reason,
-                }
+                ChatCompletionStreamOutputChoice(
+                    delta=ChatCompletionStreamOutputDelta(
+                        role=role,
+                        content=content,
+                        tool_calls=tool_calls,
+                    ),
+                    index=0,
+                    logprobs=None,
+                    finish_reason=finish_reason,
+                ),
             ],
         }
         return f"data: {json.dumps(payload)}\n\n"
@@ -265,7 +324,6 @@ class ServeCommand(BaseTransformersCLICommand):
                 try:
                     max_new_tokens = req.max_tokens or generation_config.max_new_tokens or 256
                     request_id = manager.add_request(_inputs, request_id=req.request_id, max_new_tokens=max_new_tokens)
-                    print(request_id)
                     queue_is_flushed = False
 
                     for result in manager:
@@ -288,13 +346,63 @@ class ServeCommand(BaseTransformersCLICommand):
 
             return StreamingResponse(stream_response(inputs[0]), media_type="text/event-stream")
 
+    def is_continuation(self, req: ChatCompletionInput) -> bool:
+        """
+        Determines whether the current request is a continuation of the last request. In other words, if it is the
+        same chat session.
+
+        Args:
+            req (`ChatCompletionInput`): The request to check.
+
+        Returns:
+            `True` if the request is a continuation of the last request, `False` otherwise.
+        """
+        req_continues_last_messages = True
+
+        # No cached messages: this is a new request
+        if self.last_messages is None:
+            req_continues_last_messages = False
+        # The new request has fewer rounds of conversation: this is a new request
+        elif len(self.last_messages) > len(req.messages):
+            req_continues_last_messages = False
+        # Otherwise, check that the last messages are a subset of the new request
+        else:
+            for i in range(len(self.last_messages)):
+                if self.last_messages[i] != req.messages[i]:
+                    req_continues_last_messages = False
+                    break
+
+        self.last_messages = req.messages
+        return req_continues_last_messages
+
     def generate(self, app):
         @app.post("/v1/chat/completions")
         def _serve(req: ChatCompletionInput):
             if not req.stream:
                 return {"error": "Only streaming mode is supported."}
 
-            text = self.tokenizer.apply_chat_template(req.messages, add_generation_prompt=True, tokenize=False)
+            # HACK for tiny-agents: it sends a request after the assistant message (???). Let's assume we can't have a
+            # request whose last message is from the assistant.
+            if req.messages[-1].role == "assistant":
+                return
+
+            # ====== TOOL PREPROCESSING LOGIC ======
+            tool_model_family = None
+            for supported_model_families in _MODELS_WITH_TOOL_SUPPORT:
+                if supported_model_families in self.model.config.architectures[0].lower():
+                    tool_model_family = supported_model_families
+                    break
+            # TODO: trigger 2 constrained generations after the tool call start token is emitted:
+            # 1. force generation to pick from the tool names
+            # 2. force generation to pick from that tool's arguments
+            # ====== END OF TOOL PREPROCESSING LOGIC ======
+
+            if tool_model_family is not None:
+                text = self.tokenizer.apply_chat_template(
+                    req.messages, add_generation_prompt=True, tokenize=False, tools=req.tools
+                )
+            else:
+                text = self.tokenizer.apply_chat_template(req.messages, add_generation_prompt=True, tokenize=False)
 
             inputs = self.tokenizer(text, return_tensors="pt").to(self.model.device)["input_ids"]
             request_id = req.request_id if req.request_id is not None else "req_0"
@@ -305,24 +413,102 @@ class ServeCommand(BaseTransformersCLICommand):
             max_new_tokens = req.max_tokens or generation_config.max_new_tokens or 256
             generation_config.max_new_tokens = max_new_tokens
 
-            print(generation_config)
+            last_kv_cache = None
+            if self.is_continuation(req):
+                last_kv_cache = self.last_kv_cache
 
             generation_kwargs = {
                 "inputs": inputs,
                 "attention_mask": torch.ones_like(inputs),
                 "streamer": generation_streamer,
                 "generation_config": generation_config,
+                "return_dict_in_generate": True,
+                "past_key_values": last_kv_cache,
             }
 
             def stream_response(streamer, _request_id):
-                thread = Thread(target=self.model.generate, kwargs=generation_kwargs)
+                # Thin wrapper to save the KV cache after generation
+                def generate_with_cache(**kwargs):
+                    generate_output = self.model.generate(**kwargs)
+                    self.last_kv_cache = generate_output.past_key_values
+
+                thread = Thread(target=generate_with_cache, kwargs=generation_kwargs)
 
                 try:
                     thread.start()
+                    tool_state = ToolState()
 
                     for result in streamer:
-                        yield self.build_chunk(result, _request_id)
-                    yield "data: [DONE]\n\n"
+                        # ====== TOOL CALL LOGIC ======
+                        if tool_model_family is not None:
+                            # Start of a tool call: reset state variables, set `inside_tool_call`
+                            if result.strip() == _TOOL_CALL_TOKENS[tool_model_family]["start"]:
+                                tool_state.inside_tool_call = True
+                                continue
+
+                            # End of tool call: reset `inside_tool_call`, emit a `finish_reason`
+                            if result.strip() == _TOOL_CALL_TOKENS[tool_model_family]["end"]:
+                                tool_state.reset()
+                                yield self.build_chunk("", _request_id, role=None, finish_reason="tool_calls")
+                                continue
+
+                            # Inside a tool call
+                            if tool_state.inside_tool_call:
+                                tool_state.buffer += result
+
+                                # First step: extract the tool name (may need several tokens, and we can't emit a delta
+                                # until we have the full name)
+                                if not tool_state.has_tool_name_defined:
+                                    tool_name = re.search(r"\"name\": \"(.*?)\"", tool_state.buffer)
+                                    if tool_name is None:
+                                        continue
+                                    else:
+                                        tool_name = tool_name.group(1)
+                                    tool_state.has_tool_name_defined = True
+                                    tool = ChatCompletionStreamOutputDeltaToolCall(
+                                        function=ChatCompletionStreamOutputFunction(
+                                            name=tool_name,
+                                            arguments=None,
+                                        ),
+                                        index=0,
+                                        type="function",
+                                        id=_request_id + "_tool_call",  # Only the first tool call delta has an id
+                                    )
+
+                                # Second step: extract tool arguments. The tool arguments can be seen as a json string
+                                # within the tool json string. We emit a delta for the arguments.
+                                else:
+                                    # Empty text: skip
+                                    if result == "":
+                                        continue
+                                    # Until we see the `"arguments": {` in the buffer, we skip
+                                    # TODO: other models will likely need more elaborate processing here
+                                    if '"arguments": {' not in tool_state.buffer:
+                                        continue
+
+                                    # Handle nesting. We want to exclude the last } from the emitted arguments (it's
+                                    # closing the outermost nesting level, outside the arguments block)
+                                    tool_state.arg_nesting_level += result.count("{")
+                                    tool_state.arg_nesting_level -= result.count("}")
+                                    if tool_state.arg_nesting_level < 0:
+                                        result = "".join(result.split("}")[:-2]) + "}"  # e.g. "4}}\n" -> "4}"
+
+                                    tool = ChatCompletionStreamOutputDeltaToolCall(
+                                        function=ChatCompletionStreamOutputFunction(
+                                            arguments=result,
+                                        ),
+                                        index=0,
+                                        type="function",
+                                        id=None,
+                                    )
+
+                                yield self.build_chunk(None, _request_id, role=None, tool_calls=[tool])
+                                continue
+                        # ====== END OF TOOL CALL LOGIC ======
+
+                        # All non-tool related tokens are emitted as assistant messages
+                        yield self.build_chunk(result, _request_id, role="assistant")
+                    yield self.build_chunk(None, _request_id, role=None, finish_reason="stop")
 
                     thread.join()
                 except Exception as e:
