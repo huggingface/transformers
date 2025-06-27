@@ -98,6 +98,16 @@ _TOOL_CALL_TOKENS = {
 }
 _MODELS_WITH_TOOL_SUPPORT = list(_TOOL_CALL_TOKENS.keys())
 
+
+def serve_command_factory(args: Namespace):
+    """
+    Factory function used to instantiate serving server from provided command line arguments.
+
+    Returns: ServeCommand
+    """
+    return ServeCommand(args)
+
+
 def create_generation_config_from_req(req: "ChatCompletionInput"):
     if req.extra_body is not None and "generation_config" in req.extra_body:
         for key in req.extra_body["generation_config"].keys():
