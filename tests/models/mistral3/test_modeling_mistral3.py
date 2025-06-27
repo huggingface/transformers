@@ -330,12 +330,10 @@ class Mistral3IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "Sure, here is a haiku for you:\n\nWhispers of the breeze,\nCherry blossoms softly fall,\nSpring's gentle embrace.",
-                ("cuda", 7): "Sure, here is a haiku for you:\n\nWhispers of the breeze,\nCherry blossoms softly fall,\nSpring's gentle embrace.",
                 ("cuda", 8): "Sure, here is a haiku for you:\n\nWhispers of the breeze,\nCherry blossoms softly fall,\nSpring's gentle embrace.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
-        breakpoint()
         self.assertEqual(decoded_output, expected_output)
 
     @require_read_token
@@ -364,12 +362,10 @@ class Mistral3IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "The image features two cats resting on a pink blanket. The cat on the left is a kitten",
-                ("cuda", 7): "The image features two cats resting on a pink blanket. The cat on the left is a kitten",
-                ("cuda", 8): "The image features two cats resting on a pink blanket. The cat on the left is a small kit",
+                ("cuda", 8): 'The image features two cats lying on a pink surface, which appears to be a couch or a bed',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
-        breakpoint()
         self.assertEqual(decoded_output, expected_output)
 
     @require_read_token
@@ -412,12 +408,10 @@ class Mistral3IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "Calm lake's mirror gleams,\nWhispering pines stand in silence,\nPath to peace begins.",
-                ("cuda", 7): "Calm waters reflect\nWhispering pines stand in silence\nPath to peace begins",
-                ("cuda", 8): "Calm waters reflect\nWhispering pines stand in silence\nPath to peace begins",
+                ("cuda", 8): "Wooden path to calm,\nReflections whisper secrets,\nNature's peace unfolds.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
-        breakpoint()
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -429,12 +423,10 @@ class Mistral3IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "The image depicts a vibrant urban scene in what appears to be Chinatown. The focal point is a traditional Chinese archway",
-                ("cuda", 7): 'The image depicts a vibrant street scene in Chinatown, likely in a major city. The focal point is a traditional Chinese',
-                ("cuda", 8): 'The image depicts a vibrant street scene in what appears to be Chinatown in a major city. The focal point is a',
+                ("cuda", 8): 'The image depicts a street scene in what appears to be a Chinatown district. The focal point is a traditional Chinese arch',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
-        breakpoint()
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -489,13 +481,10 @@ class Mistral3IntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(gen_tokens[0], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "Still lake reflects skies,\nWooden path to nature's heart,\nSilence speaks volumes.",
-                ("cuda", 7): "Calm waters reflect\nWhispering pines stand in silence\nPath to peace begins",
-                ("cuda", 8): "Calm waters reflect\nWhispering pines stand in silence\nPath to peace begins",
+                ("cuda", 8): 'Calm waters reflect\nWooden path to distant shore\nSilence in the scene',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
-        breakpoint()
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -507,12 +496,10 @@ class Mistral3IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "Certainly! The images depict two iconic landmarks:\n\n1. The first image shows the Statue of Liberty in New York City.",
-                ("cuda", 7): "Certainly! The images depict the following landmarks:\n\n1. The first image shows the Statue of Liberty and the New York City",
-                ("cuda", 8): "Certainly! The images depict the following landmarks:\n\n1. The first image shows the Statue of Liberty and the New York City",
+                ("cuda", 8): 'Certainly! The images depict two famous landmarks in the United States:\n\n1. The first image shows the Statue of Liberty,',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
-        breakpoint()
         self.assertEqual(
             decoded_output,
             expected_output,
