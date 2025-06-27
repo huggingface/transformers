@@ -1446,6 +1446,8 @@ class ModelTesterMixin:
 
             inputs_dict["output_attentions"] = True
             config.output_hidden_states = False
+            # We need eager to output attention weights
+            config._attn_implementation = "eager"
             model = model_class(config=config)
             model.to(torch_device)
             model.eval()
@@ -1479,6 +1481,7 @@ class ModelTesterMixin:
 
             inputs_dict["output_attentions"] = True
             config.output_hidden_states = False
+            config._attn_implementation = "eager"
             model = model_class(config=config)
             model.to(torch_device)
             model.eval()
@@ -1490,7 +1493,7 @@ class ModelTesterMixin:
 
             with tempfile.TemporaryDirectory() as temp_dir_name:
                 model.save_pretrained(temp_dir_name)
-                model = model_class.from_pretrained(temp_dir_name)
+                model = model_class.from_pretrained(temp_dir_name, attn_implementation="eager")
                 model.to(torch_device)
 
             with torch.no_grad():
@@ -1516,6 +1519,7 @@ class ModelTesterMixin:
 
             inputs_dict["output_attentions"] = True
             config.output_hidden_states = False
+            config._attn_implementation = "eager"
 
             heads_to_prune = {
                 0: list(range(1, self.model_tester.num_attention_heads)),
@@ -1551,6 +1555,7 @@ class ModelTesterMixin:
 
             inputs_dict["output_attentions"] = True
             config.output_hidden_states = False
+            config._attn_implementation = "eager"
 
             heads_to_prune = {1: [1, 2]}
             config.pruned_heads = heads_to_prune
@@ -1568,7 +1573,7 @@ class ModelTesterMixin:
 
             with tempfile.TemporaryDirectory() as temp_dir_name:
                 model.save_pretrained(temp_dir_name)
-                model = model_class.from_pretrained(temp_dir_name)
+                model = model_class.from_pretrained(temp_dir_name, attn_implementation="eager")
                 model.to(torch_device)
 
             with torch.no_grad():
