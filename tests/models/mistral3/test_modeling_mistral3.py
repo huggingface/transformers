@@ -335,6 +335,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
+        breakpoint()
         self.assertEqual(decoded_output, expected_output)
 
     @require_read_token
@@ -368,7 +369,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
-
+        breakpoint()
         self.assertEqual(decoded_output, expected_output)
 
     @require_read_token
@@ -416,6 +417,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
+        breakpoint()
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -432,6 +434,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
+        breakpoint()
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -492,6 +495,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
+        breakpoint()
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -508,7 +512,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
-
+        breakpoint()
         self.assertEqual(
             decoded_output,
             expected_output,
