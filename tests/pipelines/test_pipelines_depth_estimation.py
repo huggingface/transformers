@@ -14,6 +14,7 @@
 
 import unittest
 
+import datasets
 from huggingface_hub import DepthEstimationOutput
 from huggingface_hub.utils import insecure_hashlib
 
@@ -23,7 +24,6 @@ from transformers.testing_utils import (
     compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     nested_simplify,
-    require_tf,
     require_timm,
     require_torch,
     require_vision,
@@ -57,6 +57,17 @@ def hashimage(image: Image) -> str:
 @require_torch
 class DepthEstimationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_DEPTH_ESTIMATION_MAPPING
+    _dataset = None
+
+    @classmethod
+    def _load_dataset(cls):
+        # Lazy loading of the dataset. Because it is a class method, it will only be loaded once per pytest process.
+        if cls._dataset is None:
+            # we use revision="refs/pr/1" until the PR is merged
+            # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
+            cls._dataset = datasets.load_dataset(
+                "hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1"
+            )
 
     def get_test_pipeline(
         self,
@@ -81,23 +92,20 @@ class DepthEstimationPipelineTests(unittest.TestCase):
         ]
 
     def run_pipeline_test(self, depth_estimator, examples):
+        self._load_dataset()
         outputs = depth_estimator("./tests/fixtures/tests_samples/COCO/000000039769.png")
         self.assertEqual({"predicted_depth": ANY(torch.Tensor), "depth": ANY(Image.Image)}, outputs)
-        import datasets
 
-        # we use revision="refs/pr/1" until the PR is merged
-        # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
-        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1")
         outputs = depth_estimator(
             [
                 Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
                 "http://images.cocodataset.org/val2017/000000039769.jpg",
                 # RGBA
-                dataset[0]["image"],
+                self._dataset[0]["image"],
                 # LA
-                dataset[1]["image"],
+                self._dataset[1]["image"],
                 # L
-                dataset[2]["image"],
+                self._dataset[2]["image"],
             ]
         )
         self.assertEqual(
@@ -113,11 +121,6 @@ class DepthEstimationPipelineTests(unittest.TestCase):
 
         for single_output in outputs:
             compare_pipeline_output_to_hub_spec(single_output, DepthEstimationOutput)
-
-    @require_tf
-    @unittest.skip(reason="Depth estimation is not implemented in TF")
-    def test_small_model_tf(self):
-        pass
 
     @slow
     @require_torch

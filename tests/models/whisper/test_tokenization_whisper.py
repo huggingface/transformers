@@ -18,7 +18,7 @@ import numpy as np
 
 from transformers.models.whisper import WhisperTokenizer, WhisperTokenizerFast
 from transformers.models.whisper.tokenization_whisper import _combine_tokens_into_words, _find_longest_common_sequence
-from transformers.testing_utils import require_flax, require_tf, require_torch, slow
+from transformers.testing_utils import require_torch, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -40,12 +40,13 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     test_sentencepiece = False
     test_seq2seq = False
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
         tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny")
         tokenizer.pad_token_id = 50256
         tokenizer.pad_token = "<|endoftext|>"
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     def test_convert_token_and_id(self):
         """Test ``_convert_token_to_id`` and ``_convert_id_to_token``."""
@@ -586,24 +587,6 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
         np_array = np.array(test_list)
         self.assertListEqual(WhisperTokenizer._convert_to_list(np_array), test_list)
         self.assertListEqual(WhisperTokenizerFast._convert_to_list(np_array), test_list)
-
-    @require_tf
-    def test_convert_to_list_tf(self):
-        import tensorflow as tf
-
-        test_list = [[1, 2, 3], [4, 5, 6]]
-        tf_tensor = tf.constant(test_list)
-        self.assertListEqual(WhisperTokenizer._convert_to_list(tf_tensor), test_list)
-        self.assertListEqual(WhisperTokenizerFast._convert_to_list(tf_tensor), test_list)
-
-    @require_flax
-    def test_convert_to_list_jax(self):
-        import jax.numpy as jnp
-
-        test_list = [[1, 2, 3], [4, 5, 6]]
-        jax_array = jnp.array(test_list)
-        self.assertListEqual(WhisperTokenizer._convert_to_list(jax_array), test_list)
-        self.assertListEqual(WhisperTokenizerFast._convert_to_list(jax_array), test_list)
 
     @require_torch
     def test_convert_to_list_pt(self):

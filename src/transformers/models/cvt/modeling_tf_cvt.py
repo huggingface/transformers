@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import collections.abc
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import tensorflow as tf
 
@@ -65,9 +65,9 @@ class TFBaseModelOutputWithCLSToken(ModelOutput):
             the initial embedding outputs.
     """
 
-    last_hidden_state: tf.Tensor = None
-    cls_token_value: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    last_hidden_state: Optional[tf.Tensor] = None
+    cls_token_value: Optional[tf.Tensor] = None
+    hidden_states: tuple[tf.Tensor, ...] | None = None
 
 
 class TFCvtDropPath(keras.layers.Layer):
@@ -769,7 +769,7 @@ class TFCvtEncoder(keras.layers.Layer):
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
         training: Optional[bool] = False,
-    ) -> Union[TFBaseModelOutputWithCLSToken, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithCLSToken, tuple[tf.Tensor]]:
         all_hidden_states = () if output_hidden_states else None
         hidden_state = pixel_values
         # When running on CPU, `keras.layers.Conv2D` doesn't support (batch_size, num_channels, height, width)
@@ -824,7 +824,7 @@ class TFCvtMainLayer(keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-    ) -> Union[TFBaseModelOutputWithCLSToken, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithCLSToken, tuple[tf.Tensor]]:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -896,7 +896,7 @@ TFCVT_START_DOCSTRING = r"""
 
 TFCVT_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`np.ndarray`, `tf.Tensor`, `list[tf.Tensor]` ``dict[str, tf.Tensor]` or `dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`CvtImageProcessor.__call__`]
             for details.
 
@@ -932,7 +932,7 @@ class TFCvtModel(TFCvtPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-    ) -> Union[TFBaseModelOutputWithCLSToken, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithCLSToken, tuple[tf.Tensor]]:
         r"""
         Returns:
 
@@ -1018,7 +1018,7 @@ class TFCvtForImageClassification(TFCvtPreTrainedModel, TFSequenceClassification
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-    ) -> Union[TFImageClassifierOutputWithNoAttention, Tuple[tf.Tensor]]:
+    ) -> Union[TFImageClassifierOutputWithNoAttention, tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,

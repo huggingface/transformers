@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,7 +30,7 @@ from transformers.utils import is_accelerate_available, is_optimum_quanto_availa
 if is_torch_available():
     import torch
 
-    from transformers import LlamaForCausalLM, LlamaTokenizer
+    from transformers import LlamaForCausalLM
 
 if is_accelerate_available():
     from accelerate import init_empty_weights
@@ -224,7 +223,9 @@ class QuantoQuantizationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             with self.assertRaises(ValueError) as e:
                 self.quantized_model.save_pretrained(tmpdirname, safe_serialization=False)
-            self.assertIn("The model is quantized with quanto and is not serializable", str(e.exception))
+            self.assertIn(
+                "The model is quantized with QuantizationMethod.QUANTO and is not serializable", str(e.exception)
+            )
             # TODO: replace by the following when it works
             # quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
             #     tmpdirname, torch_dtype=torch.float32, device_map="cpu"
@@ -238,7 +239,9 @@ class QuantoQuantizationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             with self.assertRaises(ValueError) as e:
                 self.quantized_model.save_pretrained(tmpdirname)
-            self.assertIn("The model is quantized with quanto and is not serializable", str(e.exception))
+            self.assertIn(
+                "The model is quantized with QuantizationMethod.QUANTO and is not serializable", str(e.exception)
+            )
             # quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
             #     tmpdirname, torch_dtype=torch.float32, device_map="cpu"
             # )
@@ -456,7 +459,7 @@ class QuantoKVCacheQuantizationTest(unittest.TestCase):
             "Simply put, the theory of relativity states that ",
             "My favorite all time favorite condiment is ketchup.",
         ]
-        tokenizer = LlamaTokenizer.from_pretrained(
+        tokenizer = AutoTokenizer.from_pretrained(
             "unsloth/Llama-3.2-1B-Instruct", pad_token="</s>", padding_side="left"
         )
         model = LlamaForCausalLM.from_pretrained(

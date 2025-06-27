@@ -22,7 +22,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Chinese-CLIP model was proposed in [Chinese CLIP: Contrastive Vision-Language Pretraining in Chinese](https://arxiv.org/abs/2211.01335) by An Yang, Junshu Pan, Junyang Lin, Rui Men, Yichang Zhang, Jingren Zhou, Chang Zhou.
+The Chinese-CLIP model was proposed in [Chinese CLIP: Contrastive Vision-Language Pretraining in Chinese](https://huggingface.co/papers/2211.01335) by An Yang, Junshu Pan, Junyang Lin, Rui Men, Yichang Zhang, Jingren Zhou, Chang Zhou.
 Chinese-CLIP is an implementation of CLIP (Radford et al., 2021) on a large-scale dataset of Chinese image-text pairs. It is capable of performing cross-modal retrieval and also playing as a vision backbone for vision tasks like zero-shot image classification, open-domain object detection, etc. The original Chinese-CLIP code is released [at this link](https://github.com/OFA-Sys/Chinese-CLIP).
 
 The abstract from the paper is the following:
@@ -88,6 +88,11 @@ Currently, following scales of pretrained Chinese-CLIP models are available on ð
 ## ChineseCLIPImageProcessor
 
 [[autodoc]] ChineseCLIPImageProcessor
+    - preprocess
+
+## ChineseCLIPImageProcessorFast
+
+[[autodoc]] ChineseCLIPImageProcessorFast
     - preprocess
 
 ## ChineseCLIPFeatureExtractor

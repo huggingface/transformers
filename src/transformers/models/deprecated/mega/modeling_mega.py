@@ -15,7 +15,7 @@
 """PyTorch MEGA model."""
 
 import math
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -34,7 +34,6 @@ from ....modeling_outputs import (
     TokenClassifierOutput,
 )
 from ....modeling_utils import PreTrainedModel
-from ....pytorch_utils import ALL_LAYERNORM_LAYERS
 from ....utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -118,7 +117,7 @@ class MegaSimpleRelativePositionalBias(nn.Module):
 
     def forward(self, seq_len):
         if seq_len > self.max_positions:
-            raise ValueError("Sequence length {} going beyond max length {}".format(seq_len, self.max_positions))
+            raise ValueError(f"Sequence length {seq_len} going beyond max length {self.max_positions}")
 
         # seq_len * 2 - 1
         bias = self.rel_pos_bias[(self.max_positions - seq_len) : (self.max_positions + seq_len - 1)]
@@ -298,7 +297,7 @@ class MegaSequenceNorm(nn.Module):
         elif norm_type == "syncbatchnorm":
             self.norm = nn.SyncBatchNorm(embedding_dim, eps=eps, affine=affine)
         else:
-            raise ValueError("Unknown norm type: {}".format(norm_type))
+            raise ValueError(f"Unknown norm type: {norm_type}")
 
     def forward(self, input):
         if isinstance(self.norm, nn.modules.batchnorm._BatchNorm):
@@ -311,15 +310,11 @@ class MegaSequenceNorm(nn.Module):
             return self.norm(input)
 
 
-# add this layernorm class to ALL_LAYERNORM_LAYERS
-ALL_LAYERNORM_LAYERS.append(MegaSequenceNorm)
-
-
 class MegaMultiDimensionDampedEma(nn.Module):
     """
     Mega's Exponential Moving Average layer, largely left unmodified from the original repo with the exception of
     variable names and moving away from the stateful representation of incremental decoding state. See
-    "https://arxiv.org/abs/2209.10655" for more details.
+    "https://huggingface.co/papers/2209.10655" for more details.
     """
 
     def __init__(self, config: MegaConfig):
@@ -463,7 +458,7 @@ class MegaMultiDimensionDampedEma(nn.Module):
             prev_state (`torch.Tensor` of shape `(batch_size, config.ndim)`, *optional*):
                 The hidden state returned from the previous timestep during incremental decoding.
             use_cache (`bool`, default `False`):
-                Whether to perfom incremental decoding; uses `prev_state` as the prior timestep, and returns the
+                Whether to perform incremental decoding; uses `prev_state` as the prior timestep, and returns the
                 updated EMA hidden state for use in the next step
 
         Returns:
@@ -563,7 +558,7 @@ class MegaGatedCrossAttention(nn.Module):
         elif self.config.relative_positional_bias == "rotary":
             self.rel_pos_bias = MegaRotaryRelativePositionalBias(config)
         else:
-            raise ValueError("unknown relative position bias: {}".format(self.config.relative_positional_bias))
+            raise ValueError(f"unknown relative position bias: {self.config.relative_positional_bias}")
 
         self.softmax = nn.Softmax(dim=-1)
 
@@ -629,10 +624,10 @@ class MegaGatedCrossAttention(nn.Module):
         key: Optional[torch.Tensor],
         value: Optional[torch.Tensor],
         key_padding_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[torch.Tensor]] = None,
+        past_key_values: Optional[tuple[torch.Tensor]] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """
         Gated cross-attention used in Mega
 
@@ -652,7 +647,7 @@ class MegaGatedCrossAttention(nn.Module):
             output_attentions (`bool`, defaults to `False`):
                 Whether or not to return the cross-attention weights.
             use_cache (`bool`, defaults to `False`):
-                Whether to perfom incremental decoding; uses `prev_state` as the prior timestep, and returns the
+                Whether to perform incremental decoding; uses `prev_state` as the prior timestep, and returns the
                 updated EMA hidden state for use in the next step
 
         Returns:
@@ -784,7 +779,7 @@ class MegaGatedCrossAttention(nn.Module):
 
 class MegaMovingAverageGatedAttention(nn.Module):
     """
-    Pure PyTorch implementation of Mega block; see https://arxiv.org/abs/2209.10655 and original fairseq implementation
+    Pure PyTorch implementation of Mega block; see https://huggingface.co/papers/2209.10655 and original fairseq implementation
     at https://github.com/facebookresearch/mega (copyright Meta Research, licensed under MIT License)
 
     Differences from original implementation include hidden state refactor and fixed inconsistency with additive /
@@ -914,7 +909,7 @@ class MegaMovingAverageGatedAttention(nn.Module):
         input,
         padding_mask: Optional[torch.Tensor] = None,
         causal_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[torch.Tensor]] = None,
+        past_key_values: Optional[tuple[torch.Tensor]] = None,
         output_attentions=False,
         use_cache=False,
     ):
@@ -936,7 +931,7 @@ class MegaMovingAverageGatedAttention(nn.Module):
             output_attentions (`bool`, default `False`):
                 Whether to return self-attention weights
             use_cache (`bool`, default `False`):
-                Whether to perfom incremental decoding; uses `past_key_values` as prior state, and returns the updated
+                Whether to perform incremental decoding; uses `past_key_values` as prior state, and returns the updated
                 states for use in the next step
 
         Returns:
@@ -1185,10 +1180,10 @@ class MegaBlock(nn.Module):
         causal_mask: Optional[torch.LongTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Tuple[torch.FloatTensor]] = None,
+        past_key_value: Optional[tuple[torch.FloatTensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: bool = False,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         """
         A single Mega layer: either encoder or decoder, with optional cross-attention and optional normalized
         feed-forward layer
@@ -1214,7 +1209,7 @@ class MegaBlock(nn.Module):
             output_attentions (`bool`, default `False`):
                 Whether to return self-attention weights
             use_cache (`bool`, default `False`):
-                Whether to perfom incremental decoding; uses `past_key_value` as prior state, and returns the updated
+                Whether to perform incremental decoding; uses `past_key_value` as prior state, and returns the updated
                 states for use in the next step
 
         Returns:
@@ -1457,7 +1452,7 @@ class MegaModel(MegaPreTrainedModel):
     `is_decoder=True` and `bidirectional=False` argument as well as `add_cross_attention` set to `True`; an
     `encoder_hidden_states` is then expected as an input to the forward pass.
 
-    .. _*Mega: Moving Average Equipped Gated Attention*: https://arxiv.org/abs/2209.10655
+    .. _*Mega: Moving Average Equipped Gated Attention*: https://huggingface.co/papers/2209.10655
 
     """
 
@@ -1493,12 +1488,12 @@ class MegaModel(MegaPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
+    ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
@@ -1684,12 +1679,12 @@ class MegaForCausalLM(MegaPreTrainedModel):
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        past_key_values: Tuple[Tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
+    ) -> Union[tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
@@ -1857,13 +1852,13 @@ class MegaForMaskedLM(MegaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], MaskedLMOutput]:
+    ) -> Union[tuple[torch.Tensor], MaskedLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        kwargs (`Dict[str, any]`, optional, defaults to *{}*):
+        kwargs (`dict[str, any]`, optional, defaults to *{}*):
             Used to hide legacy arguments that have been deprecated.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1937,7 +1932,7 @@ class MegaForSequenceClassification(MegaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
+    ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -2027,7 +2022,7 @@ class MegaForMultipleChoice(MegaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], MultipleChoiceModelOutput]:
+    ) -> Union[tuple[torch.Tensor], MultipleChoiceModelOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
@@ -2116,7 +2111,7 @@ class MegaForTokenClassification(MegaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], TokenClassifierOutput]:
+    ) -> Union[tuple[torch.Tensor], TokenClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -2213,7 +2208,7 @@ class MegaForQuestionAnswering(MegaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], QuestionAnsweringModelOutput]:
+    ) -> Union[tuple[torch.Tensor], QuestionAnsweringModelOutput]:
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
@@ -2271,3 +2266,15 @@ class MegaForQuestionAnswering(MegaPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "MegaForCausalLM",
+    "MegaForMaskedLM",
+    "MegaForMultipleChoice",
+    "MegaForQuestionAnswering",
+    "MegaForSequenceClassification",
+    "MegaForTokenClassification",
+    "MegaModel",
+    "MegaPreTrainedModel",
+]

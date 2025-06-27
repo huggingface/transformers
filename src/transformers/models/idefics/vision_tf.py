@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import tensorflow as tf
 
@@ -55,9 +55,9 @@ class TFIdeficsVisionModelOutput(ModelOutput):
     """
 
     image_embeds: Optional[tf.Tensor] = None
-    last_hidden_state: tf.Tensor = None
-    hidden_states: Optional[Tuple[tf.Tensor]] = None
-    attentions: Optional[Tuple[tf.Tensor]] = None
+    last_hidden_state: Optional[tf.Tensor] = None
+    hidden_states: Optional[tuple[tf.Tensor]] = None
+    attentions: Optional[tuple[tf.Tensor]] = None
 
 
 class TFIdeficsVisionEmbeddings(tf.keras.layers.Layer):
@@ -204,7 +204,7 @@ class TFIdeficsVisionAttention(tf.keras.layers.Layer):
         attention_mask: Optional[tf.Tensor] = None,
         causal_attention_mask: Optional[tf.Tensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[tf.Tensor, Optional[tf.Tensor], Optional[Tuple[tf.Tensor]]]:
+    ) -> tuple[tf.Tensor, Optional[tf.Tensor], Optional[tuple[tf.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         bsz, tgt_len, embed_dim = shape_list(hidden_states)
@@ -335,7 +335,7 @@ class TFIdeficsVisionEncoderLayer(tf.keras.layers.Layer):
         attention_mask: tf.Tensor,
         causal_attention_mask: tf.Tensor,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> tuple[tf.Tensor]:
         """
         Args:
             hidden_states (`tf.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -407,7 +407,7 @@ class TFIdeficsVisionEncoder(tf.keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = None,
-    ) -> Union[Tuple, TFBaseModelOutput]:
+    ) -> Union[tuple, TFBaseModelOutput]:
         r"""
         Args:
             inputs_embeds (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -516,7 +516,7 @@ class TFIdeficsVisionTransformer(TFPreTrainedModel):
         interpolate_pos_encoding: Optional[bool] = False,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-    ) -> Union[Tuple, TFBaseModelOutputWithPooling]:
+    ) -> Union[tuple, TFBaseModelOutputWithPooling]:
         r"""
         Returns:
 

@@ -17,7 +17,6 @@ import os
 import shutil
 import tempfile
 import unittest
-from typing import List
 
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
 from transformers.models.layoutlmv3 import LayoutLMv3Processor, LayoutLMv3Tokenizer, LayoutLMv3TokenizerFast
@@ -29,8 +28,6 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_pytesseract_available():
-    from PIL import Image
-
     from transformers import LayoutLMv3ImageProcessor
 
 
@@ -93,7 +90,7 @@ class LayoutLMv3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
         return self.rust_tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
-    def get_tokenizers(self, **kwargs) -> List[PreTrainedTokenizerBase]:
+    def get_tokenizers(self, **kwargs) -> list[PreTrainedTokenizerBase]:
         return [self.get_tokenizer(**kwargs), self.get_rust_tokenizer(**kwargs)]
 
     def get_image_processor(self, **kwargs):
@@ -173,12 +170,8 @@ class LayoutLMv3ProcessorIntegrationTests(unittest.TestCase):
         # we verify our implementation on 2 document images from the DocVQA dataset
         from datasets import load_dataset
 
-        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test", trust_remote_code=True)
-
-        image_1 = Image.open(ds[0]["file"]).convert("RGB")
-        image_2 = Image.open(ds[1]["file"]).convert("RGB")
-
-        return image_1, image_2
+        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test")
+        return ds[0]["image"].convert("RGB"), ds[1]["image"].convert("RGB")
 
     @cached_property
     def get_tokenizers(self):

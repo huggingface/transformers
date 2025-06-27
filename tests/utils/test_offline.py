@@ -15,7 +15,6 @@
 import subprocess
 import sys
 import unittest
-from typing import Tuple
 
 from transformers import BertConfig, BertModel, BertTokenizer, pipeline
 from transformers.testing_utils import TestCasePlus, require_torch
@@ -195,7 +194,7 @@ print("success")
         stdout, _ = self._execute_with_env(load, run, HF_HUB_OFFLINE="1")
         self.assertIn("True", stdout)
 
-    def _execute_with_env(self, *commands: Tuple[str, ...], should_fail: bool = False, **env) -> Tuple[str, str]:
+    def _execute_with_env(self, *commands: tuple[str, ...], should_fail: bool = False, **env) -> tuple[str, str]:
         """Execute Python code with a given environment and return the stdout/stderr as strings.
 
         If `should_fail=True`, the command is expected to fail. Otherwise, it should succeed.

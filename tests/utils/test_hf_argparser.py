@@ -22,14 +22,13 @@ from argparse import Namespace
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Literal, Optional, Union, get_args, get_origin
+from typing import Literal, Optional, Union, get_args, get_origin
 
 import yaml
 
 from transformers import HfArgumentParser, TrainingArguments
 from transformers.hf_argparser import make_choice_type_function, string_to_bool
 from transformers.testing_utils import require_torch
-from transformers.training_args import _VALID_DICT_FIELDS
 
 
 # Since Python 3.10, we can use the builtin `|` operator for Union types
@@ -94,21 +93,21 @@ class OptionalExample:
     foo: Optional[int] = None
     bar: Optional[float] = field(default=None, metadata={"help": "help message"})
     baz: Optional[str] = None
-    ces: Optional[List[str]] = list_field(default=[])
-    des: Optional[List[int]] = list_field(default=[])
+    ces: Optional[list[str]] = list_field(default=[])
+    des: Optional[list[int]] = list_field(default=[])
 
 
 @dataclass
 class ListExample:
-    foo_int: List[int] = list_field(default=[])
-    bar_int: List[int] = list_field(default=[1, 2, 3])
-    foo_str: List[str] = list_field(default=["Hallo", "Bonjour", "Hello"])
-    foo_float: List[float] = list_field(default=[0.1, 0.2, 0.3])
+    foo_int: list[int] = list_field(default=[])
+    bar_int: list[int] = list_field(default=[1, 2, 3])
+    foo_str: list[str] = list_field(default=["Hallo", "Bonjour", "Hello"])
+    foo_float: list[float] = list_field(default=[0.1, 0.2, 0.3])
 
 
 @dataclass
 class RequiredExample:
-    required_list: List[int] = field()
+    required_list: list[int] = field()
     required_str: str = field()
     required_enum: BasicEnum = field()
 
@@ -122,7 +121,7 @@ class StringLiteralAnnotationExample:
     required_enum: "BasicEnum" = field()
     opt: "Optional[bool]" = None
     baz: "str" = field(default="toto", metadata={"help": "help message"})
-    foo_str: "List[str]" = list_field(default=["Hallo", "Bonjour", "Hello"])
+    foo_str: "list[str]" = list_field(default=["Hallo", "Bonjour", "Hello"])
 
 
 if is_python_no_less_than_3_10:
@@ -412,7 +411,8 @@ class HfArgumentParserTest(unittest.TestCase):
         args = BasicExample(**args_dict_for_yaml)
         self.assertEqual(parsed_args, args)
 
-    def test_integration_training_args(self):
+    def test_z_integration_training_args(self):
+        # make sure that this test executes last in the test suite
         parser = HfArgumentParser(TrainingArguments)
         self.assertIsNotNone(parser)
 
@@ -424,7 +424,7 @@ class HfArgumentParserTest(unittest.TestCase):
         If this fails, a type annotation change is
         needed on a new input
         """
-        base_list = _VALID_DICT_FIELDS.copy()
+        base_list = TrainingArguments._VALID_DICT_FIELDS.copy()
         args = TrainingArguments
 
         # First find any annotations that contain `dict`
@@ -435,18 +435,18 @@ class HfArgumentParserTest(unittest.TestCase):
 
         for field in fields.values():
             # First verify raw dict
-            if field.type in (dict, Dict):
+            if field.type is dict:
                 raw_dict_fields.append(field)
             # Next check for `Union` or `Optional`
             elif get_origin(field.type) == Union:
-                if any(arg in (dict, Dict) for arg in get_args(field.type)):
+                if any(arg is dict for arg in get_args(field.type)):
                     optional_dict_fields.append(field)
 
         # First check: anything in `raw_dict_fields` is very bad
         self.assertEqual(
             len(raw_dict_fields),
             0,
-            "Found invalid raw `dict` types in the `TrainingArgument` typings. "
+            f"Found invalid raw `dict` types in the `TrainingArgument` typings, which are {raw_dict_fields}. "
             "This leads to issues with the CLI. Please turn this into `typing.Optional[dict,str]`",
         )
 
@@ -455,12 +455,15 @@ class HfArgumentParserTest(unittest.TestCase):
             args = get_args(field.type)
             # These should be returned as `dict`, `str`, ...
             # we only care about the first two
-            self.assertIn(args[0], (Dict, dict))
-            self.assertEqual(
-                str(args[1]),
-                "<class 'str'>",
-                f"Expected field `{field.name}` to have a type signature of at least `typing.Union[dict,str,...]` for CLI compatibility, "
-                "but `str` not found. Please fix this.",
+            self.assertIn(
+                dict,
+                args,
+                f"Expected field `{field.name}` to have a type signature of at least `typing.Union[dict,str,...]` for CLI compatibility, but `dict` not found. Please fix this.",
+            )
+            self.assertIn(
+                str,
+                args,
+                f"Expected field `{field.name}` to have a type signature of at least `typing.Union[dict,str,...]` for CLI compatibility, but `str` not found. Please fix this.",
             )
 
         # Second check: anything in `optional_dict_fields` is bad if it's not in `base_list`
@@ -468,7 +471,7 @@ class HfArgumentParserTest(unittest.TestCase):
             self.assertIn(
                 field.name,
                 base_list,
-                f"Optional dict field `{field.name}` is not in the base list of valid fields. Please add it to `training_args._VALID_DICT_FIELDS`",
+                f"Optional dict field `{field.name}` is not in the base list of valid fields. Please add it to `TrainingArguments._VALID_DICT_FIELDS`",
             )
 
     @require_torch

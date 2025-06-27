@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -186,10 +185,11 @@ class ConfigTestUtils(unittest.TestCase):
     def test_config_common_kwargs_is_complete(self):
         base_config = PretrainedConfig()
         missing_keys = [key for key in base_config.__dict__ if key not in config_common_kwargs]
-        # If this part of the test fails, you have arguments to addin config_common_kwargs above.
+        # If this part of the test fails, you have arguments to add in config_common_kwargs above.
         self.assertListEqual(
             missing_keys,
             [
+                "_output_attentions",
                 "is_encoder_decoder",
                 "_name_or_path",
                 "_commit_hash",

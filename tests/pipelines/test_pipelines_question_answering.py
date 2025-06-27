@@ -29,7 +29,6 @@ from transformers.testing_utils import (
     is_pipeline_test,
     is_torch_available,
     nested_simplify,
-    require_tf,
     require_torch,
     require_torch_or_tf,
     slow,
@@ -51,9 +50,9 @@ class QAPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_QUESTION_ANSWERING_MAPPING
     tf_model_mapping = TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING
 
-    if model_mapping is not None:
+    if not hasattr(model_mapping, "is_dummy"):
         model_mapping = {config: model for config, model in model_mapping.items() if config.__name__ not in _TO_SKIP}
-    if tf_model_mapping is not None:
+    if not hasattr(tf_model_mapping, "is_dummy"):
         tf_model_mapping = {
             config: model for config, model in tf_model_mapping.items() if config.__name__ not in _TO_SKIP
         }
@@ -138,7 +137,11 @@ class QAPipelineTests(unittest.TestCase):
             question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris.", top_k=20
         )
         self.assertEqual(
-            outputs, [{"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)} for i in range(20)]
+            outputs,
+            [
+                {"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)}
+                for i in range(len(outputs))
+            ],
         )
         for single_output in outputs:
             compare_pipeline_output_to_hub_spec(single_output, QuestionAnsweringOutputElement)
@@ -279,16 +282,18 @@ class QAPipelineTests(unittest.TestCase):
         )
         self.assertEqual(nested_simplify(outputs), {"score": 0.988, "start": 0, "end": 0, "answer": ""})
 
-    @require_tf
-    def test_small_model_tf(self):
-        question_answerer = pipeline(
-            "question-answering", model="sshleifer/tiny-distilbert-base-cased-distilled-squad", framework="tf"
-        )
+    @require_torch
+    def test_duplicate_handling(self):
+        question_answerer = pipeline("question-answering", model="deepset/tinyroberta-squad2")
+
         outputs = question_answerer(
-            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
+            question="Who is the chancellor of Germany?",
+            context="Angela Merkel was the chancellor of Germany.",
+            top_k=10,
         )
 
-        self.assertEqual(nested_simplify(outputs), {"score": 0.011, "start": 0, "end": 11, "answer": "HuggingFace"})
+        answers = [output["answer"] for output in outputs]
+        self.assertEqual(len(answers), len(set(answers)), "There are duplicate answers in the outputs.")
 
     @slow
     @require_torch
@@ -403,16 +408,6 @@ between them. It's straightforward to train your models with one before loading 
             nested_simplify(outputs),
             {"answer": "Jax, PyTorch and TensorFlow", "end": 1919, "score": 0.971, "start": 1892},
         )
-
-    @slow
-    @require_tf
-    def test_large_model_tf(self):
-        question_answerer = pipeline("question-answering", framework="tf")
-        outputs = question_answerer(
-            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
-        )
-
-        self.assertEqual(nested_simplify(outputs), {"score": 0.979, "start": 27, "end": 32, "answer": "Paris"})
 
 
 @require_torch_or_tf

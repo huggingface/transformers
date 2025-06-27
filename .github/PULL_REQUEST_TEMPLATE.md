@@ -51,12 +51,12 @@ Library:
 - pipelines: @Rocketknight1
 - tensorflow: @gante and @Rocketknight1
 - tokenizers: @ArthurZucker
-- trainer: @muellerzr and @SunMarc
+- trainer: @zach-huggingface, @SunMarc and @qgallouedec
 - chat templates: @Rocketknight1
 
 Integrations:
 
-- deepspeed: HF Trainer/Accelerate: @muellerzr
+- deepspeed: HF Trainer/Accelerate: @SunMarc @zach-huggingface
 - ray/raytune: @richardliaw, @amogkam
 - Big Model Inference: @SunMarc
 - quantization (bitsandbytes, autogpt): @SunMarc @MekkCyber

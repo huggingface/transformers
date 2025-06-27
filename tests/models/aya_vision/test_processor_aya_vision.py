@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,10 +15,9 @@
 import shutil
 import tempfile
 import unittest
-from typing import Optional
 
 from transformers import AutoProcessor, AutoTokenizer, AyaVisionProcessor
-from transformers.testing_utils import require_read_token, require_torch, require_vision
+from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -33,13 +31,13 @@ if is_vision_available():
     from transformers import GotOcr2ImageProcessor
 
 
-@require_read_token
 @require_vision
 class AyaVisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = AyaVisionProcessor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
 
         image_processor = GotOcr2ImageProcessor(
             do_resize=True,
@@ -52,17 +50,21 @@ class AyaVisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             image_std=[0.229, 0.224, 0.225],
             do_convert_rgb=True,
         )
-        tokenizer = AutoTokenizer.from_pretrained("CohereForAI/aya-vision-8b", padding_side="left")
-        processor_kwargs = self.prepare_processor_dict()
+        tokenizer = AutoTokenizer.from_pretrained(
+            "hf-internal-testing/namespace-CohereForAI-repo_name_aya-vision-8b", padding_side="left"
+        )
+        processor_kwargs = cls.prepare_processor_dict()
         processor = AyaVisionProcessor.from_pretrained(
-            "CohereForAI/aya-vision-8b",
+            "hf-internal-testing/namespace-CohereForAI-repo_name_aya-vision-8b",
             image_processor=image_processor,
             tokenizer=tokenizer,
             **processor_kwargs,
         )
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
+        cls.image_token = processor.image_token
 
-    def prepare_processor_dict(self):
+    @staticmethod
+    def prepare_processor_dict():
         return {"patch_size": 10, "img_size": 20}
 
     def get_tokenizer(self, **kwargs):
@@ -74,27 +76,9 @@ class AyaVisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
-
-    # todo: yoni, fix this test
-    @unittest.skip("Chat template has long system prompt")
-    def test_chat_template_accepts_processing_kwargs(self, **kwargs):
-        pass
-
-    # Override as AyaVisionProcessor needs image tokens in prompts
-    def prepare_text_inputs(self, batch_size: Optional[int] = None):
-        if batch_size is None:
-            return "lower newer <image>"
-
-        if batch_size < 1:
-            raise ValueError("batch_size must be greater than 0")
-
-        if batch_size == 1:
-            return ["lower newer <image>"]
-        return ["lower newer <image>", "<image> upper older longer string"] + ["<image> lower newer"] * (
-            batch_size - 2
-        )
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     @require_torch
     def test_process_interleaved_images_videos(self):

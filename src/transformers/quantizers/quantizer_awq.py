@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import importlib.metadata
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Optional
 
 from packaging import version
 
@@ -34,10 +34,10 @@ logger = logging.get_logger(__name__)
 
 class AwqQuantizer(HfQuantizer):
     """
-    4-bit quantization for Activation-aware Weight Quantization(AWQ) (https://arxiv.org/abs/2306.00978)
+    4-bit quantization for Activation-aware Weight Quantization(AWQ) (https://huggingface.co/papers/2306.00978)
     """
 
-    # AWQ requires data callibration - we support only inference
+    # AWQ requires data calibration - we support only inference
     requires_calibration = True
 
     required_packages = ["awq", "accelerate"]
@@ -82,7 +82,9 @@ class AwqQuantizer(HfQuantizer):
                     "your model on a GPU device in order to run your model."
                 )
             elif device_map is not None:
-                if isinstance(device_map, dict) and ("cpu" in device_map.values() or "disk" in device_map.values()):
+                if isinstance(device_map, dict) and any(
+                    forbidden in device_map.values() for forbidden in ("cpu", torch.device("cpu"), "disk")
+                ):
                     raise ValueError(
                         "You are attempting to load an AWQ model with a device_map that contains a CPU or disk device."
                         " This is not supported. Please remove the CPU or disk device from the device_map."
@@ -92,17 +94,20 @@ class AwqQuantizer(HfQuantizer):
         if torch_dtype is None:
             torch_dtype = torch.float16
             logger.info("Loading the model in `torch.float16`. To overwrite it, set `torch_dtype` manually.")
-        elif torch_dtype != torch.float16:
-            logger.warning("We suggest you to set `torch_dtype=torch.float16` for better efficiency with AWQ.")
+        elif torch_dtype == torch.bfloat16 and torch.cuda.is_available():
+            logger.warning("`torch.bfloat16` is not supported for AWQ CUDA kernels yet. Casting to `torch.float16`.")
+            torch_dtype = torch.float16
+        elif torch_dtype != torch.float16 and torch.cuda.is_available():
+            logger.warning("We suggest you to set `torch_dtype=torch.float16` for better efficiency on CUDA with AWQ.")
         return torch_dtype
 
     def _process_model_before_weight_loading(
-        self, model: "PreTrainedModel", keep_in_fp32_modules: Optional[List[str]] = None, **kwargs
+        self, model: "PreTrainedModel", keep_in_fp32_modules: Optional[list[str]] = None, **kwargs
     ):
         from ..integrations import replace_quantization_scales, replace_with_awq_linear
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
+            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules, add_default_skips=True
         )
 
         model, has_been_replaced = replace_with_awq_linear(

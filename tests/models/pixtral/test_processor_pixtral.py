@@ -15,7 +15,7 @@ import shutil
 import tempfile
 import unittest
 
-import requests
+import numpy as np
 import torch
 
 from transformers.testing_utils import require_vision
@@ -25,8 +25,6 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import PixtralProcessor
 
 
@@ -37,11 +35,10 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.url_0 = "https://www.ilankelman.org/stopsigns/australia.jpg"
-        cls.image_0 = Image.open(requests.get(cls.url_0, stream=True).raw)
+        cls.image_0 = np.random.randint(255, size=(3, 876, 1300), dtype=np.uint8)
         cls.url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        cls.image_1 = Image.open(requests.get(cls.url_1, stream=True).raw)
-        cls.url_2 = "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg"
-        cls.image_2 = Image.open(requests.get(cls.url_2, stream=True).raw)
+        cls.image_1 = np.random.randint(255, size=(3, 480, 640), dtype=np.uint8)
+        cls.image_2 = np.random.randint(255, size=(3, 1024, 1024), dtype=np.uint8)
 
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
@@ -50,22 +47,6 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
-
-    def test_chat_template(self):
-        processor = self.processor_class.from_pretrained(self.tmpdirname)
-        expected_prompt = "<s>[INST][IMG]What is shown in this image?[/INST]"
-
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image"},
-                    {"type": "text", "text": "What is shown in this image?"},
-                ],
-            },
-        ]
-        formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
-        self.assertEqual(expected_prompt, formatted_prompt)
 
     def test_image_token_filling(self):
         processor = self.processor_class.from_pretrained(self.tmpdirname)

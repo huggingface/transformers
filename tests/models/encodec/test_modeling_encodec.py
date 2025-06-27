@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -117,7 +116,7 @@ class EncodecModelTester:
         config.normalize = True
 
         processor = EncodecFeatureExtractor(feature_size=config.audio_channels, sampling_rate=config.sampling_rate)
-        input_values = list(input_values.cpu().numpy())
+        input_values = input_values.tolist()
         inputs_dict = processor(
             input_values, sampling_rate=config.sampling_rate, padding=True, return_tensors="pt"
         ).to(torch_device)
@@ -344,18 +343,6 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_hidden_states_output(self):
         pass
 
-    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
-    def test_save_load_low_cpu_mem_usage(self):
-        pass
-
-    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
-    def test_save_load_low_cpu_mem_usage_checkpoints(self):
-        pass
-
-    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
-    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
-        pass
-
     def test_determinism(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -495,7 +482,7 @@ class EncodecIntegrationTest(unittest.TestCase):
                 # use max bandwidth for best possible reconstruction
                 encoder_outputs = model.encode(inputs["input_values"], bandwidth=float(bandwidth))
 
-                audio_code_sums = [a[0].sum().cpu().item() for a in encoder_outputs[0]]
+                audio_code_sums = [a[0].sum().item() for a in encoder_outputs[0]]
 
                 # make sure audio encoded codes are correct
                 self.assertListEqual(audio_code_sums, expected_codesums[bandwidth])
@@ -552,7 +539,7 @@ class EncodecIntegrationTest(unittest.TestCase):
                 encoder_outputs = model.encode(
                     inputs["input_values"], inputs["padding_mask"], bandwidth=float(bandwidth), return_dict=False
                 )
-                audio_code_sums = [a[0].sum().cpu().item() for a in encoder_outputs[0]]
+                audio_code_sums = [a[0].sum().item() for a in encoder_outputs[0]]
 
                 # make sure audio encoded codes are correct
                 self.assertListEqual(audio_code_sums, expected_codesums[bandwidth])
@@ -610,8 +597,8 @@ class EncodecIntegrationTest(unittest.TestCase):
             with torch.no_grad():
                 # use max bandwidth for best possible reconstruction
                 encoder_outputs = model.encode(input_values, bandwidth=float(bandwidth), return_dict=False)
-                audio_code_sums_0 = [a[0][0].sum().cpu().item() for a in encoder_outputs[0]]
-                audio_code_sums_1 = [a[0][1].sum().cpu().item() for a in encoder_outputs[0]]
+                audio_code_sums_0 = [a[0][0].sum().item() for a in encoder_outputs[0]]
+                audio_code_sums_1 = [a[0][1].sum().item() for a in encoder_outputs[0]]
 
                 # make sure audio encoded codes are correct
                 self.assertListEqual(audio_code_sums_0, expected_codesums[bandwidth][0])

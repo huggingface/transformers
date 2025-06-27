@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 Huggingface
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +14,7 @@
 
 import tempfile
 import unittest
+from functools import lru_cache
 from pathlib import Path
 from shutil import copyfile
 
@@ -26,7 +26,7 @@ from transformers.utils import is_sentencepiece_available, is_tf_available, is_t
 if is_sentencepiece_available():
     from transformers.models.marian.tokenization_marian import VOCAB_FILES_NAMES, save_json
 
-from ...test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 
 
 SAMPLE_SP = get_tests_dir("fixtures/test_sentencepiece.model")
@@ -50,22 +50,28 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_rust_tokenizer = False
     test_sentencepiece = True
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+
         vocab = ["</s>", "<unk>", "▁This", "▁is", "▁a", "▁t", "est", "\u0120", "<pad>"]
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
-        save_dir = Path(self.tmpdirname)
+        save_dir = Path(cls.tmpdirname)
         save_json(vocab_tokens, save_dir / VOCAB_FILES_NAMES["vocab"])
         save_json(mock_tokenizer_config, save_dir / VOCAB_FILES_NAMES["tokenizer_config_file"])
         if not (save_dir / VOCAB_FILES_NAMES["source_spm"]).exists():
             copyfile(SAMPLE_SP, save_dir / VOCAB_FILES_NAMES["source_spm"])
             copyfile(SAMPLE_SP, save_dir / VOCAB_FILES_NAMES["target_spm"])
 
-        tokenizer = MarianTokenizer.from_pretrained(self.tmpdirname)
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer = MarianTokenizer.from_pretrained(cls.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
-    def get_tokenizer(self, **kwargs) -> MarianTokenizer:
-        return MarianTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_tokenizer(cls, pretrained_name=None, **kwargs) -> MarianTokenizer:
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return MarianTokenizer.from_pretrained(pretrained_name, **kwargs)
 
     def get_input_output_texts(self, tokenizer):
         return (
@@ -130,7 +136,7 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             decode_kwargs={"use_source_tokenizer": True},
         )
 
-    def test_tokenizer_integration_seperate_vocabs(self):
+    def test_tokenizer_integration_separate_vocabs(self):
         tokenizer = MarianTokenizer.from_pretrained("hf-internal-testing/test-marian-two-vocabs")
 
         source_text = "Tämä on testi"

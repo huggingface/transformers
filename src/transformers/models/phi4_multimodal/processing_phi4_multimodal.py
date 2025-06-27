@@ -17,7 +17,7 @@ Processor class for Phi4Multimodal
 """
 
 import re
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...audio_utils import AudioInput
 from ...image_processing_utils import BatchFeature
@@ -62,26 +62,25 @@ class Phi4MultimodalProcessor(ProcessorMixin):
     tokenizer_class = "GPT2TokenizerFast"
     image_processor_class = "Phi4MultimodalImageProcessorFast"
     audio_processor_class = "Phi4MultimodalFeatureExtractor"
-    valid_kwargs = ["chat_template", "fake_image_token_pattern", "fake_audio_token_pattern"]
 
     def __init__(
         self,
         image_processor,
         audio_processor,
         tokenizer,
-        fake_image_token_pattern: str = r"<\|image_\d+\|>",
-        fake_audio_token_pattern: str = r"<\|audio_\d+\|>",
         **kwargs,
     ):
+        self.image_token = tokenizer.image_token
+        self.image_token_id = tokenizer.image_token_id
+        self.audio_token = tokenizer.audio_token
+        self.audio_token_id = tokenizer.audio_token_id
         super().__init__(image_processor, audio_processor, tokenizer, **kwargs)
-        self.fake_image_token_pattern = fake_image_token_pattern
-        self.fake_audio_token_pattern = fake_audio_token_pattern
 
     def __call__(
         self,
-        text: Union[TextInput, List[TextInput]],
+        text: Union[TextInput, list[TextInput]],
         images: Optional[ImageInput] = None,
-        audios: Optional[AudioInput] = None,
+        audio: Optional[AudioInput] = None,
         **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         """
@@ -92,14 +91,14 @@ class Phi4MultimodalProcessor(ProcessorMixin):
         of the above two methods for more information.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
-            audios (`List[Union[np.ndarray, torch.Tensor]]`):
+            audio (`list[Union[np.ndarray, torch.Tensor]]`):
                 List of the audios to be prepared.
 
         Returns:
@@ -117,10 +116,9 @@ class Phi4MultimodalProcessor(ProcessorMixin):
         output_kwargs = self._merge_kwargs(Phi4MultimodalProcessorKwargs, self.tokenizer.init_kwargs, **kwargs)
         image_kwargs = output_kwargs["images_kwargs"]
         audio_kwargs = output_kwargs["audio_kwargs"]
-        text_kwargs = output_kwargs["text_kwargs"]
 
         image_inputs = self.image_processor(images, **image_kwargs) if images is not None else {}
-        audio_inputs = self.audio_processor(audios, **audio_kwargs) if audios is not None else {}
+        audio_inputs = self.audio_processor(audio, **audio_kwargs) if audio is not None else {}
 
         # We pop here for images as we don't need it later
         num_img_tokens = image_inputs.pop("num_img_tokens", [])
@@ -134,31 +132,33 @@ class Phi4MultimodalProcessor(ProcessorMixin):
 
         image_token = self.tokenizer.image_token
         audio_token = self.tokenizer.audio_token
-        processed_text = [re.sub(self.fake_image_token_pattern, image_token, t) for t in text]
-        processed_text = [re.sub(self.fake_audio_token_pattern, audio_token, t) for t in processed_text]
 
         # Check that the number of special tokens is sound
-        concatenated_prompt = "".join(processed_text)
-        if concatenated_prompt.count(self.tokenizer.image_token) != len(num_img_tokens):
+        concatenated_prompt = "".join(text)
+        if concatenated_prompt.count(image_token) != len(num_img_tokens):
             raise ValueError(
-                "You should add as much image tokens `<|image_i|>` in your prompt as you pass `images` to the processor"
+                "You should add as much image tokens `<|image|>` in your prompt as you pass `images` to the processor. ",
+                f"Input contains {concatenated_prompt.count(image_token)} tokens != {len(num_img_tokens)} images",
             )
-        if concatenated_prompt.count(self.tokenizer.audio_token) != len(audio_embed_sizes):
+        if concatenated_prompt.count(audio_token) != len(audio_embed_sizes):
             raise ValueError(
-                "You should add as much audio tokens `<|audio_i|>` in your prompt as you pass `audios` to the processor"
+                "You should add as much audio tokens `<|audio|>` in your prompt as you pass `audios` to the processor. "
+                f"Input contains {concatenated_prompt.count(audio_token)} tokens != {len(audio_embed_sizes)} audios"
             )
 
         # Add appropriate number of image/audio tokens (note that the count of replacement is dynamic)
         image_count_iter = iter(num_img_tokens)
         audio_count_iter = iter(audio_embed_sizes)
         processed_text = [
-            re.sub(re.escape(image_token), lambda _: image_token * next(image_count_iter), t) for t in processed_text
+            re.sub(re.escape(image_token), lambda _: image_token * next(image_count_iter), t) for t in text
         ]
         processed_text = [
             re.sub(re.escape(audio_token), lambda _: audio_token * next(audio_count_iter), t) for t in processed_text
         ]
 
-        text_inputs = self.tokenizer(processed_text, **text_kwargs)
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        text_inputs = self.tokenizer(processed_text, **output_kwargs["text_kwargs"])
+        self._check_special_mm_tokens(processed_text, text_inputs, modalities=["image"])
 
         # prepare batch feature
         data = {
@@ -167,7 +167,7 @@ class Phi4MultimodalProcessor(ProcessorMixin):
             **audio_inputs,
         }
 
-        return BatchFeature(data=data)
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
     def batch_decode(self, *args, **kwargs):
         """

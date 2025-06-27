@@ -18,7 +18,7 @@ Speech processor class for Wav2Vec2
 
 import warnings
 from contextlib import contextmanager
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
@@ -75,16 +75,14 @@ class Wav2Vec2Processor(ProcessorMixin):
     def __call__(
         self,
         audio: AudioInput = None,
-        text: Optional[Union[str, List[str], TextInput, PreTokenizedInput]] = None,
+        text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
         images=None,
         videos=None,
         **kwargs: Unpack[Wav2Vec2ProcessorKwargs],
     ):
         """
-        When used in normal mode, this method forwards all its arguments to Wav2Vec2FeatureExtractor's
-        [`~Wav2Vec2FeatureExtractor.__call__`] and returns its output. If used in the context
-        [`~Wav2Vec2Processor.as_target_processor`] this method forwards all its arguments to PreTrainedTokenizer's
-        [`~PreTrainedTokenizer.__call__`]. Please refer to the docstring of the above two methods for more information.
+        This method forwards all its arguments to Wav2Vec2FeatureExtractor's
+        [`~Wav2Vec2FeatureExtractor.__call__`] and returns its output.
         """
 
         if "raw_speech" in kwargs:
@@ -123,10 +121,8 @@ class Wav2Vec2Processor(ProcessorMixin):
 
     def pad(self, *args, **kwargs):
         """
-        When used in normal mode, this method forwards all its arguments to Wav2Vec2FeatureExtractor's
-        [`~Wav2Vec2FeatureExtractor.pad`] and returns its output. If used in the context
-        [`~Wav2Vec2Processor.as_target_processor`] this method forwards all its arguments to PreTrainedTokenizer's
-        [`~PreTrainedTokenizer.pad`]. Please refer to the docstring of the above two methods for more information.
+        This method forwards all its arguments to Wav2Vec2FeatureExtractor's
+        [`~Wav2Vec2FeatureExtractor.pad`] and returns its output.
         """
         # For backward compatibility
         if self._in_target_context_manager:

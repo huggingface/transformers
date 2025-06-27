@@ -25,7 +25,6 @@ from torch.optim.lr_scheduler import LambdaLR, ReduceLROnPlateau
 from .trainer_pt_utils import LayerWiseDummyOptimizer, LayerWiseDummyScheduler
 from .trainer_utils import SchedulerType
 from .utils import logging
-from .utils.versions import require_version
 
 
 logger = logging.get_logger(__name__)
@@ -339,8 +338,8 @@ def get_cosine_with_min_lr_schedule_with_warmup(
     num_training_steps: int,
     num_cycles: float = 0.5,
     last_epoch: int = -1,
-    min_lr: float = None,
-    min_lr_rate: float = None,
+    min_lr: Optional[float] = None,
+    min_lr_rate: Optional[float] = None,
 ):
     """
     Create a schedule with a learning rate that decreases following the values of the cosine function between the
@@ -550,6 +549,7 @@ def get_scheduler(
                 optimizer=optimizer_dict[param],
                 num_warmup_steps=num_warmup_steps,
                 num_training_steps=num_training_steps,
+                scheduler_specific_kwargs=scheduler_specific_kwargs,
             )
 
         def scheduler_hook(param):
@@ -608,7 +608,7 @@ class Adafactor(Optimizer):
     AdaFactor pytorch implementation can be used as a drop in replacement for Adam original fairseq code:
     https://github.com/pytorch/fairseq/blob/master/fairseq/optim/adafactor.py
 
-    Paper: *Adafactor: Adaptive Learning Rates with Sublinear Memory Cost* https://arxiv.org/abs/1804.04235 Note that
+    Paper: *Adafactor: Adaptive Learning Rates with Sublinear Memory Cost* https://huggingface.co/papers/1804.04235 Note that
     this optimizer internally adjusts the learning rate depending on the `scale_parameter`, `relative_step` and
     `warmup_init` options. To use a manual (external) learning rate schedule you should set `scale_parameter=False` and
     `relative_step=False`.
@@ -618,7 +618,7 @@ class Adafactor(Optimizer):
             Iterable of parameters to optimize or dictionaries defining parameter groups.
         lr (`float`, *optional*):
             The external learning rate.
-        eps (`Tuple[float, float]`, *optional*, defaults to `(1e-30, 0.001)`):
+        eps (`tuple[float, float]`, *optional*, defaults to `(1e-30, 0.001)`):
             Regularization constants for square gradient and parameter scale respectively
         clip_threshold (`float`, *optional*, defaults to 1.0):
             Threshold of root mean square of final gradient update
@@ -642,7 +642,7 @@ class Adafactor(Optimizer):
         - Training without LR warmup or clip_threshold is not recommended.
 
            - use scheduled LR warm-up to fixed LR
-           - use clip_threshold=1.0 (https://arxiv.org/abs/1804.04235)
+           - use clip_threshold=1.0 (https://huggingface.co/papers/1804.04235)
         - Disable relative updates
         - Use scale_parameter=False
         - Additional optimizer operations like gradient clipping should not be used alongside Adafactor
@@ -701,7 +701,6 @@ class Adafactor(Optimizer):
         relative_step=True,
         warmup_init=False,
     ):
-        require_version("torch>=1.5.0")  # add_ with alpha
         if lr is not None and relative_step:
             raise ValueError("Cannot combine manual `lr` and `relative_step=True` options")
         if warmup_init and not relative_step:

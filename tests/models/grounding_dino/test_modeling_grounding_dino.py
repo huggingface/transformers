@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -328,7 +327,8 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -718,7 +718,7 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
 
     @require_torch_accelerator
     @is_flaky()
-    def test_inference_object_detection_head_equivalence_cpu_gpu(self):
+    def test_inference_object_detection_head_equivalence_cpu_accelerator(self):
         processor = self.default_processor
         image = prepare_img()
         text = prepare_text()
@@ -730,7 +730,7 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
         with torch.no_grad():
             cpu_outputs = model(**encoding)
 
-        # 2. run model on GPU
+        # 2. run model on accelerator
         model.to(torch_device)
         encoding = encoding.to(torch_device)
         with torch.no_grad():
@@ -770,7 +770,7 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
         encoding1 = processor(images=image, text=text1, return_tensors="pt").to(torch_device)
         encoding2 = processor(images=image, text=text2, return_tensors="pt").to(torch_device)
         # If we batch the text and cross attention masking is working the batched result should be equal to
-        # The singe text result
+        # The single text result
         encoding_batched = processor(
             images=[image] * len(text_batched), text=text_batched, padding="longest", return_tensors="pt"
         ).to(torch_device)
