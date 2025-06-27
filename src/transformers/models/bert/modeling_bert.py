@@ -192,16 +192,12 @@ def eager_attn_forward(
     value: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
     scaling: Optional[float] = None,
+    dropout: float = 0.0,
     head_mask: Optional[torch.Tensor] = None,
     use_cache: Optional[bool] = None,
     **kwargs,
 ):
     if scaling is None:
-        logger.warning_once(
-            "You are using a model's `eager` attention module but are not passing its appropriate attention scaling."
-            " We default to `head_dim**-0.5`. If this is unexpected, please report this to the Transformers GitHub"
-            " repo: https://github.com/huggingface/transformers/issues/new"
-        )
         scaling = query.size(-1) ** -0.5
 
     # Take the dot product between "query" and "key" to get the raw attention scores.
@@ -235,7 +231,7 @@ def eager_attn_forward(
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-    attn_weights = module.dropout(attn_weights)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
     if head_mask is not None:
         attn_weights = attn_weights * head_mask
@@ -284,7 +280,7 @@ class BertSelfAttention(nn.Module):
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
-        output_attentions: Optional[bool] = False,
+        output_attentions: Optional[bool] = False,  # Only kept to be BC
         **kwargs,
     ) -> tuple[torch.Tensor]:
         # If this is instantiated as a cross-attention module, the keys
@@ -327,6 +323,11 @@ class BertSelfAttention(nn.Module):
 
         attention_interface: Callable = eager_attn_forward
         if self.config._attn_implementation != "eager":
+            if self.position_embedding_type != "absolute":
+                raise ValueError(
+                    f"You are using {self.config._attn_implementation} as attention type. However, non-absolute "
+                    'positional embeddings can not work with them. Please load the model with `attn_implementation="eager"`.'
+                )
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
@@ -335,11 +336,11 @@ class BertSelfAttention(nn.Module):
             key_layer,
             value_layer,
             attention_mask,
+            dropout=0.0 if not self.training else self.dropout.p,
             scaling=self.scaling,
-            output_attentions=output_attentions,
             head_mask=head_mask,
+            # only for relevant for non-absolute positional embeddings
             use_cache=past_key_value is not None,
-            eager_fallback=eager_attn_forward,
             **kwargs,
         )
         attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
@@ -349,7 +350,7 @@ class BertSelfAttention(nn.Module):
             attn_weights,
         )
         if self.is_decoder:
-            outputs = outputs + (past_key_value,)  # """
+            outputs = outputs + (past_key_value,)
         return outputs
 
 

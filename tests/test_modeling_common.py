@@ -1446,7 +1446,6 @@ class ModelTesterMixin:
 
             inputs_dict["output_attentions"] = True
             config.output_hidden_states = False
-            # We need eager to output attention weights
             config._attn_implementation = "eager"
             model = model_class(config=config)
             model.to(torch_device)
