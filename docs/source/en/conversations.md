@@ -27,6 +27,9 @@ This guide shows you how to quickly start chatting with Transformers from the co
 
 ## transformers CLI
 
+
+### Interactive chat session
+
 After you've [installed Transformers](./installation.md), chat with a model directly from the command line as shown below. It launches an interactive session with a model, with a few base commands listed at the start of the session.
 
 ```bash
@@ -50,6 +53,68 @@ transformers chat -h
 ```
 
 The chat is implemented on top of the [AutoClass](./model_doc/auto), using tooling from [text generation](./llm_tutorial) and [chat](./chat_templating).
+
+
+### Serving a model and using MCP tools
+
+> [!WARNING]
+> This section is experimental and subject to changes in future versions
+
+Powering the `chat` interface, we have a server that takes user messages and returns completions. The server has a chat completion API compatible with the OpenAI SDK, so you can also quickly experiment with `transformers` models on existing aplications. To launch a server separately, use the `transformers serve` CLI:
+
+```bash
+transformers serve Menlo/Jan-nano
+```
+
+Under the hood, the `chat` CLI launches and uses `transformers serve`. This server is also an MCP client, which can receive information available MCP servers (i.e. tools), massage their information into the model prompt, and prepare calls to these tools when the model commands to do so. Naturally, this requires a model that is trained to use tools.
+
+At the moment, MCP tool usage in `transformers` has the following constraints:
+- `chat` can't handle tools, but the [`tiny-agents`](https://huggingface.co/blog/python-tiny-agents) CLI can;
+- Only the `qwen` family of models is supported.
+
+The first step to use MCP tools is to let the model know which tools are available. As an example, let's consider a `tiny-agents` configuration file with a reference to an [image generation MCP server](https://evalstate-flux1-schnell.hf.space/).
+
+> [!TIP]
+> Many [Hugging Face Spaces](https://huggingface.co/spaces) can be used as MCP servers.
+
+```json
+{
+    "model": "http://localhost:8000",
+    "provider": "local",
+    "servers": [
+        {
+            "type": "sse",
+            "config": {
+                "url": "https://evalstate-flux1-schnell.hf.space/gradio_api/mcp/sse"
+            }
+        }
+    ]
+}
+```
+
+You can then launch your `tiny-agents` chat interface with the following command.
+
+```bash
+tiny-agents run path/to/your/config.json
+```
+
+If you have a server (from `transformers serve`) running in the background, you're ready to use MCP tools from a local model! For instance, here's the example of a chat session:
+
+```bash
+Agent loaded with 1 tools:
+ • flux1_schnell_infer
+»  Generate an image of a cat on the moon
+<Tool req_0_tool_call>flux1_schnell_infer {"prompt": "a cat on the moon", "seed": 42, "randomize_seed": true, "width": 1024, "height": 1024, "num_inference_steps": 4}
+
+Tool req_0_tool_call
+[Binary Content: Image image/webp, 57732 bytes]
+The task is complete and the content accessible to the User
+Image URL: https://evalstate-flux1-schnell.hf.space/gradio_api/file=/tmp/gradio/3dbddc0e53b5a865ed56a4e3dbdd30f3f61cf3b8aabf1b456f43e5241bd968b8/image.webp
+380576952
+
+I have generated an image of a cat on the moon using the Flux 1 Schnell Image Generator. The image is 1024x1024 pixels and was created with 4 inference steps. Let me know if you would like to make any changes or need further assistance!
+```
+
 
 ## TextGenerationPipeline
 
