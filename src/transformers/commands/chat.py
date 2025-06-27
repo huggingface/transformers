@@ -458,7 +458,10 @@ class ChatCommand(BaseTransformersCLICommand):
             else:
                 generation_config = GenerationConfig.from_pretrained(args.generation_config)
         else:
-            generation_config = GenerationConfig()
+            # !!!!!!!!!
+            # This is a chat session, so we have a few non-standard defaults
+            # !!!!!!!!!
+            generation_config = GenerationConfig(do_sample=True, max_new_tokens=256)
 
         # Finally: parse and apply `generate_flags`
         parsed_generate_flags = self.parse_generate_flags(args.generate_flags)
