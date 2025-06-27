@@ -39,13 +39,20 @@ from transformers.testing_utils import (
     require_read_token,
     require_torch,
     require_torch_gpu,
+    require_torch_sdpa,
     slow,
     torch_device,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
+    ModelTesterMixin,
+    _test_eager_matches_sdpa_inference,
+    floats_tensor,
+    ids_tensor,
+)
 from ..gemma.test_modeling_gemma import GemmaModelTester
 
 
@@ -362,6 +369,36 @@ class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
                 [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],
                 [expected_shape] * len(iter_hidden_states),
             )
+
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @require_torch_sdpa
+    def test_eager_matches_sdpa_inference(
+        self,
+        name,
+        torch_dtype,
+        padding_side,
+        use_attention_mask,
+        output_attentions,
+        enable_kernels,
+    ):
+        "We need to relax a bit the `atols` for fp32 here due to the altup projections"
+        atols = {
+            ("cpu", False, torch.float32): 1e-3,  # this was relaxed
+            ("cpu", False, torch.float16): 5e-3,
+            ("cpu", False, torch.bfloat16): 1e-2,
+            ("cpu", True, torch.float32): 1e-3,  # this was relaxed
+            ("cpu", True, torch.float16): 5e-3,
+            ("cpu", True, torch.bfloat16): 1e-2,
+            ("cuda", False, torch.float32): 1e-3,  # this was relaxed
+            ("cuda", False, torch.bfloat16): 1e-2,
+            ("cuda", False, torch.float16): 5e-3,
+            ("cuda", True, torch.float32): 1e-3,  # this was relaxed
+            ("cuda", True, torch.bfloat16): 1e-2,
+            ("cuda", True, torch.float16): 5e-3,
+        }
+        _test_eager_matches_sdpa_inference(
+            self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels, atols=atols
+        )
 
 
 class Gemma3nVision2TextModelTester:
