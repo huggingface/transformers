@@ -21,7 +21,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -346,10 +346,11 @@ class MolmoTextConfig(CohereConfig):
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         use_qk_norm (`bool), *optional*, defaults to `False`):
-            Whther to apply layer norm to keys and queries in attention module.
+            Whether to apply layer norm to keys and queries in attention module.
         use_postnorm (`bool), *optional*, defaults to `True`):
-            Whther to apply pre or post layer normalization in each decoder layer.
-
+            Whteher to apply pre or post layer normalization in each decoder layer.
+        layer_types (`list`, *optional*):
+            Attention pattern for each layer.
     ```python
     >>> from transformers import MolmoTextModel, MolmoTextConfig
 
@@ -388,6 +389,7 @@ class MolmoTextConfig(CohereConfig):
         attention_bias=False,
         use_qk_norm=False,
         use_postnorm=True,
+        layer_types=None,
         **kwargs,
     ):
         self.head_dim = head_dim
@@ -395,7 +397,13 @@ class MolmoTextConfig(CohereConfig):
         self.attention_bias = attention_bias
         self.use_qk_norm = use_qk_norm
         self.use_postnorm = use_postnorm
+
         super().__init__(**kwargs)
+        self.layer_types = layer_types
+        if self.layer_types is None:
+            self.layer_types = ["full_attention" for i in range(self.num_hidden_layers)]
+        layer_type_validation(self.layer_types)
+
         del self.logit_scale
 
 
@@ -442,7 +450,7 @@ class MolmoConfig(PretrainedConfig):
     >>> pooling_config = MolmoPoolingConfig()
 
     >>> # Initializing a Molmo allenai/Molmo-7B-D-0924-hf style configuration
-    >>> configuration = MolmoConfig.from_text_vision_configs(vision_config, text_config, pooling_config)
+    >>> configuration = MolmoConfig(vision_config=vision_config, text_config=text_config, pooling_config=pooling_config)
 
     >>> # Initializing a model from the allenai/Molmo-7B-D-0924-hf style configuration
     >>> model = MolmoForConditionalGeneration(configuration)
@@ -486,29 +494,6 @@ class MolmoConfig(PretrainedConfig):
         self.text_config = MolmoTextConfig(**text_config)
         self.pooling_config = MolmoPoolingConfig(**pooling_config)
         self.initializer_range = initializer_range
-
-    @classmethod
-    def from_text_vision_configs(
-        cls,
-        text_config: MolmoTextConfig,
-        vision_config: MolmoVisionConfig,
-        pooling_config: MolmoPoolingConfig,
-        **kwargs,
-    ):
-        r"""
-        Instantiate a [`MolmoConfig`] (or a derived class) from molmo text model configuration, molmo vision model
-        configuration and molmo pooling module conffiguration.
-
-        Returns:
-            [`MolmoConfig`]: An instance of a configuration object
-        """
-
-        return cls(
-            text_config=text_config.to_dict(),
-            vision_config=vision_config.to_dict(),
-            pooling_config=pooling_config.to_dict(),
-            **kwargs,
-        )
 
 
 class MolmoCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
@@ -594,13 +579,7 @@ class MolmoTextAttention(LlamaAttention):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -1102,13 +1081,7 @@ class MolmoPoolingAttention(nn.Module):
 
         attention_interface: Callable = pooling_eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -1222,8 +1195,8 @@ class MolmoModel(LlavaModel):
         self,
         pixel_values: torch.FloatTensor,
         image_masks,
-        vision_feature_layers: list,
-        vision_feature_select_strategy: str,
+        vision_feature_layers: Optional[list],
+        vision_feature_select_strategy: Optional[str],
     ):
         image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
         batch_size, patches, height, width = pixel_values.shape
@@ -1262,6 +1235,7 @@ class MolmoModel(LlavaModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: int = 0,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[tuple, MolmoCausalLMOutputWithPast]:
         r"""
         image_masks (`torch.FloatTensor` or `torch.BoolTensor`, optional):
@@ -1361,6 +1335,7 @@ class MolmoModel(LlavaModel):
             return_dict=return_dict,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            **kwargs,
         )
 
         return MolmoModelOutputWithPast(

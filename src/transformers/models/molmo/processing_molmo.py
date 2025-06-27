@@ -78,7 +78,6 @@ class MolmoProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template"]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
@@ -253,8 +252,6 @@ class MolmoProcessor(ProcessorMixin):
             for mask, offset in zip(image_inputs["image_token_indices"], total_offsets):
                 shifted.append(np.where(mask < 0, mask, mask + int(offset)))
             image_inputs["image_token_indices"] = shifted
-        if kwargs.get("device", None) is not None:
-            text_inputs = text_inputs.to(device=kwargs.get("device"))
         # there is no bos token in Qwen tokenizer
         return BatchFeature(
             data={**text_inputs, **image_inputs}, tensor_type=output_kwargs["common_kwargs"]["return_tensors"]

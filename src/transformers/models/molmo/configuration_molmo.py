@@ -19,7 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
@@ -307,10 +307,11 @@ class MolmoTextConfig(PretrainedConfig):
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         use_qk_norm (`bool), *optional*, defaults to `False`):
-            Whther to apply layer norm to keys and queries in attention module.
+            Whether to apply layer norm to keys and queries in attention module.
         use_postnorm (`bool), *optional*, defaults to `True`):
-            Whther to apply pre or post layer normalization in each decoder layer.
-
+            Whteher to apply pre or post layer normalization in each decoder layer.
+        layer_types (`list`, *optional*):
+            Attention pattern for each layer.
     ```python
     >>> from transformers import MolmoTextModel, MolmoTextConfig
 
@@ -366,6 +367,7 @@ class MolmoTextConfig(PretrainedConfig):
         attention_bias=False,
         use_qk_norm=False,
         use_postnorm=True,
+        layer_types=None,
         **kwargs,
     ):
         super().__init__(
@@ -404,6 +406,10 @@ class MolmoTextConfig(PretrainedConfig):
 
         # Validate the correctness of rotary position embeddings parameters
         rope_config_validation(self)
+        self.layer_types = layer_types
+        if self.layer_types is None:
+            self.layer_types = ["full_attention" for i in range(self.num_hidden_layers)]
+        layer_type_validation(self.layer_types)
 
 
 class MolmoConfig(PretrainedConfig):
@@ -449,7 +455,7 @@ class MolmoConfig(PretrainedConfig):
     >>> pooling_config = MolmoPoolingConfig()
 
     >>> # Initializing a Molmo allenai/Molmo-7B-D-0924-hf style configuration
-    >>> configuration = MolmoConfig.from_text_vision_configs(vision_config, text_config, pooling_config)
+    >>> configuration = MolmoConfig(vision_config=vision_config, text_config=text_config, pooling_config=pooling_config)
 
     >>> # Initializing a model from the allenai/Molmo-7B-D-0924-hf style configuration
     >>> model = MolmoForConditionalGeneration(configuration)
@@ -493,29 +499,6 @@ class MolmoConfig(PretrainedConfig):
         self.text_config = MolmoTextConfig(**text_config)
         self.pooling_config = MolmoPoolingConfig(**pooling_config)
         self.initializer_range = initializer_range
-
-    @classmethod
-    def from_text_vision_configs(
-        cls,
-        text_config: MolmoTextConfig,
-        vision_config: MolmoVisionConfig,
-        pooling_config: MolmoPoolingConfig,
-        **kwargs,
-    ):
-        r"""
-        Instantiate a [`MolmoConfig`] (or a derived class) from molmo text model configuration, molmo vision model
-        configuration and molmo pooling module conffiguration.
-
-        Returns:
-            [`MolmoConfig`]: An instance of a configuration object
-        """
-
-        return cls(
-            text_config=text_config.to_dict(),
-            vision_config=vision_config.to_dict(),
-            pooling_config=pooling_config.to_dict(),
-            **kwargs,
-        )
 
 
 __all__ = ["MolmoConfig", "MolmoPoolingConfig", "MolmoTextConfig", "MolmoVisionConfig"]

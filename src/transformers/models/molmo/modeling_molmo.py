@@ -341,13 +341,7 @@ class MolmoTextAttention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -1309,13 +1303,7 @@ class MolmoPoolingAttention(nn.Module):
 
         attention_interface: Callable = pooling_eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -1434,8 +1422,8 @@ class MolmoModel(MolmoPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         image_masks,
-        vision_feature_layers: list,
-        vision_feature_select_strategy: str,
+        vision_feature_layers: Optional[list],
+        vision_feature_select_strategy: Optional[str],
     ):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
@@ -1492,6 +1480,7 @@ class MolmoModel(MolmoPreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: int = 0,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[tuple, MolmoCausalLMOutputWithPast]:
         r"""
         image_masks (`torch.FloatTensor` or `torch.BoolTensor`, optional):
@@ -1591,6 +1580,7 @@ class MolmoModel(MolmoPreTrainedModel):
             return_dict=return_dict,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            **kwargs,
         )
 
         return MolmoModelOutputWithPast(
