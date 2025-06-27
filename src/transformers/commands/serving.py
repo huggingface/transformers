@@ -98,6 +98,32 @@ _TOOL_CALL_TOKENS = {
 }
 _MODELS_WITH_TOOL_SUPPORT = list(_TOOL_CALL_TOKENS.keys())
 
+def create_generation_config_from_req(req: "ChatCompletionInput"):
+    if req.extra_body is not None and "generation_config" in req.extra_body:
+        for key in req.extra_body["generation_config"].keys():
+            if key in ChatCompletionInput.base_field_names.keys():
+                return {"error": "Duplicated key in the root request and in the passed generation config."}
+
+    if req.extra_body is not None and "generation_config" in req.extra_body:
+        generation_config = GenerationConfig(**(req.extra_body["generation_config"]))
+    else:
+        generation_config = GenerationConfig()
+
+    if req.frequency_penalty is not None:
+        generation_config.repetition_penalty = req.frequency_penalty
+    if req.logit_bias is not None:
+        generation_config.sequence_bias = req.logit_bias
+    if req.stop is not None:
+        generation_config.stop_strings = req.stop
+    if req.temperature is not None:
+        generation_config.temperature = req.temperature
+    if req.top_p is not None:
+        generation_config.top_p = req.top_p
+    if req.seed is not None:
+        torch.manual_seed(req.seed)
+
+    return generation_config
+
 class ToolState:
     """Class to keep track of the tool call state."""
 
