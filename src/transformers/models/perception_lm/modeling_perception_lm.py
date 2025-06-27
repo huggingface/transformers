@@ -263,28 +263,7 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
             sequence length dimension.
         lm_kwargs:
             Additional keyword arguments passed to the language model.
-
-        Example:
-        (TODO: fix example)
-        ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoProcessor, PerceptionLMForConditionalGeneration
-
-        >>> model = PerceptionLMForConditionalGeneration.from_pretrained("facebook/Perception-LM-1B")
-        >>> processor = AutoProcessor.from_pretrained("facebook/Perception-LM-1B")
-
-        >>> prompt = "USER: <image>\nWhat's the content of the image? ASSISTANT:"
-        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(**inputs, max_new_tokens=15)
-        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "USER:  \nWhat's the content of the image? ASSISTANT: The image features a busy city street with a stop sign prominently displayed"
-        ```"""
+        """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
