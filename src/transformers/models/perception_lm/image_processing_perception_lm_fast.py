@@ -68,6 +68,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
+    size = {"width": 448, "height": 448}  # for backward compatibility in tests
     valid_kwargs = PerceptionLMFastImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[PerceptionLMFastImageProcessorKwargs]) -> None:
