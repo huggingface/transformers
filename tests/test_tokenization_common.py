@@ -43,8 +43,6 @@ from transformers import (
     SpecialTokensMixin,
     Trainer,
     TrainingArguments,
-    is_flax_available,
-    is_tf_available,
     is_torch_available,
     logging,
 )
@@ -53,7 +51,6 @@ from transformers.testing_utils import (
     get_tests_dir,
     require_jinja,
     require_read_token,
-    require_tf,
     require_tokenizers,
     require_torch,
     run_test_in_subprocess,
@@ -3106,41 +3103,6 @@ class TokenizerTesterMixin:
         #     model(**encoded_sequence_fast)
         #     model(**batch_encoded_sequence_fast)
 
-    @require_tf
-    @slow
-    def test_tf_encode_plus_sent_to_model(self):
-        from transformers import TF_MODEL_MAPPING, TOKENIZER_MAPPING
-
-        MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(TF_MODEL_MAPPING, TOKENIZER_MAPPING)
-
-        tokenizers = self.get_tokenizers(do_lower_case=False)
-        for tokenizer in tokenizers:
-            with self.subTest(f"{tokenizer.__class__.__name__}"):
-                if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
-                    self.skipTest(f"{tokenizer.__class__.__name__} is not in the MODEL_TOKENIZER_MAPPING")
-
-                config_class, model_class = MODEL_TOKENIZER_MAPPING[tokenizer.__class__]
-                config = config_class()
-
-                if config.is_encoder_decoder or config.pad_token_id is None:
-                    self.skipTest(reason="Model is not an encoder-decoder model or has no set pad token id")
-
-                model = model_class(config)
-
-                # Make sure the model contains at least the full vocabulary size in its embedding matrix
-                self.assertGreaterEqual(model.config.vocab_size, len(tokenizer))
-
-                # Build sequence
-                first_ten_tokens = list(tokenizer.get_vocab().keys())[:10]
-                sequence = " ".join(first_ten_tokens)
-                encoded_sequence = tokenizer.encode_plus(sequence, return_tensors="tf")
-                batch_encoded_sequence = tokenizer.batch_encode_plus([sequence, sequence], return_tensors="tf")
-
-                # This should not fail
-                model(encoded_sequence)
-                model(batch_encoded_sequence)
-
-    # TODO: Check if require_torch is the best to test for numpy here ... Maybe move to require_flax when available
     @require_torch
     @slow
     def test_np_encode_plus_sent_to_model(self):
@@ -3166,7 +3128,6 @@ class TokenizerTesterMixin:
                 encoded_sequence = tokenizer.encode_plus(sequence, return_tensors="np")
                 batch_encoded_sequence = tokenizer.batch_encode_plus([sequence, sequence], return_tensors="np")
 
-                # TODO: add forward through JAX/Flax when PR is merged
                 # This is currently here to make ruff happy !
                 if encoded_sequence is None:
                     raise ValueError("Cannot convert list to numpy tensor on  encode_plus()")
@@ -3181,7 +3142,6 @@ class TokenizerTesterMixin:
                         [sequence, sequence], return_tensors="np"
                     )
 
-                    # TODO: add forward through JAX/Flax when PR is merged
                     # This is currently here to make ruff happy !
                     if encoded_sequence_fast is None:
                         raise ValueError("Cannot convert list to numpy tensor on  encode_plus() (fast)")
@@ -3652,12 +3612,8 @@ class TokenizerTesterMixin:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name}, {tokenizer.__class__.__name__})"):
                 if is_torch_available():
                     returned_tensor = "pt"
-                elif is_tf_available():
-                    returned_tensor = "tf"
-                elif is_flax_available():
-                    returned_tensor = "jax"
                 else:
-                    self.skipTest(reason="No expected framework from PT, TF or JAX found")
+                    self.skipTest(reason="No expected framework (PT) found")
 
                 if not tokenizer.pad_token or tokenizer.pad_token_id < 0:
                     self.skipTest(reason="This tokenizer has no padding token set, or pad_token_id < 0")
