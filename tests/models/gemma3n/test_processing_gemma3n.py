@@ -71,6 +71,9 @@ class Gemma3nProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, GemmaTokenizerFast)
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
 
+        # `disable_grouping` is a new attribute that got added on main while gemma3n was being released - so was
+        # not part of the saved processor 
+        del processor.feature_extractor.disable_grouping
         self.assertIsInstance(processor.feature_extractor, Gemma3nAudioFeatureExtractor)
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
 
@@ -94,6 +97,9 @@ class Gemma3nProcessorTest(unittest.TestCase):
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, GemmaTokenizerFast)
 
+        # `disable_grouping` is a new attribute that got added on main while gemma3n was being released - so was
+        # not part of the saved processor 
+        del processor.feature_extractor.disable_grouping
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.feature_extractor, Gemma3nAudioFeatureExtractor)
 
