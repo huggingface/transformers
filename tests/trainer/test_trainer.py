@@ -2917,9 +2917,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         )
         trainer.train()
         # Check that we have the last known step:
-        assert os.path.exists(
-            os.path.join(tmp_dir, f"checkpoint-{trainer.state.max_steps}")
-        ), f"Could not find checkpoint-{trainer.state.max_steps}"
+        assert os.path.exists(os.path.join(tmp_dir, f"checkpoint-{trainer.state.max_steps}")), (
+            f"Could not find checkpoint-{trainer.state.max_steps}"
+        )
         # And then check the last step
         assert os.path.exists(os.path.join(tmp_dir, "checkpoint-9")), "Could not find checkpoint-9"
 
