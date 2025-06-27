@@ -41,6 +41,7 @@ AUTODOC_FILES = [
     "image_processing_*_fast.py",
     "image_processing_*.py",
     "feature_extractor_*.py",
+    "modular_*.py",
 ]
 
 PLACEHOLDER_TO_AUTO_MODULE = {

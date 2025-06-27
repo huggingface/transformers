@@ -20,7 +20,12 @@ import torch
 import torch.nn as nn
 import torch.utils.checkpoint
 
-from transformers.models.llava.modeling_llava import (
+from ...configuration_utils import PretrainedConfig
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...processing_utils import Unpack
+from ...utils import auto_docstring, can_return_tuple, logging
+from ..auto import CONFIG_MAPPING, AutoConfig
+from ..llava.modeling_llava import (
     KwargsForCausalLM,
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
@@ -28,13 +33,7 @@ from transformers.models.llava.modeling_llava import (
     LlavaModelOutputWithPast,
     LlavaPreTrainedModel,
 )
-from transformers.models.sam.modeling_sam import SamMLPBlock, SamVisionAttention, SamVisionEncoder, SamVisionLayer
-
-from ...configuration_utils import PretrainedConfig
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, logging
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..sam.modeling_sam import SamMLPBlock, SamVisionAttention, SamVisionEncoder, SamVisionLayer
 
 
 logger = logging.get_logger(__name__)
