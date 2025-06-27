@@ -16,6 +16,7 @@ import unittest
 
 import numpy as np
 
+from transformers.image_utils import PILImageResampling
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
@@ -51,6 +52,7 @@ class ChameleonImageProcessingTester:
         image_mean=[1.0, 1.0, 1.0],
         image_std=[1.0, 1.0, 1.0],
         do_convert_rgb=True,
+        resample=PILImageResampling.BILINEAR,
     ):
         size = size if size is not None else {"shortest_edge": 18}
         crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
@@ -68,6 +70,7 @@ class ChameleonImageProcessingTester:
         self.image_mean = image_mean
         self.image_std = image_std
         self.do_convert_rgb = do_convert_rgb
+        self.resample = resample
 
     def prepare_image_processor_dict(self):
         return {
@@ -79,6 +82,7 @@ class ChameleonImageProcessingTester:
             "image_mean": self.image_mean,
             "image_std": self.image_std,
             "do_convert_rgb": self.do_convert_rgb,
+            "resample": self.resample,
         }
 
     # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTester.expected_output_image_shape
