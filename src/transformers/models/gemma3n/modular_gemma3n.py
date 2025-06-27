@@ -1732,7 +1732,7 @@ class Gemma3nTextAttention(Gemma3Attention):
         self.v_norm = Gemma3nRMSNorm(dim=config.head_dim, eps=config.rms_norm_eps, with_scale=False)
 
         first_kv_shared_layer_idx = self.config.num_hidden_layers - self.config.num_kv_shared_layers
-        self.is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx
+        self.is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx > 0
         # Find the index of the last sliding or full layer before sharing starts (or None if no sharing)
         layer_type = config.layer_types[layer_idx]
         self.kv_shared_layer_index = (
@@ -1761,18 +1761,15 @@ class Gemma3nTextAttention(Gemma3Attention):
         query_states = query_states.transpose(1, 2)
 
         if self.is_kv_shared_layer and self.kv_shared_layer_index is not None and past_key_value is not None:
-            # HybridCache has complex slicing when layer_type == "sliding_attention" that impact Shared KV Cache.
+            indices = cache_position
+            # In this case we need special handling of the slice as the layer is of fixed small size (for full layers, we never go beyond)
             if isinstance(past_key_value, HybridCache) and self.is_sliding:
                 max_length = past_key_value.sliding_window
-                if cache_position.shape[0] > max_length:
-                    # If in the prefill phase for a "sliding_attention" layer and the prefill is larger than the cache,
-                    # slice into the entire cache.
-                    indices = slice(0, max_length)
-                else:
-                    # If prefill fits or generating for a "sliding_attention" layer, clamp to max_cache_len - 1
-                    indices = cache_position.clamp(min=0, max=max_length - 1)
-            else:
-                indices = cache_position
+                indices = (
+                    slice(0, max_length)
+                    if cache_position.shape[0] > max_length
+                    else cache_position.clamp(min=0, max=max_length - 1)
+                )
 
             key_states = past_key_value.key_cache[self.kv_shared_layer_index][:, :, indices]
             value_states = past_key_value.value_cache[self.kv_shared_layer_index][:, :, indices]
