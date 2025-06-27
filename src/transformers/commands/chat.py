@@ -20,7 +20,6 @@ import platform
 import re
 import string
 import time
-import warnings
 from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass, field
 from threading import Thread
@@ -108,19 +107,6 @@ If you're a new user, check this basic flag guide: https://huggingface.co/docs/t
 `./chat_history/{{MODEL_NAME}}/chat_{{DATETIME}}.yaml` or `{{SAVE_NAME}}` if provided
 - **!exit**: closes the interface
 """
-
-# format: (optional CLI arg being deprecated, its current default, corresponding `generate` flag)
-_DEPRECATION_MAP = [
-    ("max_new_tokens", 256, "max_new_tokens"),
-    ("do_sample", True, "do_sample"),
-    ("num_beams", 1, "num_beams"),
-    ("temperature", 1.0, "temperature"),
-    ("top_k", 50, "top_k"),
-    ("top_p", 1.0, "top_p"),
-    ("repetition_penalty", 1.0, "repetition_penalty"),
-    ("eos_tokens", None, "eos_token_id"),
-    ("eos_token_ids", None, "eos_token_id"),
-]
 
 
 class RichInterface:
@@ -252,25 +238,6 @@ class ChatArguments:
             ),
         },
     )
-    # Deprecated CLI args start here
-    max_new_tokens: int = field(default=256, metadata={"help": "Maximum number of tokens to generate."})
-    do_sample: bool = field(default=True, metadata={"help": "Whether to sample outputs during generation."})
-    num_beams: int = field(default=1, metadata={"help": "Number of beams for beam search."})
-    temperature: float = field(default=1.0, metadata={"help": "Temperature parameter for generation."})
-    top_k: int = field(default=50, metadata={"help": "Value of k for top-k sampling."})
-    top_p: float = field(default=1.0, metadata={"help": "Value of p for nucleus sampling."})
-    repetition_penalty: float = field(default=1.0, metadata={"help": "Repetition penalty."})
-    eos_tokens: Optional[str] = field(
-        default=None,
-        metadata={
-            "help": "EOS tokens (text format) to stop the generation. If multiple they should be comma separated."
-        },
-    )
-    eos_token_ids: Optional[str] = field(
-        default=None,
-        metadata={"help": "EOS token IDs to stop the generation. If multiple they should be comma separated."},
-    )
-    # Deprecated CLI args end here
 
     # Model loading
     model_revision: str = field(
@@ -353,8 +320,6 @@ class ChatCommand(BaseTransformersCLICommand):
         chat_parser.set_defaults(func=chat_command_factory)
 
     def __init__(self, args):
-        args = self._handle_deprecated_args(args)
-
         if args.model_name_or_path_or_address is not None:
             name = args.model_name_or_path_or_address
             if name.startswith("http") or name.startswith("https") or name.startswith("localhost"):
@@ -385,32 +350,6 @@ class ChatCommand(BaseTransformersCLICommand):
             )
 
         self.args = args
-
-    def _handle_deprecated_args(self, args: ChatArguments) -> ChatArguments:
-        """
-        Handles deprecated arguments and their deprecation cycle. To be removed after we fully migrated to the new
-        args.
-        """
-        has_warnings = False
-
-        # Named generate option args
-        for deprecated_arg, default_value, new_arg in _DEPRECATION_MAP:
-            value = getattr(args, deprecated_arg)
-            if value != default_value:
-                has_warnings = True
-                warnings.warn(
-                    f"The --{deprecated_arg} argument is deprecated will be removed in v4.54.0. There are two "
-                    "alternative solutions to specify this generation option: \n"
-                    "1. Pass `--generation-config <path_to_file/Hub repo>` to specify a generation config.\n"
-                    "2. Pass `generate` flags through positional arguments, e.g. `transformers chat <model_repo> "
-                    f"{new_arg}={value}`",
-                    FutureWarning,
-                )
-
-        if has_warnings:
-            print("\n(Press enter to continue)")
-            input()
-        return args
 
     # -----------------------------------------------------------------------------------------------------------------
     # Chat session methods
