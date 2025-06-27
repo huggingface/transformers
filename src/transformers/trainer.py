@@ -230,7 +230,6 @@ if is_accelerate_available():
         AutocastKwargs,
         DistributedDataParallelKwargs,
         DistributedType,
-        TorchTensorParallelPlugin,
         load_fsdp_model,
         load_fsdp_optimizer,
         save_fsdp_model,
