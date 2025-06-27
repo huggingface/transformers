@@ -287,6 +287,7 @@ class Glm4vVisionAttention(nn.Module):
         self.attention_dropout = config.attention_dropout
         self.qkv = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=config.attention_bias)
         self.proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
+        self.is_causal = False
 
     def forward(
         self,
@@ -324,7 +325,7 @@ class Glm4vVisionAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scale,
-            is_causal=False,
+            is_causal=self.is_causal,
             **kwargs,
         )
         attn_output = attn_output.squeeze(0)
