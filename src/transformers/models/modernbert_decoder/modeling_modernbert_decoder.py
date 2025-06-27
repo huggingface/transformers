@@ -157,20 +157,6 @@ class ModernBertDecoderAttention(nn.Module):
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        # FlashAttention only supports fp16 and bf16 data types
-        if self.config._attn_implementation == "flash_attention_2":
-            original_dtype = query.dtype
-            if original_dtype not in (torch.float16, torch.bfloat16):
-                # Cast to bfloat16 if available, otherwise fp16
-                target_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-                query = query.to(target_dtype)
-                key = key.to(target_dtype)
-                value = value.to(target_dtype)
-                if attention_mask is not None:
-                    attention_mask = attention_mask.to(target_dtype)
-        else:
-            original_dtype = None
-
         # Pass sliding window parameter for sliding attention layers
         sliding_window_param = self.local_attention[0] if self.local_attention[0] != -1 else None
 
@@ -188,13 +174,6 @@ class ModernBertDecoderAttention(nn.Module):
 
         attn_output = attn_outputs[0]
         attn_weights = attn_outputs[1] if output_attentions and len(attn_outputs) > 1 else None
-
-        # Cast back to original dtype if we changed it for FlashAttention
-        if self.config._attn_implementation == "flash_attention_2" and original_dtype is not None:
-            if original_dtype not in (torch.float16, torch.bfloat16):
-                attn_output = attn_output.to(original_dtype)
-                if attn_weights is not None:
-                    attn_weights = attn_weights.to(original_dtype)
 
         # Reshape to [batch_size, seq_len, hidden_size] - this handles both eager and FA2 outputs
         input_shape = hidden_states.shape[:-1]
@@ -793,4 +772,3 @@ __all__ = [
     "ModernBertDecoderForCausalLM",
     "ModernBertDecoderForSequenceClassification",
 ]
-
