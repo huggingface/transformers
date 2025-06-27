@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
+<!-- Github Training>-->
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://huggingface.co/datasets/huggingface/documentation-images/raw/main/transformers-logo-dark.svg">
@@ -22,6 +24,7 @@ limitations under the License.
   </picture>
   <br/>
   <br/>
+  <em>Powered by Hugging Face</em>
 </p>
 
 <p align="center">
