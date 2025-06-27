@@ -245,8 +245,8 @@ jobs:
           name: ${{ env.machine_type }}_run_examples_gpu_test_reports
           path: reports/${{ env.machine_type }}_run_examples_gpu_test_reports
 
-  run_deepspeed_gpu:
-    if: ${{ inputs.job == 'run_deepspeed_gpu' }}
+  run_torch_cuda_extensions_gpu:
+    if: ${{ inputs.job == 'run_torch_cuda_extensions_gpu' }}
     name: Intel Gaudi deepspeed tests
     strategy:
       fail-fast: false
@@ -302,20 +302,20 @@ jobs:
 
       - name: Run all deepspeed tests on intel Gaudi
         run: |
-          python3 -m pytest -v --make-reports=${{ env.machine_type }}_run_deepspeed_gpu_test_reports tests/deepspeed -m "not not_device_test"
+          python3 -m pytest -v --make-reports=${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports tests/deepspeed -m "not not_device_test"
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
         run: |
-          cat reports/${{ env.machine_type }}_run_deepspeed_gpu_test_reports/failures_short.txt
+          cat reports/${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports/failures_short.txt
 
-      - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_deepspeed_gpu_test_reports"
+      - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports"
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.machine_type }}_run_deepspeed_gpu_test_reports
-          path: reports/${{ env.machine_type }}_run_deepspeed_gpu_test_reports
+          name: ${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports
+          path: reports/${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports
 
   send_results:
     name: Slack Report
@@ -324,7 +324,7 @@ jobs:
         setup,
         run_models_gpu,
         run_examples_gpu,
-        run_deepspeed_gpu,
+        run_torch_cuda_extensions_gpu,
         run_pipelines_torch_gpu,
         run_trainer_and_fsdp_gpu,
       ]

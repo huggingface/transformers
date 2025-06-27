@@ -40,7 +40,6 @@ job_to_test_map = {
     "run_examples_gpu": "Examples directory",
     "run_torch_cuda_extensions_gpu": "DeepSpeed",
     "run_quantization_torch_gpu": "Quantization",
-    "run_deepspeed_gpu": "DeepSpeed",
 }
 
 # The values are used as the file names where to save the corresponding CI job results.
