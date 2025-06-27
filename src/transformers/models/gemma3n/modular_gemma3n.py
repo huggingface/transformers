@@ -1903,7 +1903,7 @@ class Gemma3nTextDecoderLayer(Gemma3DecoderLayer):
 class Gemma3nPreTrainedModel(Gemma2PreTrainedModel):
     config_class = Gemma3nConfig
     base_model_prefix = ""
-    _no_split_modules = ["Gemma3nDecoderLayer"]
+    _no_split_modules = ["Gemma3nTextDecoderLayer"]
 
     def _init_weights(self, module):
         # important: this ported version of Gemma2 isn't meant for training from scratch - only
