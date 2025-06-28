@@ -20,10 +20,15 @@ rendered properly in your Markdown viewer.
 
 The [Ovis2](https://github.com/AIDC-AI/Ovis) is an updated version of the [Ovis](https://arxiv.org/abs/2405.20797) model developed by the AIDC-AI team at Alibaba International Digital Commerce Group. 
 
-The abstract from this update is the following:
+Ovis2 is the latest advancement in multi-modal large language models (MLLMs), succeeding Ovis1.6. It retains the architectural design of the Ovis series, which focuses on aligning visual and textual embeddings, and introduces major improvements in data curation and training methods.
 
-*It brings major improvements, including better performance for small models, stronger reasoning ability, advanced video and multi-image processing, wider multilingual OCR support, and improved handling of high-resolution images.*
+<img src="https://cdn-uploads.huggingface.co/production/uploads/637aebed7ce76c3b834cea37/XB-vgzDL6FshrSNGyZvzc.png"  width="600">
 
+<small> Ovis2 architecture.</small>
+
+This model was contributed by [thisisiron](https://huggingface.co/thisisiron).
+
+## Usage example
 
 ```python
 
