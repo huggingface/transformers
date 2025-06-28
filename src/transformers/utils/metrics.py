@@ -2,7 +2,7 @@ import functools
 import logging
 import time
 from enum import Enum
-from typing import Any, Callable, List, Optional, Tuple, Union
+from typing import Any, Callable, Optional, Union
 
 import torch
 
@@ -98,7 +98,7 @@ def traced(
     *,
     span_name=None,
     standalone=False,
-    additional_attributes: Optional[List[Tuple[str, str, Union[Any, Callable[[Any], Any]]]]] = None,
+    additional_attributes: Optional[list[tuple[str, str, Union[Any, Callable[[Any], Any]]]]] = None,
 ):
     """
     Decorator to trace function calls with OpenTelemetry.
@@ -301,7 +301,7 @@ class ContinuousBatchProcessorMetrics:
             logger.warning(f"Failed to record TTFT metric: {e}")
 
     @traced
-    def record_batch_metrics(self, requests_in_batch: List) -> None:
+    def record_batch_metrics(self, requests_in_batch: list) -> None:
         """Record metrics about the batch composition including decode/prefill ratio and batch fill percentage.
 
         Args:
