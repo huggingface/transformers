@@ -60,6 +60,7 @@ FLAX_MODEL_MAPPING_NAMES = OrderedDict(
         ("t5", "FlaxT5Model"),
         ("vision-text-dual-encoder", "FlaxVisionTextDualEncoderModel"),
         ("vit", "FlaxViTModel"),
+        ("dust3r", "FlaxDust3RModel"),
         ("wav2vec2", "FlaxWav2Vec2Model"),
         ("whisper", "FlaxWhisperModel"),
         ("xglm", "FlaxXGLMModel"),
@@ -129,6 +130,7 @@ FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("regnet", "FlaxRegNetForImageClassification"),
         ("resnet", "FlaxResNetForImageClassification"),
         ("vit", "FlaxViTForImageClassification"),
+        ("dust3r", "FlaxDust3RForImageClassification"),
     ]
 )
 
