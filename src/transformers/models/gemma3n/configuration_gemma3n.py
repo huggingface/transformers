@@ -575,7 +575,7 @@ class Gemma3nConfig(PretrainedConfig):
             Custom vision config or dict.
         audio_config (`Union[AutoConfig, dict]`,  *optional*):
             Custom audio config or dict.
-        audio_soft_tokens_per_image (`int`, *optional*, defaults to 188):
+        audio_soft_tokens_per_audio (`int`, *optional*, defaults to 188):
             The number of soft tokens per audio clip.
         vision_soft_tokens_per_image (`int`, *optional*, defaults to 256):
             The number of soft tokens per image.
@@ -631,7 +631,7 @@ class Gemma3nConfig(PretrainedConfig):
         text_config: Optional[Union[Gemma3nTextConfig, dict[str, Any]]] = None,
         vision_config: Optional[Union[Gemma3nVisionConfig, dict[str, Any]]] = None,
         audio_config: Optional[Union[Gemma3nAudioConfig, dict[str, Any]]] = None,
-        audio_soft_tokens_per_image: int = 188,
+        audio_soft_tokens_per_audio: int = 188,
         vision_soft_tokens_per_image: int = 256,
         boi_token_id: int = 255_999,
         eoi_token_id: int = 262_144,
@@ -666,7 +666,7 @@ class Gemma3nConfig(PretrainedConfig):
         self.vision_config = vision_config
         self.audio_config = audio_config
 
-        self.audio_soft_tokens_per_image = audio_soft_tokens_per_image
+        self.audio_soft_tokens_per_audio = audio_soft_tokens_per_audio
         self.vision_soft_tokens_per_image = vision_soft_tokens_per_image
         self.boi_token_id = boi_token_id
         self.eoi_token_id = eoi_token_id
