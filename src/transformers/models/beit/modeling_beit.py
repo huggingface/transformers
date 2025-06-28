@@ -37,7 +37,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import compile_compatible_method_lru_cache, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import auto_docstring, logging, torch_int
+from ...utils import auto_docstring, can_return_tuple, logging, torch_int
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_beit import BeitConfig
 
@@ -648,6 +648,7 @@ class BeitEncoder(nn.Module):
         )
         self.gradient_checkpointing = False
 
+    @can_return_tuple
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -656,8 +657,7 @@ class BeitEncoder(nn.Module):
         output_hidden_states: bool = False,
         interpolate_pos_encoding: bool = False,
         resolution: Optional[tuple[int, int]] = None,
-        return_dict: bool = True,
-    ) -> Union[tuple, BaseModelOutput]:
+    ) -> BaseModelOutput:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -692,9 +692,6 @@ class BeitEncoder(nn.Module):
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return BaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
@@ -773,6 +770,7 @@ class BeitModel(BeitPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -782,8 +780,7 @@ class BeitModel(BeitPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BeitModelOutputWithPooling]:
+    ) -> BeitModelOutputWithPooling:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
@@ -792,7 +789,6 @@ class BeitModel(BeitPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -810,16 +806,11 @@ class BeitModel(BeitPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             resolution=resolution,
-            return_dict=return_dict,
             interpolate_pos_encoding=interpolate_pos_encoding,
         )
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output)
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
-
-        if not return_dict:
-            head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
-            return head_outputs + encoder_outputs[1:]
 
         return BeitModelOutputWithPooling(
             last_hidden_state=sequence_output,
@@ -870,6 +861,7 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -880,8 +872,7 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, MaskedLMOutput]:
+    ) -> MaskedLMOutput:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
@@ -914,7 +905,6 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         >>> list(logits.shape)
         [1, 196, 8192]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.beit(
             pixel_values,
@@ -923,7 +913,6 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=return_dict,
         )
 
         sequence_output = outputs[0]
@@ -934,10 +923,6 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         if labels is not None:
             loss_fct = CrossEntropyLoss()  # -100 index = padding token
             masked_lm_loss = loss_fct(prediction_scores[bool_masked_pos], labels)
-
-        if not return_dict:
-            output = (prediction_scores,) + outputs[1:]
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
         return MaskedLMOutput(
             loss=masked_lm_loss,
@@ -966,6 +951,7 @@ class BeitForImageClassification(BeitPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -975,25 +961,22 @@ class BeitForImageClassification(BeitPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, ImageClassifierOutput]:
+    ) -> ImageClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         outputs = self.beit(
             pixel_values,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=return_dict,
         )
 
-        pooled_output = outputs.pooler_output if return_dict else outputs[1]
+        pooled_output = outputs.pooler_output
 
         logits = self.classifier(pooled_output)
 
@@ -1019,9 +1002,6 @@ class BeitForImageClassification(BeitPreTrainedModel):
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return ImageClassifierOutput(
             loss=loss,
@@ -1319,6 +1299,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
 
         return loss
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1328,8 +1309,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, SemanticSegmenterOutput]:
+    ) -> SemanticSegmenterOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
@@ -1353,7 +1333,6 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         >>> # logits are of shape (batch_size, num_labels, height, width)
         >>> logits = outputs.logits
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -1367,10 +1346,9 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=True,  # we need the intermediate hidden states
             interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=return_dict,
         )
 
-        encoder_hidden_states = outputs.hidden_states if return_dict else outputs[1]
+        encoder_hidden_states = outputs.hidden_states
 
         # only keep certain features, and reshape
         # note that we do +1 as the encoder_hidden_states also includes the initial embeddings
@@ -1395,13 +1373,6 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         loss = None
         if labels is not None:
             loss = self.compute_loss(logits, auxiliary_logits, labels)
-
-        if not return_dict:
-            if output_hidden_states:
-                output = (logits,) + outputs[1:]
-            else:
-                output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return SemanticSegmenterOutput(
             loss=loss,
@@ -1450,13 +1421,13 @@ class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         pixel_values: Tensor,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
     ) -> BackboneOutput:
         r"""
         Examples:
@@ -1482,7 +1453,6 @@ class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
         >>> list(feature_maps[-1].shape)
         [1, 768, 14, 14]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -1497,10 +1467,9 @@ class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
             output_hidden_states=True,
             output_attentions=output_attentions,
             resolution=resolution,
-            return_dict=return_dict,
         )
 
-        hidden_states = outputs.hidden_states if return_dict else outputs[1]
+        hidden_states = outputs.hidden_states
 
         feature_maps = ()
         for stage, hidden_state in zip(self.stage_names, hidden_states):
@@ -1520,13 +1489,6 @@ class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
                 self.fpn4(feature_maps[3]),
             ]
             feature_maps = tuple(feature_maps)
-
-        if not return_dict:
-            if output_hidden_states:
-                output = (feature_maps,) + outputs[1:]
-            else:
-                output = (feature_maps,) + outputs[2:]
-            return output
 
         return BackboneOutput(
             feature_maps=feature_maps,

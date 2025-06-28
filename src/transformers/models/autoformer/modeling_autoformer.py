@@ -34,7 +34,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ModelOutput, SampleTSPredictionOutput, Seq2SeqTSPredictionOutput
 from ...modeling_utils import PreTrainedModel
 from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
-from ...utils import auto_docstring, is_torch_flex_attn_available, logging
+from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
 from .configuration_autoformer import AutoformerConfig
 
 
@@ -928,6 +928,7 @@ class AutoformerEncoder(AutoformerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     def forward(
         self,
         attention_mask: Optional[torch.Tensor] = None,
@@ -935,8 +936,7 @@ class AutoformerEncoder(AutoformerPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutput]:
+    ) -> BaseModelOutput:
         r"""
         Args:
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -962,14 +962,11 @@ class AutoformerEncoder(AutoformerPreTrainedModel):
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         hidden_states = self.value_embedding(inputs_embeds)
         embed_pos = self.embed_positions(inputs_embeds.size())
@@ -1020,9 +1017,6 @@ class AutoformerEncoder(AutoformerPreTrainedModel):
 
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
         return BaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
@@ -1057,6 +1051,7 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     def forward(
         self,
         trend: Optional[torch.Tensor] = None,
@@ -1070,8 +1065,7 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, AutoFormerDecoderOutput]:
+    ) -> AutoFormerDecoderOutput:
         r"""
         Args:
             trend (`torch.FloatTensor` of shape `(batch_size, prediction_length, feature_size)`, *optional*):
@@ -1131,15 +1125,12 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning(
@@ -1220,12 +1211,6 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
             all_hidden_states += (hidden_states,)
 
         next_cache = next_decoder_cache if use_cache else None
-        if not return_dict:
-            return tuple(
-                v
-                for v in [hidden_states, trend, next_cache, all_hidden_states, all_self_attns, all_cross_attentions]
-                if v is not None
-            )
         return AutoFormerDecoderOutput(
             last_hidden_state=hidden_states,
             trend=trend,
@@ -1411,6 +1396,7 @@ class AutoformerModel(AutoformerPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1430,8 +1416,7 @@ class AutoformerModel(AutoformerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         use_cache: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[AutoformerModelOutput, tuple]:
+    ) -> AutoformerModelOutput:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Past values of the time series, that serve as context in order to predict the future. These values may
@@ -1534,7 +1519,6 @@ class AutoformerModel(AutoformerPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         transformer_inputs, temporal_features, loc, scale, static_feat = self.create_network_inputs(
             past_values=past_values,
@@ -1559,10 +1543,9 @@ class AutoformerModel(AutoformerPreTrainedModel):
                 head_mask=head_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
             )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
+        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput
+        elif not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
                 last_hidden_state=encoder_outputs[0],
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
@@ -1611,13 +1594,9 @@ class AutoformerModel(AutoformerPreTrainedModel):
                 use_cache=use_cache,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
             )
         else:
             decoder_outputs = AutoFormerDecoderOutput()
-
-        if not return_dict:
-            return decoder_outputs + encoder_outputs + (loc, scale, static_feat)
 
         return AutoformerModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
@@ -1676,6 +1655,7 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
             sliced_params = [p[:, -trailing_n:] for p in params]
         return self.distribution_output.distribution(sliced_params, loc=loc, scale=scale)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1696,8 +1676,7 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         use_cache: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Seq2SeqTSPredictionOutput, tuple]:
+    ) -> Seq2SeqTSPredictionOutput:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Past values of the time series, that serve as context in order to predict the future. These values may
@@ -1860,8 +1839,6 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
 
         </Tip>
         """
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if future_values is not None:
             use_cache = False
 
@@ -1882,7 +1859,6 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
             use_cache=use_cache,
-            return_dict=return_dict,
         )
 
         prediction_loss = None
@@ -1904,10 +1880,6 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
                 loss_weights, _ = future_observed_mask.min(dim=-1, keepdim=False)
 
             prediction_loss = weighted_average(loss, weights=loss_weights)
-
-        if not return_dict:
-            outputs = ((params,) + outputs[2:]) if params is not None else outputs[2:]
-            return ((prediction_loss,) + outputs) if prediction_loss is not None else outputs
 
         return Seq2SeqTSPredictionOutput(
             loss=prediction_loss,
