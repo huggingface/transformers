@@ -85,7 +85,10 @@ if is_scipy_available():
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
-SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
+SUPPORTED_ANNOTATION_FORMATS = (
+    AnnotationFormat.COCO_DETECTION,
+    AnnotationFormat.COCO_PANOPTIC,
+)
 
 
 # Copied from transformers.models.detr.image_processing_detr.get_size_with_aspect_ratio
@@ -257,7 +260,8 @@ def max_across_indices(values: Iterable[Any]) -> list[Any]:
 
 # Copied from transformers.models.detr.image_processing_detr.get_max_height_width
 def get_max_height_width(
-    images: list[np.ndarray], input_data_format: Optional[Union[str, ChannelDimension]] = None
+    images: list[np.ndarray],
+    input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> list[int]:
     """
     Get the maximum height and width across all images in a batch.
@@ -276,7 +280,9 @@ def get_max_height_width(
 
 # Copied from transformers.models.detr.image_processing_detr.make_pixel_mask
 def make_pixel_mask(
-    image: np.ndarray, output_size: tuple[int, int], input_data_format: Optional[Union[str, ChannelDimension]] = None
+    image: np.ndarray,
+    output_size: tuple[int, int],
+    input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> np.ndarray:
     """
     Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
@@ -352,7 +358,10 @@ def prepare_coco_detection_annotation(
 
     # for conversion to coco api
     area = np.asarray([obj["area"] for obj in annotations], dtype=np.float32)
-    iscrowd = np.asarray([obj["iscrowd"] if "iscrowd" in obj else 0 for obj in annotations], dtype=np.int64)
+    iscrowd = np.asarray(
+        [obj["iscrowd"] if "iscrowd" in obj else 0 for obj in annotations],
+        dtype=np.int64,
+    )
 
     boxes = [obj["bbox"] for obj in annotations]
     # guard against no boxes via resizing
@@ -454,13 +463,16 @@ def prepare_coco_panoptic_annotation(
             new_target["masks"] = masks
         new_target["boxes"] = masks_to_boxes(masks)
         new_target["class_labels"] = np.array(
-            [segment_info["category_id"] for segment_info in target["segments_info"]], dtype=np.int64
+            [segment_info["category_id"] for segment_info in target["segments_info"]],
+            dtype=np.int64,
         )
         new_target["iscrowd"] = np.asarray(
-            [segment_info["iscrowd"] for segment_info in target["segments_info"]], dtype=np.int64
+            [segment_info["iscrowd"] for segment_info in target["segments_info"]],
+            dtype=np.int64,
         )
         new_target["area"] = np.asarray(
-            [segment_info["area"] for segment_info in target["segments_info"]], dtype=np.float32
+            [segment_info["area"] for segment_info in target["segments_info"]],
+            dtype=np.float32,
         )
 
     return new_target
@@ -468,7 +480,11 @@ def prepare_coco_panoptic_annotation(
 
 # Copied from transformers.models.detr.image_processing_detr.get_segmentation_image
 def get_segmentation_image(
-    masks: np.ndarray, input_size: tuple, target_size: tuple, stuff_equiv_classes, deduplicate=False
+    masks: np.ndarray,
+    input_size: tuple,
+    target_size: tuple,
+    stuff_equiv_classes,
+    deduplicate=False,
 ):
     h, w = input_size
     final_h, final_w = target_size
@@ -503,7 +519,9 @@ def get_mask_area(seg_img: np.ndarray, target_size: tuple[int, int], n_classes: 
 
 
 # Copied from transformers.models.detr.image_processing_detr.score_labels_from_class_probabilities
-def score_labels_from_class_probabilities(logits: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def score_labels_from_class_probabilities(
+    logits: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
     probs = scipy.special.softmax(logits, axis=-1)
     labels = probs.argmax(-1, keepdims=True)
     scores = np.take_along_axis(probs, labels, axis=-1)
@@ -760,7 +778,10 @@ def compute_segments(
 
     if target_size is not None:
         mask_probs = nn.functional.interpolate(
-            mask_probs.unsqueeze(0), size=target_size, mode="bilinear", align_corners=False
+            mask_probs.unsqueeze(0),
+            size=target_size,
+            mode="bilinear",
+            align_corners=False,
         )[0]
 
     current_segment_id = 0
@@ -874,19 +895,27 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         do_convert_annotations: Optional[bool] = None,
         do_pad: bool = True,
         pad_size: Optional[dict[str, int]] = None,
+        max_size: Optional[int] = None,
         **kwargs,
     ) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
 
-        if "max_size" in kwargs:
+        if max_size is not None or "max_size" in kwargs:
+            if max_size is None:
+                max_size = kwargs.pop("max_size")
             logger.warning_once(
                 "The `max_size` parameter is deprecated and will be removed in v4.26. "
                 "Please specify in `size['longest_edge'] instead`.",
             )
-            max_size = kwargs.pop("max_size")
-        else:
-            max_size = None if size is None else 1333
+            if size is None:
+                size = {"shortest_edge": 800, "longest_edge": max_size}
+            else:
+                # If size is already provided, we need to handle max_size appropriately
+                if isinstance(size, dict) and "longest_edge" not in size:
+                    size = dict(size)  # Make a copy to avoid modifying the original
+                    size["longest_edge"] = max_size
+                # If size already has longest_edge, the max_size is ignored (deprecated behavior)
 
         size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
         size = get_size_dict(size, max_size=max_size, default_to_square=False)
@@ -940,7 +969,30 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         """
         image_processor_dict = image_processor_dict.copy()
         if "max_size" in kwargs:
-            image_processor_dict["max_size"] = kwargs.pop("max_size")
+            max_size = kwargs.pop("max_size")
+            # Check for size in both image_processor_dict and kwargs
+            size = kwargs.get("size", image_processor_dict.get("size"))
+            
+            if size is not None:
+                # If size is an integer, convert to shortest_edge dict
+                if isinstance(size, int):
+                    size = {"shortest_edge": size}
+                # If size is a dict but missing longest_edge, add it
+                elif isinstance(size, dict) and "longest_edge" not in size:
+                    size = dict(size)  # Make a copy
+                
+                if isinstance(size, dict) and "longest_edge" not in size:
+                    size["longest_edge"] = max_size
+                    
+                # Update both locations if size was in kwargs
+                if "size" in kwargs:
+                    kwargs["size"] = size
+                else:
+                    image_processor_dict["size"] = size
+            else:
+                # If no size provided, create default size with max_size
+                image_processor_dict["size"] = {"shortest_edge": 800, "longest_edge": max_size}
+                
         if "pad_and_return_pixel_mask" in kwargs:
             image_processor_dict["pad_and_return_pixel_mask"] = kwargs.pop("pad_and_return_pixel_mask")
         return super().from_dict(image_processor_dict, **kwargs)
@@ -963,7 +1015,10 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         if format == AnnotationFormat.COCO_DETECTION:
             return_segmentation_masks = False if return_segmentation_masks is None else return_segmentation_masks
             target = prepare_coco_detection_annotation(
-                image, target, return_segmentation_masks, input_data_format=input_data_format
+                image,
+                target,
+                return_segmentation_masks,
+                input_data_format=input_data_format,
             )
         elif format == AnnotationFormat.COCO_PANOPTIC:
             return_segmentation_masks = True if return_segmentation_masks is None else return_segmentation_masks
@@ -1019,16 +1074,26 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
                 "Please specify in `size['longest_edge'] instead`.",
             )
             max_size = kwargs.pop("max_size")
+            # If size is already a dict but missing longest_edge, add it from max_size
+            if isinstance(size, dict) and "longest_edge" not in size:
+                size = dict(size)  # Make a copy
+                size["longest_edge"] = max_size
         else:
             max_size = None
         size = get_size_dict(size, max_size=max_size, default_to_square=False)
         if "shortest_edge" in size and "longest_edge" in size:
             new_size = get_resize_output_image_size(
-                image, size["shortest_edge"], size["longest_edge"], input_data_format=input_data_format
+                image,
+                size["shortest_edge"],
+                size["longest_edge"],
+                input_data_format=input_data_format,
             )
         elif "max_height" in size and "max_width" in size:
             new_size = get_image_size_for_max_height_width(
-                image, size["max_height"], size["max_width"], input_data_format=input_data_format
+                image,
+                size["max_height"],
+                size["max_width"],
+                input_data_format=input_data_format,
             )
         elif "height" in size and "width" in size:
             new_size = (size["height"], size["width"])
@@ -1088,7 +1153,12 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
         """
-        return rescale(image, rescale_factor, data_format=data_format, input_data_format=input_data_format)
+        return rescale(
+            image,
+            rescale_factor,
+            data_format=data_format,
+            input_data_format=input_data_format,
+        )
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.normalize_annotation
     def normalize_annotation(self, annotation: dict, image_size: tuple[int, int]) -> dict:
@@ -1172,7 +1242,11 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         )
         if annotation is not None:
             annotation = self._update_annotation_for_padded_image(
-                annotation, (input_height, input_width), (output_height, output_width), padding, update_bboxes
+                annotation,
+                (input_height, input_width),
+                (output_height, output_width),
+                padding,
+                update_bboxes,
             )
         return padded_image, annotation
 
@@ -1248,7 +1322,11 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
 
         if return_pixel_mask:
             masks = [
-                make_pixel_mask(image=image, output_size=padded_size, input_data_format=input_data_format)
+                make_pixel_mask(
+                    image=image,
+                    output_size=padded_size,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
             data["pixel_mask"] = masks
@@ -1372,7 +1450,17 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
                 "The `max_size` argument is deprecated and will be removed in a future version, use"
                 " `size['longest_edge']` instead."
             )
-            size = kwargs.pop("max_size")
+            max_size = kwargs.pop("max_size")
+            if size is None:
+                size = {"shortest_edge": 800, "longest_edge": max_size}
+            else:
+                # If size is already provided, we need to handle max_size appropriately
+                if isinstance(size, dict) and "longest_edge" not in size:
+                    size = dict(size)  # Make a copy to avoid modifying the original
+                    size["longest_edge"] = max_size
+                # If size already has longest_edge, the max_size is ignored (deprecated behavior)
+        else:
+            max_size = None if size is None else 1333
 
         do_resize = self.do_resize if do_resize is None else do_resize
         size = self.size if size is None else size
@@ -1397,7 +1485,10 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
+        validate_kwargs(
+            captured_kwargs=kwargs.keys(),
+            valid_processor_keys=self._valid_processor_keys,
+        )
 
         # Here, the pad() method pads to the maximum of (width, height). It does not need to be validated.
         validate_preprocess_arguments(
@@ -1472,10 +1563,15 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
                 for image, target in zip(images, annotations):
                     orig_size = get_image_size(image, input_data_format)
                     resized_image = self.resize(
-                        image, size=size, resample=resample, input_data_format=input_data_format
+                        image,
+                        size=size,
+                        resample=resample,
+                        input_data_format=input_data_format,
                     )
                     resized_annotation = self.resize_annotation(
-                        target, orig_size, get_image_size(resized_image, input_data_format)
+                        target,
+                        orig_size,
+                        get_image_size(resized_image, input_data_format),
                     )
                     resized_images.append(resized_image)
                     resized_annotations.append(resized_annotation)
@@ -1484,7 +1580,12 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
                 del resized_images, resized_annotations
             else:
                 images = [
-                    self.resize(image, size=size, resample=resample, input_data_format=input_data_format)
+                    self.resize(
+                        image,
+                        size=size,
+                        resample=resample,
+                        input_data_format=input_data_format,
+                    )
                     for image in images
                 ]
 
@@ -1671,7 +1772,10 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
             semantic_segmentation = []
             for idx in range(batch_size):
                 resized_logits = nn.functional.interpolate(
-                    segmentation[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
+                    segmentation[idx].unsqueeze(dim=0),
+                    size=target_sizes[idx],
+                    mode="bilinear",
+                    align_corners=False,
                 )
                 semantic_map = resized_logits[0].argmax(dim=0)
                 semantic_segmentation.append(semantic_map)

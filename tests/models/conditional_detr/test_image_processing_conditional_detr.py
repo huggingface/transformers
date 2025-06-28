@@ -20,9 +20,17 @@ import unittest
 import numpy as np
 
 from transformers.testing_utils import require_torch, require_vision, slow
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import (
+    is_torch_available,
+    is_torchvision_available,
+    is_vision_available,
+)
 
-from ...test_image_processing_common import AnnotationFormatTestMixin, ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    AnnotationFormatTestMixin,
+    ImageProcessingTestMixin,
+    prepare_image_inputs,
+)
 
 
 if is_torch_available():
@@ -161,7 +169,10 @@ class ConditionalDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcess
             self.assertEqual(image_processor.do_pad, True)
 
             image_processor = image_processing_class.from_dict(
-                self.image_processor_dict, size=42, max_size=84, pad_and_return_pixel_mask=False
+                self.image_processor_dict,
+                size=42,
+                max_size=84,
+                pad_and_return_pixel_mask=False,
             )
             self.assertEqual(image_processor.size, {"shortest_edge": 42, "longest_edge": 84})
             self.assertEqual(image_processor.do_pad, False)
@@ -185,16 +196,35 @@ class ConditionalDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcess
             self.assertEqual(encoding["pixel_values"].shape, expected_shape)
 
             expected_slice = torch.tensor([0.2796, 0.3138, 0.3481])
-            torch.testing.assert_close(encoding["pixel_values"][0, 0, 0, :3], expected_slice, rtol=1e-4, atol=1e-4)
+            torch.testing.assert_close(
+                encoding["pixel_values"][0, 0, 0, :3],
+                expected_slice,
+                rtol=1e-4,
+                atol=1e-4,
+            )
 
             # verify area
-            expected_area = torch.tensor([5887.9600, 11250.2061, 489353.8438, 837122.7500, 147967.5156, 165732.3438])
+            expected_area = torch.tensor(
+                [
+                    5887.9600,
+                    11250.2061,
+                    489353.8438,
+                    837122.7500,
+                    147967.5156,
+                    165732.3438,
+                ]
+            )
             torch.testing.assert_close(encoding["labels"][0]["area"], expected_area)
             # verify boxes
             expected_boxes_shape = torch.Size([6, 4])
             self.assertEqual(encoding["labels"][0]["boxes"].shape, expected_boxes_shape)
             expected_boxes_slice = torch.tensor([0.5503, 0.2765, 0.0604, 0.2215])
-            torch.testing.assert_close(encoding["labels"][0]["boxes"][0], expected_boxes_slice, rtol=1e-3, atol=1e-3)
+            torch.testing.assert_close(
+                encoding["labels"][0]["boxes"][0],
+                expected_boxes_slice,
+                rtol=1e-3,
+                atol=1e-3,
+            )
             # verify image_id
             expected_image_id = torch.tensor([39769])
             torch.testing.assert_close(encoding["labels"][0]["image_id"], expected_image_id)
@@ -218,30 +248,58 @@ class ConditionalDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcess
         with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt") as f:
             target = json.loads(f.read())
 
-        target = {"file_name": "000000039769.png", "image_id": 39769, "segments_info": target}
+        target = {
+            "file_name": "000000039769.png",
+            "image_id": 39769,
+            "segments_info": target,
+        }
 
         masks_path = pathlib.Path("./tests/fixtures/tests_samples/COCO/coco_panoptic")
 
         for image_processing_class in self.image_processor_list:
             # encode them
             image_processing = image_processing_class(format="coco_panoptic")
-            encoding = image_processing(images=image, annotations=target, masks_path=masks_path, return_tensors="pt")
+            encoding = image_processing(
+                images=image,
+                annotations=target,
+                masks_path=masks_path,
+                return_tensors="pt",
+            )
 
             # verify pixel values
             expected_shape = torch.Size([1, 3, 800, 1066])
             self.assertEqual(encoding["pixel_values"].shape, expected_shape)
 
             expected_slice = torch.tensor([0.2796, 0.3138, 0.3481])
-            torch.testing.assert_close(encoding["pixel_values"][0, 0, 0, :3], expected_slice, rtol=1e-4, atol=1e-4)
+            torch.testing.assert_close(
+                encoding["pixel_values"][0, 0, 0, :3],
+                expected_slice,
+                rtol=1e-4,
+                atol=1e-4,
+            )
 
             # verify area
-            expected_area = torch.tensor([147979.6875, 165527.0469, 484638.5938, 11292.9375, 5879.6562, 7634.1147])
+            expected_area = torch.tensor(
+                [
+                    147979.6875,
+                    165527.0469,
+                    484638.5938,
+                    11292.9375,
+                    5879.6562,
+                    7634.1147,
+                ]
+            )
             torch.testing.assert_close(encoding["labels"][0]["area"], expected_area)
             # verify boxes
             expected_boxes_shape = torch.Size([6, 4])
             self.assertEqual(encoding["labels"][0]["boxes"].shape, expected_boxes_shape)
             expected_boxes_slice = torch.tensor([0.2625, 0.5437, 0.4688, 0.8625])
-            torch.testing.assert_close(encoding["labels"][0]["boxes"][0], expected_boxes_slice, rtol=1e-3, atol=1e-3)
+            torch.testing.assert_close(
+                encoding["labels"][0]["boxes"][0],
+                expected_boxes_slice,
+                rtol=1e-3,
+                atol=1e-3,
+            )
             # verify image_id
             expected_image_id = torch.tensor([39769])
             torch.testing.assert_close(encoding["labels"][0]["image_id"], expected_image_id)
@@ -391,8 +449,16 @@ class ConditionalDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcess
         with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt") as f:
             target = json.loads(f.read())
 
-        annotation_0 = {"file_name": "000000039769.png", "image_id": 39769, "segments_info": target}
-        annotation_1 = {"file_name": "000000039769.png", "image_id": 39769, "segments_info": target}
+        annotation_0 = {
+            "file_name": "000000039769.png",
+            "image_id": 39769,
+            "segments_info": target,
+        }
+        annotation_1 = {
+            "file_name": "000000039769.png",
+            "image_id": 39769,
+            "segments_info": target,
+        }
 
         w_0, h_0 = image_0.size
         w_1, h_1 = image_1.size
@@ -528,7 +594,9 @@ class ConditionalDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcess
 
             # do_pad=True, max_height=100, max_width=100, image=200x100 -> 100x100
             image_processor = image_processing_class(
-                size={"max_height": 100, "max_width": 100}, do_pad=True, pad_size={"height": 100, "width": 100}
+                size={"max_height": 100, "max_width": 100},
+                do_pad=True,
+                pad_size={"height": 100, "width": 100},
             )
             inputs = image_processor(images=[image_1], return_tensors="pt")
             self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 100, 100]))
@@ -553,6 +621,53 @@ class ConditionalDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcess
             )
             inputs = image_processor(images=[image_1, image_2], return_tensors="pt")
             self.assertEqual(inputs["pixel_values"].shape, torch.Size([2, 3, 150, 100]))
+
+    def test_max_size_parameter_handling(self):
+        """Test that the deprecated max_size parameter is handled correctly."""
+        for image_processing_class in self.image_processor_list:
+            # Test 1: max_size only (should create size with default shortest_edge and max_size as longest_edge)
+            image_processor = image_processing_class(max_size=1000)
+            expected_size = {"shortest_edge": 800, "longest_edge": 1000}
+            self.assertEqual(image_processor.size, expected_size)
+
+            # Test 2: size with max_size (max_size should be used to set longest_edge if not present)
+            image_processor = image_processing_class(size={"shortest_edge": 600}, max_size=900)
+            expected_size = {"shortest_edge": 600, "longest_edge": 900}
+            self.assertEqual(image_processor.size, expected_size)
+
+            # Test 3: size with longest_edge and max_size (max_size should be ignored)
+            image_processor = image_processing_class(size={"shortest_edge": 500, "longest_edge": 800}, max_size=1200)
+            expected_size = {"shortest_edge": 500, "longest_edge": 800}
+            self.assertEqual(image_processor.size, expected_size)
+
+            # Test 4: from_dict with max_size (using a dict without longest_edge)
+        test_dict = {k: v for k, v in self.image_processor_dict.items() if k != "size"}
+        test_dict["size"] = {"shortest_edge": 18}  # Only shortest_edge, no longest_edge
+        image_processor = image_processing_class.from_dict(test_dict, max_size=1100)
+        expected_size = {"shortest_edge": 18, "longest_edge": 1100}
+        self.assertEqual(image_processor.size, expected_size)
+
+    def test_preprocess_with_max_size_parameter(self):
+        """Test that max_size parameter in preprocess method works correctly."""
+        image = torch.ones([200, 300, 3], dtype=torch.uint8)
+
+        for image_processing_class in self.image_processor_list:
+            image_processor = image_processing_class(do_pad=False)
+
+            # Test 1: preprocess with max_size only
+            inputs = image_processor(images=[image], max_size=150, return_tensors="pt")
+            # Image is 200x300, with max_size=150, shortest edge should be 100, longest 150
+            self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 100, 150]))
+
+            # Test 2: preprocess with size and max_size
+            inputs = image_processor(
+                images=[image],
+                size={"shortest_edge": 80},
+                max_size=120,
+                return_tensors="pt",
+            )
+            # With shortest_edge=80 and max_size=120, result should be 80x120
+            self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 80, 120]))
 
     def test_longest_edge_shortest_edge_resizing_strategy(self):
         image_1 = torch.ones([958, 653, 3], dtype=torch.uint8)
