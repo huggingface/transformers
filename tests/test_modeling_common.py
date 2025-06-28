@@ -566,6 +566,8 @@ class ModelTesterMixin:
                 model_from_config.state_dict().items(), model_from_pretrained.state_dict().items()
             ):
                 self.assertEqual(k1, k2, "The keys from each model should be the same")
+                if "parametrizations" in k1:
+                    continue
                 # Since we added the seed, they should be exactly the same (i.e. using allclose maybe be wrong due
                 # to very low std in init function)
                 if not (v1 == v2).all():

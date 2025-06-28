@@ -415,10 +415,13 @@ class MusicgenMelodyPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         std = self.config.initializer_factor
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
+        if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
@@ -1295,7 +1298,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
             The text encoder model that encodes text into hidden states for conditioning.
         audio_encoder (`PreTrainedModel`, *optional*):
             The audio encoder model that encodes audio into hidden states for conditioning.
-        decoder (`MusicgenForCausalLM`, *optional*):
+        decoder (`MusicgenMelodyForCausalLM`, *optional*):
             The decoder model that generates audio tokens based on conditioning signals.
         """
         if config is None and None in (text_encoder, audio_encoder, decoder):
