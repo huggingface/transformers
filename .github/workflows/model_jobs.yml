@@ -97,6 +97,10 @@ jobs:
         run: |
           python3 utils/print_env.py
 
+      - name: Install torch 2.8.0 RC
+        working-directory: /transformers
+        run: python3 -m pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/test/cu126
+
       - name: Show installed libraries and their versions
         working-directory: /transformers
         run: pip freeze
