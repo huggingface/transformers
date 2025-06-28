@@ -123,6 +123,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("falcon_h1", "FalconH1Model"),
         ("falcon_mamba", "FalconMambaModel"),
         ("fastspeech2_conformer", "FastSpeech2ConformerModel"),
+        ("fastspeech2_conformer_with_hifigan", "FastSpeech2ConformerWithHifiGan"),
         ("flaubert", "FlaubertModel"),
         ("flava", "FlavaModel"),
         ("fnet", "FNetModel"),
@@ -857,6 +858,7 @@ MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Universal Segmentation mapping
         ("detr", "DetrForSegmentation"),
+        ("eomt", "EomtForUniversalSegmentation"),
         ("mask2former", "Mask2FormerForUniversalSegmentation"),
         ("maskformer", "MaskFormerForInstanceSegmentation"),
         ("oneformer", "OneFormerForUniversalSegmentation"),
@@ -1514,6 +1516,7 @@ MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES = OrderedDict(
         ("bark", "BarkModel"),
         ("csm", "CsmForConditionalGeneration"),
         ("fastspeech2_conformer", "FastSpeech2ConformerWithHifiGan"),
+        ("fastspeech2_conformer_with_hifigan", "FastSpeech2ConformerWithHifiGan"),
         ("musicgen", "MusicgenForConditionalGeneration"),
         ("musicgen_melody", "MusicgenMelodyForConditionalGeneration"),
         ("qwen2_5_omni", "Qwen2_5OmniForConditionalGeneration"),
