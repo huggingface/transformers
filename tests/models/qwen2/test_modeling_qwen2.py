@@ -267,7 +267,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
         ].shape[-1]
 
         # Load model
-        device = "cpu"
+        device = torch_device
         dtype = torch.bfloat16
         cache_implementation = "static"
         attn_implementation = "sdpa"
