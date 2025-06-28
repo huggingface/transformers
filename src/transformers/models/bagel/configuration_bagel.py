@@ -47,7 +47,7 @@ class BagelVQVAEConfig(PretrainedConfig):
     def __init__(
         self,
         double_latent: bool = False,
-        latent_channels: int = 256,
+        latent_channels: int = 16,
         num_patches: int = 32,
         latent_patch_size=2,
         in_channels: int = 3,
@@ -182,6 +182,7 @@ class BagelConfig(PretrainedConfig):
                 f" Type found: {type(vq_config)}"
             )
         self.vit_max_num_patch_per_side = 70
+        self.max_latent_size = 64
         self.timestep_shift = 1.0
         super().__init__(**kwargs)
 
