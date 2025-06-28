@@ -225,7 +225,6 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
             config.architecture, pretrained=False, num_classes=config.num_labels, **extra_init_kwargs
         )
         self.num_labels = config.num_labels
-        self.post_init()
 
     @auto_docstring
     def forward(
