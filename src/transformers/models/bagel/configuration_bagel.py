@@ -29,6 +29,18 @@ logger = logging.get_logger(__name__)
 
 
 class BagelVQVAEConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`BambaModel`]. It is used to instantiate a
+    BambaModel model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with defaults taken from [ibm-fms/Bamba-9.8b-2.2T-hf](https://huggingface.co/ibm-fms/Bamba-9.8b-2.2T-hf).
+
+    The BambaModel is a hybrid [mamba2](https://github.com/state-spaces/mamba) architecture with SwiGLU.
+    The checkpoints are  jointly trained by IBM, Princeton, and UIUC.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+    """
+
     model_type = "bagel_vqvae"
     base_config_key = "vq_config"
 
@@ -37,6 +49,7 @@ class BagelVQVAEConfig(PretrainedConfig):
         double_latent: bool = False,
         latent_channels: int = 256,
         num_patches: int = 32,
+        latent_patch_size=2,
         in_channels: int = 3,
         out_channels: int = 3,
         base_channels: int = 128,
@@ -61,9 +74,59 @@ class BagelVQVAEConfig(PretrainedConfig):
         self.out_channels = out_channels
         self.scale_factor = scale_factor
         self.shift_factor = shift_factor
+        self.latent_patch_size = latent_patch_size
+
+
+llm_config = {
+    "attention_dropout": 0.0,
+    "bos_token_id": 151643,
+    "eos_token_id": 151645,
+    "hidden_act": "silu",
+    "hidden_size": 3584,
+    "initializer_range": 0.02,
+    "intermediate_size": 18944,
+    "max_position_embeddings": 32768,
+    "max_window_layers": 28,
+    "model_type": "qwen2",
+    "num_attention_heads": 28,
+    "num_hidden_layers": 28,
+    "num_key_value_heads": 4,
+    "rms_norm_eps": 1e-06,
+    "rope_theta": 1000000.0,
+    "sliding_window": 131072,
+    "tie_word_embeddings": False,
+    "torch_dtype": "bfloat16",
+    "transformers_version": "4.43.1",
+    "use_cache": True,
+    "use_sliding_window": False,
+    "vocab_size": 152064,
+}
+
+vit_config = {
+    "hidden_size": 1152,
+    "image_size": 980,
+    "intermediate_size": 4304,
+    "model_type": "siglip_vision_model",
+    "num_attention_heads": 16,
+    "num_hidden_layers": 26,
+    "patch_size": 14,
+    "vision_use_head": False,
+}
 
 
 class BagelConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`BambaModel`]. It is used to instantiate a
+    BambaModel model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with defaults taken from [ibm-fms/Bamba-9.8b-2.2T-hf](https://huggingface.co/ibm-fms/Bamba-9.8b-2.2T-hf).
+
+    The BambaModel is a hybrid [mamba2](https://github.com/state-spaces/mamba) architecture with SwiGLU.
+    The checkpoints are  jointly trained by IBM, Princeton, and UIUC.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+    """
+
     model_type = "bagel"
     sub_configs = {
         "text_config": AutoConfig,
@@ -83,12 +146,12 @@ class BagelConfig(PretrainedConfig):
             self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             logger.info("`text_config` is None. Initializing with default values")
-            self.text_config = CONFIG_MAPPING["qwen2"]()
+            self.text_config = CONFIG_MAPPING["qwen2"](**llm_config)
         elif isinstance(text_config, PretrainedConfig):
             self.text_config = text_config
         else:
             raise ValueError(
-                f"Invalid type for `text_config`. Must be either `dict` or `LlamaConfig`."
+                f"Invalid type for `text_config`. Must be either `dict` or `Qwen2Config`."
                 f" Type found: {type(text_config)}"
             )
 
@@ -97,12 +160,12 @@ class BagelConfig(PretrainedConfig):
             self.vision_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             logger.info("`vision_config` is None. Initializing with default values")
-            self.vision_config = CONFIG_MAPPING["siglip_vision_model"]()
+            self.vision_config = CONFIG_MAPPING["siglip_vision_model"](**vit_config)
         elif isinstance(vision_config, PretrainedConfig):
             self.vision_config = vision_config
         else:
             raise ValueError(
-                f"Invalid type for `vision_config`. Must be either `dict` or `JanusVisionConfig`."
+                f"Invalid type for `vision_config`. Must be either `dict` or `SiglipVisionConfig`."
                 f" Type found: {type(vision_config)}"
             )
 
@@ -118,7 +181,8 @@ class BagelConfig(PretrainedConfig):
                 f"Invalid type for `vq_config`. Must be either `dict` or `JanusVQVAEConfig`."
                 f" Type found: {type(vq_config)}"
             )
-
+        self.vit_max_num_patch_per_side = 70
+        self.timestep_shift = 1.0
         super().__init__(**kwargs)
 
 

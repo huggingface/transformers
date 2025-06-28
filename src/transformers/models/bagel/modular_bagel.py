@@ -14,6 +14,7 @@
 # limitations under the License.
 
 
+import math
 from typing import Callable, Optional
 
 from ...activations import ACT2FN
@@ -40,12 +41,62 @@ from ..janus.modeling_janus import (
 
 if is_torch_available():
     import torch
+    import torch.nn.functional as F
     from torch import nn
 
 logger = logging.get_logger(__name__)
 
 
+llm_config = {
+    "attention_dropout": 0.0,
+    "bos_token_id": 151643,
+    "eos_token_id": 151645,
+    "hidden_act": "silu",
+    "hidden_size": 3584,
+    "initializer_range": 0.02,
+    "intermediate_size": 18944,
+    "max_position_embeddings": 32768,
+    "max_window_layers": 28,
+    "model_type": "qwen2",
+    "num_attention_heads": 28,
+    "num_hidden_layers": 28,
+    "num_key_value_heads": 4,
+    "rms_norm_eps": 1e-06,
+    "rope_theta": 1000000.0,
+    "sliding_window": 131072,
+    "tie_word_embeddings": False,
+    "torch_dtype": "bfloat16",
+    "transformers_version": "4.43.1",
+    "use_cache": True,
+    "use_sliding_window": False,
+    "vocab_size": 152064,
+}
+
+vit_config = {
+    "hidden_size": 1152,
+    "image_size": 980,
+    "intermediate_size": 4304,
+    "model_type": "siglip_vision_model",
+    "num_attention_heads": 16,
+    "num_hidden_layers": 26,
+    "patch_size": 14,
+    "vision_use_head": False,
+}
+
+
 class BagelVQVAEConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`BambaModel`]. It is used to instantiate a
+    BambaModel model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with defaults taken from [ibm-fms/Bamba-9.8b-2.2T-hf](https://huggingface.co/ibm-fms/Bamba-9.8b-2.2T-hf).
+
+    The BambaModel is a hybrid [mamba2](https://github.com/state-spaces/mamba) architecture with SwiGLU.
+    The checkpoints are  jointly trained by IBM, Princeton, and UIUC.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+    """
+
     model_type = "bagel_vqvae"
     base_config_key = "vq_config"
 
@@ -54,6 +105,7 @@ class BagelVQVAEConfig(PretrainedConfig):
         double_latent: bool = False,
         latent_channels: int = 256,
         num_patches: int = 32,
+        latent_patch_size=2,
         in_channels: int = 3,
         out_channels: int = 3,
         base_channels: int = 128,
@@ -78,9 +130,22 @@ class BagelVQVAEConfig(PretrainedConfig):
         self.out_channels = out_channels
         self.scale_factor = scale_factor
         self.shift_factor = shift_factor
+        self.latent_patch_size = latent_patch_size
 
 
 class BagelConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`BambaModel`]. It is used to instantiate a
+    BambaModel model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with defaults taken from [ibm-fms/Bamba-9.8b-2.2T-hf](https://huggingface.co/ibm-fms/Bamba-9.8b-2.2T-hf).
+
+    The BambaModel is a hybrid [mamba2](https://github.com/state-spaces/mamba) architecture with SwiGLU.
+    The checkpoints are  jointly trained by IBM, Princeton, and UIUC.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+    """
+
     model_type = "bagel"
     sub_configs = {
         "text_config": AutoConfig,
@@ -100,12 +165,12 @@ class BagelConfig(PretrainedConfig):
             self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             logger.info("`text_config` is None. Initializing with default values")
-            self.text_config = CONFIG_MAPPING["qwen2"]()
+            self.text_config = CONFIG_MAPPING["qwen2"](**llm_config)
         elif isinstance(text_config, PretrainedConfig):
             self.text_config = text_config
         else:
             raise ValueError(
-                f"Invalid type for `text_config`. Must be either `dict` or `LlamaConfig`."
+                f"Invalid type for `text_config`. Must be either `dict` or `Qwen2Config`."
                 f" Type found: {type(text_config)}"
             )
 
@@ -114,12 +179,12 @@ class BagelConfig(PretrainedConfig):
             self.vision_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             logger.info("`vision_config` is None. Initializing with default values")
-            self.vision_config = CONFIG_MAPPING["siglip_vision_model"]()
+            self.vision_config = CONFIG_MAPPING["siglip_vision_model"](**vit_config)
         elif isinstance(vision_config, PretrainedConfig):
             self.vision_config = vision_config
         else:
             raise ValueError(
-                f"Invalid type for `vision_config`. Must be either `dict` or `JanusVisionConfig`."
+                f"Invalid type for `vision_config`. Must be either `dict` or `SiglipVisionConfig`."
                 f" Type found: {type(vision_config)}"
             )
 
@@ -135,8 +200,12 @@ class BagelConfig(PretrainedConfig):
                 f"Invalid type for `vq_config`. Must be either `dict` or `JanusVQVAEConfig`."
                 f" Type found: {type(vq_config)}"
             )
-
+        self.vit_max_num_patch_per_side = 70
+        self.timestep_shift = 1.0
         super().__init__(**kwargs)
+
+
+# Split the vison_model.pathc_embeddings from linear to conv2d in conversion file :)
 
 
 @auto_docstring
@@ -166,43 +235,6 @@ class BagelPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, BagelTextRMSNorm):
             module.weight.data.fill_(1.0)
-
-
-class BagelTextMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
-
-
-@use_kernel_forward_from_hub("RMSNorm")
-class BagelTextRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        BagelTextRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 def rotate_half(x):
@@ -237,6 +269,77 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
+
+
+class BagelTextRotaryEmbedding(nn.Module):
+    def __init__(self, config, device=None):
+        super().__init__()
+        # BC: "rope_type" was originally "type"
+        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+        else:
+            self.rope_type = "default"
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = self.inv_freq
+
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
+@use_kernel_forward_from_hub("RMSNorm")
+class BagelTextRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        BagelTextRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
+class BagelTextMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -289,10 +392,21 @@ class BagelTextAttention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
+
+        self.q_norm = BagelTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = BagelTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.q_norm_generation = BagelTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm_generation = BagelTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=True)
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
+
+        self.q_proj_generation = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=True)
+        self.k_proj_generation = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)
+        self.v_proj_generation = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)
+        self.o_proj_generation = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
         self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 
     def forward(
@@ -300,6 +414,7 @@ class BagelTextAttention(nn.Module):
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
+        mode: Optional[str] = "und",
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -346,16 +461,20 @@ class BagelTextDecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
 
         self.self_attn = BagelTextAttention(config=config, layer_idx=layer_idx)
+        self.attention_type = config.layer_types[layer_idx]
 
         self.mlp = BagelTextMLP(config)
+        self.mlp_generation = BagelTextMLP(config)
         self.input_layernorm = BagelTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm_generation = BagelTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = BagelTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.attention_type = config.layer_types[layer_idx]
+        self.post_attention_layernorm_generation = BagelTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
+        mode: Optional[str] = "und",
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
@@ -394,42 +513,6 @@ class BagelTextDecoderLayer(GradientCheckpointingLayer):
         return outputs
 
 
-class BagelTextRotaryEmbedding(nn.Module):
-    def __init__(self, config, device=None):
-        super().__init__()
-        # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-
-# How to attention mask as in there they are using flash attention
-# whichever atn mask gives same result with flash attn then use that or later ask the authors.
 @auto_docstring
 class BagelTextModel(BagelPreTrainedModel):
     def __init__(self, config):
@@ -562,143 +645,6 @@ class BagelTextModel(BagelPreTrainedModel):
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
-
-
-# Connector to map vision embeddding to languange model
-class BagelVisionConnector(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.activation_fn = ACT2FN[config.hidden_act]
-        in_dim = config.hidden_size
-        # Here hidden size of language model is the out dim
-        out_dim = config.lm_hidden_size
-        self.fc1 = nn.Linear(in_dim, out_dim)
-        self.fc2 = nn.Linear(out_dim, out_dim)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
-
-
-class BagelModel(BagelPreTrainedModel):
-    def __init__(self, config: BagelConfig):
-        super().__init__(config)
-        self.config = config
-        self.vision_tower = AutoModel.from_config(config.vision_config)
-        self.language_model = AutoModel.from_config(config.text_config)
-
-        self.vision_connecter = BagelVisionConnector(config)
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
-    def set_decoder(self, decoder):
-        self.language_model = decoder
-
-    def get_decoder(self):
-        return self.language_model
-
-    @staticmethod
-    def build_2d_sincos_position_embedding(
-        width, height, embed_dim=256, temperature=10000.0, device="cpu", dtype=torch.float32
-    ):
-        grid_w = torch.arange(torch_int(width), device=device).to(dtype)
-        grid_h = torch.arange(torch_int(height), device=device).to(dtype)
-        grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing="ij")
-        if embed_dim % 4 != 0:
-            raise ValueError("Embed dimension must be divisible by 4 for 2D sin-cos position embedding")
-        pos_dim = embed_dim // 4
-        omega = torch.arange(pos_dim, device=device).to(dtype) / pos_dim
-        omega = 1.0 / (temperature**omega)
-
-        out_w = grid_w.flatten()[..., None] @ omega[None]
-        out_h = grid_h.flatten()[..., None] @ omega[None]
-
-        return torch.concat([out_h.sin(), out_h.cos(), out_w.sin(), out_w.cos()], dim=1)[None, :, :]
-
-    def get_image_features(
-        self,
-        pixel_values: torch.FloatTensor,
-        **kwargs,
-    ):
-        image_embeddings = self.vision_tower(pixel_values)
-        pos_embed = self.build_2d_sincos_position_embedding(self.config.vision_config)
-
-        image_embeddings = image_embeddings + pos_embed
-        return image_embeddings
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        image_sizes: torch.Tensor = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ):
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
-
-        if pixel_values is not None:
-            image_features = self.get_image_features(
-                pixel_values=pixel_values,
-                image_sizes=image_sizes,
-            )
-            image_features = torch.cat(image_features, dim=0)
-
-            if input_ids is None:
-                special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                n_image_tokens = (special_image_mask).sum(dim=1).sum(dim=0)[0]
-            else:
-                special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
-                special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-                n_image_tokens = (input_ids == self.config.image_token_id).sum()
-
-            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
-                n_image_tokens = (input_ids == self.config.image_token_id).sum()
-                n_image_features = image_features.shape[0] * image_features.shape[1]
-                raise ValueError(
-                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-                )
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
-
-        outputs = self.language_model(
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
-            cache_position=cache_position,
-            **kwargs,
-        )
-        return outputs
 
 
 ###########
@@ -890,12 +836,6 @@ class BagelVQVAE(BagelPreTrainedModel):
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
                 Pixel values decoded from the token IDs.
         """
-        # if image_tokens.shape[1] != self.quantize.quant_state_dims[0] * self.quantize.quant_state_dims[1]:
-        #     raise ValueError(
-        #         f"Expected `image_tokens` to have shape `(batch_size, {self.quantize.quant_state_dims[0] * self.quantize.quant_state_dims[1]})`, "
-        #         f"but got shape `{image_tokens.shape}`."
-        #     )
-
         pixel_values = image_tokens / self.scale_factor + self.shift_factor
         pixel_values = self.decoder(pixel_values)
         return pixel_values
@@ -909,6 +849,217 @@ class BagelVQVAE(BagelPreTrainedModel):
         hidden_states = self.encode(pixel_values)
         hidden_states = self.decode(hidden_states)
         return hidden_states
+
+
+class BagelVisionConnector(nn.Module):
+    def __init__(self, config: BagelConfig):
+        super().__init__()
+        in_dim = config.vision_config.hidden_size
+        out_dim = config.text_config.hidden_size
+
+        self.activation_fn = ACT2FN[config.vision_config.hidden_act]
+        self.fc1 = nn.Linear(in_dim, out_dim)
+        self.fc2 = nn.Linear(out_dim, out_dim)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
+
+
+class BagelTimestepMLP(nn.Module):
+    def __init__(self, input_dim: int, hidden_dim: int):
+        super().__init__()
+        self.linear1 = nn.Linear(input_dim, hidden_dim)
+        self.activation = nn.SiLU()
+        self.linear2 = nn.Linear(hidden_dim, hidden_dim)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.linear1(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        hidden_states = self.linear2(hidden_states)
+        return hidden_states
+
+
+class BagelTimestepEmbedder(nn.Module):
+    def __init__(self, hidden_size: int, frequency_embedding_size: int = 256):
+        super().__init__()
+        self.frequency_embedding_size = frequency_embedding_size
+        self.mlp = BagelTimestepMLP(frequency_embedding_size, hidden_size)
+
+    @staticmethod
+    def timestep_embedding(t: torch.Tensor, dim: int, max_period: int = 10000) -> torch.Tensor:
+        """
+        Create sinusoidal timestep embeddings.
+
+        Args:
+            t (torch.Tensor): A 1D tensor of shape (batch_size,) with scalar timesteps.
+            dim (int): Output dimension of the embedding.
+            max_period (int): Maximum period used for frequency calculation.
+
+        Returns:
+            torch.Tensor: Sinusoidal embedding of shape (batch_size, dim)
+        """
+        half = dim // 2
+        device = t.device
+        freqs = torch.exp(-math.log(max_period) * torch.arange(0, half, dtype=torch.float32, device=device) / half)
+        args = t[:, None].float() * freqs[None]  # shape: (B, half)
+        embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
+        if dim % 2 == 1:
+            embedding = F.pad(embedding, (0, 1))  # pad to full dim if odd
+        return embedding
+
+    def forward(self, t: torch.Tensor) -> torch.Tensor:
+        t_freq = self.timestep_embedding(t, self.frequency_embedding_size)
+        t_emb = self.mlp(t_freq)
+        return t_emb
+
+
+# Need to think how can we do it with config and correct this
+class PositionEmbedding(nn.Module):
+    def __init__(self, max_num_patch_per_side, hidden_size):
+        super().__init__()
+        self.max_num_patch_per_side = max_num_patch_per_side
+        self.hidden_size = hidden_size
+        self.pos_embed = nn.Parameter(torch.zeros(max_num_patch_per_side**2, hidden_size), requires_grad=False)
+        self._init_weights()
+
+    @staticmethod
+    def build_2d_sincos_position_embedding(
+        width, height, embed_dim=256, temperature=10000.0, device="cpu", dtype=torch.float32
+    ):
+        grid_w = torch.arange(torch_int(width), device=device).to(dtype)
+        grid_h = torch.arange(torch_int(height), device=device).to(dtype)
+        grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing="ij")
+        if embed_dim % 4 != 0:
+            raise ValueError("Embed dimension must be divisible by 4 for 2D sin-cos position embedding")
+        pos_dim = embed_dim // 4
+        omega = torch.arange(pos_dim, device=device).to(dtype) / pos_dim
+        omega = 1.0 / (temperature**omega)
+
+        out_w = grid_w.flatten()[..., None] @ omega[None]
+        out_h = grid_h.flatten()[..., None] @ omega[None]
+
+        return torch.concat([out_h.sin(), out_h.cos(), out_w.sin(), out_w.cos()], dim=1)[None, :, :]
+
+    def _init_weights(self):
+        # Initialize (and freeze) pos_embed by sin-cos embedding:
+        pos_embed = self.build_2d_sincos_position_embedding(self.hidden_size, self.max_num_patch_per_side)
+        self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float())
+
+    def forward(self, position_ids):
+        return self.pos_embed[position_ids]
+
+
+class BagelModel(BagelPreTrainedModel):
+    def __init__(self, config: BagelConfig):
+        super().__init__(config)
+        self.config = config
+        self.hidden_size = config.text_config.hidden_size
+        self.latent_channel = config.vq_config.latent_channels
+        self.latent_patch_size = config.vq_config.latent_patch_size
+        self.patch_latent_dim = self.latent_patch_size**2 * self.latent_channel
+
+        self.vision_tower = AutoModel.from_config(config.vision_config)
+        self.language_model = BagelTextModel(config.text_config)
+        self.vq_model = BagelVQVAE(config.vq_config)
+
+        self.vision_connecter = BagelVisionConnector(config)
+        self.timestep_embedder = BagelTimestepEmbedder(config.text_config.hidden_size)
+        self.vae2llm_connector = nn.Linear(self.patch_latent_dim, self.hidden_size)
+        self.llm2vae_connector = nn.Linear(self.hidden_size, self.patch_latent_dim)
+
+    def get_input_embeddings(self):
+        return self.language_model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.language_model.set_input_embeddings(value)
+
+    def set_decoder(self, decoder):
+        self.language_model = decoder
+
+    def get_decoder(self):
+        return self.language_model
+
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        **kwargs,
+    ):
+        image_embeddings = self.vision_tower(pixel_values)
+        pos_embed = self.build_2d_sincos_position_embedding(self.config.vision_config)
+
+        image_embeddings = image_embeddings + pos_embed
+        return image_embeddings
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        pixel_values: torch.FloatTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        image_sizes: torch.Tensor = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        if pixel_values is not None:
+            image_features = self.get_image_features(
+                pixel_values=pixel_values,
+                image_sizes=image_sizes,
+            )
+            image_features = torch.cat(image_features, dim=0)
+
+            if input_ids is None:
+                special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+                n_image_tokens = (special_image_mask).sum(dim=1).sum(dim=0)[0]
+            else:
+                special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
+                special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+                n_image_tokens = (input_ids == self.config.image_token_id).sum()
+
+            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
+                n_image_tokens = (input_ids == self.config.image_token_id).sum()
+                n_image_features = image_features.shape[0] * image_features.shape[1]
+                raise ValueError(
+                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+                )
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+
+        outputs = self.language_model(
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True,
+            cache_position=cache_position,
+            **kwargs,
+        )
+        return outputs
 
 
 __all__ = ["BagelVQVAEConfig", "BagelConfig", "BagelModel", "BagelTextModel", "BagelVQVAE"]
