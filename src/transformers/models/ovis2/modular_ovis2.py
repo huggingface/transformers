@@ -22,16 +22,13 @@ from torch import nn
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils import auto_docstring, can_return_tuple
 from ..auto import AutoModel
 from ..llama.modeling_llama import LlamaMLP, LlamaRMSNorm
 from ..llava.modeling_llava import LlavaForConditionalGeneration, LlavaModel
 from ..llava_next.modeling_llava_next import LlavaNextCausalLMOutputWithPast, LlavaNextModelOutputWithPast
 from ..siglip.modeling_siglip import SiglipAttention, SiglipEncoder, SiglipEncoderLayer, SiglipVisionEmbeddings
 from .configuration_ovis2 import Ovis2Config, Ovis2VisionConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 def hard_softmax(logits: torch.Tensor, dim: int):
@@ -41,28 +38,6 @@ def hard_softmax(logits: torch.Tensor, dim: int):
     y_hard = torch.zeros_like(logits, memory_format=torch.legacy_contiguous_format).scatter_(dim, index, 1.0)
     ret = y_hard - y_soft.detach() + y_soft
 
-    return ret
-
-
-def gumbel_softmax(logits: torch.Tensor, tau: float = 1, hard: bool = False, dim: int = -1) -> torch.Tensor:
-    # more stable https://github.com/pytorch/pytorch/issues/41663
-    gumbel_dist = torch.distributions.gumbel.Gumbel(
-        torch.tensor(0.0, device=logits.device, dtype=logits.dtype),
-        torch.tensor(1.0, device=logits.device, dtype=logits.dtype),
-    )
-    gumbels = gumbel_dist.sample(logits.shape)
-
-    gumbels = (logits + gumbels) / tau  # ~Gumbel(logits,tau)
-    y_soft = gumbels.softmax(dim)
-
-    if hard:
-        # Straight through.
-        index = y_soft.max(dim, keepdim=True)[1]
-        y_hard = torch.zeros_like(logits, memory_format=torch.legacy_contiguous_format).scatter_(dim, index, 1.0)
-        ret = y_hard - y_soft.detach() + y_soft
-    else:
-        # Reparametrization trick.
-        ret = y_soft
     return ret
 
 
@@ -212,7 +187,7 @@ class Ovis2VisionModel(nn.Module):
         logits = self.head_norm(logits)
 
         if self.config.tokenize_function == "gumbel_argmax":
-            prob_token = gumbel_softmax(logits, dim=-1, hard=True)
+            prob_token = nn.functional.gumbel_softmax(logits, dim=-1, hard=True)
         elif self.config.tokenize_function == "st_argmax":
             prob_token = hard_softmax(logits, dim=-1)
         elif self.config.tokenize_function == "softmax":

@@ -32,12 +32,9 @@ from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import auto_docstring, can_return_tuple, logging, torch_int
+from ...utils import auto_docstring, can_return_tuple, torch_int
 from ..auto import AutoModel
 from .configuration_ovis2 import Ovis2Config, Ovis2VisionConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -200,7 +197,7 @@ class Ovis2VisionAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
+        **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -216,13 +213,7 @@ class Ovis2VisionAttention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and output_attentions:
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -237,9 +228,6 @@ class Ovis2VisionAttention(nn.Module):
 
         attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
         attn_output = self.out_proj(attn_output)
-
-        if not output_attentions:
-            attn_weights = None
 
         return attn_output, attn_weights
 
@@ -432,28 +420,6 @@ def hard_softmax(logits: torch.Tensor, dim: int):
     return ret
 
 
-def gumbel_softmax(logits: torch.Tensor, tau: float = 1, hard: bool = False, dim: int = -1) -> torch.Tensor:
-    # more stable https://github.com/pytorch/pytorch/issues/41663
-    gumbel_dist = torch.distributions.gumbel.Gumbel(
-        torch.tensor(0.0, device=logits.device, dtype=logits.dtype),
-        torch.tensor(1.0, device=logits.device, dtype=logits.dtype),
-    )
-    gumbels = gumbel_dist.sample(logits.shape)
-
-    gumbels = (logits + gumbels) / tau  # ~Gumbel(logits,tau)
-    y_soft = gumbels.softmax(dim)
-
-    if hard:
-        # Straight through.
-        index = y_soft.max(dim, keepdim=True)[1]
-        y_hard = torch.zeros_like(logits, memory_format=torch.legacy_contiguous_format).scatter_(dim, index, 1.0)
-        ret = y_hard - y_soft.detach() + y_soft
-    else:
-        # Reparametrization trick.
-        ret = y_soft
-    return ret
-
-
 class Ovis2VisionModel(nn.Module):
     def __init__(self, config: Ovis2VisionConfig):
         super().__init__()
@@ -497,7 +463,7 @@ class Ovis2VisionModel(nn.Module):
         logits = self.head_norm(logits)
 
         if self.config.tokenize_function == "gumbel_argmax":
-            prob_token = gumbel_softmax(logits, dim=-1, hard=True)
+            prob_token = nn.functional.gumbel_softmax(logits, dim=-1, hard=True)
         elif self.config.tokenize_function == "st_argmax":
             prob_token = hard_softmax(logits, dim=-1)
         elif self.config.tokenize_function == "softmax":
