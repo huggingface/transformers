@@ -32,7 +32,7 @@ from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils import auto_docstring, can_return_tuple, logging, torch_int
 from ..auto import AutoModel
 from .configuration_ovis2 import Ovis2Config, Ovis2VisionConfig
 
@@ -81,47 +81,74 @@ class Ovis2VisionEmbeddings(nn.Module):
     def __init__(self, config: Ovis2VisionConfig):
         super().__init__()
         self.config = config
+        self.embed_dim = config.hidden_size
+        self.image_size = config.image_size
         self.patch_size = config.patch_size
-        self.patch_embed = nn.Conv2d(
-            config.num_channels, config.hidden_size, kernel_size=config.patch_size, stride=config.patch_size
+
+        self.patch_embedding = nn.Conv2d(
+            in_channels=config.num_channels,
+            out_channels=self.embed_dim,
+            kernel_size=self.patch_size,
+            stride=self.patch_size,
+            padding="valid",
         )
+
+        self.num_patches = (self.image_size // self.patch_size) ** 2
+        self.num_positions = self.num_patches
+        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
+        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
         self.rms_norm = Ovis2RMSNorm(config.hidden_size, config.rms_norm_eps)
 
-        num_patches = (config.image_size // config.patch_size) ** 2
-        self.position_embeddings = nn.Embedding(num_patches, config.hidden_size)
-        self.register_buffer("position_ids", torch.arange(num_patches).expand((1, -1)), persistent=False)
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
+        images. This method is also adapted to support torch.jit tracing and no class embeddings.
 
-    @staticmethod
-    def build_2d_sincos_position_embedding(
-        height, width, embed_dim=256, temperature=10000.0, device="cpu", dtype=torch.float32
-    ):
-        grid_w = torch.arange(int(width), dtype=dtype, device=device)
-        grid_h = torch.arange(int(height), dtype=dtype, device=device)
-        grid_h, grid_w = torch.meshgrid(grid_w, grid_h, indexing="xy")
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
+        """
 
-        pos_dim = embed_dim // 4
-        omega = torch.arange(pos_dim, dtype=dtype, device=device) / pos_dim
-        omega = 1.0 / (temperature**omega)
+        num_patches = embeddings.shape[1]
+        num_positions = self.position_embedding.weight.shape[0]
 
-        out_h = grid_h.flatten()[..., None] @ omega[None, :]
-        out_w = grid_w.flatten()[..., None] @ omega[None, :]
+        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
+        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
+            return self.position_embedding(self.position_ids)
 
-        return torch.concat([out_h.sin(), out_h.cos(), out_w.sin(), out_w.cos()], dim=1)[None, :, :]
+        patch_pos_embed = self.position_embedding.weight.unsqueeze(0)
 
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        _, _, height, width = pixel_values.size()
-        hidden_states = self.patch_embed(pixel_values).flatten(2).transpose(1, 2)
-        hidden_states = self.rms_norm(hidden_states)
+        dim = embeddings.shape[-1]
 
-        if self.config.image_size != height or self.config.image_size != width:
-            pos_embed = self.build_2d_sincos_position_embedding(
-                height // self.patch_size, width // self.patch_size, embed_dim=self.config.hidden_size
-            )
+        new_height = height // self.patch_size
+        new_width = width // self.patch_size
+
+        sqrt_num_positions = torch_int(num_positions**0.5)
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
+        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+
+        patch_pos_embed = nn.functional.interpolate(
+            patch_pos_embed,
+            size=(new_height, new_width),
+            mode="bicubic",
+            align_corners=False,
+        )
+
+        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+        return patch_pos_embed
+
+    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=False) -> torch.Tensor:
+        _, _, height, width = pixel_values.shape
+        target_dtype = self.patch_embedding.weight.dtype
+        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
+        embeddings = patch_embeds.flatten(2).transpose(1, 2)
+        embeddings = self.rms_norm(embeddings)
+
+        if interpolate_pos_encoding:
+            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
         else:
-            pos_embed = self.position_embeddings(self.position_ids)
-
-        hidden_states = hidden_states + pos_embed
-        return hidden_states
+            embeddings = embeddings + self.position_embedding(self.position_ids)
+        return embeddings
 
 
 def eager_attention_forward(
@@ -565,10 +592,6 @@ class Ovis2PreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
             if hasattr(module, "bias") and module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, Ovis2VisualEmbeddingTable):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
 
 
 @auto_docstring(

@@ -27,7 +27,7 @@ from ..auto import AutoModel
 from ..llama.modeling_llama import LlamaMLP, LlamaRMSNorm
 from ..llava.modeling_llava import LlavaForConditionalGeneration, LlavaModel
 from ..llava_next.modeling_llava_next import LlavaNextCausalLMOutputWithPast, LlavaNextModelOutputWithPast
-from ..siglip.modeling_siglip import SiglipAttention, SiglipEncoder, SiglipEncoderLayer
+from ..siglip.modeling_siglip import SiglipAttention, SiglipEncoder, SiglipEncoderLayer, SiglipVisionEmbeddings
 from .configuration_ovis2 import Ovis2Config, Ovis2VisionConfig
 
 
@@ -74,51 +74,23 @@ class Ovis2VisionMLP(LlamaMLP):
     pass
 
 
-class Ovis2VisionEmbeddings(nn.Module):
+class Ovis2VisionEmbeddings(SiglipVisionEmbeddings):
     def __init__(self, config: Ovis2VisionConfig):
-        super().__init__()
-        self.config = config
-        self.patch_size = config.patch_size
-        self.patch_embed = nn.Conv2d(
-            config.num_channels, config.hidden_size, kernel_size=config.patch_size, stride=config.patch_size
-        )
+        super().__init__(config)
         self.rms_norm = Ovis2RMSNorm(config.hidden_size, config.rms_norm_eps)
 
-        num_patches = (config.image_size // config.patch_size) ** 2
-        self.position_embeddings = nn.Embedding(num_patches, config.hidden_size)
-        self.register_buffer("position_ids", torch.arange(num_patches).expand((1, -1)), persistent=False)
+    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=False) -> torch.Tensor:
+        _, _, height, width = pixel_values.shape
+        target_dtype = self.patch_embedding.weight.dtype
+        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
+        embeddings = patch_embeds.flatten(2).transpose(1, 2)
+        embeddings = self.rms_norm(embeddings)
 
-    @staticmethod
-    def build_2d_sincos_position_embedding(
-        height, width, embed_dim=256, temperature=10000.0, device="cpu", dtype=torch.float32
-    ):
-        grid_w = torch.arange(int(width), dtype=dtype, device=device)
-        grid_h = torch.arange(int(height), dtype=dtype, device=device)
-        grid_h, grid_w = torch.meshgrid(grid_w, grid_h, indexing="xy")
-
-        pos_dim = embed_dim // 4
-        omega = torch.arange(pos_dim, dtype=dtype, device=device) / pos_dim
-        omega = 1.0 / (temperature**omega)
-
-        out_h = grid_h.flatten()[..., None] @ omega[None, :]
-        out_w = grid_w.flatten()[..., None] @ omega[None, :]
-
-        return torch.concat([out_h.sin(), out_h.cos(), out_w.sin(), out_w.cos()], dim=1)[None, :, :]
-
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        _, _, height, width = pixel_values.size()
-        hidden_states = self.patch_embed(pixel_values).flatten(2).transpose(1, 2)
-        hidden_states = self.rms_norm(hidden_states)
-
-        if self.config.image_size != height or self.config.image_size != width:
-            pos_embed = self.build_2d_sincos_position_embedding(
-                height // self.patch_size, width // self.patch_size, embed_dim=self.config.hidden_size
-            )
+        if interpolate_pos_encoding:
+            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
         else:
-            pos_embed = self.position_embeddings(self.position_ids)
-
-        hidden_states = hidden_states + pos_embed
-        return hidden_states
+            embeddings = embeddings + self.position_embedding(self.position_ids)
+        return embeddings
 
 
 class Ovis2VisionAttention(SiglipAttention):
@@ -290,10 +262,6 @@ class Ovis2PreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
             if hasattr(module, "bias") and module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, Ovis2VisualEmbeddingTable):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
 
 
 class Ovis2Model(LlavaModel):

@@ -48,7 +48,7 @@ ORIGINAL_TO_HF_MAPPING = {
     r"visual_tokenizer":                            r"model.vision_tower",
     r"backbone":                                    r"transformer",
     r"preprocessor":                                r"embeddings",
-    r"patchifier.proj":                             r"patch_embed",
+    r"patchifier.proj":                             r"patch_embedding",
     r"patchifier.norm":                             r"rms_norm",
     r"trunk.post_trunk_norm":                       r"rms_norm",
     r"trunk.blocks":                                r"encoder.layers",
@@ -151,13 +151,13 @@ def create_image_processor(save_dir):
 
 def extract_vision_config_from_original(orig_config):
     """
-    Extract and format vision configuration from the original model config.
+        Extract and format vision configuration from the original model config.
 
-    Args:
-        orig_config: Original model configuration
-
-    Returns:
-        dict: Cleaned vision configuration dictionary
+        Args:
+            orig_config: Original model configuration
+    F
+        Returns:
+            dict: Cleaned vision configuration dictionary
     """
     visual_tokenizer_config = orig_config.visual_tokenizer_config.to_dict()
     # backbone_config = visual_tokenizer_config.pop("backbone_config")
@@ -257,7 +257,7 @@ def convert_orig2hf(state_dict, dim):
             new_state_dict[new_key_value] = state_dict[orig_key][-dim:]
 
         elif "pos_embed" in key:
-            new_key = key.replace("pos_embed", "position_embeddings.weight")
+            new_key = key.replace("pos_embed", "position_embedding.weight")
             new_state_dict[new_key] = state_dict[orig_key][0]
 
         else:
