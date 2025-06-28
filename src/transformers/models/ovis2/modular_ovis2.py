@@ -51,7 +51,7 @@ class Ovis2VisionMLP(LlamaMLP):
 
 class Ovis2VisionEmbeddings(SiglipVisionEmbeddings):
     def __init__(self, config: Ovis2VisionConfig):
-        super().__init__(config)
+        super().__init__()
         self.rms_norm = Ovis2RMSNorm(config.hidden_size, config.rms_norm_eps)
 
     def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=False) -> torch.Tensor:
@@ -70,7 +70,7 @@ class Ovis2VisionEmbeddings(SiglipVisionEmbeddings):
 
 class Ovis2VisionAttention(SiglipAttention):
     def __init__(self, config: Ovis2VisionConfig):
-        super().__init__(config)
+        super().__init__()
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
@@ -79,7 +79,7 @@ class Ovis2VisionAttention(SiglipAttention):
 
 class Ovis2VisionEncoderLayer(SiglipEncoderLayer):
     def __init__(self, config: Ovis2VisionConfig):
-        super().__init__(config)
+        super().__init__()
         self.layer_norm1 = Ovis2RMSNorm(config.hidden_size, config.rms_norm_eps)
         self.mlp = Ovis2VisionMLP(config)
         self.layer_norm2 = Ovis2RMSNorm(config.hidden_size, config.rms_norm_eps)

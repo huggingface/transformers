@@ -151,19 +151,29 @@ def create_image_processor(save_dir):
 
 def extract_vision_config_from_original(orig_config):
     """
-        Extract and format vision configuration from the original model config.
+    Extract and format vision configuration from the original model config.
 
-        Args:
-            orig_config: Original model configuration
-    F
-        Returns:
-            dict: Cleaned vision configuration dictionary
+    Args:
+        orig_config: Original model configuration
+
+    Returns:
+        dict: Cleaned vision configuration dictionary
     """
     visual_tokenizer_config = orig_config.visual_tokenizer_config.to_dict()
     # backbone_config = visual_tokenizer_config.pop("backbone_config")
 
     # Copy required fields from backbone config
     visual_tokenizer_config["hidden_size"] = orig_config.visual_tokenizer_config.backbone_config.hidden_size
+    visual_tokenizer_config["intermediate_size"] = (
+        orig_config.visual_tokenizer_config.backbone_config.intermediate_size
+    )
+    visual_tokenizer_config["num_attention_heads"] = (
+        orig_config.visual_tokenizer_config.backbone_config.num_attention_heads
+    )
+    visual_tokenizer_config["num_hidden_layers"] = (
+        orig_config.visual_tokenizer_config.backbone_config.num_hidden_layers
+    )
+    visual_tokenizer_config["rms_norm_eps"] = orig_config.visual_tokenizer_config.backbone_config.rms_norm_eps
     visual_tokenizer_config["image_size"] = orig_config.visual_tokenizer_config.backbone_config.image_size
     visual_tokenizer_config["num_channels"] = orig_config.visual_tokenizer_config.backbone_config.num_channels
     visual_tokenizer_config["patch_size"] = orig_config.visual_tokenizer_config.backbone_config.patch_size
