@@ -149,11 +149,11 @@ class Gemma3nAudioRelativePositionEmbedding(nn.Module):
         super().__init__()
         self.config = config
 
-        self.num_heads = self.config.conf_num_attention_heads
+        self.num_heads = self.config.num_attention_heads
         self.channels = self.config.hidden_size
         self.head_dim = self.channels // self.num_heads
-        self.max_backward = max(0, self.config.conf_attention_context_left - 1)
-        self.max_forward = self.config.conf_attention_context_right
+        self.max_backward = max(0, self.config.attention_context_left - 1)
+        self.max_forward = self.config.attention_context_right
 
         self.pos_proj = nn.Linear(self.channels, self.num_heads * self.head_dim, bias=False)
 
@@ -319,7 +319,7 @@ class Gemma3nAudioAttention(nn.Module):
         super().__init__()
         self.config = config
 
-        self.num_heads = self.config.conf_num_attention_heads
+        self.num_heads = self.config.num_attention_heads
         self.hidden_size = self.config.hidden_size
         self.head_dim = self.hidden_size // self.num_heads
 
@@ -826,7 +826,7 @@ class Gemma3nAudioConformerFeedForward(nn.Module):
         self.ffw_layer_1 = nn.Linear(self.config.hidden_size, self.config.hidden_size * 4, bias=False)
         self.ffw_layer_2 = nn.Linear(self.config.hidden_size * 4, self.config.hidden_size, bias=False)
         self.post_layer_norm = Gemma3nRMSNorm(self.config.hidden_size)
-        self.post_layer_scale = torch.tensor(self.config.conf_residual_weight)
+        self.post_layer_scale = torch.tensor(self.config.residual_weight)
 
     def forward(self, audio_encodings: torch.Tensor) -> torch.Tensor:
         residual = audio_encodings
@@ -850,7 +850,7 @@ class Gemma3nAudioConformerLightConv1d(nn.Module):
         self.depthwise_conv1d = nn.Conv1d(
             in_channels=self.config.hidden_size,
             out_channels=self.config.hidden_size,
-            kernel_size=self.config.conf_conv_kernel_size,
+            kernel_size=self.config.conv_kernel_size,
             stride=1,
             padding=0,  # Manual causal padding
             groups=self.config.hidden_size,  # Depthwise
@@ -860,7 +860,7 @@ class Gemma3nAudioConformerLightConv1d(nn.Module):
         self.conv_norm = Gemma3nRMSNorm(self.config.hidden_size, eps=self.config.rms_norm_eps)
         self.linear_end = nn.Linear(self.config.hidden_size, self.config.hidden_size, bias=False)
 
-        self.causal_padding = self.config.conf_conv_kernel_size - 1
+        self.causal_padding = self.config.conv_kernel_size - 1
 
     def forward(self, audio_encodings: torch.Tensor) -> torch.Tensor:
         audio_encodings_residual = audio_encodings  # Save for residual connection
@@ -922,9 +922,7 @@ class Gemma3nAudioEncoder(PreTrainedModel):
         self.config = config
 
         self.subsample_conv_projection = Gemma3nAudioSubSampleConvProjection(config)
-        self.conformer = nn.ModuleList(
-            [Gemma3nAudioConformerBlock(config) for _ in range(config.conf_num_hidden_layers)]
-        )
+        self.conformer = nn.ModuleList([Gemma3nAudioConformerBlock(config) for _ in range(config.num_hidden_layers)])
 
     def forward(
         self, audio_mel: torch.Tensor, audio_mel_mask: torch.BoolTensor
@@ -973,10 +971,10 @@ class Gemma3nAudioEncoder(PreTrainedModel):
         for block in self.conformer:
             audio_encodings = block(audio_encodings, current_mask)  # Pass the processed mask
 
-        if self.config.conf_reduction_factor > 1:
-            audio_encodings = audio_encodings[:, :: self.config.conf_reduction_factor]
+        if self.config.reduction_factor > 1:
+            audio_encodings = audio_encodings[:, :: self.config.reduction_factor]
             # Reduce the mask as well
-            current_mask = current_mask[:, :: self.config.conf_reduction_factor]
+            current_mask = current_mask[:, :: self.config.reduction_factor]
 
         audio_encodings = audio_encodings.masked_fill(current_mask.unsqueeze(-1), 0.0)
         return audio_encodings, current_mask
