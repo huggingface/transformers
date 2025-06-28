@@ -34,8 +34,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, logging
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, is_torch_available, torch_int
-from ..auto import AutoModel
-from .configuration_bagel import BagelConfig, BagelVisionConfig, BagelVQVAEConfig
+from .configuration_bagel import BagelConfig, BagelVQVAEConfig
 
 
 if is_torch_available():
@@ -48,7 +47,7 @@ logger = logging.get_logger(__name__)
 
 
 class BagelVisionEmbeddings(nn.Module):
-    def __init__(self, config: BagelVisionConfig):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -68,55 +67,20 @@ class BagelVisionEmbeddings(nn.Module):
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
-    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
-        """
-        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
-        images. This method is also adapted to support torch.jit tracing and no class embeddings.
+    def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
+        patch_embeds = self.patch_embedding(pixel_values)
+        return patch_embeds
 
-        Adapted from:
-        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
-        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
-        """
-
-        num_patches = embeddings.shape[1]
-        num_positions = self.position_embedding.weight.shape[0]
-
-        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
-        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
-            return self.position_embedding(self.position_ids)
-
-        patch_pos_embed = self.position_embedding.weight.unsqueeze(0)
-
-        dim = embeddings.shape[-1]
-
-        new_height = height // self.patch_size
-        new_width = width // self.patch_size
-
-        sqrt_num_positions = torch_int(num_positions**0.5)
-        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
-        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
-
-        patch_pos_embed = nn.functional.interpolate(
-            patch_pos_embed,
-            size=(new_height, new_width),
-            mode="bicubic",
-            align_corners=False,
+    def convert_conv2d_to_linear(self, config, meta=False):
+        W = self.patch_embedding.weight.permute(0, 2, 3, 1).reshape(
+            self.embed_dim, config.num_channels * self.patch_size**2
         )
-
-        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-        return patch_pos_embed
-
-    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=False) -> torch.Tensor:
-        _, _, height, width = pixel_values.shape
-        target_dtype = self.patch_embedding.weight.dtype
-        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
-        embeddings = patch_embeds.flatten(2).transpose(1, 2)
-
-        if interpolate_pos_encoding:
-            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
-        else:
-            embeddings = embeddings + self.position_embedding(self.position_ids)
-        return embeddings
+        linear_patch_embedding = nn.Linear(
+            config.num_channels * self.patch_size**2, self.embed_dim, bias=True, device=W.device
+        )
+        linear_patch_embedding.weight.data = W
+        linear_patch_embedding.bias.data = self.patch_embedding.bias.data
+        self.patch_embedding = linear_patch_embedding
 
 
 def eager_attention_forward(
@@ -129,32 +93,17 @@ def eager_attention_forward(
     dropout: float = 0.0,
     **kwargs,
 ):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
+
+    attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
-
-
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
 class BagelVisionAttention(nn.Module):
@@ -378,6 +327,8 @@ class BagelVisionTransformer(nn.Module):
         embed_dim = config.hidden_size
 
         self.embeddings = BagelVisionEmbeddings(config)
+        # Better way to do this
+        self.embeddings.convert_conv2d_to_linear(config)
         self.encoder = BagelVisionEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
@@ -388,14 +339,13 @@ class BagelVisionTransformer(nn.Module):
         pixel_values,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = False,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
-        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        hidden_states = self.embeddings(pixel_values)
 
         encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
@@ -513,6 +463,44 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+def text_eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+        attn_weights = attn_weights + causal_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class BagelTextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -567,7 +555,7 @@ class BagelTextAttention(nn.Module):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attention_interface: Callable = eager_attention_forward
+        attention_interface: Callable = text_eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
@@ -1210,16 +1198,13 @@ class BagelTimestepEmbedder(nn.Module):
         return t_emb
 
 
-# Split the vison_model.pathc_embeddings from linear to conv2d in conversion file :)
-
-
 def patchify(image, patch_size):
     p = patch_size
-    c, h, w = image.shape
+    b, c, h, w = image.shape
     assert h % p == 0 and w % p == 0
-    image = image.reshape(c, h // p, p, w // p, p)
-    image = torch.einsum("chpwq->hwpqc", image)
-    image = image.reshape(-1, p**2 * c)
+    image = image.reshape(b, c, h // p, p, w // p, p)
+    image = torch.einsum("bchpwq->bhwpqc", image)
+    image = image.reshape(b, -1, p**2 * c)
     return image
 
 
@@ -1240,9 +1225,9 @@ class BagelModel(BagelPreTrainedModel):
         self.latent_patch_size = config.vq_config.latent_patch_size
         self.patch_latent_dim = self.latent_patch_size**2 * self.latent_channel
 
-        self.vision_tower = AutoModel.from_config(config.vision_config)
-        self.language_model = BagelTextModel(config.text_config)
-        self.vq_model = BagelVQVAE(config.vq_config)
+        self.vision_tower = BagelVisionTransformer(config.vision_config)
+        # self.language_model = BagelTextModel(config.text_config)
+        # self.vq_model = BagelVQVAE(config.vq_config)
 
         self.vision_connecter = BagelVisionConnector(config)
         self.timestep_embedder = BagelTimestepEmbedder(config.text_config.hidden_size)
@@ -1257,8 +1242,8 @@ class BagelModel(BagelPreTrainedModel):
             embed_dim=config.text_config.hidden_size,
         )
 
-        self.register_buffer("vit_pos_embed", vit_pos_embed, persistent=False)
-        self.register_buffer("latent_pos_embed", latent_pos_embed, persistent=False)
+        self.vit_pos_embed = nn.Parameter(vit_pos_embed, requires_grad=False)
+        self.latent_pos_embed = nn.Parameter(latent_pos_embed, requires_grad=False)
 
     @staticmethod
     def build_2d_sincos_position_embedding(
@@ -1276,7 +1261,7 @@ class BagelModel(BagelPreTrainedModel):
         out_w = grid_w.flatten()[..., None] @ omega[None]
         out_h = grid_h.flatten()[..., None] @ omega[None]
 
-        return torch.concat([out_h.sin(), out_h.cos(), out_w.sin(), out_w.cos()], dim=1)[None, :, :]
+        return torch.concat([out_h.sin(), out_h.cos(), out_w.sin(), out_w.cos()], dim=1)
 
     def get_input_embeddings(self):
         return self.language_model.get_input_embeddings()
@@ -1295,20 +1280,18 @@ class BagelModel(BagelPreTrainedModel):
         pixel_values: torch.FloatTensor,
         **kwargs,
     ):
-        pixel_values = patchify(
-            pixel_values,
-            self.config.vision_config.patch_size,
-        )
         position_ids = get_flattened_position_ids_extrapolate(
-            pixel_values.size(1),
-            pixel_values.size(2),
+            pixel_values.size(-2),
+            pixel_values.size(-1),
             self.config.vision_config.patch_size,
             max_num_patches_per_side=self.config.vit_max_num_patch_per_side,
         )
+        pixel_values = patchify(pixel_values, self.config.vision_config.patch_size)
 
-        image_embeddings = self.vision_tower(pixel_values)
+        image_embeddings = self.vision_tower(pixel_values).last_hidden_state
         image_embeddings = self.vision_connecter(image_embeddings)
-        pos_embed = self.vit_pos_embed(position_ids)
+        # rn pso_embed is of sahpe [num_pathces,x], make it compatible with batch
+        pos_embed = self.vit_pos_embed[position_ids]
         image_embeddings = image_embeddings + pos_embed
         return image_embeddings
 
