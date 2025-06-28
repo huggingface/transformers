@@ -54,17 +54,17 @@ class Ovis2VisionEmbeddings(SiglipVisionEmbeddings):
         super().__init__()
         self.rms_norm = Ovis2RMSNorm(config.hidden_size, config.rms_norm_eps)
 
-    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=False) -> torch.Tensor:
-        _, _, height, width = pixel_values.shape
+    def interpolate_pos_encoding(self):
+        raise NotImplementedError("Not needed for Ovis2")
+
+    def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         target_dtype = self.patch_embedding.weight.dtype
-        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
+        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))
         embeddings = patch_embeds.flatten(2).transpose(1, 2)
         embeddings = self.rms_norm(embeddings)
 
-        if interpolate_pos_encoding:
-            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
-        else:
-            embeddings = embeddings + self.position_embedding(self.position_ids)
+        embeddings = embeddings + self.position_embedding(self.position_ids)
+
         return embeddings
 
 
