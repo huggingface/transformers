@@ -99,7 +99,9 @@ jobs:
 
       - name: Install torch 2.8.0 RC
         working-directory: /transformers
-        run: python3 -m pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/test/cu126
+        run: |
+          python3 -m pip uninstall -y torch torchvision torchaudio
+          python3 -m pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/test/cu126
 
       - name: Show installed libraries and their versions
         working-directory: /transformers
