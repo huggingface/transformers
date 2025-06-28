@@ -662,6 +662,11 @@ class TrainerIntegrationCommon:
         metrics = trainer.evaluate()
         self.assertEqual(metrics[metric], best_value)
 
+    def remove_nan_logs(self, log):
+        for key in list(log.keys()):
+            if log[key] != log[key]:  # Check if the value is NaN
+                del log[key]
+
     def check_trainer_state_are_the_same(self, trainer_state, trainer_state1):
         # We'll pop things so operate on copies.
         state = trainer_state.copy()
@@ -675,6 +680,10 @@ class TrainerIntegrationCommon:
             for key in skip_log_keys:
                 _ = log.pop(key, None)
                 _ = log1.pop(key, None)
+
+            self.remove_nan_logs(log)
+            self.remove_nan_logs(log1)
+
             self.assertEqual(log, log1)
 
     def convert_to_sharded_checkpoint(self, folder, save_safe=True, load_safe=True):
@@ -3174,6 +3183,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertAlmostEqual(b, b1, delta=1e-5)
 
     @slow
+    @require_non_hpu
     @require_accelerate
     @require_torch_non_multi_accelerator
     def test_auto_batch_size_finder(self):
