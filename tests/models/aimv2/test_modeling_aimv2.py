@@ -69,7 +69,7 @@ if is_vision_available():
     from transformers import AutoImageProcessor, AutoProcessor
 
 
-class AIMv2VisionModelTester:
+class Aimv2VisionModelTester:
     def __init__(
         self,
         parent,
@@ -139,10 +139,10 @@ class AIMv2VisionModelTester:
         return config, inputs_dict
 
 
-class AIMv2ModelTesterMixin(ModelTesterMixin):
+class Aimv2ModelTesterMixin(ModelTesterMixin):
     """
-    Subclass of ModelTesterMixin with methods specific to testing AIMv2 models.
-    The SDPA equivalence test is overridden here because AIMv2 models may have test/vision/text+vision inputs,
+    Subclass of ModelTesterMixin with methods specific to testing Aimv2 models.
+    The SDPA equivalence test is overridden here because Aimv2 models may have test/vision/text+vision inputs,
     different output logits, and are not supposed to be used or tested with padding_side="left".
     """
 
@@ -177,9 +177,9 @@ class AIMv2ModelTesterMixin(ModelTesterMixin):
 
 
 @require_torch
-class AIMv2VisionModelTest(AIMv2ModelTesterMixin, unittest.TestCase):
+class Aimv2VisionModelTest(Aimv2ModelTesterMixin, unittest.TestCase):
     """
-    Here we also overwrite some of the tests of test_modeling_common.py, as AIMv2 does not use input_ids, inputs_embeds,
+    Here we also overwrite some of the tests of test_modeling_common.py, as Aimv2 does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
@@ -190,7 +190,7 @@ class AIMv2VisionModelTest(AIMv2ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = AIMv2VisionModelTester(self)
+        self.model_tester = Aimv2VisionModelTester(self)
         self.config_tester = ConfigTester(
             self, config_class=Aimv2VisionConfig, has_text_modality=False, hidden_size=37
         )
@@ -198,7 +198,7 @@ class AIMv2VisionModelTest(AIMv2ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="AIMv2 does not use inputs_embeds")
+    @unittest.skip(reason="Aimv2 does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
@@ -228,7 +228,7 @@ class AIMv2VisionModelTest(AIMv2ModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_model(*config_and_inputs)
 
 
-class AIMv2TextModelTester:
+class Aimv2TextModelTester:
     def __init__(
         self,
         parent,
@@ -312,7 +312,7 @@ class AIMv2TextModelTester:
 
 
 @require_torch
-class AIMv2TextModelTest(AIMv2ModelTesterMixin, unittest.TestCase):
+class Aimv2TextModelTest(Aimv2ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Aimv2TextModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
@@ -320,7 +320,7 @@ class AIMv2TextModelTest(AIMv2ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
 
     def setUp(self):
-        self.model_tester = AIMv2TextModelTester(self)
+        self.model_tester = Aimv2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Aimv2TextConfig, hidden_size=37)
 
     def test_config(self):
@@ -330,12 +330,12 @@ class AIMv2TextModelTest(AIMv2ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="AIMv2 does not use inputs_embeds")
+    @unittest.skip(reason="Aimv2 does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
 
-class AIMv2ModelTester:
+class Aimv2ModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=False):
         if text_kwargs is None:
             text_kwargs = {}
@@ -343,8 +343,8 @@ class AIMv2ModelTester:
             vision_kwargs = {}
 
         self.parent = parent
-        self.text_model_tester = AIMv2TextModelTester(parent, **text_kwargs)
-        self.vision_model_tester = AIMv2VisionModelTester(parent, **vision_kwargs)
+        self.text_model_tester = Aimv2TextModelTester(parent, **text_kwargs)
+        self.vision_model_tester = Aimv2VisionModelTester(parent, **vision_kwargs)
         self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
@@ -386,7 +386,7 @@ class AIMv2ModelTester:
 
 
 @require_torch
-class AIMv2ModelTest(AIMv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class Aimv2ModelTest(Aimv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     additional_model_inputs = ["pixel_values"]
     all_model_classes = (Aimv2Model,) if is_torch_available() else ()
     pipeline_model_mapping = (
@@ -402,7 +402,7 @@ class AIMv2ModelTest(AIMv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     _is_composite = True
 
     def setUp(self):
-        self.model_tester = AIMv2ModelTester(self)
+        self.model_tester = Aimv2ModelTester(self)
         common_properties = ["projection_dim", "logit_scale_init_value"]
         self.config_tester = ConfigTester(
             self, config_class=Aimv2Config, has_text_modality=False, common_properties=common_properties
@@ -432,7 +432,7 @@ class AIMv2ModelTest(AIMv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_model_get_set_embeddings(self):
         pass
 
-    # Override as the `logit_scale` parameter initialization is different for AIMv2
+    # Override as the `logit_scale` parameter initialization is different for Aimv2
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -568,7 +568,7 @@ class AIMv2ModelTest(AIMv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         # Adding only flaky decorator here and call the parent test method
         return getattr(ModelTesterMixin, self._testMethodName)(self)
 
-    # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest._create_and_check_torchscript with CLIP->AIMv2
+    # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest._create_and_check_torchscript with CLIP->Aimv2
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
             self.skipTest(reason="test_torchscript is set to False")
@@ -583,7 +583,7 @@ class AIMv2ModelTest(AIMv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
             try:
                 input_ids = inputs_dict["input_ids"]
-                pixel_values = inputs_dict["pixel_values"]  # AIMv2 needs pixel_values
+                pixel_values = inputs_dict["pixel_values"]  # Aimv2 needs pixel_values
                 traced_model = torch.jit.trace(model, (input_ids, pixel_values))
             except RuntimeError:
                 self.fail("Couldn't trace module.")
@@ -643,7 +643,7 @@ class AIMv2ModelTest(AIMv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
 @require_vision
 @require_torch
-class AIMv2ModelIntegrationTest(unittest.TestCase):
+class Aimv2ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
         model_name = "yaswanthgali/aimv2-large-patch14-224-lit-HF"
@@ -676,7 +676,7 @@ class AIMv2ModelIntegrationTest(unittest.TestCase):
 
 @require_vision
 @require_torch
-class AIMv2VisionModelIntegrationTests(unittest.TestCase):
+class Aimv2VisionModelIntegrationTests(unittest.TestCase):
     @slow
     def test_inference(self):
         model_name = "yaswanthgali/aimv2-large-patch14-224-HF"
