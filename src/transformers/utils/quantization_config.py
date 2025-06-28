@@ -63,6 +63,7 @@ class QuantizationMethod(str, Enum):
     SPQR = "spqr"
     FP8 = "fp8"
     QUARK = "quark"
+    QUARTET = "quartet"
     AUTOROUND = "auto-round"
 
 
@@ -1548,6 +1549,61 @@ class HiggsConfig(QuantizationConfigMixin):
             raise ValueError("group_size must be 64, 128, or 256")
         if self.hadamard_size % self.group_size != 0:
             raise ValueError("hadamard_size must be divisible by group_size")
+
+
+@dataclass
+class QuartetConfig(QuantizationConfigMixin):
+    """
+    QuartetConfig is a configuration class for quantization using the Quartet method.
+
+    Args:
+        forward_dtype (`str`, *optional*, defaults to `"mxfp4"`):
+            The dtype to use for the forward pass.
+        backward_dtype (`str`, *optional*, defaults to `"mxfp4"`):
+            The dtype to use for the backward pass.
+        store_master_weights (`bool`, *optional*, defaults to `False`):
+            Whether to store the master weights.
+        hadamard_group_size (`int`, *optional*, defaults to `32`):
+            The group size for the hadamard transform.
+        modules_to_not_convert (`list`, *optional*, defaults to `None`):
+            The list of modules to not quantize, useful for quantizing models that explicitly require to have
+            some modules left in their original precision.
+    """
+
+    def __init__(
+        self,
+        forward_dtype: str = "mxfp4",
+        forward_method: str = "abs_max",
+        backward_dtype: str = "mxfp4",
+        store_master_weights: bool = False,
+        hadamard_group_size: int = 32,
+        modules_to_not_convert: Optional[List[str]] = None,
+        **kwargs,
+    ):
+        self.forward_dtype = forward_dtype
+        self.forward_method = forward_method
+        self.backward_dtype = backward_dtype
+        self.store_master_weights = store_master_weights
+        self.hadamard_group_size = hadamard_group_size
+        self.modules_to_not_convert = modules_to_not_convert
+
+        self.quant_method = QuantizationMethod.QUARTET
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
+        """
+        if self.forward_dtype not in ["mxfp4"]:
+            raise ValueError("forward_dtype must be mxfp4 for now")
+        if self.forward_method not in ["abs_max", "quest"]:
+            raise ValueError("forward_method must be abs_max or quest for now")
+        if self.backward_dtype not in ["mxfp4", "bf16"]:
+            raise ValueError("backward_dtype must be mxfp4 or bf16 for now")
+        if self.hadamard_group_size not in [32]:
+            raise ValueError("hadamard_group_size must be 32 for now")
+        if self.modules_to_not_convert is None:
+            self.modules_to_not_convert = ["lm_head"]
 
 
 @dataclass
