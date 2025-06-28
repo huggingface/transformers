@@ -1720,6 +1720,7 @@ class PatchTSMixerForPrediction(PatchTSMixerPreTrainedModel):
             scale=scale,
         )
 
+    @torch.no_grad()
     def generate(
         self,
         past_values: torch.Tensor,
@@ -2104,6 +2105,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
             hidden_states=model_output.hidden_states,
         )
 
+    @torch.no_grad()
     def generate(
         self,
         past_values: torch.Tensor,
