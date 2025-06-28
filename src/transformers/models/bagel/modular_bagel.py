@@ -40,6 +40,7 @@ from ..qwen2.modeling_qwen2 import (
     Qwen2RMSNorm,
     Qwen2RotaryEmbedding,
     apply_rotary_pos_emb,
+    repeat_kv,
 )
 from ..siglip.modeling_siglip import (
     SiglipAttention,
@@ -352,19 +353,6 @@ class BagelTextRMSNorm(Qwen2RMSNorm):
 class BagelTextMLP(Qwen2MLP):
     pass
 
-
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
 def text_eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -663,11 +651,6 @@ class BagelTextModel(BagelPreTrainedModel):
         )
 
 
-###########
-## VQVAE ##
-###########
-
-
 class BagelVQVAEResnetBlock(JanusVQVAEResnetBlock):
     pass
 
@@ -706,7 +689,7 @@ class BagelVQVAEEncoder(JanusVQVAEEncoder, nn.Module):
             attn = nn.ModuleList()
             block_in = base_channels * in_channel_multiplier[i_level]
             block_out = base_channels * channel_multiplier[i_level]
-            for i_block in range(self.num_res_blocks):
+            for _ in range(self.num_res_blocks):
                 block.append(
                     BagelVQVAEResnetBlock(
                         config=config,
@@ -810,10 +793,7 @@ class BagelVQVAEDiagonalGaussian(nn.Module):
 
 
 @auto_docstring(
-    custom_intro="""
-    The VQ-VAE model used in Bagel for encoding/decoding images into discrete tokens.
-    This model follows the "Make-a-scene: Scene-based text-to-image generation with human priors" paper from
-    [ Oran Gafni, Adam Polyak, Oron Ashual, Shelly Sheynin, Devi Parikh, and Yaniv Taigman](https://arxiv.org/abs/2203.13131).
+    custom_intro=""" Bagel VQVAE part.
     """
 )
 class BagelVQVAE(BagelPreTrainedModel):
@@ -1023,14 +1003,10 @@ class BagelModel(BagelPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        image_sizes: torch.Tensor = None,
         **kwargs,
     ):
         if pixel_values is not None:
-            image_features = self.get_image_features(
-                pixel_values=pixel_values,
-                image_sizes=image_sizes,
-            )
+            image_features = self.get_image_features(pixel_values=pixel_values)
 
         # outputs = self.language_model(
         #     attention_mask=attention_mask,
@@ -1074,12 +1050,12 @@ class BagelForConditionalGeneration(BagelPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs,
     ):
         return self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
-            **flash_attn_kwargs,
+            **kwargs,
         )
 
 

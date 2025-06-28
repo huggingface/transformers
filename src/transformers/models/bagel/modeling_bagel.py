@@ -948,7 +948,7 @@ class BagelVQVAEEncoder(nn.Module):
             attn = nn.ModuleList()
             block_in = base_channels * in_channel_multiplier[i_level]
             block_out = base_channels * channel_multiplier[i_level]
-            for i_block in range(self.num_res_blocks):
+            for _ in range(self.num_res_blocks):
                 block.append(
                     BagelVQVAEResnetBlock(
                         config=config,
@@ -1076,10 +1076,7 @@ class BagelVQVAEDiagonalGaussian(nn.Module):
 
 
 @auto_docstring(
-    custom_intro="""
-    The VQ-VAE model used in Bagel for encoding/decoding images into discrete tokens.
-    This model follows the "Make-a-scene: Scene-based text-to-image generation with human priors" paper from
-    [ Oran Gafni, Adam Polyak, Oron Ashual, Shelly Sheynin, Devi Parikh, and Yaniv Taigman](https://arxiv.org/abs/2203.13131).
+    custom_intro=""" Bagel VQVAE part.
     """
 )
 class BagelVQVAE(BagelPreTrainedModel):
@@ -1307,14 +1304,10 @@ class BagelModel(BagelPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        image_sizes: torch.Tensor = None,
         **kwargs,
     ):
         if pixel_values is not None:
-            image_features = self.get_image_features(
-                pixel_values=pixel_values,
-                image_sizes=image_sizes,
-            )
+            image_features = self.get_image_features(pixel_values=pixel_values)
 
         # outputs = self.language_model(
         #     attention_mask=attention_mask,
@@ -1358,12 +1351,12 @@ class BagelForConditionalGeneration(BagelPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs,
     ):
         return self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
-            **flash_attn_kwargs,
+            **kwargs,
         )
 
 
