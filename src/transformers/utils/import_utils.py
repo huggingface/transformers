@@ -119,6 +119,7 @@ _aqlm_available = _is_package_available("aqlm")
 _vptq_available, _vptq_version = _is_package_available("vptq", return_version=True)
 _av_available = importlib.util.find_spec("av") is not None
 _decord_available = importlib.util.find_spec("decord") is not None
+_torchcodec_available = importlib.util.find_spec("torchcodec") is not None
 _bitsandbytes_available = _is_package_available("bitsandbytes")
 _eetq_available = _is_package_available("eetq")
 _fbgemm_gpu_available = _is_package_available("fbgemm_gpu")
@@ -815,8 +816,8 @@ def is_torch_hpu_available():
     ):
         return False
 
-    torch_hpu_min_version = "1.5.0"
-    if _accelerate_available and version.parse(_accelerate_version) < version.parse(torch_hpu_min_version):
+    torch_hpu_min_accelerate_version = "1.5.0"
+    if _accelerate_available and version.parse(_accelerate_version) < version.parse(torch_hpu_min_accelerate_version):
         return False
 
     import torch
@@ -849,6 +850,46 @@ def is_torch_hpu_available():
                 original_masked_fill_(self, mask, value)
 
         torch.Tensor.masked_fill_ = patched_masked_fill_
+
+    # We patch torch.gather for int64 tensors to avoid a bug on Gaudi
+    # Graph compile failed with synStatus 26 [Generic failure]
+    # This can be removed once bug is fixed but for now we need it.
+    original_gather = torch.Tensor.gather
+
+    def patched_gather(input: torch.Tensor, dim: int, index: torch.LongTensor) -> torch.Tensor:
+        if input.dtype == torch.int64 and input.device.type == "hpu":
+            logger.warning_once(
+                "torch.gather is not supported for int64 tensors on Gaudi. "
+                "This operation will be performed patched_gather using indexing."
+            )
+
+            idx = [torch.arange(size, device=input.device, dtype=input.dtype) for size in input.shape]
+            idx[dim] = index
+            idx = tuple(idx)
+            output = input[idx]
+            return output
+        else:
+            return original_gather(input, dim, index)
+
+    torch.Tensor.gather = patched_gather
+
+    # IlyasMoutawwakil: we patch torch.compile to use the HPU backend by default
+    # https://github.com/huggingface/transformers/pull/38790#discussion_r2157043944
+    # This is necessary for cases where torch.compile is used as a decorator (defaulting to inductor)
+    # https://github.com/huggingface/transformers/blob/af6120b3eb2470b994c21421bb6eaa76576128b0/src/transformers/models/modernbert/modeling_modernbert.py#L204
+    original_compile = torch.compile
+
+    def hpu_backend_compile(*args, **kwargs):
+        if kwargs.get("backend", None) not in ["hpu_backend", "eager"]:
+            logger.warning(
+                f"Calling torch.compile with backend={kwargs.get('backend', None)} on a Gaudi device is not supported. "
+                "We will override the backend with 'hpu_backend' to avoid errors."
+            )
+            kwargs["backend"] = "hpu_backend"
+
+        return original_compile(*args, **kwargs)
+
+    torch.compile = hpu_backend_compile
 
     return True
 
@@ -956,6 +997,10 @@ def is_av_available():
 
 def is_decord_available():
     return _decord_available
+
+
+def is_torchcodec_available():
+    return _torchcodec_available
 
 
 def is_ninja_available():
@@ -1075,6 +1120,25 @@ def is_flash_attn_2_available():
         return False
 
 
+@lru_cache()
+def is_flash_attn_3_available():
+    if not is_torch_available():
+        return False
+
+    if not _is_package_available("flash_attn_3"):
+        return False
+
+    import torch
+
+    if not torch.cuda.is_available():
+        return False
+
+    # TODO: Check for a minimum version when FA3 is stable
+    # return version.parse(importlib.metadata.version("flash_attn_3")) >= version.parse("3.0.0")
+
+    return True
+
+
 @lru_cache
 def is_flash_attn_greater_or_equal_2_10():
     if not _is_package_available("flash_attn"):
@@ -1107,6 +1171,24 @@ def is_torch_greater_or_equal(library_version: str, accept_dev: bool = False):
         )
     else:
         return version.parse(importlib.metadata.version("torch")) >= version.parse(library_version)
+
+
+@lru_cache
+def is_torch_less_or_equal(library_version: str, accept_dev: bool = False):
+    """
+    Accepts a library version and returns True if the current version of the library is less than or equal to the
+    given version. If `accept_dev` is True, it will also accept development versions (e.g. 2.7.0.dev20250320 matches
+    2.7.0).
+    """
+    if not _is_package_available("torch"):
+        return False
+
+    if accept_dev:
+        return version.parse(version.parse(importlib.metadata.version("torch")).base_version) <= version.parse(
+            library_version
+        )
+    else:
+        return version.parse(importlib.metadata.version("torch")) <= version.parse(library_version)
 
 
 @lru_cache
@@ -1480,6 +1562,14 @@ DECORD_IMPORT_ERROR = """
 {0} requires the PyAv library but it was not found in your environment. You can install it with:
 ```
 pip install decord
+```
+Please note that you may need to restart your runtime after installation.
+"""
+
+TORCHCODEC_IMPORT_ERROR = """
+{0} requires the TorchCodec (https://github.com/pytorch/torchcodec) library, but it was not found in your environment. You can install it with:
+```
+pip install torchcodec
 ```
 Please note that you may need to restart your runtime after installation.
 """
@@ -1864,6 +1954,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("tokenizers", (is_tokenizers_available, TOKENIZERS_IMPORT_ERROR)),
         ("torch", (is_torch_available, PYTORCH_IMPORT_ERROR)),
         ("torchvision", (is_torchvision_available, TORCHVISION_IMPORT_ERROR)),
+        ("torchcodec", (is_torchcodec_available, TORCHCODEC_IMPORT_ERROR)),
         ("vision", (is_vision_available, VISION_IMPORT_ERROR)),
         ("scipy", (is_scipy_available, SCIPY_IMPORT_ERROR)),
         ("accelerate", (is_accelerate_available, ACCELERATE_IMPORT_ERROR)),

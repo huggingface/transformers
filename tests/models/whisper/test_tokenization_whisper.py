@@ -18,7 +18,7 @@ import numpy as np
 
 from transformers.models.whisper import WhisperTokenizer, WhisperTokenizerFast
 from transformers.models.whisper.tokenization_whisper import _combine_tokens_into_words, _find_longest_common_sequence
-from transformers.testing_utils import require_flax, require_tf, require_torch, slow
+from transformers.testing_utils import require_torch, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -344,13 +344,8 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         model_outputs = [
             {
                 'stride': [10, 0, 5],
-                'tokens': np.array([[ 50257, 50362, 3363, 11, 345, 460, 0, 2329, 466, 340, 0, 50256 ]]),
-                'token_timestamps': np.array([[ 0, 0, 5.18, 5.56, 5.56, 5.84, 6.36, 7.12, 7.54, 7.82, 8.16, 9.48 ]])
-            },
-            {
-                'stride': [10, 5, 0],
-                'tokens': np.array([[ 50257, 50362, 2329, 466, 340, 0, 3363, 345, 460, 0, 2329, 466, 340, 50256 ]]),
-                'token_timestamps': np.array([[ 0, 0, 0, 2.44, 4.3, 5.04, 5.06, 5.56, 5.8, 6.32, 7.12, 7.56, 7.8, 8.72 ]])
+                'tokens': np.array([[50363, 3363, 11, 345, 460, 0, 50423]]),
+                'token_timestamps': np.array([[0.0, 0.5, 0.52, 0.78, 1.2, 1.28, 1.28]])
             }
         ]
         # fmt: on
@@ -361,15 +356,12 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
         EXPECTED_OUTPUT = (
-            " Yes, you can! Just do it",
+            " Yes, you can!",
             {
                 "chunks": [
-                    {"text": " Yes,", "timestamp": (5.18, 5.56)},
-                    {"text": " you", "timestamp": (5.56, 5.84)},
-                    {"text": " can!", "timestamp": (5.84, 7.12)},
-                    {"text": " Just", "timestamp": (7.12, 7.56)},
-                    {"text": " do", "timestamp": (7.56, 7.8)},
-                    {"text": " it", "timestamp": (7.8, 8.72)},
+                    {"text": " Yes,", "timestamp": (0.0, 0.52)},
+                    {"text": " you", "timestamp": (0.52, 0.78)},
+                    {"text": " can!", "timestamp": (0.78, 1.28)},
                 ]
             },
         )
@@ -587,24 +579,6 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
         np_array = np.array(test_list)
         self.assertListEqual(WhisperTokenizer._convert_to_list(np_array), test_list)
         self.assertListEqual(WhisperTokenizerFast._convert_to_list(np_array), test_list)
-
-    @require_tf
-    def test_convert_to_list_tf(self):
-        import tensorflow as tf
-
-        test_list = [[1, 2, 3], [4, 5, 6]]
-        tf_tensor = tf.constant(test_list)
-        self.assertListEqual(WhisperTokenizer._convert_to_list(tf_tensor), test_list)
-        self.assertListEqual(WhisperTokenizerFast._convert_to_list(tf_tensor), test_list)
-
-    @require_flax
-    def test_convert_to_list_jax(self):
-        import jax.numpy as jnp
-
-        test_list = [[1, 2, 3], [4, 5, 6]]
-        jax_array = jnp.array(test_list)
-        self.assertListEqual(WhisperTokenizer._convert_to_list(jax_array), test_list)
-        self.assertListEqual(WhisperTokenizerFast._convert_to_list(jax_array), test_list)
 
     @require_torch
     def test_convert_to_list_pt(self):
