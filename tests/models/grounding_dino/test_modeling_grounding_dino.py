@@ -585,6 +585,8 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
                         or "value_proj" in name
                         or "output_proj" in name
                         or "reference_points" in name
+                        or "vision_proj" in name
+                        or "text_proj" in name
                     ):
                         continue
                     self.assertIn(

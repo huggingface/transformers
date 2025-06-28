@@ -235,7 +235,7 @@ class EncodecLSTM(nn.Module):
     LSTM without worrying about the hidden state, nor the layout of the data. Expects input as convolutional layout.
     """
 
-    def __init__(self, config, dimension):
+    def __init__(self, config: EncodecConfig, dimension: int):
         super().__init__()
         self.lstm = nn.LSTM(dimension, dimension, config.num_lstm_layers)
 
@@ -452,11 +452,7 @@ class EncodecPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
+        if isinstance(module, nn.GroupNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
@@ -464,10 +460,8 @@ class EncodecPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 nn.init.uniform_(module.bias, a=-k, b=k)
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.ConvTranspose1d):
+            module.reset_parameters()
         elif isinstance(module, nn.LSTM):
             for name, param in module.named_parameters():
                 if "weight" in name:
@@ -659,7 +653,7 @@ class EncodecModel(EncodecPreTrainedModel):
 
     def decode(
         self,
-        audio_codes: torch.Tensor,
+        audio_codes: torch.LongTensor,
         audio_scales: torch.Tensor,
         padding_mask: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
@@ -708,10 +702,10 @@ class EncodecModel(EncodecPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_values: torch.Tensor,
-        padding_mask: Optional[torch.Tensor] = None,
+        input_values: torch.FloatTensor,
+        padding_mask: Optional[torch.BoolTensor] = None,
         bandwidth: Optional[float] = None,
-        audio_codes: Optional[torch.Tensor] = None,
+        audio_codes: Optional[torch.LongTensor] = None,
         audio_scales: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], EncodecOutput]:

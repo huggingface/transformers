@@ -154,7 +154,15 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         pass
 
     @unittest.skip(reason="TimmWrapper initialization is managed on the timm side")
+    def test_can_init_all_missing_weights(self):
+        pass
+
+    @unittest.skip(reason="TimmWrapper initialization is managed on the timm side")
     def test_initialization(self):
+        pass
+
+    @unittest.skip(reason="TimmWrapper initialization is managed on the timm side")
+    def test_mismatched_shapes_have_properly_initialized_weights(self):
         pass
 
     @unittest.skip(reason="Need to use a timm model and there is no tiny model available.")

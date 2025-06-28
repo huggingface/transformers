@@ -310,12 +310,13 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def test_feed_forward_chunking(self):
         (original_config, inputs_dict) = self.model_tester.prepare_config_and_inputs_for_common()
+        # original_config.norm_type = "time_group_norm"
         for model_class in self.all_model_classes:
             torch.manual_seed(0)
             config = copy.deepcopy(original_config)
             config.chunk_length_s = None
             config.overlap = None
-            config.sampling_rate = 10
+            config.sampling_rate = 20
 
             model = model_class(config)
             model.to(torch_device)
@@ -326,9 +327,9 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             hidden_states_no_chunk = model(**inputs)[1]
 
             torch.manual_seed(0)
-            config.chunk_length_s = 1
+            config.chunk_length_s = 2
             config.overlap = 0
-            config.sampling_rate = 10
+            config.sampling_rate = 20
 
             model = model_class(config)
             model.to(torch_device)
