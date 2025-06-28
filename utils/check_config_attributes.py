@@ -276,6 +276,17 @@ SPECIAL_CASES_TO_ALLOW = {
         "attention_chunk_size",
     ],
     "Llama4VisionConfig": ["multi_modal_projector_bias", "norm_eps"],
+    "ModernBertDecoderConfig": [
+        "embedding_dropout",
+        "hidden_activation",
+        "initializer_cutoff_factor",
+        "intermediate_size",
+        "max_position_embeddings",
+        "mlp_bias",
+        "mlp_dropout",
+        "classifier_activation",
+        "global_attn_every_n_layers",
+    ],
     "SmolLM3Config": ["no_rope_layer_interval"],
     "Gemma3nVisionConfig": ["architecture", "do_pooling", "model_args"],  # this is for use in `timm`
 }

@@ -2974,6 +2974,8 @@ class ModelTesterMixin:
                 "ModernBertForTokenClassification",
                 "TimmWrapperForImageClassification",
                 "ModernBertForQuestionAnswering",
+                "ModernBertDecoderForSequenceClassification",
+                "ModernBertDecoderForCausalLM",
             ]
             special_param_names = [
                 r"^bit\.",
