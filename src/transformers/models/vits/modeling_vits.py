@@ -38,29 +38,20 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class VitsModelOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Describes the outputs for the VITS model, with potential hidden states and attentions.
-
-    Args:
-        waveform (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            The final audio waveform predicted by the model.
-        sequence_lengths  (`torch.FloatTensor` of shape `(batch_size,)`):
-            The length in samples of each element in the `waveform` batch.
-        spectrogram (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_bins)`):
-            The log-mel spectrogram predicted at the output of the flow model. This spectrogram is passed to the Hi-Fi
-            GAN decoder model to obtain the final audio waveform.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attention weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    """
+)
+class VitsModelOutput(ModelOutput):
+    r"""
+    waveform (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        The final audio waveform predicted by the model.
+    sequence_lengths (`torch.FloatTensor` of shape `(batch_size,)`):
+        The length in samples of each element in the `waveform` batch.
+    spectrogram (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_bins)`):
+        The log-mel spectrogram predicted at the output of the flow model. This spectrogram is passed to the Hi-Fi
+        GAN decoder model to obtain the final audio waveform.
     """
 
     waveform: Optional[torch.FloatTensor] = None
@@ -71,28 +62,17 @@ class VitsModelOutput(ModelOutput):
 
 
 @dataclass
-class VitsTextEncoderOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Describes the outputs for the VITS text encoder model, with potential hidden states and attentions.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        prior_means (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            The predicted mean values of the prior distribution for the latent text variables.
-        prior_log_variances (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            The predicted log-variance values of the prior distribution for the latent text variables.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attention weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    """
+)
+class VitsTextEncoderOutput(ModelOutput):
+    r"""
+    prior_means (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        The predicted mean values of the prior distribution for the latent text variables.
+    prior_log_variances (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        The predicted log-variance values of the prior distribution for the latent text variables.
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None

@@ -687,9 +687,9 @@ class WhisperEncoder(WhisperPreTrainedModel):
         inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds))
 
         inputs_embeds = inputs_embeds.permute(0, 2, 1)
-        embed_pos = self.embed_positions.weight
+        all_positions = torch.arange(self.embed_positions.num_embeddings, device=inputs_embeds.device)
 
-        hidden_states = inputs_embeds + embed_pos
+        hidden_states = inputs_embeds + self.embed_positions(all_positions)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         encoder_states = () if output_hidden_states else None
@@ -1292,15 +1292,15 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the language modeling loss. Indices should either be in `[0, ..., config.vocab_size]`
-            or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored (masked), the loss is
-            only computed for the tokens with labels in `[0, ..., config.vocab_size]`. `sequence_length` should be smaller than or equal to `config.max_target_positions`.
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.n_positions - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the language modeling loss. Indices should either be in `[0, ..., config.vocab_size]`
+            or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored (masked), the loss is
+            only computed for the tokens with labels in `[0, ..., config.vocab_size]`. `sequence_length` should be smaller than or equal to `config.max_target_positions`.
 
         Example:
 

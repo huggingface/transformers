@@ -270,7 +270,6 @@ def make_task_cmds():
         "img_clas": f"""
         {scripts_dir}/image-classification/run_image_classification.py
             --dataset_name hf-internal-testing/cats_vs_dogs_sample
-            --trust_remote_code
             --remove_unused_columns False
             --max_steps 10
             --image_processor_name {DS_TESTS_DIRECTORY}/vit_feature_extractor.json
