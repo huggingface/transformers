@@ -3770,16 +3770,28 @@ class GenerationMixin(ContinuousMixin):
         Beam Search stopping condition -- halts the generation loop if any of these conditions becomes False
         """
         # a. Can the open beams improve the top completed scores?
-        # early_stopping == False -> apply heuristic = always get the best score from
-        #   `cur_len - decoder_prompt_len`. See the discussion below for more details.
-        #   https://github.com/huggingface/transformers/pull/20901#issuecomment-1369845565
+        # early_stopping == False -> apply heuristic = always get the best score from `cur_len - decoder_prompt_len`.
         # early_stopping == "never" -> compute the best score from `max_length` or `cur_len`, depending on the
         #   sign of `length_penalty`. Positive `length_penalty` favors longer sequences, thus we use
         #   `max_length` there.
+        # !!
+        # Be sure to check the docstring for `early_stopping` and `length_penalty`. The default parameterization
+        # does NOT correspond to a canonical beam search implementation, and tends to favor shorter output sequences
+        # compared to it (the heuristic active by default underestimates the maximum achievable score, and thus cut
+        # generation short). Also, be mindful that length penalty > 0.0 actually favors longer sequences, despite
+        # its name. These modifications were empirically found in the past (prior to 2022) to produce better quality
+        # generations, and changing them is BC breaking.
+        # For a canonical beam search implementation, set `early_stopping="never"` and `length_penalty=0.0`.
+        # See the discussion below for more details.
+        # https://github.com/huggingface/transformers/pull/20901#issuecomment-1369845565
+        # !!
         if early_stopping == "never" and length_penalty > 0.0:
             best_hypothetical_length = max_length - decoder_prompt_len
         else:
             best_hypothetical_length = cur_len - decoder_prompt_len
+
+        # best-case scenario: the next tokens have logprobs=0 (probability=1), and the score stays the same before
+        # applying length penalty
         best_possible_running_score = running_beam_scores[:, :1] / (best_hypothetical_length**length_penalty)
         worst_finished_score = torch.where(is_sent_finished, torch.min(beam_scores, dim=1, keepdim=True)[0], -1.0e9)
         improvement_possible = torch.any(best_possible_running_score > worst_finished_score)
