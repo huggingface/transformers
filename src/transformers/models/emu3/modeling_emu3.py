@@ -1537,20 +1537,26 @@ class Emu3Model(Emu3PreTrainedModel):
                 "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
             )
 
-        if pixel_values is not None and inputs_embeds is not None:
-            raise ValueError(
-                "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
-            )
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_tokens = self.get_image_tokens(pixel_values, image_sizes)
-            special_image_mask = input_ids == self.vocabulary_mapping.image_token_id
-            image_tokens = image_tokens.to(input_ids.device, input_ids.dtype)
-            input_ids = input_ids.masked_scatter(special_image_mask, image_tokens)
+            image_embeds = self.get_image_features(pixel_values, image_sizes)
+            image_embeds = torch.cat(image_embeds, dim=0)
+
+            if input_ids is None:
+                special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                    torch.tensor(self.vocabulary_mapping.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+                special_image_mask = special_image_mask.all(-1)
+            else:
+                special_image_mask = input_ids == self.vocabulary_mapping.image_token_id
+
+            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_embeds)
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.text_model(
-            input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
