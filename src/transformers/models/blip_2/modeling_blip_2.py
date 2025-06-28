@@ -415,6 +415,7 @@ class Blip2PreTrainedModel(PreTrainedModel):
     _no_split_modules = [
         "Blip2Attention",
         "Blip2QFormerMultiHeadAttention",
+        "Blip2EncoderLayer",
         "Blip2TextEmbeddings",
         "T5Block",
         "OPTDecoderLayer",
@@ -1262,6 +1263,7 @@ class Blip2Model(Blip2PreTrainedModel):
     config_class = Blip2Config
     main_input_name = "pixel_values"
     _keep_in_fp32_modules = ["query_tokens", "qformer"]
+    _supports_flash_attn_2 = False  # because self.qformer does not support FA2
 
     def __init__(self, config: Blip2Config):
         super().__init__(config)
@@ -1646,6 +1648,7 @@ class Blip2Model(Blip2PreTrainedModel):
 class Blip2TextModelWithProjection(Blip2PreTrainedModel):
     supports_gradient_checkpointing = False
     _keep_in_fp32_modules = ["query_tokens", "qformer"]
+    _supports_flash_attn_2 = False  # because self.qformer does not support FA2
 
     def __init__(self, config: Blip2Config):
         super().__init__(config)
@@ -1738,6 +1741,7 @@ class Blip2TextModelWithProjection(Blip2PreTrainedModel):
 class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
     main_input_name = "pixel_values"
     _keep_in_fp32_modules = ["query_tokens", "qformer"]
+    _supports_flash_attn_2 = False  # because self.qformer does not support FA2
 
     def __init__(self, config: Blip2Config):
         super().__init__(config)
@@ -1856,6 +1860,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
     _supports_static_cache = True
     _supports_quantized_cache = False  # not all LM bacbones support (e.g. T5)
     _keep_in_fp32_modules = ["query_tokens", "qformer"]
+    _supports_flash_attn_2 = False  # because self.qformer does not support FA2
 
     def __init__(self, config: Blip2Config):
         super().__init__(config)
@@ -2074,7 +2079,8 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         # otherwise we expand manually by concating
         if getattr(self.config, "image_token_id", None) is not None:
             special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)
-            language_model_inputs = language_model_inputs.to(inputs_embeds.device, inputs_embeds.dtype)
+            language_model_inputs = language_model_inputs.to(inputs_embeds.dtype)
+            special_image_mask = special_image_mask.to(language_model_inputs.device)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, language_model_inputs)
         else:
             logger.warning_once(
@@ -2208,7 +2214,12 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         # otherwise we expand manually by concatenating
         if getattr(self.config, "image_token_id", None) is not None:
             special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)
+
+            inputs_embeds = inputs_embeds.to(language_model_inputs.device)
+            special_image_mask = special_image_mask.to(language_model_inputs.device)
             inputs_embeds[special_image_mask] = language_model_inputs.flatten()
+
+            attention_mask = attention_mask.to(language_attention_mask.device)
         else:
             logger.warning_once(
                 "Expanding inputs for image tokens in BLIP-2 should be done in processing. "
@@ -2231,7 +2242,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
 
         inputs = {"inputs_embeds": inputs_embeds, "attention_mask": attention_mask}
         if not self.language_model.config.is_encoder_decoder:
-            inputs["input_ids"] = input_ids
+            inputs["input_ids"] = input_ids.to(language_model_inputs.device)
 
         outputs = self.language_model.generate(**inputs, **generate_kwargs)
         return outputs
@@ -2247,6 +2258,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
 class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
     main_input_name = "pixel_values"
     _keep_in_fp32_modules = ["query_tokens", "qformer"]
+    _supports_flash_attn_2 = False  # because self.qformer does not support FA2
 
     def __init__(self, config: Blip2Config):
         super().__init__(config)
