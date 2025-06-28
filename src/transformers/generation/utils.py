@@ -1929,9 +1929,8 @@ class GenerationMixin(ContinuousMixin):
             or isinstance(
                 cache_to_check, (HybridChunkedCache, OffloadedHybridCache)
             )  # due to internal slicing, we always re-init
+            or cache_to_check.max_cache_len < max_cache_len
         )
-        if cache_implementation != "mamba":
-            need_new_cache = need_new_cache or cache_to_check.max_cache_len < max_cache_len
 
         if requires_cross_attention_cache and hasattr(self, "_cache"):
             need_new_cache = (
@@ -1966,13 +1965,14 @@ class GenerationMixin(ContinuousMixin):
     def _supports_default_dynamic_cache(self) -> bool:
         """
         Return `True` if current model can use a `DynamicCache` instance when initializing the `past_key_values`.
-        This is mostly the same as `_supports_cache_class` attribute, but add exception for `Jamba` model which
-        uses its own `HybridMambaAttentionDynamicCache` and do not need to initialize the Cache in advance in
+        This is mostly the same as `_supports_cache_class` attribute, but add exception for `Mamba` models which
+        use their own caches and do not need to initialize the Cache in advance in
         order to save memory (because no back and forth `to_legacy_cache` and `from_legacy_cache` will be performed
-        for `HybridMambaAttentionDynamicCache`).
+        for mamba-based models).
         """
         return (
             self._supports_cache_class
+            and "mamba" not in self.__class__.__name__.lower()
             and "jamba" not in self.__class__.__name__.lower()
             and "zamba" not in self.__class__.__name__.lower()
             and "bamba" not in self.__class__.__name__.lower()
@@ -2023,7 +2023,7 @@ class GenerationMixin(ContinuousMixin):
         if generation_config.use_cache is False:
             return
 
-        # Quick escape route 3: model that only supports legacy caches = nothing to prepare
+        # Quick escape route 3: model that only supports legacy caches or models that supply it in `prepare_inputs_for_generation` (mamba, zamba, ...)
         if not self._supports_default_dynamic_cache():
             if generation_config.cache_implementation is not None:
                 warnings.warn(
