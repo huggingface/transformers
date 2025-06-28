@@ -590,13 +590,14 @@ class Aimv2TextModel(Aimv2PreTrainedModel):
         _, seq_len, _ = hidden_states.shape
 
         cache_position = torch.arange(seq_len, device=hidden_states.device)
-        attention_mask = create_causal_mask(
-            config=self.config,
-            input_embeds=hidden_states,
-            attention_mask=attention_mask,
-            cache_position=cache_position,
-            past_key_values=None,
-        )
+        if attention_mask is not None:
+            attention_mask = create_causal_mask(
+                config=self.config,
+                input_embeds=hidden_states,
+                attention_mask=attention_mask,
+                cache_position=cache_position,
+                past_key_values=None,
+            )
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
