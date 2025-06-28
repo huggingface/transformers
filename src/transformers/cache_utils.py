@@ -183,7 +183,7 @@ class CacheLayer:
         """Updates KV cache, returns updated K and V for this layer."""
         raise NotImplementedError("Make sure to implement `update` in a subclass.")
 
-    def get_usable_length(self, state, new_seq_length: int, layer_idx: Optional[int] = 0) -> tuple[int, bool]:
+    def get_usable_length(self, new_seq_length: int, layer_idx: Optional[int] = 0) -> int:
         """Given the sequence length of the new inputs, returns the usable length of the cache.
         Early stops since first layer is enough to compute sequence length"""
         # Cache without size limit -> all cache is usable
@@ -191,19 +191,19 @@ class CacheLayer:
         #   length, we will need to evict part of the cache (and thus not all cache is usable)
         max_length = self.get_max_cache_shape()
         previous_seq_length, _ = self.get_seq_length(layer_idx)
-        if max_length is not None and previous_seq_length + new_seq_length > max_length:
-            return max_length - new_seq_length, True
-        return previous_seq_length, True
+        if max_length != -1 and previous_seq_length + new_seq_length > max_length:
+            return max_length - new_seq_length
+        return previous_seq_length
 
-    def get_max_cache_shape(self, state) -> tuple[Optional[int], bool]:
+    def get_max_cache_shape(self) -> int:
         """Returns the maximum sequence length (i.e. max capacity) of this layer's cache."""
         raise NotImplementedError("Make sure to implement `get_max_cache_shape` in a subclass.")
 
-    def reset(self, state) -> tuple[None, bool]:
+    def reset(self) -> None:
         """Resets this layer's cache."""
         raise NotImplementedError("Make sure to implement `reset` in a subclass.")
 
-    def reorder_cache(self, state, beam_idx: torch.LongTensor) -> tuple[None, bool]:
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
         """Reorders this layer's cache for beam search."""
         if self.key_cache.numel():
             device = self.key_cache.device
@@ -211,7 +211,6 @@ class CacheLayer:
         if self.value_cache.numel():
             device = self.value_cache.device
             self.value_cache = self.value_cache.index_select(0, beam_idx.to(device))
-        return None, True
 
     def __repr__(self):
         return f"{self.__class__.__name__}(K={self.key_cache}, V={self.value_cache})"
@@ -413,13 +412,11 @@ class Cache:
 
         # If the attribute is a method, we propagate it to all layers
         def propagate_to_layers(*args, **kwargs):
-            state = None
             for layer in self.layers:
-                # State is carried over from layer to layer for flexible aggregation
-                state, return_early = getattr(layer, name)(state, *args, **kwargs)
-                if return_early:
+                return_value = getattr(layer, name)(*args, **kwargs)
+                if return_value is not None:
                     break
-            return state
+            return return_value
 
         return propagate_to_layers
 
@@ -427,7 +424,7 @@ class Cache:
         """Returns the sequence length of the cache for the given layer. TODO: deprecate in favor of cache_position"""
         if layer_idx >= len(self.layers):
             return 0
-        return self.layers[layer_idx].get_seq_length(None)[0]
+        return self.layers[layer_idx].get_seq_length()
 
     def get_mask_sizes(self, cache_position: torch.Tensor, layer_idx: int) -> tuple[int, int]:
         """
@@ -516,11 +513,11 @@ class CacheConfig:
             # Rename max_batch_size to batch_size
             if max_batch_size is not None:
                 batch_size = max_batch_size
-            # Hybrid caches require that the model config supports sliding_window (max_cache_len already used)
+            # Hybrid/Sliding caches require a config that supports sliding_window (max_cache_len already used)
             if StaticLayer in pattern_block and SlidingWindowLayer in pattern_block:
                 if getattr(config, "sliding_window", None) is None:
                     raise ValueError(
-                        "Setting `cache_implementation` to 'hybrid' requires the model config supporting "
+                        "Setting up a hybrid or sliding window KVCache requires the model config supporting "
                         "sliding window attention, please check if there is a `sliding_window` field in the model "
                         "config and it's not set to None."
                     )
@@ -533,22 +530,21 @@ class CacheConfig:
                 if getattr(config, "head_dim", None) is not None
                 else config.hidden_size // config.num_attention_heads
             )
-            device = torch.device(device) if device is not None else None
             num_heads = (
                 config.num_attention_heads
                 if getattr(config, "num_key_value_heads", None) is None
                 else config.num_key_value_heads
             )
             cache_config = StaticCacheConfig(
-                batch_size,
-                max_cache_len,
-                device,
-                dtype,
-                layer_device_map,
-                head_dim,
-                num_heads,
-                sliding_window_len,
-                num_layers,
+                batch_size=batch_size,
+                max_cache_len=max_cache_len,
+                device=torch.device(device) if device is not None else None,
+                dtype=dtype,
+                layer_device_map=layer_device_map,
+                head_dim=head_dim,
+                num_heads=num_heads,
+                sliding_window=sliding_window_len,
+                num_layers=num_layers,
             )
             return cache_config, pattern_block
 
@@ -864,48 +860,44 @@ class DynamicLayer(CacheLayer):
 
         return self.key_cache, self.value_cache
 
-    def get_seq_length(self, state, cache_position: Optional[torch.LongTensor] = None) -> tuple[int, bool]:
+    def get_seq_length(self, cache_position: Optional[torch.LongTensor] = None) -> int:
         """Returns the sequence length of the cached states."""
         # TODO: deprecate this function in favor of `cache_position`
         if self is None or self.key_cache is None:
-            return 0, True
-        return (self.key_cache.shape[-2], True)
+            return 0
+        return self.key_cache.shape[-2]
 
-    def get_max_cache_shape(self, state) -> tuple[Optional[int], bool]:
+    def get_max_cache_shape(self) -> int:
         """Returns the maximum sequence length of the cache object. DynamicLayer does not have a maximum length."""
-        return None, True
+        return -1
 
-    def reset(self, state) -> tuple[None, bool]:
+    def reset(self) -> None:
         """Resets the cache values while preserving the objects"""
         self.key_cache = torch.tensor([], dtype=self.key_cache.dtype, device=self.key_cache.device)
         self.value_cache = torch.tensor([], dtype=self.value_cache.dtype, device=self.value_cache.device)
-        return None, False
 
-    def reorder_cache(self, state, beam_idx: torch.LongTensor) -> tuple[None, bool]:
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
         """Reorders the cache for beam search, given the selected beam indices."""
         if self.key_cache is not None and self.key_cache.numel():
-            device = self.key_cache.device
-            self.key_cache = self.key_cache.index_select(0, beam_idx.to(device))
+            self.key_cache = self.key_cache.index_select(0, beam_idx.to(self.key_cache.device))
         if self.value_cache is not None and self.value_cache.numel():
-            device = self.value_cache.device
-            self.value_cache = self.value_cache.index_select(0, beam_idx.to(device))
-        return None, False
+            self.value_cache = self.value_cache.index_select(0, beam_idx.to(self.value_cache.device))
 
-    def crop(self, state, max_length: int) -> tuple[None, bool]:
+    def crop(self, max_length: int) -> None:
         """Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be
         negative to remove `max_length` tokens."""
         if max_length < 0:
-            max_length = self.get_seq_length(None)[0] - abs(max_length)
+            max_length = self.get_seq_length() - abs(max_length)
 
-        if self.get_seq_length(None)[0] <= max_length:
-            return None, False
+        if self.get_seq_length() <= max_length:
+            return
 
         if self.key_cache.numel():
             self.key_cache = self.key_cache[..., :max_length, :]
             self.value_cache = self.value_cache[..., :max_length, :]
-        return None, False
 
-    def batch_split(self, state, full_batch_size: int, split_size: int) -> tuple[list["DynamicLayer"], bool]:
+    #TODO (manuel): test this
+    def batch_split(self, full_batch_size: int, split_size: int) -> list["DynamicLayer"]:
         """Split the current instance into a list of `DynamicLayer` by the batch size."""
         out = []
         for i in range(0, full_batch_size, split_size):
@@ -914,24 +906,23 @@ class DynamicLayer(CacheLayer):
                 value_cache=self.value_cache[i : i + split_size] if self.value_cache.numel() else None,
             )
             out.append(current_split)
-        return out, False
+        # return out, False
 
-    def batch_repeat_interleave(self, state, repeats: int) -> tuple[None, bool]:
+    def batch_repeat_interleave(self, repeats: int) -> None:
         """Repeat the cache `repeats` times in the batch dimension."""
         if self.key_cache.numel():
             self.key_cache = self.key_cache.repeat_interleave(repeats, dim=0)
             self.value_cache = self.value_cache.repeat_interleave(repeats, dim=0)
-        return None, False
 
-    def batch_select_indices(self, state, indices: torch.Tensor) -> tuple[None, bool]:
+    def batch_select_indices(self, indices: torch.Tensor) -> None:
         """Only keep the `indices` in the batch dimension of the cache."""
         if self.key_cache.numel():
             self.key_cache = self.key_cache[indices, ...]
             self.value_cache = self.value_cache[indices, ...]
-        return None, False
 
+    #TODO (manuel): test this
     @classmethod
-    def from_batch_splits(cls, state, splits: list["DynamicLayer"]) -> tuple["DynamicLayer", bool]:
+    def from_batch_splits(cls, splits: list["DynamicLayer"]) -> "DynamicLayer":
         """This is the opposite of the above `batch_split()` method."""
         cache = DynamicCache()
 
@@ -939,7 +930,7 @@ class DynamicLayer(CacheLayer):
             cache.key_cache = torch.cat([split.key_cache for split in splits], dim=0)
             cache.value_cache = torch.cat([split.value_cache for split in splits], dim=0)
 
-        return cache, True
+        return cache
 
 
 class DynamicCache(Cache):
@@ -1167,8 +1158,8 @@ class StaticLayer(CacheLayer):
         torch._dynamo.mark_static_address(self.key_cache)
         torch._dynamo.mark_static_address(self.value_cache)
 
-    def get_max_cache_shape(self, state) -> Optional[int]:
-        return self.max_cache_len, True
+    def get_max_cache_shape(self) -> int:
+        return self.max_cache_len
 
     def _static_update(
         self,
@@ -1213,24 +1204,22 @@ class StaticLayer(CacheLayer):
         value_states = value_states.to(self.value_cache.dtype)
         return self._static_update(key_states, value_states, cache_position)
 
-    def get_seq_length(self, state, cache_position=None) -> int:
+    def get_seq_length(self, cache_position=None) -> int:
         if cache_position is not None:
             return int(cache_position[-1] + 1)
         # Occupied cache == any slot in the 3rd dim (sequence length) holds a non-zero value. To save on compute, let's
         # limit the check to the first batch member and head dimension.
-        return (self.key_cache[0, 0].any(dim=-1)).sum(), True
+        return (self.key_cache[0, 0].any(dim=-1)).sum()
 
-    def reset(self, state):
+    def reset(self):
         self.key_cache.zero_()
         self.value_cache.zero_()
-        return None, False
 
-    def reorder_cache(self, state, beam_idx):
+    def reorder_cache(self, beam_idx):
         dev = self.key_cache.device
         beam_idx_dev = beam_idx.to(dev)
         self.key_cache = self.key_cache.index_select(0, beam_idx_dev)
         self.value_cache = self.value_cache.index_select(0, beam_idx_dev)
-        return None, False
 
 
 class StaticCache(Cache):
@@ -1392,35 +1381,6 @@ class SlidingWindowCache(Cache):
     """
 
     pattern_block = (SlidingWindowLayer,)
-
-    def __init__(
-        self,
-        config: PretrainedConfig,
-        max_batch_size: int,
-        max_cache_len: Optional[int] = None,
-        device: Union[torch.device, str, None] = None,
-        dtype: torch.dtype = torch.float32,
-        layer_device_map: Optional[dict[int, Union[str, torch.device, int]]] = None,
-    ) -> None:
-        if not hasattr(config, "sliding_window") or config.sliding_window is None:
-            raise ValueError(
-                "Setting `cache_implementation` to 'sliding_window' requires the model config supporting "
-                "sliding window attention, please check if there is a `sliding_window` field in the model "
-                "config and it's not set to None."
-            )
-        max_cache_len = (
-            min(config.sliding_window, max_cache_len) if max_cache_len is not None else config.sliding_window
-        )
-
-        # Use the standard Cache initialization with SlidingWindowLayer structure
-        super().__init__(
-            config,
-            max_batch_size=max_batch_size,
-            max_cache_len=max_cache_len,
-            device=device,
-            dtype=dtype,
-            layer_device_map=layer_device_map,
-        )
 
 
 class EncoderDecoderCache(Cache):
@@ -1594,7 +1554,7 @@ class EncoderDecoderCache(Cache):
         self.self_attention_cache.batch_select_indices(indices)
         self.cross_attention_cache.batch_select_indices(indices)
 
-    def get_max_cache_shape(self) -> Optional[int]:
+    def get_max_cache_shape(self) -> int:
         """Returns the maximum sequence length (i.e. max capacity) of the cache object"""
         return self.self_attention_cache.get_max_cache_shape()
 
@@ -1835,7 +1795,7 @@ class HybridChunkedCache(Cache):
             k_out.shape[2],
         )
 
-    def get_max_cache_shape(self) -> Optional[int]:
+    def get_max_cache_shape(self) -> int:
         return self.max_cache_len
 
     def get_seq_length(self, layer_idx: Optional[int] = 0):
@@ -2208,17 +2168,6 @@ class QuantizedCacheProcessor(CacheProcessor):
         # Only compatible with DynamicCache
         if not isinstance(cache, DynamicCache):
             raise ValueError("QuantizedCacheProcessor is only compatible with DynamicCache")
-
-    def pre_update(
-        self,
-        cache: "Cache",
-        key_states: torch.Tensor,
-        value_states: torch.Tensor,
-        layer_idx: int,
-        cache_kwargs: Optional[dict[str, Any]] = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Pre-update hook - no processing needed."""
-        return key_states, value_states
 
     def post_update(
         self,
