@@ -54,7 +54,6 @@ if is_torch_available():
         HQQQuantizedCache,
         HybridCache,
         HybridChunkedCache,
-        MambaCache,
         OffloadedHybridCache,
         OffloadedStaticCache,
         QuantizedCacheConfig,
@@ -67,6 +66,8 @@ if is_torch_available():
 
     CACHE_CONFIG_MAPPING["quantized"] = QuantizedCacheConfig
     CACHE_CONFIG_MAPPING["static"] = StaticCacheConfig
+    CACHE_CONFIG_MAPPING["sliding_window"] = StaticCacheConfig
+    CACHE_CONFIG_MAPPING["hybrid"] = StaticCacheConfig
     NEED_SETUP_CACHE_CLASSES_MAPPING = {
         "static": StaticCache,
         "offloaded_static": OffloadedStaticCache,
@@ -75,12 +76,9 @@ if is_torch_available():
         "hybrid_chunked": HybridChunkedCache,
         "offloaded_hybrid": OffloadedHybridCache,
         "offloaded_hybrid_chunked": OffloadedHybridCache,
-        "mamba": MambaCache,
     }
     QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
-    ALL_CACHE_IMPLEMENTATIONS = (
-        list(NEED_SETUP_CACHE_CLASSES_MAPPING.keys()) + list(CACHE_CONFIG_MAPPING.keys()) + ["offloaded", "dynamic"]
-    )
+    ALL_CACHE_IMPLEMENTATIONS = list(NEED_SETUP_CACHE_CLASSES_MAPPING.keys()) + ["offloaded", "dynamic", "quantized"]
 
 
 class GenerationMode(ExplicitEnum):
@@ -186,7 +184,6 @@ class GenerationConfig(PushToHubMixin):
             - `"offloaded_static"`: [`OffloadedStaticCache`]
             - `"sliding_window"`: [`SlidingWindowCache`]
             - `"hybrid"`: [`HybridCache`]
-            - `"mamba"`: [`MambaCache`]
             - `"quantized"`: [`QuantizedCache`]
 
             If none is specified, we will use the default cache for the model (which is often [`DynamicCache`]). See

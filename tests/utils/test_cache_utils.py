@@ -63,8 +63,6 @@ if is_torch_available():
 TEST_CACHE_IMPLEMENTATIONS = [
     cache_name
     for cache_name in ALL_CACHE_IMPLEMENTATIONS
-    # TODO (joao): Mamba is not compatible with most models, remove from `ALL_CACHE_IMPLEMENTATIONS`?
-    if cache_name != "mamba"
     # TODO (joao): offloaded_hybrid == offloaded_hybrid_chunked, deprecate one of them
     if cache_name != "offloaded_hybrid"
 ]
@@ -1118,4 +1116,45 @@ class SyntheticCacheTest(unittest.TestCase):
             hybrid_cache.key_cache[0][0, 0, :, 0].tolist(),
             [3.0, 4.0, 5.0, 6.0],
             "HybridCache Sliding Scenario 4 failed",
+        )
+
+    def test_dynamic_cache(self):
+        """Test DynamicCache with manually prefilled states and hardcoded assertions.
+        Scenario 1: prefill and update for one layer
+        prefill:       [1.0, 2.0]
+        update pos 2:  [1.0, 2.0, 3.0]
+        Scenario 2: prefill and update for two layers independently
+        """
+        prefill = torch.tensor([1.0, 2.0])[None, None, :, None]
+        update3 = torch.tensor(3.0)[None, None, None, None]
+        update4 = torch.tensor(4.0)[None, None, None, None]
+
+        # Scenario 1: prefill and update for one layer
+        cache = DynamicCache()
+        cache.update(prefill, prefill, 0)
+        cache.update(update3, update3, 0)
+        self.assertEqual(cache.key_cache[0][0, 0, :, 0].tolist(), [1.0, 2.0, 3.0], "DynamicCache Scenario 1 failed")
+        cache.update(update4, update4, 0)
+        self.assertEqual(
+            cache.key_cache[0][0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 4.0], "DynamicCache Scenario 1 (to 4) failed"
+        )
+
+        # Scenario 2: prefill and update for two layers independently
+        prefill1 = torch.tensor([10.0, 20.0])[None, None, :, None]
+        update3_1 = torch.tensor(30.0)[None, None, None, None]
+        update4_1 = torch.tensor(40.0)[None, None, None, None]
+
+        cache = DynamicCache()
+        cache.update(prefill, prefill, 0)
+        cache.update(prefill1, prefill1, 1)
+
+        cache.update(update3, update3, 0)
+        cache.update(update3_1, update3_1, 1)
+        cache.update(update4, update4, 0)
+        cache.update(update4_1, update4_1, 1)
+        self.assertEqual(
+            cache.key_cache[0][0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 4.0], "DynamicCache Scenario 2 layer 0 failed"
+        )
+        self.assertEqual(
+            cache.key_cache[1][0, 0, :, 0].tolist(), [10.0, 20.0, 30.0, 40.0], "DynamicCache Scenario 2 layer 1 failed"
         )
