@@ -16,7 +16,7 @@
 
 import collections
 import math
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -25,6 +25,7 @@ import torch.utils.checkpoint
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     QuestionAnsweringModelOutput,
@@ -358,7 +359,7 @@ class LayoutLMv3Attention(nn.Module):
 
 
 # Copied from transformers.models.layoutlmv2.modeling_layoutlmv2.LayoutLMv2Layer with LayoutLMv2->LayoutLMv3
-class LayoutLMv3Layer(nn.Module):
+class LayoutLMv3Layer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -514,25 +515,14 @@ class LayoutLMv3Encoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    output_attentions,
-                    rel_pos,
-                    rel_2d_pos,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    output_attentions,
-                    rel_pos=rel_pos,
-                    rel_2d_pos=rel_2d_pos,
-                )
+            layer_outputs = layer_module(
+                hidden_states,
+                attention_mask,
+                layer_head_mask,
+                output_attentions,
+                rel_pos=rel_pos,
+                rel_2d_pos=rel_2d_pos,
+            )
 
             hidden_states = layer_outputs[0]
             if output_attentions:
@@ -693,7 +683,7 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, token_sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -746,7 +736,7 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
         >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", apply_ocr=False)
         >>> model = AutoModel.from_pretrained("microsoft/layoutlmv3-base")
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
         >>> example = dataset[0]
         >>> image = example["image"]
         >>> words = example["tokens"]
@@ -942,7 +932,7 @@ class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         pixel_values: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, TokenClassifierOutput]:
+    ) -> Union[tuple, TokenClassifierOutput]:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,
@@ -961,7 +951,7 @@ class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
         >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", apply_ocr=False)
         >>> model = AutoModelForTokenClassification.from_pretrained("microsoft/layoutlmv3-base", num_labels=7)
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
         >>> example = dataset[0]
         >>> image = example["image"]
         >>> words = example["tokens"]
@@ -1044,7 +1034,7 @@ class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
         return_dict: Optional[bool] = None,
         bbox: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, QuestionAnsweringModelOutput]:
+    ) -> Union[tuple, QuestionAnsweringModelOutput]:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,
@@ -1062,7 +1052,7 @@ class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
         >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", apply_ocr=False)
         >>> model = AutoModelForQuestionAnswering.from_pretrained("microsoft/layoutlmv3-base")
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
         >>> example = dataset[0]
         >>> image = example["image"]
         >>> question = "what's his name?"
@@ -1164,7 +1154,7 @@ class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
         return_dict: Optional[bool] = None,
         bbox: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, SequenceClassifierOutput]:
+    ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,
@@ -1182,7 +1172,7 @@ class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
         >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", apply_ocr=False)
         >>> model = AutoModelForSequenceClassification.from_pretrained("microsoft/layoutlmv3-base")
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
         >>> example = dataset[0]
         >>> image = example["image"]
         >>> words = example["tokens"]
