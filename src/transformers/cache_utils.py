@@ -126,7 +126,8 @@ class CacheProcessorList(list):
 
 
 class KVList:
-    """Efficiently simulates layer-indexed key or value lists from a layered cache."""
+    """Efficiently simulates layer-indexed key or value lists from a layered cache.
+    This allows for BC access, e.g., cache.key_cache[idx] or cache.value_cache[idx]."""
 
     def __init__(self, layers, cache_type="key"):
         self.layers = layers
@@ -475,10 +476,6 @@ class Cache:
         return cache
 
     def __repr__(self):
-        # print stack trace
-        import traceback
-
-        traceback.print_stack()
         return f"{self.__class__.__name__}(layers={self.layers})"
 
 
@@ -896,18 +893,6 @@ class DynamicLayer(CacheLayer):
             self.key_cache = self.key_cache[..., :max_length, :]
             self.value_cache = self.value_cache[..., :max_length, :]
 
-    #TODO (manuel): test this
-    def batch_split(self, full_batch_size: int, split_size: int) -> list["DynamicLayer"]:
-        """Split the current instance into a list of `DynamicLayer` by the batch size."""
-        out = []
-        for i in range(0, full_batch_size, split_size):
-            current_split = DynamicLayer.from_kv(
-                key_cache=self.key_cache[i : i + split_size] if self.key_cache.numel() else None,
-                value_cache=self.value_cache[i : i + split_size] if self.value_cache.numel() else None,
-            )
-            out.append(current_split)
-        # return out, False
-
     def batch_repeat_interleave(self, repeats: int) -> None:
         """Repeat the cache `repeats` times in the batch dimension."""
         if self.key_cache.numel():
@@ -919,18 +904,6 @@ class DynamicLayer(CacheLayer):
         if self.key_cache.numel():
             self.key_cache = self.key_cache[indices, ...]
             self.value_cache = self.value_cache[indices, ...]
-
-    #TODO (manuel): test this
-    @classmethod
-    def from_batch_splits(cls, splits: list["DynamicLayer"]) -> "DynamicLayer":
-        """This is the opposite of the above `batch_split()` method."""
-        cache = DynamicCache()
-
-        if splits[0].key_cache.numel():
-            cache.key_cache = torch.cat([split.key_cache for split in splits], dim=0)
-            cache.value_cache = torch.cat([split.value_cache for split in splits], dim=0)
-
-        return cache
 
 
 class DynamicCache(Cache):
@@ -1525,22 +1498,6 @@ class EncoderDecoderCache(Cache):
         for self_attn, cross_attn in zip(self_attention_cache, cross_attention_cache):
             out.append(EncoderDecoderCache(self_attn, cross_attn))
         return out
-
-    @classmethod
-    def from_batch_splits(cls, splits: list["EncoderDecoderCache"]) -> "EncoderDecoderCache":
-        """This is the opposite of the above `batch_split()` method. This will be used by `stack_model_outputs` in
-        `generation.utils`"""
-        self_attention_cache = DynamicCache()
-        cross_attention_cache = DynamicCache()
-        for idx in range(len(splits[0])):
-            layer_keys = torch.cat([current.self_attention_cache.key_cache[idx] for current in splits], dim=0)
-            layer_values = torch.cat([current.self_attention_cache.value_cache[idx] for current in splits], dim=0)
-            self_attention_cache.update(layer_keys, layer_values, idx)
-
-            layer_keys = torch.cat([current.cross_attention_cache.key_cache[idx] for current in splits], dim=0)
-            layer_values = torch.cat([current.cross_attention_cache.value_cache[idx] for current in splits], dim=0)
-            cross_attention_cache.update(layer_keys, layer_values, idx)
-        return cls(self_attention_cache, cross_attention_cache)
 
     def batch_repeat_interleave(self, repeats: int):
         """Repeat the cache `repeats` times in the batch dimension. Used in contrastive search."""
