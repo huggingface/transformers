@@ -338,6 +338,8 @@ class DeepseekV3DecoderLayer(LlamaDecoderLayer, nn.Module):
 
 
 class DeepseekV3PreTrainedModel(LlamaPreTrainedModel):
+    _supports_static_cache = False
+
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
@@ -355,10 +357,14 @@ class DeepseekV3PreTrainedModel(LlamaPreTrainedModel):
 
 
 class DeepseekV3Model(LlamaModel):
+    _supports_static_cache = False
+
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.61.*"]
 
 
 class DeepseekV3ForCausalLM(LlamaForCausalLM):
+    _supports_static_cache = False
+
     pass
 
 
