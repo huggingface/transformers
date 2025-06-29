@@ -2271,7 +2271,6 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
                 )
 
         outputs = self.language_model(
-            input_ids=input_ids,
             attention_mask=attention_mask,
             labels=labels,
             inputs_embeds=inputs_embeds,

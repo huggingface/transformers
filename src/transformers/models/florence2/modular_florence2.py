@@ -324,6 +324,7 @@ def eager_attention_forward(
 
     return attn_output, attn_weights
 
+
 class Florence2VisionWindowAttention(nn.Module):
     def __init__(
         self,
@@ -574,6 +575,7 @@ class Florence2LanguageEncoderLayer(BartEncoderLayer):
 class Florence2LanguageDecoderLayer(BartDecoderLayer):
     pass
 
+
 @auto_docstring
 class Florence2LanguagePreTrainedModel(BartPreTrainedModel):
     config_class = Florence2LanguageConfig
@@ -642,6 +644,7 @@ class Florence2Seq2SeqLMOutput(Seq2SeqLMOutput):
 
     image_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
 
+
 @auto_docstring
 class Florence2PreTrainedModel(PreTrainedModel):
     config_class = Florence2Config
@@ -672,6 +675,7 @@ class Florence2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.weight.data.fill_(1.0)
             module.bias.data.zero_()
+
 
 @auto_docstring(
     custom_intro="""
