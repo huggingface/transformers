@@ -14,10 +14,11 @@
 
 import subprocess
 import sys
+import tempfile
 import unittest
 
 from transformers import BertConfig, BertModel, BertTokenizer, pipeline
-from transformers.testing_utils import TestCasePlus, require_torch
+from transformers.testing_utils import TestCasePlus, require_torch, slow
 
 
 class OfflineTests(TestCasePlus):
@@ -176,6 +177,124 @@ print("success")
 
         # should succeed as TRANSFORMERS_OFFLINE=1 tells it to use local files
         stdout, _ = self._execute_with_env(load, run, TRANSFORMERS_OFFLINE="1")
+        self.assertIn("success", stdout)
+
+    @require_torch
+    def test_offline_model_dynamic_model_save_and_load_basic(self):
+        run_save = """
+import os
+from transformers import AutoModel
+
+mname = "hf-internal-testing/test_dynamic_model"
+model = AutoModel.from_pretrained(mname, trust_remote_code=True)
+model.save_pretrained('{tmp_dir}')
+saved_files = os.listdir('{tmp_dir}')
+if ('configuration.py' not in saved_files) or ('modeling.py' not in saved_files):
+    raise ValueError(
+        f"Expected to find configuration.py and modeling.py in {tmp_dir} but found only {{saved_files}}"
+    )
+print("success")
+        """
+
+        run_load_offline = """
+from transformers import AutoModel
+AutoModel.from_pretrained('{tmp_dir}', trust_remote_code=True, local_files_only=True)
+print("success")
+        """
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # load from_pretrained from remote with normal network - should succeed
+            stdout, _ = self._execute_with_env(run_save.format(tmp_dir=tmp_dir))
+            self.assertIn("success", stdout)
+
+            # should succeed as TRANSFORMERS_OFFLINE=1 tells it to use local files
+            stdout, _ = self._execute_with_env(run_load_offline.format(tmp_dir=tmp_dir), TRANSFORMERS_OFFLINE="1")
+            self.assertIn("success", stdout)
+
+    @require_torch
+    @slow
+    def test_offline_model_dynamic_model_save_and_load_advanced(self):
+        run_save = """
+import subprocess
+subprocess.run(["pip", "install", "einops"]) # dependency of jinaai/jina-embeddings-v3
+
+import os
+from transformers import AutoModel, AutoTokenizer
+
+model_name = "jinaai/jina-embeddings-v3"
+model = AutoModel.from_pretrained(model_name, trust_remote_code=True)
+tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+
+model.save_pretrained('{tmp_dir}')
+tokenizer.save_pretrained('{tmp_dir}')
+
+expected_files = [
+    'block.py', 'configuration_xlm_roberta.py', 'embedding.py', 'mha.py', 'mlp.py',
+    'modeling_lora.py', 'modeling_xlm_roberta.py', 'rotary.py', 'stochastic_depth.py', 'xlm_padding.py'
+]
+saved_files = os.listdir('{tmp_dir}')
+if not all(f in saved_files for f in expected_files):
+    raise ValueError(
+        f"Expected to find {{expected_files}} in {tmp_dir} but found only {{saved_files}}"
+    )
+print("success")
+        """
+
+        run_load_offline = """
+import shutil
+import numpy as np
+from pathlib import Path
+from transformers import AutoModel
+from transformers.utils import TRANSFORMERS_CACHE, HF_MODULES_CACHE
+
+# remove cache for jinaai to reproduce the behaviour of a fresh machine without cache
+shutil.rmtree(Path(TRANSFORMERS_CACHE) / 'models--jinaai--jina-embeddings-v3', ignore_errors=True)
+shutil.rmtree(Path(TRANSFORMERS_CACHE) / 'models--jinaai--xlm-roberta-flash-implementation', ignore_errors=True)
+shutil.rmtree(Path(HF_MODULES_CACHE) / 'transformers_modules' / 'jinaai', ignore_errors=True)
+
+model = AutoModel.from_pretrained('{tmp_dir}', trust_remote_code=True, local_files_only=True)
+
+sentences = [
+    "The weather is lovely today.",
+    "It's so sunny outside!",
+]
+embeddings = model.encode(sentences, task="text-matching")
+r = type(embeddings[0] @ embeddings[1])
+if r == np.float32:
+    print("success")
+else:
+    raise ValueError(f"Expected embeddings to be of type float, but got {{r}}")
+        """
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # load from_pretrained from remote with normal network - should succeed
+            stdout, _ = self._execute_with_env(run_save.format(tmp_dir=tmp_dir))
+            self.assertIn("success", stdout)
+
+            # should succeed as TRANSFORMERS_OFFLINE=1 tells it to use local files
+            stdout, _ = self._execute_with_env(run_load_offline.format(tmp_dir=tmp_dir), TRANSFORMERS_OFFLINE="1")
+            self.assertIn("success", stdout)
+
+    @require_torch
+    def test_offline_model_dynamic_model_load_from_cache(self):
+        run_online_and_cache = """
+from transformers import AutoModel
+mname = "hf-internal-testing/test_dynamic_model"
+model = AutoModel.from_pretrained(mname, trust_remote_code=True)
+        """
+
+        run_offline_and_load_cached = """
+from transformers import AutoModel
+mname = "hf-internal-testing/test_dynamic_model"
+model = AutoModel.from_pretrained(mname, trust_remote_code=True, local_files_only=True)
+print("success")
+        """
+
+        # load from_pretrained from remote with normal network - should succeed
+        self._execute_with_env(run_online_and_cache)
+
+        # should succeed as TRANSFORMERS_OFFLINE=1 tells it to use local files
+        stdout, _ = self._execute_with_env(run_offline_and_load_cached, TRANSFORMERS_OFFLINE="1")
         self.assertIn("success", stdout)
 
     def test_is_offline_mode(self):
