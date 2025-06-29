@@ -366,43 +366,22 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 	- validate
 
 [[autodoc]] DynamicCache
-    - update
-    - get_seq_length
-    - reorder_cache
-    - to_legacy_cache
-    - from_legacy_cache
 
 [[autodoc]] QuantizedCache
-    - update
-    - get_seq_length
 
 [[autodoc]] QuantoQuantizedCache
 
 [[autodoc]] HQQQuantizedCache
 
 [[autodoc]] OffloadedCache
-    - update
-    - prefetch_layer
-    - evict_previous_layer
 
 [[autodoc]] StaticCache
-    - update
-    - get_seq_length
-    - reset
 
 [[autodoc]] OffloadedStaticCache
-    - update
-    - get_seq_length
-    - reset
 
 [[autodoc]] HybridCache
-    - update
-    - get_seq_length
-    - reset
 
 [[autodoc]] SlidingWindowCache
-    - update
-    - reset
 
 [[autodoc]] EncoderDecoderCache
     - get_seq_length
