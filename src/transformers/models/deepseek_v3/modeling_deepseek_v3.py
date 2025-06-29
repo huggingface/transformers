@@ -510,7 +510,7 @@ class DeepseekV3PreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_cache_class = True
     _supports_quantized_cache = True
-    _supports_static_cache = True
+    _supports_static_cache = False
     _supports_attention_backend = True
 
     def _init_weights(self, module):
@@ -531,6 +531,8 @@ class DeepseekV3PreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class DeepseekV3Model(DeepseekV3PreTrainedModel):
+    _supports_static_cache = False
+
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.61.*"]
 
     def __init__(self, config: DeepseekV3Config):
@@ -664,6 +666,7 @@ class DeepseekV3ForCausalLM(DeepseekV3PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _supports_static_cache = False
 
     def __init__(self, config):
         super().__init__(config)
