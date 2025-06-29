@@ -794,7 +794,6 @@ class GraniteMoeHybridMambaLayer(nn.Module):
             # Init cache
             if ssm_state is not None and cache_params is not None:
                 cache_params.ssm_states[self.layer_idx].copy_(ssm_state)
-                cache_params.has_previous_state = True
 
         scan_output = self.norm(y, gate)
 
@@ -856,7 +855,7 @@ class GraniteMoeHybridMLP(nn.Module):
     """
 
     def __init__(self, config: GraniteMoeHybridConfig):
-        super(GraniteMoeHybridMLP, self).__init__()
+        super().__init__()
 
         self.input_size = config.hidden_size
         self.hidden_size = config.shared_intermediate_size
@@ -995,7 +994,7 @@ class GraniteMoeHybridMoE(nn.Module):
     """
 
     def __init__(self, config: GraniteMoeHybridConfig):
-        super(GraniteMoeHybridMoE, self).__init__()
+        super().__init__()
 
         self.input_size = config.hidden_size
         self.hidden_size = config.intermediate_size
@@ -1375,6 +1374,9 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
         # add hidden states from the last decoder layer
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
+
+        if past_key_values and not past_key_values.has_previous_state:
+            past_key_values.has_previous_state = True
 
         next_cache = next_decoder_cache if use_cache else None
 
