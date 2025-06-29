@@ -28,6 +28,18 @@ rendered properly in your Markdown viewer.
 
 You can find all the original Code Llama checkpoints under the [Code Llama](https://huggingface.co/collections/meta-llama/code-llama-family-661da32d0a9d678b6f55b933) collection.
 
+## Quick Links
+
+🤗 **Popular Code Llama Models on HuggingFace Hub:**
+- [CodeLlama-7b-hf](https://huggingface.co/meta-llama/CodeLlama-7b-hf) - General purpose, 7B parameters
+- [CodeLlama-13b-Python-hf](https://huggingface.co/meta-llama/CodeLlama-13b-Python-hf) - Python-specialized, 13B parameters  
+- [CodeLlama-7b-Instruct-hf](https://huggingface.co/meta-llama/CodeLlama-7b-Instruct-hf) - Instruction-following variant
+- [CodeLlama-34b-hf](https://huggingface.co/meta-llama/CodeLlama-34b-hf) - Larger model, 34B parameters
+
+📖 **Additional Resources:**
+- [Original Code Llama Paper](https://huggingface.co/papers/2308.12950)
+- [Complete Model Collection](https://huggingface.co/collections/meta-llama/code-llama-family-661da32d0a9d678b6f55b933)
+
 > [!TIP]
 > Click on the Code Llama models in the right sidebar for more examples of how to apply Code Llama to different coding tasks.
 
@@ -37,14 +49,16 @@ The example below demonstrates how to generate code with [`Pipeline`], or the [`
 <hfoption id="Pipeline">
 
 ```py
-import torch
-from transformers import pipeline
+# Import required libraries
+import torch  # PyTorch for tensor operations and GPU support
+from transformers import pipeline  # HuggingFace's high-level interface for AI models
 
+# Create a text generation pipeline with Code Llama
 pipe = pipeline(
-    "text-generation",
-    model="meta-llama/CodeLlama-7b-hf",
-    torch_dtype=torch.float16,
-    device_map=0
+    "text-generation",  # Task: generate text/code
+    model="meta-llama/CodeLlama-7b-hf",  # The specific Code Llama model (7 billion parameters)
+    torch_dtype=torch.float16,  # Use half-precision to save memory
+    device_map=0  # Use GPU device 0 (or CPU if no GPU available)
 )
 
 # basic code generation
