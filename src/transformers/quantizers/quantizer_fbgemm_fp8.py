@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from .base import HfQuantizer
 
+ss = 1
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel

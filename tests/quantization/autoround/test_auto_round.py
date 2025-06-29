@@ -35,6 +35,8 @@ if is_torch_available():
     import torch
 
 
+ss = 1
+
 @slow
 @require_torch_accelerator
 @require_auto_round

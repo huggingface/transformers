@@ -51,6 +51,9 @@ from .configuration_bert import BertConfig
 logger = logging.get_logger(__name__)
 
 
+sss = 3
+
+
 def load_tf_weights_in_bert(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
     try:

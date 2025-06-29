@@ -26,74 +26,78 @@ env:
 
 jobs:
   get-pr-number:
-    runs-on: ubuntu-22.04
     name: Get PR number
     # For security: only allow team members to run
     if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["ydshieh", "ArthurZucker", "zucchini-nlp", "qubvel", "molbap", "gante", "LysandreJik", "Cyrilvallez", "Rocketknight1", "SunMarc", "muellerzr", "eustlb", "MekkCyber", "manueldeprada", "vasqu", "ivarflakstad"]'), github.actor) && (startsWith(github.event.comment.body, 'run-slow') || startsWith(github.event.comment.body, 'run slow') || startsWith(github.event.comment.body, 'run_slow')) }}
-    outputs:
-      PR_NUMBER: ${{ steps.set_pr_number.outputs.PR_NUMBER }}
+    uses: ./.github/workflows/self-get-pr-number.yml
+
+  # TODO: remove this job
+  show-pr-number:
+    runs-on: ubuntu-latest
+    needs: get-pr-number
     steps:
-      - name: Get PR number
-        shell: bash
-        run: |
-          if [[ "${{ github.event.issue.number }}" != "" && "${{ github.event.issue.pull_request }}" != "" ]]; then
-            echo "PR_NUMBER=${{ github.event.issue.number }}" >> $GITHUB_ENV
-          else
-            echo "PR_NUMBER=" >> $GITHUB_ENV
-          fi
+      - run: echo ${{ needs.get-pr-number.outputs.PR_NUMBER }}
 
-      - name: Check PR number
-        shell: bash
-        run: |
-          echo "${{ env.PR_NUMBER }}"
-
-      - name: Set PR number
-        id: set_pr_number
-        run: echo "PR_NUMBER=${{ env.PR_NUMBER }}" >> "$GITHUB_OUTPUT"
-
-  get-sha:
-    runs-on: ubuntu-22.04
+  get-pr-sha:
+    name: Get PR commit SHA
     needs: get-pr-number
     if: ${{ needs.get-pr-number.outputs.PR_NUMBER != ''}}
-    outputs:
-      PR_HEAD_SHA: ${{ steps.get_sha.outputs.PR_HEAD_SHA }}
-      PR_MERGE_SHA: ${{ steps.get_sha.outputs.PR_MERGE_SHA }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: "0"
-          ref: "refs/pull/${{needs.get-pr-number.outputs.PR_NUMBER}}/merge"
+    uses: ./.github/workflows/self-get-pr-sha.yml
+    with:
+      pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
 
-      - name: Get SHA (and verify timestamps against the issue comment date)
-        id: get_sha
-        env:
-          PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
-          COMMENT_DATE: ${{ github.event.comment.created_at }}
-        run: |
-            git fetch origin refs/pull/$PR_NUMBER/head:refs/remotes/pull/$PR_NUMBER/head
-            git checkout refs/remotes/pull/$PR_NUMBER/head
-            echo "PR_HEAD_SHA: $(git log -1 --format=%H)"
-            echo "PR_HEAD_SHA=$(git log -1 --format=%H)" >> "$GITHUB_OUTPUT"
-            git fetch origin refs/pull/$PR_NUMBER/merge:refs/remotes/pull/$PR_NUMBER/merge
-            git checkout refs/remotes/pull/$PR_NUMBER/merge
-            echo "PR_MERGE_SHA: $(git log -1 --format=%H)"
-            echo "PR_MERGE_SHA=$(git log -1 --format=%H)" >> "$GITHUB_OUTPUT"
-            PR_MERGE_COMMIT_TIMESTAMP=$(git log -1 --date=unix --format=%cd)
-            echo "PR_MERGE_COMMIT_TIMESTAMP: $PR_MERGE_COMMIT_TIMESTAMP"
-            COMMENT_TIMESTAMP=$(date -d "${COMMENT_DATE}" +"%s")
-            echo "COMMENT_DATE: $COMMENT_DATE"
-            echo "COMMENT_TIMESTAMP: $COMMENT_TIMESTAMP"
-            if [ $COMMENT_TIMESTAMP -le $PR_MERGE_COMMIT_TIMESTAMP ]; then
-              echo "Last commit on the pull request is newer than the issue comment triggering this run! Abort!";
-              exit -1;
-            fi
+  # TODO: remove this job
+  show-pr-sha:
+    runs-on: ubuntu-latest
+    needs: get-pr-sha
+    steps:
+      - run: |
+          echo ${{ needs.get-pr-sha.outputs.PR_HEAD_SHA_BAD }}
+          echo ${{ needs.get-pr-sha.outputs.PR_MERGE_SHA_BAD }}
+          echo ${{ needs.get-pr-sha.outputs.PR_HEAD_REPO_FULL_NAME }}
+          echo ${{ needs.get-pr-sha.outputs.PR_BASE_REPO_FULL_NAME }}
+          echo ${{ needs.get-pr-sha.outputs.PR_HEAD_REPO_OWNER }}
+          echo ${{ needs.get-pr-sha.outputs.PR_BASE_REPO_OWNER }}
+          echo ${{ needs.get-pr-sha.outputs.PR_HEAD_REPO_NAME }}
+          echo ${{ needs.get-pr-sha.outputs.PR_BASE_REPO_NAME }}
+          echo ${{ needs.get-pr-sha.outputs.PR_HEAD_REF }}
+          echo ${{ needs.get-pr-sha.outputs.PR_BASE_REF }}
+          echo ${{ needs.get-pr-sha.outputs.PR_HEAD_SHA }}
+          echo ${{ needs.get-pr-sha.outputs.PR_BASE_SHA }}
+          echo ${{ needs.get-pr-sha.outputs.PR_MERGE_COMMIT_SHA }}
+          echo ${{ needs.get-pr-sha.outputs.PR_HEAD_COMMIT_DATE }}
+          echo ${{ needs.get-pr-sha.outputs.PR_MERGE_COMMIT_DATE }}
+          echo ${{ needs.get-pr-sha.outputs.PR_HEAD_COMMIT_TIMESTAMP }}
+          echo ${{ needs.get-pr-sha.outputs.PR_MERGE_COMMIT_TIMESTAMP }}
+#          echo ${{ needs.get-pr-sha.outputs.PR }}
+
+  verity_pr_commit:
+    name: Verity PR commit corresponds to a specific event by comparing timestamps
+    runs-on: ubuntu-22.04
+    needs: get-pr-sha
+    env:
+      COMMENT_DATE: ${{ github.event.comment.created_at }}
+      PR_MERGE_COMMIT_DATE: ${{ needs.get-pr-sha.outputs.PR_MERGE_COMMIT_DATE }}
+      PR_MERGE_COMMIT_TIMESTAMP: ${{ needs.get-pr-sha.outputs.PR_MERGE_COMMIT_TIMESTAMP }}
+    steps:
+      - run: |
+          COMMENT_TIMESTAMP=$(date -d "${COMMENT_DATE}" +"%s")
+          echo "COMMENT_DATE: $COMMENT_DATE"
+          echo "PR_MERGE_COMMIT_DATE: $PR_MERGE_COMMIT_DATE"
+          echo "COMMENT_TIMESTAMP: $COMMENT_TIMESTAMP"
+          echo "PR_MERGE_COMMIT_TIMESTAMP: $PR_MERGE_COMMIT_TIMESTAMP"
+          if [ $COMMENT_TIMESTAMP -le $PR_MERGE_COMMIT_TIMESTAMP ]; then
+            echo "Last commit on the pull request is newer than the issue comment triggering this run! Abort!";
+            exit -1;
+          fi
+
 
   # use a python script to handle this complex logic
   # case 1: `run-slow` (auto. infer with limited number of models, but in particular, new model)
   # case 2: `run-slow model_1, model_2`
   get-tests:
     runs-on: ubuntu-22.04
-    needs: [get-pr-number, get-sha]
+    needs: [get-pr-number, get-pr-sha]
     if: ${{ needs.get-pr-number.outputs.PR_NUMBER != ''}}
     outputs:
       models: ${{ steps.models_to_run.outputs.models }}
@@ -106,7 +110,7 @@ jobs:
 
       - name: Verify merge commit SHA
         env:
-          VERIFIED_PR_MERGE_SHA: ${{ needs.get-sha.outputs.PR_MERGE_SHA }}
+          VERIFIED_PR_MERGE_SHA: ${{ needs.get-pr-sha.outputs.PR_MERGE_SHA }}
         run: |
             PR_MERGE_SHA=$(git log -1 --format=%H)
             if [ $PR_MERGE_SHA != $VERIFIED_PR_MERGE_SHA ]; then
@@ -114,6 +118,7 @@ jobs:
               exit -1;
             fi
 
+      # Do we really need to checkout? The script can take a list of files and output the desired list, right?
       - name: Get models to test
         env:
           PR_COMMENT: ${{ github.event.comment.body }}
