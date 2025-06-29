@@ -48,10 +48,10 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     auto_docstring,
+    can_return_tuple,
     is_torch_flex_attn_available,
     is_torchdynamo_compiling,
     logging,
-    replace_return_docstrings,
 )
 from .configuration_florence2 import Florence2Config, Florence2LanguageConfig, Florence2VisionConfig
 
@@ -359,24 +359,24 @@ def eager_attention_forward(
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
-    scaling: float,
+    scaling: Optional[float] = None,
     dropout: float = 0.0,
+    head_mask: Optional[torch.Tensor] = None,
     **kwargs,
 ):
-    # Take the dot product between "query" and "key" to get the raw attention scores.
-    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
 
-    # Normalize the attention scores to probabilities.
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-
-    # This is actually dropping out entire tokens to attend to, which might
-    # seem a bit unusual, but is taken from the original Transformer paper.
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-
-    # Mask heads if we want to
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        attn_weights = attn_weights * attention_mask
+        attn_weights = attn_weights + attention_mask
 
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+
+    if head_mask is not None:
+        attn_weights = attn_weights * head_mask.view(1, -1, 1, 1)
+
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
@@ -2052,82 +2052,43 @@ class Florence2LanguageForConditionalGeneration(Florence2LanguagePreTrainedModel
 
 
 @dataclass
-class Florence2Seq2SeqLMOutput(Seq2SeqLMOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for Florence-2 model's outputs that also contains : pre-computed hidden states that can speed up sequential
     decoding.
-
+    """
+)
+class Florence2Seq2SeqLMOutput(Seq2SeqLMOutput):
+    """
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
             Language modeling loss.
         logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (`EncoderDecoderCache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            It is a [`~cache_utils.EncoderDecoderCache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
-        decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the decoder at the output of each layer plus the initial embedding outputs.
-        decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
-            self-attention heads.
-        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
-            weighted average in the cross-attention heads.
-        encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder of the model.
-        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the encoder at the output of each layer plus the initial embedding outputs.
-        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
-            self-attention heads.
-        image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+        image_hidden_states (`torch.FloatTensor`, *optional*):
             Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size,
             num_image_tokens, hidden_size)`.
+            image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
 
-            image_hidden_states of the model produced by the vision encoder
     """
 
     image_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
+@auto_docstring
 class Florence2PreTrainedModel(PreTrainedModel):
     config_class = Florence2Config
-    base_model_prefix = "model"
+    main_input_name = "input_ids"
+    base_model_prefix = "florence2"
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
-
-    @property
-    def _supports_flash_attn_2(self):
-        """
-        Retrieve language_model's attribute to check whether the model supports
-        Flash Attention 2 or not.
-        """
-        return self.language_model._supports_flash_attn_2
-
-    @property
-    def _supports_sdpa(self):
-        """
-        Retrieve language_model's attribute to check whether the model supports
-        SDPA or not.
-        """
-        return self.language_model._supports_sdpa
+    _supports_cache_class = True
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_quantized_cache = True
+    _supports_static_cache = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.Embedding, nn.LayerNorm]) -> None:
         std = self.config.text_config.initializer_range
@@ -2146,6 +2107,11 @@ class Florence2PreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
+@auto_docstring(
+    custom_intro="""
+    Florence-2 is an advanced vision foundation model that uses a prompt-based approach to handle a wide range of vision and vision-language tasks. Florence-2 can interpret simple text prompts to perform tasks like captioning, object detection, and segmentation.
+    """
+)
 class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = [
         "language_model.model.shared.weight",
@@ -2155,9 +2121,9 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
 
     def __init__(self, config: Florence2Config):
         super().__init__(config)
-        self.vision_tower = Florence2VisionBackbone(config=config.vision_config)
         self.vocab_size = config.vocab_size
-        self._attn_implementation = config._attn_implementation
+
+        self.vision_tower = Florence2VisionBackbone(config=config.vision_config)
         self.vision_embedding_dim = config.vision_config.embed_dim[-1]
         self.vision_projection_dim = config.vision_config.projection_dim
         self.image_projection = nn.Parameter(torch.ones(self.vision_embedding_dim, self.vision_projection_dim))
@@ -2201,6 +2167,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         self.vocab_size = model_embeds.num_embeddings
         return model_embeds
 
+    @auto_docstring
     def get_image_features(self, pixel_values: torch.Tensor):
         vision_features = self.vision_tower.forward_features_unpool(pixel_values)
         position_features = vision_features + self.image_position_embed(vision_features)
@@ -2241,7 +2208,8 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
 
         return inputs_embeds, attention_mask
 
-    @replace_return_docstrings(output_type=Florence2Seq2SeqLMOutput, config_class="Florence2Config")
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -2249,29 +2217,20 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         attention_mask: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        decoder_head_mask: Optional[torch.Tensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[list[torch.FloatTensor]] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> Union[tuple, Florence2Seq2SeqLMOutput]:
         r"""
-        Args:
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        Returns:
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 
@@ -2298,7 +2257,6 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         image_features = None
         if inputs_embeds is None:
@@ -2307,45 +2265,25 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
                 inputs_embeds = self.get_input_embeddings()(input_ids)
             # 2. Merge text and images
             if pixel_values is not None:
-                # (batch_size, num_image_tokens, hidden_size)
                 image_features = self.get_image_features(pixel_values)
                 inputs_embeds, attention_mask = self._merge_input_ids_with_image_features(
                     image_features, inputs_embeds, attention_mask
                 )
 
-        if attention_mask is not None:
-            attention_mask = attention_mask.to(inputs_embeds.dtype)
-
         outputs = self.language_model(
+            input_ids=input_ids,
             attention_mask=attention_mask,
             labels=labels,
             inputs_embeds=inputs_embeds,
             decoder_input_ids=decoder_input_ids,
-            encoder_outputs=encoder_outputs,
             decoder_attention_mask=decoder_attention_mask,
-            head_mask=head_mask,
-            decoder_head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
-            decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
             **kwargs,
         )
-
-        if not return_dict:
-            if labels is not None:
-                loss = outputs[0]
-                logits = outputs[1].float()
-                return (
-                    loss,
-                    logits,
-                ) + outputs[2:]
-            else:
-                return outputs
 
         loss = None
         logits = outputs.logits

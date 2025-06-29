@@ -130,9 +130,9 @@ class Florence2VisionConfig(PretrainedConfig):
 
 class Florence2LanguageConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Florence2LanguagePreTrainedModel`]. It is used to instantiate a BART
+    This is the configuration class to store the configuration of a [`Florence2LanguageModel`]. It is used to instantiate a Florence2LanguageConfig
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the BART
+    defaults will yield a similar configuration to that of the Florence2LanguageModel
     [facebook/bart-large](https://huggingface.co/facebook/bart-large) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
