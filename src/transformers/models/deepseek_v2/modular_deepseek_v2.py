@@ -20,14 +20,11 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from transformers.cache_utils import Cache
-from transformers.utils import (
+from ...cache_utils import Cache
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...utils import (
     logging,
 )
-
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...processing_utils import Unpack
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
@@ -185,6 +182,7 @@ class DeepseekV2Config(LlamaConfig):
     ):
         super().__init__(**super_kwargs)
 
+        del self.pretraining_tp
         self.aux_loss_alpha = aux_loss_alpha
         self.first_k_dense_replace = first_k_dense_replace
         self.kv_lora_rank = kv_lora_rank
@@ -481,61 +479,27 @@ class DeepseekV2DecoderLayer(LlamaDecoderLayer):
         super().__init__(config, layer_idx)
 
         self.self_attn = DeepseekV2Attention(config=config, layer_idx=layer_idx)
-
-        if layer_idx >= config.first_k_dense_replace:
-            self.mlp = DeepseekV2MoE(config)
+        self.mlp = DeepseekV2MoE(config) if layer_idx >= config.first_k_dense_replace else nn.Identity
 
         self.input_layernorm = DeepseekV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = DeepseekV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        residual = hidden_states
-
-        hidden_states = self.input_layernorm(hidden_states)
-
-        # Self Attention
-        hidden_states, self_attn_weights = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_value=past_key_value,
-            output_attentions=output_attentions,
-            use_cache=use_cache,
-            cache_position=cache_position,
-            position_embeddings=position_embeddings,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-
-        outputs = (hidden_states,)
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        return outputs
-
 
 class DeepseekV2PreTrainedModel(LlamaPreTrainedModel):
     def _init_weights(self, module):
-        if isinstance(module, DeepseekV2MoEGate):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, DeepseekV2RMSNorm):
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, DeepseekV2MoEGate):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-        super()._init_weights(module)
 
 
 class DeepseekV2Model(LlamaModel):

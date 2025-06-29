@@ -211,7 +211,6 @@ class DeepseekV2Config(PretrainedConfig):
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
-        self.pretraining_tp = pretraining_tp
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
@@ -224,7 +223,6 @@ class DeepseekV2Config(PretrainedConfig):
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
-
         self.aux_loss_alpha = aux_loss_alpha
         self.first_k_dense_replace = first_k_dense_replace
         self.kv_lora_rank = kv_lora_rank

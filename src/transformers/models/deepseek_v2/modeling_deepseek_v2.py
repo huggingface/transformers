@@ -26,11 +26,8 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from transformers.cache_utils import Cache
-from transformers.utils import logging
-
 from ...activations import ACT2FN
-from ...cache_utils import DynamicCache
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
@@ -40,7 +37,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast,
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, auto_docstring, can_return_tuple
+from ...utils import LossKwargs, auto_docstring, can_return_tuple, logging
 from .configuration_deepseek_v2 import DeepseekV2Config
 
 
@@ -412,14 +409,10 @@ class DeepseekV2DecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
 
         self.self_attn = DeepseekV2Attention(config=config, layer_idx=layer_idx)
-
-        self.mlp = DeepseekV2MLP(config)
+        self.mlp = DeepseekV2MoE(config) if layer_idx >= config.first_k_dense_replace else nn.Identity
 
         self.input_layernorm = DeepseekV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = DeepseekV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-        if layer_idx >= config.first_k_dense_replace:
-            self.mlp = DeepseekV2MoE(config)
 
     def forward(
         self,
@@ -434,7 +427,6 @@ class DeepseekV2DecoderLayer(GradientCheckpointingLayer):
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
-
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
@@ -471,6 +463,7 @@ class DeepseekV2PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["DeepseekV2DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn_3 = True
     _supports_flash_attn_2 = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -480,8 +473,6 @@ class DeepseekV2PreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
     def _init_weights(self, module):
-        if isinstance(module, DeepseekV2MoEGate):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
@@ -493,6 +484,8 @@ class DeepseekV2PreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, DeepseekV2RMSNorm):
             module.weight.data.fill_(1.0)
+        elif isinstance(module, DeepseekV2MoEGate):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring
