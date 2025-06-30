@@ -790,7 +790,7 @@ class ContinuousBatchProcessor:
     def setup_static_tensors(self):
         T = self.max_batch_tokens
         max_token_budget = self.cache.num_blocks * self.cache.block_size
-        tensor_metadata = {"dtype": torch.int32, "device": self.model_device}
+        tensor_metadata = {"dtype": torch.int32, "device": self.model_device, "pin_memory": True}
         self.tensor_metadata = tensor_metadata
         self.input_ids = torch.zeros((1, T), **tensor_metadata)
         self.position_ids = torch.zeros((1, T), **tensor_metadata)
@@ -805,6 +805,12 @@ class ContinuousBatchProcessor:
         self.max_seqlen_q = 0
         self.max_seqlen_k = 0
         self.output_ids = torch.full((1, T), -1, **tensor_metadata)
+        self.block_table = torch.full(
+            (T, 24),
+            -1,
+            dtype=torch.int32,
+            device=self.model_device,  # default 24 blocks
+        )
 
     @traced
     @torch.no_grad()
@@ -821,6 +827,7 @@ class ContinuousBatchProcessor:
         self.max_seqlen_q = 0
         self.max_seqlen_k = 0
         self.output_ids.zero_()
+        self.block_table.zero_()
 
     def get_model_kwargs(self) -> PagedAttentionArgs:
         """Get model keyword arguments for the current batch."""
@@ -836,7 +843,7 @@ class ContinuousBatchProcessor:
             "logits_indices": self.logits_indices,
             "max_seqlen_q": self.max_seqlen_q,
             "max_seqlen_k": self.max_seqlen_k,
-            "block_tables": self.cache._block_tables,
+            "block_tables": self.block_tables,
             "cache": self.cache,
             "use_cache": False,
         }
@@ -947,7 +954,12 @@ class ContinuousBatchProcessor:
             self.max_seqlen_k = max(self.max_seqlen_k, key_length)
             state.position_offset += query_length
 
-        logger.info(
+            block_list = self.cache.get_block_table(state.request_id)
+            self.block_table[: len(block_list), :] = torch.tensor(
+                block_list, torch.int32, device=self.model_device, pin_memory=True
+            )
+
+        logger.warning(
             f"Scheduled: {len(self.requests_in_batch)}, Waiting: {len(self.scheduler.waiting_requests)}, Active: {len(self.scheduler.active_requests)}. cum Q: {cumulative_seqlens_q[-1]}. cum KV: {cumulative_seqlens_k[-1]}, free blocks: {self.cache.get_num_free_blocks()}"
         )
         self._build_tensors(
