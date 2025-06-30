@@ -826,7 +826,7 @@ class ContinuousBatchProcessor:
         self.max_seqlen_q = 0
         self.max_seqlen_k = 0
         self.output_ids.zero_()
-        self.block_table.zero_()
+        self.block_tables.zero_()
 
     def get_model_kwargs(self) -> PagedAttentionArgs:
         """Get model keyword arguments for the current batch."""
