@@ -993,16 +993,12 @@ def check_model_inputs(func):
         bound.apply_defaults()
         all_args = bound.arguments
 
-        # TODO @Lysandre add the head we have today about GC and training
-        # and all of the rest that is general transformers checking
-        # THIS PART :
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
                 "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
             )
             use_cache = False
-        #
-        # # TODO (joao): remove this exception in v4.56 -- it exists for users that try to pass a legacy cache
+        # TODO (arthur): should we init the cache here if not provided?
         # if not isinstance(past_key_values, (type(None), Cache)):
         #     raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
         #
@@ -1010,7 +1006,7 @@ def check_model_inputs(func):
         collected_outputs = defaultdict(tuple)
 
         def make_capture_fn(key, index):
-            def capture_fn(module, input, output):
+            def capture_fn(_, __, output):
                 if not isinstance(output, tuple):
                     collected_outputs[key] += (output,)
                 elif output[index] is not None:
@@ -1021,14 +1017,15 @@ def check_model_inputs(func):
         capture_flags = self._can_record_outputs
         all_args.update(**all_args["kwargs"])
         recordable_keys = {
-            f"output_{k}": all_args.get(f"output_{k}", getattr(self.config, f"output_{k}")) for k in capture_flags
+            f"output_{k}": all_args.get(f"output_{k}", getattr(self.config, f"output_{k}", False))
+            for k in capture_flags
         }
         if any(recordable_keys.values()):
             for (
                 _,
                 layer,
             ) in self.named_modules():  # pretty sure we gotta attache the hooks to an instance and not a class
-                for key, (cls, idx) in self._can_record_outputs.items():
+                for key, (cls, idx) in capture_flags.items():
                     if capture_flags.get(key, getattr(self.config, key, False)) and isinstance(layer, cls):
                         hook_fn = make_capture_fn(key, idx)
                         hooks.append(register_hook_if_needed(layer, hook_fn))
