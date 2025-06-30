@@ -418,7 +418,7 @@ class IsolatedParallel(TensorParallelLayer):
         param = param[...].to(param_casting_dtype)
         if to_contiguous:
             param = param.contiguous()
-        param = param / device_mesh.size()  # TODO should be optionable
+        # param = param / device_mesh.size()  # TODO should be optionable
         return param
 
     def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
