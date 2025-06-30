@@ -987,7 +987,9 @@ def check_model_inputs(func):
 
         capture_flags = self._can_record_outputs
         all_args.update(**all_args["kwargs"])
-        recordable_keys = {f"output_{k}": all_args.get(f"output_{k}", False) for k in capture_flags}
+        recordable_keys = {
+            f"output_{k}": all_args.get(f"output_{k}", getattr(self.config, f"output_{k}")) for k in capture_flags
+        }
         if any(recordable_keys.values()):
             for (
                 _,
@@ -1004,8 +1006,9 @@ def check_model_inputs(func):
                 h.remove()
 
         for key in collected_outputs:
+            if key == "hidden_states":
+                collected_outputs[key].append(outputs.last_hidden_state)
             outputs[key] = collected_outputs[key]
-        print(collected_outputs)
         if return_dict is False:
             outputs = outputs.to_tuple()
         return outputs
