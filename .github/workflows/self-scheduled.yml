@@ -50,7 +50,7 @@ jobs:
     name: Setup
     strategy:
       matrix:
-        machine_type: [aws-g4dn-4xlarge-cache, aws-g4dn-12xlarge-cache]
+        machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
     runs-on:
       group: '${{ matrix.machine_type }}'
     container:
@@ -128,7 +128,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [aws-g4dn-4xlarge-cache, aws-g4dn-12xlarge-cache]
+        machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
         slice_id: [0, 1]
     uses: ./.github/workflows/model_jobs.yml
     with:
@@ -145,7 +145,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [aws-g4dn-4xlarge-cache, aws-g4dn-12xlarge-cache]
+        machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
     runs-on:
       group: '${{ matrix.machine_type }}'
     container:
@@ -179,9 +179,9 @@ jobs:
         run: |
           echo "${{ matrix.machine_type }}"
 
-          if [ "${{ matrix.machine_type }}" = "aws-g4dn-4xlarge-cache" ]; then
+          if [ "${{ matrix.machine_type }}" = "aws-g5-4xlarge-cache" ]; then
             machine_type=single-gpu
-          elif [ "${{ matrix.machine_type }}" = "aws-g4dn-12xlarge-cache" ]; then
+          elif [ "${{ matrix.machine_type }}" = "aws-g5-12xlarge-cache" ]; then
             machine_type=multi-gpu
           else
             machine_type=${{ matrix.machine_type }}
@@ -213,7 +213,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [aws-g4dn-4xlarge-cache]
+        machine_type: [aws-g5-4xlarge-cache]
     runs-on:
       group: '${{ matrix.machine_type }}'
     container:
@@ -247,9 +247,9 @@ jobs:
         run: |
           echo "${{ matrix.machine_type }}"
 
-          if [ "${{ matrix.machine_type }}" = "aws-g4dn-4xlarge-cache" ]; then
+          if [ "${{ matrix.machine_type }}" = "aws-g5-4xlarge-cache" ]; then
             machine_type=single-gpu
-          elif [ "${{ matrix.machine_type }}" = "aws-g4dn-12xlarge-cache" ]; then
+          elif [ "${{ matrix.machine_type }}" = "aws-g5-12xlarge-cache" ]; then
             machine_type=multi-gpu
           else
             machine_type=${{ matrix.machine_type }}
@@ -282,7 +282,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [aws-g4dn-4xlarge-cache, aws-g4dn-12xlarge-cache]
+        machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
     runs-on:
       group: '${{ matrix.machine_type }}'
     container:
@@ -344,9 +344,9 @@ jobs:
         run: |
           echo "${{ matrix.machine_type }}"
 
-          if [ "${{ matrix.machine_type }}" = "aws-g4dn-4xlarge-cache" ]; then
+          if [ "${{ matrix.machine_type }}" = "aws-g5-4xlarge-cache" ]; then
             machine_type=single-gpu
-          elif [ "${{ matrix.machine_type }}" = "aws-g4dn-12xlarge-cache" ]; then
+          elif [ "${{ matrix.machine_type }}" = "aws-g5-12xlarge-cache" ]; then
             machine_type=multi-gpu
           else
             machine_type=${{ matrix.machine_type }}
@@ -381,7 +381,7 @@ jobs:
       fail-fast: false
       matrix:
         folders: ${{ fromJson(needs.setup.outputs.quantization_matrix) }}
-        machine_type: [aws-g4dn-4xlarge-cache, aws-g4dn-12xlarge-cache]
+        machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
     runs-on:
       group: '${{ matrix.machine_type }}'
     container:
@@ -424,9 +424,9 @@ jobs:
         run: |
           echo "${{ matrix.machine_type }}"
 
-          if [ "${{ matrix.machine_type }}" = "aws-g4dn-4xlarge-cache" ]; then
+          if [ "${{ matrix.machine_type }}" = "aws-g5-4xlarge-cache" ]; then
             machine_type=single-gpu
-          elif [ "${{ matrix.machine_type }}" = "aws-g4dn-12xlarge-cache" ]; then
+          elif [ "${{ matrix.machine_type }}" = "aws-g5-12xlarge-cache" ]; then
             machine_type=multi-gpu
           else
             machine_type=${{ matrix.machine_type }}
