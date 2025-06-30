@@ -86,46 +86,7 @@ class CacheProcessor:
         return key_tensors, value_tensors
 
 
-class CacheProcessorList(list):
-    """
-    list of cache processors that can be applied to a cache.
-    """
-
-    def init(self, cache: "Cache", **kwargs) -> None:
-        """Initialize all processors in the list."""
-        for processor in self:
-            processor.init(cache, **kwargs)
-
-    def pre_update(
-        self,
-        cache: "Cache",
-        key_states: torch.Tensor,
-        value_states: torch.Tensor,
-        layer_idx: int,
-        cache_kwargs: Optional[dict[str, Any]] = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Apply pre_update hook for all processors."""
-        for processor in self:
-            key_states, value_states = processor.pre_update(cache, key_states, value_states, layer_idx, cache_kwargs)
-        return key_states, value_states
-
-    def post_update(
-        self,
-        cache: "Cache",
-        key_tensors: torch.Tensor,
-        value_tensors: torch.Tensor,
-        layer_idx: int,
-        cache_kwargs: Optional[dict[str, Any]] = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Apply post_update hook for all processors."""
-        for processor in self:
-            key_tensors, value_tensors = processor.post_update(
-                cache, key_tensors, value_tensors, layer_idx, cache_kwargs
-            )
-        return key_tensors, value_tensors
-
-
-class KVList:
+class KVProxy:
     """Efficiently simulates layer-indexed key or value lists from a layered cache.
     This allows for BC access, e.g., cache.key_cache[idx] or cache.value_cache[idx]."""
 
@@ -228,8 +189,8 @@ class Cache:
         config_or_ddp_cache_data (`PretrainedConfig` or `Iterable`, *optional*):
             Model configuration for shape/device info, or DDP-distributed cache data for compatibility.
             If DDP-distributed cache data, must be an iterable of (key_states, value_states) tuples for each layer.
-        processors (`CacheProcessorList`, *optional*):
-            List of cache processors to apply (e.g., quantization, offloading). Defaults to empty list.
+        processor (`CacheProcessor`, *optional*):
+            Cache processor to apply (e.g., quantization, offloading).
         pattern_block (`tuple[Type[CacheLayer], ...]`, *optional*):
             Pattern of cache layer types to use. Defaults to `(DynamicLayer,)`. Must be a tuple whose length divides
             the total number of layers. The pattern repeats to fill all layers. Examples: `(StaticLayer,)` for a
@@ -258,13 +219,13 @@ class Cache:
         config_or_ddp_cache_data: Optional[
             Union[PretrainedConfig, Iterable[tuple[torch.Tensor, torch.Tensor]]]
         ] = None,
-        processors: Optional[CacheProcessorList] = None,
+        processor: Optional[CacheProcessor] = None,
         pattern_block: Optional[tuple[type["CacheLayer"], ...]] = None,
         *args,
         **kwargs,
     ):
         self.layers: list[CacheLayer] = []
-        self.processors = processors if processors is not None else CacheProcessorList()
+        self.processor = processor
         pattern_block = pattern_block or self.pattern_block or (DynamicLayer,)
 
         if isinstance(config_or_ddp_cache_data, PretrainedConfig):
@@ -280,7 +241,8 @@ class Cache:
             assert pattern_block == (DynamicLayer,), "torch DDP is only supported for DynamicCache"
             for key_states, value_states in _distributed_cache_data:
                 self.layers.append(DynamicLayer.from_kv(key_states, value_states))
-            self.processors.init(self, **kwargs)
+            if self.processor is not None:
+                self.processor.init(self, **kwargs)
             return
         else:
             model_config = kwargs.pop("config", None)
@@ -292,7 +254,8 @@ class Cache:
             layer = layer_type(self.config.to_layer(idx))
             self.layers.append(layer)
 
-        self.processors.init(self, **kwargs)
+        if self.processor is not None:
+            self.processor.init(self, **kwargs)
 
     def grow_layers_to(self, layer_idx):
         while len(self.layers) <= layer_idx:
@@ -302,14 +265,14 @@ class Cache:
             self.layers.append(next_layer_type())
 
     @property
-    def key_cache(self) -> KVList:
+    def key_cache(self) -> KVProxy:
         """Returns a list-like object of key cache tensors indexed by layer."""
-        return KVList(self.layers, "key")
+        return KVProxy(self.layers, "key")
 
     @property
-    def value_cache(self) -> KVList:
+    def value_cache(self) -> KVProxy:
         """Returns a list-like object of value cache tensors indexed by layer."""
-        return KVList(self.layers, "value")
+        return KVProxy(self.layers, "value")
 
     def update(
         self,
@@ -335,12 +298,16 @@ class Cache:
         Return:
             A tuple containing the updated key and value states.
         """
-        key_states, value_states = self.processors.pre_update(self, key_states, value_states, layer_idx, cache_kwargs)
+        if self.processor is not None:
+            key_states, value_states = self.processor.pre_update(
+                self, key_states, value_states, layer_idx, cache_kwargs
+            )
         self.grow_layers_to(layer_idx)
         key_tensors, value_tensors = self.layers[layer_idx].update(key_states, value_states, cache_kwargs)
-        key_tensors, value_tensors = self.processors.post_update(
-            self, key_tensors, value_tensors, layer_idx, cache_kwargs
-        )
+        if self.processor is not None:
+            key_tensors, value_tensors = self.processor.post_update(
+                self, key_tensors, value_tensors, layer_idx, cache_kwargs
+            )
         return key_tensors, value_tensors
 
     def __getitem__(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
@@ -1015,8 +982,7 @@ class OffloadedCache(DynamicCache):
 
     def __init__(self, config: Optional[CacheConfig] = None) -> None:
         # Create the underlying cache with offload processor
-        processors = CacheProcessorList([OffloadedCacheProcessor()])
-        super().__init__(processors=processors, config=config)
+        super().__init__(processor=OffloadedCacheProcessor(), config=config)
 
 
 class StaticLayer(CacheLayer):
@@ -1115,7 +1081,7 @@ class StaticCache(Cache):
 
     Parameters:
         config_or_ddp_cache_data (`Union`, *optional*): Model configuration for shape/device info, or DDP-distributed cache data for compatibility.
-        processors (`Optional`, *optional*): List of cache processors to apply (e.g., quantization, offloading). Defaults to empty list.
+        processor (`Optional`, *optional*): Cache processor to apply (e.g., quantization, offloading).
         pattern_block (`Optional`, *optional*): Pattern of cache layer types to use. Defaults to `(StaticLayer,)` for backward compatibility.
 
 
@@ -1429,7 +1395,7 @@ class HybridCache(Cache):
 
     Parameters:
         config_or_ddp_cache_data (`PretrainedConfig` or `Iterable`, *optional*): Model configuration for shape/device info. No DDP-distributed cache data is supported.
-        processors (`CacheProcessorList`, *optional*): List of cache processors to apply (e.g., quantization, offloading). Defaults to empty list.
+        processor (`CacheProcessor`, *optional*): Cache processor to apply (e.g., quantization, offloading).
         pattern_block (`tuple[Type[CacheLayer], ...]`, *optional*): Pattern of cache layer types to use. Defaults to `(SlidingWindowLayer, StaticLayer, ..., StaticLayer)`
             for backward compatibility.
     Example:
@@ -1455,7 +1421,7 @@ class HybridCache(Cache):
     def __init__(
         self,
         config_or_ddp_cache_data=None,
-        processors: Optional[CacheProcessorList] = None,
+        processor: Optional[CacheProcessor] = None,
         pattern_block: Optional[tuple[type["CacheLayer"], ...]] = None,
         *args,
         **kwargs,
@@ -1469,7 +1435,7 @@ class HybridCache(Cache):
             self.is_sliding = [False] * model_config.num_hidden_layers
 
         pattern_block = tuple(SlidingWindowLayer if sl else StaticLayer for sl in self.is_sliding)
-        super().__init__(config_or_ddp_cache_data, processors, pattern_block, *args, **kwargs)
+        super().__init__(config_or_ddp_cache_data, processor, pattern_block, *args, **kwargs)
 
 
 class HybridChunkedCache(Cache):
@@ -1878,10 +1844,6 @@ class OffloadedStaticCache(StaticCache):
         offload_device: Union[str, torch.device] = "cpu",
         layer_device_map: Optional[dict[int, Union[str, torch.device, int]]] = None,
     ) -> None:
-        # Create offload processor
-        processors = CacheProcessorList([OffloadedCacheProcessor(offload_device)])
-
-        # Initialize the base StaticCache with the processor
         super().__init__(
             config=config,
             max_batch_size=max_batch_size,
@@ -1889,7 +1851,7 @@ class OffloadedStaticCache(StaticCache):
             device=device,
             dtype=dtype,
             layer_device_map=layer_device_map,
-            processors=processors,
+            processor=OffloadedCacheProcessor(offload_device),
         )
 
 
@@ -2230,8 +2192,7 @@ class QuantizedCache(DynamicCache):
         else:
             raise ValueError(f"Unknown quantization backend `{cache_config.backend}`")
 
-        processors = CacheProcessorList([processor])
-        super().__init__(processors=processors)
+        super().__init__(processor=processor)
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
@@ -2240,7 +2201,7 @@ class QuantizedCache(DynamicCache):
         # since we cannot get the seq_length of each layer directly and rely on `_seen_tokens` which is
         # updated every "layer_idx" == 0, this is a hack to get the actual seq_length for the given layer_idx
         # this part of code otherwise fails when used to verify attn_weight shape in some models
-        return self.processors[0]._seen_tokens if layer_idx == 0 else self.processors[0]._seen_tokens - 1
+        return self.processor._seen_tokens if layer_idx == 0 else self.processor._seen_tokens - 1
 
 
 class QuantoQuantizedCache(QuantizedCache):
@@ -2283,8 +2244,7 @@ class QuantoQuantizedCache(QuantizedCache):
     """
 
     def __init__(self, cache_config: QuantizedCacheConfig) -> None:
-        processors = CacheProcessorList([QuantoQuantizedCacheProcessor(cache_config)])
-        Cache.__init__(self, processors=processors)
+        Cache.__init__(self, processor=QuantoQuantizedCacheProcessor(cache_config))
 
 
 class HQQQuantizedCache(QuantizedCache):
@@ -2327,8 +2287,7 @@ class HQQQuantizedCache(QuantizedCache):
     """
 
     def __init__(self, cache_config: QuantizedCacheConfig) -> None:
-        processors = CacheProcessorList([HQQQuantizedCacheProcessor(cache_config)])
-        Cache.__init__(self, processors=processors)
+        Cache.__init__(self, processor=HQQQuantizedCacheProcessor(cache_config))
 
 
 class SinkCache(Cache):

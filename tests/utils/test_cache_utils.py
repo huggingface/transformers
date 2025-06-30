@@ -323,7 +323,7 @@ class CacheIntegrationTest(unittest.TestCase):
         )
 
         self.assertIsInstance(gen_out.past_key_values, QuantizedCache)
-        processor = gen_out.past_key_values.processors[0]
+        processor = gen_out.past_key_values.processor
         if backend == "quanto":
             self.assertIsInstance(processor, QuantoQuantizedCacheProcessor)
         elif backend == "hqq":
