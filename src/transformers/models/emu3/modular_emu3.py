@@ -31,7 +31,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging
 from ..chameleon.modeling_chameleon import ChameleonPreTrainedModel, ChameleonVQVAEEncoderConvDownsample
-from ..llama.modeling_llama import TransformersKwargs, LlamaDecoderLayer, LlamaForCausalLM, LlamaModel
+from ..llama.modeling_llama import LlamaDecoderLayer, LlamaForCausalLM, LlamaModel, TransformersKwargs
 from ..siglip.modeling_siglip import SiglipAttention
 from .configuration_emu3 import Emu3Config, Emu3TextConfig, Emu3VQVAEConfig
 

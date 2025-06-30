@@ -21,12 +21,12 @@ import torch.nn as nn
 import torch.utils.checkpoint
 
 from transformers.models.llava.modeling_llava import (
-    TransformersKwargs,
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
     LlavaModel,
     LlavaModelOutputWithPast,
     LlavaPreTrainedModel,
+    TransformersKwargs,
 )
 from transformers.models.sam.modeling_sam import SamMLPBlock, SamVisionAttention, SamVisionEncoder, SamVisionLayer
 

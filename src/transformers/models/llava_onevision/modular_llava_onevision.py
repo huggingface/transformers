@@ -21,12 +21,12 @@ from torch import nn
 
 from transformers.models.llava_next.image_processing_llava_next_fast import LlavaNextImageProcessorFast
 from transformers.models.llava_next_video.modeling_llava_next_video import (
-    TransformersKwargs,
     LlavaNextVideoCausalLMOutputWithPast,
     LlavaNextVideoForConditionalGeneration,
     LlavaNextVideoModel,
     LlavaNextVideoModelOutputWithPast,
     LlavaNextVideoPreTrainedModel,
+    TransformersKwargs,
     get_anyres_image_grid_shape,
     image_size_to_num_patches,
     unpad_image,

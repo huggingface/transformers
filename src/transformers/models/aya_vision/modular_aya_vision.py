@@ -20,12 +20,12 @@ import torch
 from torch import nn
 
 from transformers.models.llava.modeling_llava import (
-    TransformersKwargs,
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
     LlavaModel,
     LlavaModelOutputWithPast,
     LlavaPreTrainedModel,
+    TransformersKwargs,
 )
 
 from ...activations import ACT2FN

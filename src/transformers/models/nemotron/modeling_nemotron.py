@@ -39,8 +39,10 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
+from ...utils.generic import TransformersKwargs
 from .configuration_nemotron import NemotronConfig
 
+from ...processing_utils import Unpack
 
 if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import BlockMask

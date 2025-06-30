@@ -29,7 +29,6 @@ import torch.utils.checkpoint
 
 from transformers.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig, Qwen2VLTextConfig
 from transformers.models.qwen2_vl.modeling_qwen2_vl import (
-    TransformersKwargs,
     PatchEmbed,
     PatchMerger,
     Qwen2RMSNorm,
@@ -38,6 +37,7 @@ from transformers.models.qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLModel,
     Qwen2VLModelOutputWithPast,
     Qwen2VLPreTrainedModel,
+    TransformersKwargs,
     VisionAttention,
     VisionRotaryEmbedding,
 )

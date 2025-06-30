@@ -29,7 +29,6 @@ from ...processing_utils import Unpack
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
 from ..auto import AutoModel
 from ..llama.modeling_llama import (
-    TransformersKwargs,
     LlamaAttention,
     LlamaDecoderLayer,
     LlamaForCausalLM,
@@ -37,6 +36,7 @@ from ..llama.modeling_llama import (
     LlamaModel,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
+    TransformersKwargs,
 )
 from .configuration_csm import CsmConfig, CsmDepthDecoderConfig
 from .generation_csm import CsmGenerationMixin
