@@ -23,6 +23,7 @@ from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -100,8 +101,9 @@ class EomtForUniversalSegmentationTester:
 
 
 @require_torch
-class EomtForUniversalSegmentationTest(ModelTesterMixin, unittest.TestCase):
+class EomtForUniversalSegmentationTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (EomtForUniversalSegmentation,) if is_torch_available() else ()
+    pipeline_model_mapping = {"image-segmentation": EomtForUniversalSegmentation} if is_torch_available() else {}
     is_encoder_decoder = False
     test_pruning = False
     test_head_masking = False
