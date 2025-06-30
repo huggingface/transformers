@@ -1015,7 +1015,8 @@ def check_model_inputs(func):
             return capture_fn
 
         capture_flags = self._can_record_outputs
-        all_args.update(**all_args["kwargs"])
+        if "kwargs" in all_args:
+            all_args.update(**all_args["kwargs"])
         recordable_keys = {
             f"output_{k}": all_args.get(f"output_{k}", getattr(self.config, f"output_{k}", False))
             for k in capture_flags
