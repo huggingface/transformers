@@ -340,10 +340,11 @@ class EomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
         image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
         inputs = processor(images=image, return_tensors="pt").to(model.device)
-        patch_offsets = inputs.pop("patch_offsets", None)
 
         with torch.inference_mode():
             outputs = model(**inputs)
+
+        patch_offsets = model.patch_offsets
 
         self.assertTrue(outputs.class_queries_logits.shape == (2, 100, 151))
         self.assertTrue(outputs.masks_queries_logits.shape == (2, 100, 128, 128))

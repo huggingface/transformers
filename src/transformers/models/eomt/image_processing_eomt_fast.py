@@ -268,7 +268,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
         r"""
         segmentation_maps (`ImageInput`, *optional*):
             The segmentation maps to preprocess for corresponding images.
-        instance_id_to_semantic_id (`List[Dict[int, int]]` or `Dict[int, int]`, *optional*):
+        instance_id_to_semantic_id (`list[dict[int, int]]` or `dict[int, int]`, *optional*):
             A mapping between object instance ids and class ids.
         """
         # args are not validated, but their order in the `preprocess` and `_preprocess` signatures must be the same
@@ -358,14 +358,14 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
             segmentation_logits (`torch.Tensor`):
                 A tensor of shape `(num_patches, num_classes, patch_height, patch_width)` representing predicted logits
                 for each image patch.
-            patch_offsets (`List[Tuple[int, int, int]]`):
+            patch_offsets (`list[tuple[int, int, int]]`):
                 A list of tuples where each tuple contains:
                 - `image_index` (int): Index of the original image this patch belongs to.
                 - `start` (int): Start pixel index of the patch along the long dimension (height or width).
                 - `end` (int): End pixel index of the patch along the long dimension.
-            target_sizes (`List[Tuple[int, int]]`):
-                List of original (height, width) dimensions for each image before preprocessing.
-            size (`Dict[str, int]`):
+            target_sizes (`list[tuple[int, int]]`):
+                list of original (height, width) dimensions for each image before preprocessing.
+            size (`dict[str, int]`):
                 A size dict which was used to resize.
         """
         num_classes = segmentation_logits.shape[1]

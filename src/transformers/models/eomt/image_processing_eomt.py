@@ -97,7 +97,7 @@ def get_size_with_aspect_ratio(image_size, size, max_size=None) -> tuple[int, in
     Computes the output image size given the input image size and the desired output size.
 
     Args:
-        image_size (`Tuple[int, int]`):
+        image_size (`tuple[int, int]`):
             The input image size.
         size (`int`):
             The desired output size.
@@ -531,13 +531,13 @@ class EomtImageProcessor(BaseImageProcessor):
                 Image or batch of images to preprocess.
             segmentation_maps (`ImageInput`, *optional*):
                 The corresponding semantic segmentation maps with the pixel-wise annotations.
-            instance_id_to_semantic_id (`List[Dict[int, int]]` or `Dict[int, int]`, *optional*):
+            instance_id_to_semantic_id (`list[dict[int, int]]` or `dict[int, int]`, *optional*):
                 A mapping between object instance ids and class ids.
             do_split_image (`bool`, *optional*, defaults to `self.do_split_image`):
                 Whether to split the input images into overlapping patches for semantic segmentation.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the input images.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
                 Target size as a dictionary with `"shortest_edge"` and `"longest_edge"` keys.
             resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
                 Resampling filter to use when resizing.
@@ -550,9 +550,9 @@ class EomtImageProcessor(BaseImageProcessor):
             do_pad (`bool`, *optional*, defaults to `False`):
                 Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
                 number of patches in the batch. Padding will be applied to the bottom and right with zeros.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
                 Mean for normalization. Single value or list for each channel.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
                 Standard deviation for normalization. Single value or list for each channel.
             ignore_index (`int`, *optional*):
                 Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
@@ -663,8 +663,8 @@ class EomtImageProcessor(BaseImageProcessor):
         each mask.
 
         Args:
-            pixel_values_list (`List[ImageInput]`):
-                List of images (pixel values) to be padded. Each image should be a tensor of shape `(channels, height,
+            pixel_values_list (`list[ImageInput]`):
+                list of images (pixel values) to be padded. Each image should be a tensor of shape `(channels, height,
                 width)`.
 
             segmentation_maps (`ImageInput`, *optional*):
@@ -678,7 +678,7 @@ class EomtImageProcessor(BaseImageProcessor):
                 - 1 for pixels that are real (i.e. **not masked**),
                 - 0 for pixels that are padding (i.e. **masked**).
 
-            instance_id_to_semantic_id (`List[Dict[int, int]]` or `Dict[int, int]`, *optional*):
+            instance_id_to_semantic_id (`list[dict[int, int]]` or `dict[int, int]`, *optional*):
                 A mapping between object instance ids and class ids. If passed, `segmentation_maps` is treated as an
                 instance segmentation map where each pixel represents an instance id. Can be provided as a single
                 dictionary with a global/dataset-level mapping or as a list of dictionaries (one per image), to map
@@ -750,14 +750,14 @@ class EomtImageProcessor(BaseImageProcessor):
             segmentation_logits (`torch.Tensor`):
                 A tensor of shape `(num_patches, num_classes, patch_height, patch_width)` representing predicted logits
                 for each image patch.
-            patch_offsets (`List[Tuple[int, int, int]]`):
+            patch_offsets (`list[tuple[int, int, int]]`):
                 A list of tuples where each tuple contains:
                 - `image_index` (int): Index of the original image this patch belongs to.
                 - `start` (int): Start pixel index of the patch along the long dimension (height or width).
                 - `end` (int): End pixel index of the patch along the long dimension.
-            target_sizes (`List[Tuple[int, int]]`):
-                List of original (height, width) dimensions for each image before preprocessing.
-            size (`Dict[str, int]`):
+            target_sizes (`list[tuple[int, int]]`):
+                list of original (height, width) dimensions for each image before preprocessing.
+            size (`dict[str, int]`):
                 A size dict which was used to resize.
         """
         num_classes = segmentation_logits.shape[1]
