@@ -34,7 +34,7 @@ from torch.fx._symbolic_trace import is_fx_tracing
 from torch.fx.proxy import ParameterProxy
 
 from .. import logging
-from ..cache_utils import Cache, DynamicCache, StaticCache
+from ..cache_utils import Cache, DynamicCache, LagKVCache, StaticCache
 from ..modeling_utils import PretrainedConfig, PreTrainedModel
 from ..models.auto import get_values
 from ..models.auto.modeling_auto import (
@@ -835,6 +835,12 @@ ProxyableDynamicCache = HFProxyableClassMeta(
     {},
     proxy_factory_fn=create_cache_proxy_factory_fn(DynamicCache),
 )
+ProxyableLagKVCache = HFProxyableClassMeta(
+    "ProxyableLagKVCache",
+    (LagKVCache,),
+    {},
+    proxy_factory_fn=create_cache_proxy_factory_fn(LagKVCache),
+)
 ProxyableStaticCache = HFProxyableClassMeta(
     "ProxyableStaticCache",
     (StaticCache,),
@@ -877,6 +883,7 @@ class HFTracer(Tracer):
     _CLASSES_TO_PATCH = {
         Cache: ProxyableCache,
         DynamicCache: ProxyableDynamicCache,
+        LagKVCache: ProxyableLagKVCache,
         StaticCache: ProxyableStaticCache,
     }
 
