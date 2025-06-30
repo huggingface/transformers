@@ -226,7 +226,7 @@ class EomtForUniversalSegmentationOutput(ModelOutput):
     attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
         Tuple of `tuple(torch.FloatTensor)` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
         sequence_length)`. Self and Cross Attentions weights from transformer decoder.
-    patch_offsets (`list[tuple[int, int, int]]`, *optional*):
+    patch_offsets (`list[torch.Tensor]`, *optional*):
         list of tuples indicating the image index and start and end positions of patches for semantic segementation.
     """
 
@@ -236,7 +236,7 @@ class EomtForUniversalSegmentationOutput(ModelOutput):
     last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
-    patch_offsets: Optional[list[tuple[int, int, int]]] = None
+    patch_offsets: Optional[list[torch.Tensor]] = None
 
 
 class EomtLoss(Mask2FormerLoss):
@@ -476,7 +476,7 @@ class EomtForUniversalSegmentation(Mask2FormerForUniversalSegmentation, nn.Modul
         class_labels: Optional[list[Tensor]] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
-        patch_offsets: Optional[list[tuple]] = None,
+        patch_offsets: Optional[list[Tensor]] = None,
     ):
         r"""
         mask_labels (`list[torch.Tensor]`, *optional*):
@@ -484,7 +484,7 @@ class EomtForUniversalSegmentation(Mask2FormerForUniversalSegmentation, nn.Modul
         class_labels (`list[torch.LongTensor]`, *optional*):
             list of target class labels of shape `(num_labels, height, width)` to be fed to a model. They identify the
             labels of `mask_labels`, e.g. the label of `mask_labels[i][j]` if `class_labels[i][j]`.
-        patch_offsets (`list[Tuple[int, int, int]]`, *optional*):
+        patch_offsets (`list[torch.Tensor]`, *optional*):
             list of tuples indicating the image index and start and end positions of patches for semantic segementation.
         """
         output_hidden_states = (
