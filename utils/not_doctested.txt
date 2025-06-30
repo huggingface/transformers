@@ -278,7 +278,6 @@ docs/source/en/perf_train_cpu_many.md
 docs/source/en/perf_train_gpu_many.md
 docs/source/en/perf_train_gpu_one.md
 docs/source/en/perf_train_special.md
-docs/source/en/perf_train_tpu_tf.md
 docs/source/en/perplexity.md
 docs/source/en/philosophy.md
 docs/source/en/pipeline_webserver.md
@@ -307,7 +306,6 @@ docs/source/en/tasks/video_classification.md
 docs/source/en/tasks/visual_question_answering.md
 docs/source/en/tasks/zero_shot_image_classification.md
 docs/source/en/tasks/zero_shot_object_detection.md
-docs/source/en/tf_xla.md
 docs/source/en/tflite.md
 docs/source/en/tokenizer_summary.md
 docs/source/en/torchscript.md
