@@ -17,6 +17,8 @@
 from ...utils import is_torch_flex_attn_available, logging
 from typing import Callable, List, Optional, Tuple, Union
 
+from enum import Enum
+
 from ...cache_utils import Cache
 from ...activations import ACT2FN
 
@@ -35,7 +37,6 @@ from .configuration_blt import (
     BLTLocalDecoderConfig,
     BLTGlobalTransformerConfig,
     BLTPatcherConfig,
-    PatchingModeEnum,
 )
 
 if is_torch_flex_attn_available():
@@ -44,6 +45,15 @@ if is_torch_flex_attn_available():
 
 
 logger = logging.get_logger(__name__)
+
+
+class PatchingModeEnum(str, Enum):
+    entropy = "entropy"
+    bpe = "bpe"
+    bpe_patcher = "bpe_patcher"
+    space = "space"
+    static = "static"
+    byte = "byte"
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -149,9 +159,6 @@ class BLTRMSNorm(nn.Module):
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         return self.weight * hidden_states.to(input_dtype)
 
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
 
 class BLTTransformerLayer(nn.Module):
     def __init__(self, config, layer_idx: int):
@@ -242,7 +249,7 @@ class BLTSelfAttention(nn.Module):
         self.num_key_value_heads = config.num_key_value_heads
         self.head_dim = config.hidden_size // self.num_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = None
         self.rope_theta = config.rope_theta
         self.layer_idx = layer_idx
 
@@ -284,7 +291,6 @@ class BLTSelfAttention(nn.Module):
         attention_interface: Callable = eager_attention_forward
         output_attentions = False
         self.config._attn_implementation = "sdpa"
-        self.scaling = None
         if self.config._attn_implementation != "eager":
             if self.config._attn_implementation == "sdpa" and output_attentions:
                 logger.warning_once(
@@ -787,7 +793,6 @@ class BLTCrossAttention(nn.Module):
         attention_interface: Callable = eager_attention_forward
 
         self.config._attn_implementation = "sdpa" 
-        attn = "sdpa"
         if self.config._attn_implementation != "eager":
             if self.config._attn_implementation == "sdpa" and output_attentions:
                 logger.warning_once(
@@ -1077,14 +1082,14 @@ class BLTPatcher(BLTPreTrainedModel):
 
             position_ids = torch.arange(split.shape[1], device=input_embeds.device).unsqueeze(0).expand(batch_size, -1)
             
-            position_embeddings = self.rotary_emb(hidden_states, position_ids)  # = BLT self.rope
+            position_embeddings = self.rotary_emb(hidden_states, position_ids) 
             
             for i, layer in enumerate(self.layers):
-                layer_outputs = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None) #, attn_impl=self.config.patcher_attn_impl )
+                layer_outputs = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None)
                 hidden_states = layer_outputs[0]
 
             logits = self.lm_head(self.norm(hidden_states))
-            logits = logits.reshape(-1, logits.shape[-1])[: split.numel() - pad_size, :]  # [batch_size * seq_len, vocab]
+            logits = logits.reshape(-1, logits.shape[-1])[: split.numel() - pad_size, :] 
             predictions.append(logits)
             prediction_entropies = torch.distributions.Categorical(logits=logits).entropy()
             entropies.append(prediction_entropies)
