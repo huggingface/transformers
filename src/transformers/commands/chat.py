@@ -636,7 +636,6 @@ class ChatCommand(BaseTransformersCLICommand):
     async def _inner_run(self):
         if self.spawn_backend:
             serve_args = ServeArguments(
-                model_revision=self.args.model_revision,
                 device=self.args.device,
                 torch_dtype=self.args.torch_dtype,
                 trust_remote_code=self.args.trust_remote_code,
@@ -649,13 +648,13 @@ class ChatCommand(BaseTransformersCLICommand):
                 port=self.args.port,
                 log_level="error",
             )
-            serve_args.model_name_or_path = self.args.model_name_or_path
             serve_command = ServeCommand(serve_args)
 
             thread = Thread(target=serve_command.run)
             thread.daemon = True
             thread.start()
 
+        model = self.args.model_name_or_path + "@" + self.args.model_revision
         host = "http://localhost" if self.args.host == "localhost" else self.args.host
         client = AsyncInferenceClient(f"{host}:{self.args.port}")
 
@@ -709,7 +708,11 @@ class ChatCommand(BaseTransformersCLICommand):
                 stream = client.chat_completion(
                     chat,
                     stream=True,
-                    extra_body={"request_id": request_id, "generation_config": {**generation_config.to_dict()}},
+                    extra_body={
+                        "request_id": request_id,
+                        "generation_config": {**generation_config.to_dict()},
+                        "model": model,
+                    },
                 )
 
                 model_output, request_id = await interface.stream_output(stream)
