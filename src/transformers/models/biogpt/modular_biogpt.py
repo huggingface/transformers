@@ -517,7 +517,7 @@ class BioGptModel(BioGptPreTrainedModel):
         )
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, TransformersKwargs): ...
+class TransformersKwargs(FlashAttentionKwargs, TransformersKwargs): ...
 
 
 @auto_docstring(
@@ -558,7 +558,7 @@ class BioGptForCausalLM(BioGptPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

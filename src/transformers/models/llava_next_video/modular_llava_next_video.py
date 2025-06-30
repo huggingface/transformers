@@ -20,7 +20,7 @@ import torch
 from torch import nn
 
 from transformers.models.llava_next.modeling_llava_next import (
-    KwargsForCausalLM,
+    TransformersKwargs,
     LlavaNextCausalLMOutputWithPast,
     LlavaNextForConditionalGeneration,
     LlavaNextModel,
@@ -546,7 +546,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, LlavaNextVideoCausalLMOutputWithPast]:
         r"""
         pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, image_size, image_size)):

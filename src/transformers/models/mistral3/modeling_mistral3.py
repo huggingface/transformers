@@ -357,7 +357,7 @@ class Mistral3Model(Mistral3PreTrainedModel):
         )
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, TransformersKwargs): ...
+class TransformersKwargs(FlashAttentionKwargs, TransformersKwargs): ...
 
 
 @auto_docstring(
@@ -443,7 +443,7 @@ class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, GenerationMixin)
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         image_sizes: Optional[torch.Tensor] = None,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Mistral3CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

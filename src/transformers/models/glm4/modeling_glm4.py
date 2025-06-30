@@ -279,7 +279,7 @@ class Glm4Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, TransformersKwargs): ...
+class TransformersKwargs(FlashAttentionKwargs, TransformersKwargs): ...
 
 
 @use_kernel_forward_from_hub("RMSNorm")

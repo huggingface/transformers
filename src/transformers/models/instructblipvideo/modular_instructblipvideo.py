@@ -29,7 +29,7 @@ from transformers.models.instructblip.modeling_instructblip import (
     InstructBlipPreTrainedModel,
     InstructBlipQFormerModel,
     InstructBlipVisionModel,
-    KwargsForCausalLM,
+    TransformersKwargs,
 )
 
 from ...configuration_utils import PretrainedConfig
@@ -378,7 +378,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         use_cache: Optional[bool] = None,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, InstructBlipVideoForConditionalGenerationModelOutput]:
         r"""
         ```python

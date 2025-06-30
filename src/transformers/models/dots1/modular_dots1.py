@@ -23,7 +23,7 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3TopkRouter,
 )
 from ..qwen3.modeling_qwen3 import (
-    KwargsForCausalLM,
+    TransformersKwargs,
     Qwen3Attention,
     Qwen3ForCausalLM,
     Qwen3Model,
@@ -77,7 +77,7 @@ class Dots1Model(Qwen3Model):
 class Dots1ForCausalLM(Qwen3ForCausalLM):
     def forward(
         self,
-        **super_kwargs: Unpack[KwargsForCausalLM],
+        **super_kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
