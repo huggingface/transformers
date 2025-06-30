@@ -143,7 +143,7 @@ class OpenAIMoeMLP(nn.Module):
         router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)
         router_top_value = torch.nn.functional.softmax(router_top_value, dim=1)
         router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value).transpose(0, 1)
-        routed_out = self.experts(hidden_states, router_indices, router_top_value)
+        routed_out, _ = self.experts(hidden_states, router_indices, router_top_value) #TODO: router_indices isn't used inside this func
         if self.training:
             output_states = routed_out.view(batch_size, -1, self.hidden_dim)
         else:
