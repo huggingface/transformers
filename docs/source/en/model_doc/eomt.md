@@ -81,13 +81,13 @@ with torch.inference_mode():
     outputs = model(**inputs)
 
 # Prepare the original image size in the format (height, width)
-original_image_sizes = [(image.height, image.width)]
+target_sizes = [(image.height, image.width)]
 
 # Post-process the model outputs to get final segmentation prediction
 preds = processor.post_process_semantic_segmentation(
     outputs,
     patch_offsets=patch_offsets,
-    original_image_sizes=original_image_sizes,
+    target_sizes=target_sizes,
 )
 
 # Visualize the segmentation mask
@@ -130,12 +130,12 @@ with torch.inference_mode():
     outputs = model(**inputs)
 
 # Prepare the original image size in the format (height, width)
-original_image_sizes = [(image.height, image.width)]
+target_sizes = [(image.height, image.width)]
 
 # Post-process the model outputs to get final segmentation prediction
 preds = processor.post_process_instance_segmentation(
     outputs,
-    original_image_sizes=original_image_sizes,
+    target_sizes=target_sizes,
 )
 
 # Visualize the segmentation mask
@@ -173,12 +173,12 @@ with torch.inference_mode():
     outputs = model(**inputs)
 
 # Prepare the original image size in the format (height, width)
-original_image_sizes = [(image.height, image.width)]
+target_sizes = [(image.height, image.width)]
 
 # Post-process the model outputs to get final segmentation prediction
 preds = processor.post_process_panoptic_segmentation(
     outputs,
-    original_image_sizes=original_image_sizes,
+    target_sizes=target_sizes,
 )
 
 # Visualize the panoptic segmentation mask

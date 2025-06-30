@@ -349,7 +349,7 @@ class EomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
         self.assertTrue(outputs.masks_queries_logits.shape == (2, 100, 128, 128))
 
         preds = processor.post_process_semantic_segmentation(
-            outputs, original_image_sizes=[(image.size[1], image.size[0])], patch_offsets=patch_offsets
+            outputs, target_sizes=[(image.size[1], image.size[0])], patch_offsets=patch_offsets
         )
 
         self.assertTrue(preds.shape[1:] == (image.size[1], image.size[0]))
@@ -387,9 +387,7 @@ class EomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
         self.assertTrue(outputs.class_queries_logits.shape == (1, 200, 134))
         self.assertTrue(outputs.masks_queries_logits.shape == (1, 200, 160, 160))
 
-        preds = processor.post_process_panoptic_segmentation(
-            outputs, original_image_sizes=[(image.size[1], image.size[0])]
-        )[0]
+        preds = processor.post_process_panoptic_segmentation(outputs, target_sizes=[(image.size[1], image.size[0])])[0]
         segmentation, segments_info = preds["segmentation"], preds["segments_info"]
 
         # fmt: off
@@ -438,9 +436,7 @@ class EomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
         self.assertTrue(outputs.class_queries_logits.shape == (1, 200, 81))
         self.assertTrue(outputs.masks_queries_logits.shape == (1, 200, 160, 160))
 
-        preds = processor.post_process_instance_segmentation(
-            outputs, original_image_sizes=[(image.size[1], image.size[0])]
-        )[0]
+        preds = processor.post_process_instance_segmentation(outputs, target_sizes=[(image.size[1], image.size[0])])[0]
         segmentation, segments_info = preds["segmentation"], preds["segments_info"]
 
         # fmt: off
