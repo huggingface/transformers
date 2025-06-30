@@ -1135,9 +1135,17 @@ class Gemma3nTextAltUp(nn.Module):
         corrected += predictions  # add the original input
         return corrected.contiguous().type_as(activated)
 
+    def forward(self, corrected: torch.Tensor) -> torch.Tensor:
+        """
+        This is only defined as the `forward` so that accelerate hooks can move correctly `correct_output_scale`
+        (which is a nn.Parameter, not a Module) between devices when offloading. It is otherwise only used in
+        `scale_corrected_output`
+        """
+        return (corrected.type_as(self.correct_output_scale) * self.correct_output_scale).type_as(corrected)
+
     def scale_corrected_output(self, corrected: torch.Tensor) -> torch.Tensor:
         """Scales the provided 3D tensor of shape [batch_size, num_tokens, hidden_size]."""
-        return (corrected.type_as(self.correct_output_scale) * self.correct_output_scale).type_as(corrected)
+        return self.forward(corrected)
 
 
 class Gemma3nTextRotaryEmbedding(nn.Module):
@@ -1319,7 +1327,8 @@ class Gemma3nTextAttention(nn.Module):
         query_states = query_states.transpose(1, 2)
 
         if self.is_kv_shared_layer and self.kv_shared_layer_index is not None and past_key_value is not None:
-            indices = cache_position
+            # Device of past layer may be different from current one
+            indices = cache_position.to(past_key_value.key_cache[self.kv_shared_layer_index].device)
             # In this case we need special handling of the slice as the layer is of fixed small size (for full layers, we never go beyond)
             if isinstance(past_key_value, HybridCache) and self.is_sliding:
                 max_length = past_key_value.sliding_window
@@ -1329,8 +1338,11 @@ class Gemma3nTextAttention(nn.Module):
                     else cache_position.clamp(min=0, max=max_length - 1)
                 )
 
-            key_states = past_key_value.key_cache[self.kv_shared_layer_index][:, :, indices]
-            value_states = past_key_value.value_cache[self.kv_shared_layer_index][:, :, indices]
+            # Device of past layer may be different from current one
+            key_states = past_key_value.key_cache[self.kv_shared_layer_index][:, :, indices].to(query_states.device)
+            value_states = past_key_value.value_cache[self.kv_shared_layer_index][:, :, indices].to(
+                query_states.device
+            )
         else:
             key_states = self.k_proj(hidden_states).view(hidden_shape)
             key_states = self.k_norm(key_states)
@@ -1653,17 +1665,17 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
         position_embeddings_local = self.rotary_emb_local(hidden_states_0, position_ids)
 
         # Expand hidden_states to support per-layer inputs
-        target_magnitude: torch.Tensor = torch.mean(hidden_states_0**2, dim=-1, keepdim=True) ** 0.5
+        target_magnitude = torch.mean(hidden_states_0**2, dim=-1, keepdim=True) ** 0.5
         epsilon_tensor = torch.tensor(1e-5)
 
         temp_hidden_states = [hidden_states_0]
         for i in range(1, self.config.altup_num_inputs):
             # altup_proj adapted from jax.numpy.einsum("btp,pd->btd", ...)
-            altup_proj: torch.Tensor = self.altup_projections[i - 1](hidden_states_0)
-            current_hidden_state = altup_proj.type(hidden_states_0.dtype)
+            altup_proj = self.altup_projections[i - 1](hidden_states_0)
+            current_hidden_state = altup_proj.to(dtype=hidden_states_0.dtype, device=target_magnitude.device)
             new_magnitude = torch.mean(current_hidden_state**2, dim=-1, keepdim=True) ** 0.5
             current_hidden_state = current_hidden_state * (
-                target_magnitude / torch.maximum(new_magnitude, epsilon_tensor)
+                target_magnitude / torch.maximum(new_magnitude, epsilon_tensor.to(target_magnitude.device))
             )
             temp_hidden_states.append(current_hidden_state)
 
@@ -1709,10 +1721,10 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
         for i in range(1, self.config.altup_num_inputs):
             # altup_unembed_projections adapted from jax.numpy.einsum("btp,pd->btd", ...)
             altup_unemb_proj: torch.Tensor = self.altup_unembed_projections[i - 1](hidden_states[i])
-            current_hidden_state = altup_unemb_proj.type(hidden_states_0.dtype)
+            current_hidden_state = altup_unemb_proj.to(dtype=hidden_states_0.dtype, device=target_magnitude.device)
             new_magnitude = torch.mean(current_hidden_state**2, dim=-1, keepdim=True) ** 0.5
             current_hidden_state = current_hidden_state * (
-                target_magnitude / torch.maximum(new_magnitude, epsilon_tensor)
+                target_magnitude / torch.maximum(new_magnitude, epsilon_tensor.to(target_magnitude.device))
             )
             temp_hidden_states.append(current_hidden_state)
 
@@ -1740,7 +1752,9 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
         per_layer_inputs: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         per_layer_projection: torch.Tensor = self.per_layer_model_projection(inputs_embeds)
-        per_layer_projection *= self.per_layer_projection_scale.type(inputs_embeds.dtype)
+        per_layer_projection *= self.per_layer_projection_scale.to(
+            dtype=inputs_embeds.dtype, device=per_layer_projection.device
+        )
         per_layer_projection = per_layer_projection.reshape(
             *inputs_embeds.shape[:-1],
             self.config.num_hidden_layers,
@@ -1755,7 +1769,9 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
             # per-layer inputs are sometimes padded with zeros, slice the relevant embeddings.
             per_layer_inputs = per_layer_inputs[..., : self.config.num_hidden_layers, :]
 
-        return (per_layer_projection + per_layer_inputs) * self.per_layer_input_scale.type(inputs_embeds.dtype)
+        return (per_layer_projection + per_layer_inputs) * self.per_layer_input_scale.to(
+            dtype=inputs_embeds.dtype, device=per_layer_projection.device
+        )
 
 
 @auto_docstring(custom_intro="The base Gemma 3n language model with a language modeling head.")
