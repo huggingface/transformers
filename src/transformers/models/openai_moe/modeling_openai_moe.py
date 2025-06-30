@@ -299,6 +299,7 @@ class OpenAIMoeAttention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
+            raise ValueError(f"Attention implementation {self.config._attn_implementation} doesn't support sinks")
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
