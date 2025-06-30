@@ -185,7 +185,6 @@ class Glm4vVisionEmbeddings(nn.Module):
                 .unsqueeze(0)
                 .to(device=device, dtype=torch.float32)
             )
-
             # Calculate target dimensions for each patch
             target_h = torch.cat([image_shapes[i, 1].repeat(lengths[i]) for i in range(len(lengths))]).to(
                 device=device, dtype=torch.float32
@@ -1018,6 +1017,7 @@ class Glm4vModel(Glm4vPreTrainedModel):
                 device=input_ids.device,
             )
             image_index, video_index = 0, 0
+            video_group_index = 0
             attention_mask = attention_mask.to(total_input_ids.device)
             for i, input_ids in enumerate(total_input_ids):
                 input_ids = input_ids[attention_mask[i] == 1]
@@ -1047,7 +1047,6 @@ class Glm4vModel(Glm4vPreTrainedModel):
 
                 llm_pos_ids_list = []
                 video_frame_num = 1
-
                 for modality_type, start_idx, end_idx in input_type_group:
                     st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
 
@@ -1091,7 +1090,11 @@ class Glm4vModel(Glm4vPreTrainedModel):
                             w_index = torch.arange(llm_grid_w).view(1, 1, -1).expand(1, llm_grid_h, -1).flatten()
                             llm_pos_ids_list.append(torch.stack([t_index, h_index, w_index]) + st_idx)
 
-                        video_index += 1
+                        video_group_index += 1
+
+                        if video_group_index >= video_grid_thw[video_index][0]:
+                            video_index += 1
+                            video_group_index = 0
 
                         video_frame_num += 1
 
@@ -1140,7 +1143,13 @@ class Glm4vModel(Glm4vPreTrainedModel):
                 The temporal, height and width of feature shape of each video in LLM.
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-        video_embeds = self.visual(pixel_values_videos, grid_thw=video_grid_thw)
+        # reshape video_grid_thw -> [b, 3] -> [1, h, w] * frames
+        temp_frames_hw = []
+        for t, h, w in video_grid_thw:
+            repeated_row = torch.tensor([1, h.item(), w.item()]).unsqueeze(0).repeat(t, 1)
+            temp_frames_hw.append(repeated_row)
+        flattened_video_grid_thw = torch.cat(temp_frames_hw, dim=0)
+        video_embeds = self.visual(pixel_values_videos, grid_thw=flattened_video_grid_thw)
         split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         video_embeds = torch.split(video_embeds, split_sizes)
         return video_embeds
