@@ -823,8 +823,8 @@ class GenerationConfig(PushToHubMixin):
                 )
                 if logging.get_verbosity() >= logging.WARNING:
                     warning_message += " Set `TRANSFORMERS_VERBOSITY=info` for more details."
-                logger.warning(warning_message)
-                logger.info(info_message)
+                logger.warning_once(warning_message)
+                logger.info_once(info_message)
 
     def save_pretrained(
         self,
