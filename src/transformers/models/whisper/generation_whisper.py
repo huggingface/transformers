@@ -336,8 +336,8 @@ class WhisperGenerationMixin(GenerationMixin):
         if num_input_ids is not None:
             weights = weights[:, :, num_input_ids:, :]
 
-        # Edge case: When we generate only one token, we have no cross attention values available
-        # This happens because we ignore the input ids and only look at generated tokens
+        # Since we ignore `decoder_input_ids` in the DTW and in the case where we generated only one token (for which we don't have cross attentions, see below comments),
+        # the DTW sequence length is 0 and we should return only 0.0s for the token timestamps
         if weights.shape[2] == 0:
             return timestamps
 
