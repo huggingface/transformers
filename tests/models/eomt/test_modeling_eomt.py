@@ -17,7 +17,7 @@ import unittest
 
 import requests
 
-from transformers import AutoImageProcessor, EomtConfig, EomtForUniversalSegmentation
+from transformers import AutoImageProcessor, EomtConfig, EomtForUniversalSegmentation, pipeline
 from transformers.testing_utils import require_torch, require_torch_accelerator, require_torch_fp16, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -349,9 +349,9 @@ class EomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
         self.assertTrue(outputs.class_queries_logits.shape == (2, 100, 151))
         self.assertTrue(outputs.masks_queries_logits.shape == (2, 100, 128, 128))
 
-        preds = processor.post_process_semantic_segmentation(outputs, target_sizes=[(image.size[1], image.size[0])])
+        preds = processor.post_process_semantic_segmentation(outputs, target_sizes=[(image.size[1], image.size[0])])[0]
 
-        self.assertTrue(preds.shape[1:] == (image.size[1], image.size[0]))
+        self.assertTrue(preds.shape == (image.size[1], image.size[0]))
 
         # fmt: off
         EXPECTED_SLICE = torch.tensor([
@@ -368,7 +368,7 @@ class EomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
         ], device=model.device)
         # fmt: on
 
-        output_slice = preds[0, :10, :10]
+        output_slice = preds[:10, :10]
         torch.testing.assert_close(output_slice, EXPECTED_SLICE, rtol=1e-2, atol=1e-2)
 
     @slow
@@ -468,3 +468,10 @@ class EomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
             self.assertEqual(actual["id"], expected["id"])
             self.assertEqual(actual["label_id"], expected["label_id"])
             self.assertAlmostEqual(actual["score"], expected["score"], delta=1e-3)
+
+    @slow
+    def test_segmentation_pipeline(self):
+        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+
+        pipe = pipeline(model=self.model_id, subtask="panoptic", device=torch_device)
+        _ = pipe(image)
