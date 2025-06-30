@@ -287,6 +287,13 @@ class ServeCommand(BaseTransformersCLICommand):
 
         @functools.lru_cache(maxsize=None)
         def get_text_gen_models() -> list[ModelInfo]:
+            """
+            This is by no means a limit to which models may be instantiated with `transformers serve`: any chat-based
+            model working with generate can work.
+
+            This is a limited list of models to ensure we have a discoverable /v1/models endpoint for third-party
+            integrations.
+            """
             return [
                 model_info("Menlo/Jan-nano"),
                 model_info("Menlo/Jan-nano-128k"),
@@ -336,7 +343,7 @@ class ServeCommand(BaseTransformersCLICommand):
         manager.start()
 
         @app.post("/v1/chat/completions")
-        def _serve(req: ChatCompletionInput):
+        def _serve(req: "ChatCompletionInput"):
             if not req.stream:
                 return {"error": "Only streaming mode is supported."}
 
@@ -346,7 +353,6 @@ class ServeCommand(BaseTransformersCLICommand):
                 self.model, self.tokenizer = self.load_model_and_tokenizer(req.model, self.args)
 
             chat = req.messages
-
             inputs = self.tokenizer.apply_chat_template(chat, return_tensors="pt", add_generation_prompt=True).to(
                 self.model.device
             )
@@ -379,7 +385,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
             return StreamingResponse(stream_response(inputs[0]), media_type="text/event-stream")
 
-    def is_continuation(self, req: ChatCompletionInput) -> bool:
+    def is_continuation(self, req: "ChatCompletionInput") -> bool:
         """
         Determines whether the current request is a continuation of the last request. In other words, if it is the
         same chat session.
@@ -410,7 +416,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
     def generate(self, app):
         @app.post("/v1/chat/completions")
-        def _serve(req: ChatCompletionInput):
+        def _serve(req: "ChatCompletionInput"):
             update_model = req.model != self.loaded_model
 
             if update_model:
