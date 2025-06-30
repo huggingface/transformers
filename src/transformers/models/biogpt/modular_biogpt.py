@@ -38,7 +38,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
-    LossKwargs,
+    TransformersKwargs,
     auto_docstring,
     is_torch_flex_attn_available,
     logger,
@@ -517,7 +517,7 @@ class BioGptModel(BioGptPreTrainedModel):
         )
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
+class KwargsForCausalLM(FlashAttentionKwargs, TransformersKwargs): ...
 
 
 @auto_docstring(

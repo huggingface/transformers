@@ -47,7 +47,7 @@ from .doc import (
 from .generic import (
     ContextManagers,
     ExplicitEnum,
-    LossKwargs,
+    TransformersKwargs,
     ModelOutput,
     PaddingStrategy,
     TensorType,

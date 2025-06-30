@@ -31,6 +31,8 @@ from typing import Any, Callable, ContextManager, Optional, TypedDict
 import numpy as np
 from packaging import version
 
+from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
+
 from ..utils import logging
 from .import_utils import (
     get_torch_version,
@@ -852,7 +854,7 @@ def filter_out_non_signature_kwargs(extra: Optional[list] = None):
     return decorator
 
 
-class LossKwargs(TypedDict, total=False):
+class TransformersKwars(FlashAttentionKwargs, total=False):
     """
     Keyword arguments to be passed to the loss function
 
@@ -860,9 +862,18 @@ class LossKwargs(TypedDict, total=False):
         num_items_in_batch (`Optional[torch.Tensor]`, *optional*):
             Number of items in the batch. It is recommended to pass it when
             you are doing gradient accumulation.
+        output_hidden_states (`Optional[bool]`, *optional*):
+            Most of the models support outputing all hidden states computed during the forward pass.
+        otput_attentions (`Optional[bool]`, *optional*):
+            Turn this on to return the intermediary attention scores.
+        output_router_logits (`Optional[bool]`, *optional*):
+            For MoE models, this allows returning the router logits to compute the loss.
     """
 
     num_items_in_batch: Optional["torch.Tensor"]
+    output_hidden_states: Optional[bool]
+    output_attentions: Optional[bool]
+    output_router_logits: Optional[bool]
 
 
 def is_timm_config_dict(config_dict: dict[str, Any]) -> bool:
