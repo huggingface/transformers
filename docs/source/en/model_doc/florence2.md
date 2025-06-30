@@ -55,11 +55,6 @@ The original code can be found [here](https://huggingface.co/microsoft/Florence-
 [[autodoc]] Florence2LanguageForConditionalGeneration
     - forward
 
-## Florence2LanguageModel
-
-[[autodoc]] Florence2LanguageModel
-    - forward
-
 ## Florence2VisionBackbone
 
 [[autodoc]] Florence2VisionBackbone
