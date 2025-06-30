@@ -27,8 +27,6 @@ from ..utils import is_torch_greater_or_equal, logging
 from ..utils.generic import GeneralInterface
 
 
-ALL_LAYERNORM_LAYERS = [nn.LayerNorm]
-
 logger = logging.get_logger(__name__)
 
 # Cache this result has it's a C FFI call which can be pretty time-consuming
@@ -59,9 +57,11 @@ def initialize_tensor_parallelism(tp_plan, tp_size=None):
             local_rank = int(os.environ["LOCAL_RANK"])
             world_size = int(os.environ["WORLD_SIZE"])
 
-            backend_map = {"cuda": "nccl", "cpu": "gloo", "xpu": "ccl", "hpu": "hccl"}
+            backend_map = {"cuda": "nccl", "cpu": "gloo", "xpu": "xccl", "hpu": "hccl"}
             backend = backend_map.get(device_type)
             if device_type == "cpu" and int(os.environ.get("CCL_WORKER_COUNT", 0)):
+                backend = "ccl"
+            if device_type == "xpu" and not is_torch_greater_or_equal("2.8", accept_dev=True):
                 backend = "ccl"
 
             torch.distributed.init_process_group(backend=backend, rank=rank, world_size=world_size)

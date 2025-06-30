@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -347,7 +348,7 @@ class DeiTOutput(nn.Module):
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->DeiT,VIT->DEIT
-class DeiTLayer(nn.Module):
+class DeiTLayer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the timm implementation."""
 
     def __init__(self, config: DeiTConfig) -> None:
@@ -414,15 +415,7 @@ class DeiTEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    layer_head_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
+            layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -814,27 +807,21 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
 
 
 @dataclass
-class DeiTForImageClassificationWithTeacherOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Output type of [`DeiTForImageClassificationWithTeacher`].
-
-    Args:
-        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
-            Prediction scores as the average of the cls_logits and distillation logits.
-        cls_logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
-            Prediction scores of the classification head (i.e. the linear layer on top of the final hidden state of the
-            class token).
-        distillation_logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
-            Prediction scores of the distillation head (i.e. the linear layer on top of the final hidden state of the
-            distillation token).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
-            plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
+    """
+)
+class DeiTForImageClassificationWithTeacherOutput(ModelOutput):
+    r"""
+    logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+        Prediction scores as the average of the cls_logits and distillation logits.
+    cls_logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+        Prediction scores of the classification head (i.e. the linear layer on top of the final hidden state of the
+        class token).
+    distillation_logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+        Prediction scores of the distillation head (i.e. the linear layer on top of the final hidden state of the
+        distillation token).
     """
 
     logits: Optional[torch.FloatTensor] = None
