@@ -425,7 +425,6 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
     def post_process_semantic_segmentation(
         self,
         outputs,
-        patch_offsets: list[tuple[int, int, int]],
         target_sizes: list[tuple[int, int]],
         size: Optional[dict[str, int]] = None,
     ) -> np.ndarray:
@@ -435,6 +434,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
 
         masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
         class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
+        patch_offsets = outputs.patch_offsets
 
         output_size = get_target_size(size)
         masks_queries_logits = torch.nn.functional.interpolate(
