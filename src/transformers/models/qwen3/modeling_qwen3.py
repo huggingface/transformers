@@ -773,7 +773,6 @@ __all__ = [
     "Qwen3ForCausalLM",
     "Qwen3ForQuestionAnswering",
     "Qwen3Model",
-    "Qwen3PreTrainedModel",
     "Qwen3ForSequenceClassification",
     "Qwen3ForTokenClassification",
 ]
