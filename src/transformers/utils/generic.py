@@ -854,7 +854,7 @@ def filter_out_non_signature_kwargs(extra: Optional[list] = None):
     return decorator
 
 
-class TransformersKwars(FlashAttentionKwargs, total=False):
+class TransformersKwargs(FlashAttentionKwargs, TypedDict, total=False):
     """
     Keyword arguments to be passed to the loss function
 
