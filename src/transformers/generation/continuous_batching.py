@@ -790,7 +790,7 @@ class ContinuousBatchProcessor:
     def setup_static_tensors(self):
         T = self.max_batch_tokens
         max_token_budget = self.cache.num_blocks * self.cache.block_size
-        tensor_metadata = {"dtype": torch.int32, "pin_memory": True}
+        tensor_metadata = {"dtype": torch.int32, "pin_memory": True if torch.cuda.is_available() else False}
         self.tensor_metadata = tensor_metadata
         self.input_ids = torch.zeros((1, T), **tensor_metadata).to(self.model_device, non_blocking=True)
         self.position_ids = torch.zeros((1, T), **tensor_metadata).to(self.model_device, non_blocking=True)
