@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import functools
 import json
 import re
 import time
@@ -25,6 +25,8 @@ from huggingface_hub import (
     ChatCompletionStreamOutputDelta,
     ChatCompletionStreamOutputDeltaToolCall,
     ChatCompletionStreamOutputFunction,
+    ModelInfo,
+    model_info,
 )
 
 from transformers.utils.import_utils import is_fastapi_available, is_pydantic_available, is_uvicorn_available
@@ -50,7 +52,7 @@ if is_torch_available():
 if is_pydantic_available() and is_fastapi_available() and is_uvicorn_available():
     import uvicorn
     from fastapi import FastAPI
-    from fastapi.responses import StreamingResponse
+    from fastapi.responses import JSONResponse, StreamingResponse
     from pydantic import BaseModel
 
     class Message(BaseModel):
@@ -169,11 +171,6 @@ class ServeArguments:
     `transformers serve --help`
     """
 
-    # Model loading
-    model_revision: str = field(
-        default="main",
-        metadata={"help": "Specific model version to use (can be a branch name, tag name or commit id)."},
-    )
     device: str = field(default="cpu", metadata={"help": "Device to use for inference."})
     torch_dtype: Optional[str] = field(
         default="auto",
@@ -215,6 +212,10 @@ class ServeArguments:
 
 
 class ServeCommand(BaseTransformersCLICommand):
+    loaded_model: Optional[str] = None
+    model: PreTrainedModel
+    tokenizer: PreTrainedTokenizerFast
+
     @staticmethod
     def register_subcommand(parser: ArgumentParser):
         """
@@ -225,9 +226,6 @@ class ServeCommand(BaseTransformersCLICommand):
         """
         dataclass_types = (ServeArguments,)
         serve_parser = parser.add_parser("serve", dataclass_types=dataclass_types)
-
-        group = serve_parser.add_argument_group("Positional arguments")
-        group.add_argument("model_name_or_path", type=str, default=None, help="Name of the pre-trained model.")
         serve_parser.set_defaults(func=serve_command_factory)
 
     def __init__(self, args: ServeArguments):
@@ -237,7 +235,6 @@ class ServeCommand(BaseTransformersCLICommand):
             )
 
         self.args = args
-        self.model, self.tokenizer = self.load_model_and_tokenizer(args)
         self.use_continuous_batching = self.args.attn_implementation == "sdpa_paged"
 
         # State: preserves information about the last call and last KV cache, to determine whether we can reuse the KV
@@ -263,7 +260,7 @@ class ServeCommand(BaseTransformersCLICommand):
             "object": "chat.completion.chunk",
             "id": request_id,
             "created": int(time.time()),
-            "model": self.args.model_name_or_path,
+            "model": self.loaded_model,
             "system_fingerprint": "",
             "choices": [
                 ChatCompletionStreamOutputChoice(
@@ -288,6 +285,37 @@ class ServeCommand(BaseTransformersCLICommand):
         else:
             self.generate(app)
 
+        @functools.lru_cache(maxsize=None)
+        def get_text_gen_models() -> list[ModelInfo]:
+            return [
+                model_info("Menlo/Jan-nano"),
+                model_info("Menlo/Jan-nano-128k"),
+                model_info("Qwen/Qwen2.5-0.5B-Instruct"),
+                model_info("Qwen/Qwen2.5-3B-Instruct"),
+                model_info("Qwen/Qwen2.5-7B-Instruct"),
+                model_info("Qwen/Qwen2.5-14B-Instruct"),
+                model_info("meta-llama/Llama-3.1-8B-Instruct"),
+                model_info("meta-llama/Llama-3.2-1B-Instruct"),
+                model_info("meta-llama/Llama-3.3-70B-Instruct"),
+            ]
+
+        @app.get("/v1/models")
+        def get_all_models():
+            return JSONResponse(
+                {
+                    "object": "list",
+                    "data": [
+                        {
+                            "id": model.id,
+                            "object": "model",
+                            "crated": model.created_at.timestamp(),
+                            "owned_by": model.author,
+                        }
+                        for model in get_text_gen_models()
+                    ],
+                }
+            )
+
         uvicorn.run(app, host=self.args.host, port=self.args.port, log_level=self.args.log_level)
 
     def continuous_batching(self, app):
@@ -311,6 +339,11 @@ class ServeCommand(BaseTransformersCLICommand):
         def _serve(req: ChatCompletionInput):
             if not req.stream:
                 return {"error": "Only streaming mode is supported."}
+
+            update_model = req.model != self.loaded_model
+
+            if update_model:
+                self.model, self.tokenizer = self.load_model_and_tokenizer(req.model, self.args)
 
             chat = req.messages
 
@@ -378,6 +411,11 @@ class ServeCommand(BaseTransformersCLICommand):
     def generate(self, app):
         @app.post("/v1/chat/completions")
         def _serve(req: ChatCompletionInput):
+            update_model = req.model != self.loaded_model
+
+            if update_model:
+                self.model, self.tokenizer = self.load_model_and_tokenizer(req.model, self.args)
+
             if not req.stream:
                 return {"error": "Only streaming mode is supported."}
 
@@ -414,7 +452,7 @@ class ServeCommand(BaseTransformersCLICommand):
             generation_config.max_new_tokens = max_new_tokens
 
             last_kv_cache = None
-            if self.is_continuation(req):
+            if self.is_continuation(req) and not update_model:
                 last_kv_cache = self.last_kv_cache
 
             generation_kwargs = {
@@ -513,6 +551,7 @@ class ServeCommand(BaseTransformersCLICommand):
                     thread.join()
                 except Exception as e:
                     logger.error(str(e))
+                    raise
                     yield f'data: {{"error": "{str(e)}"}}'
 
                 finally:
@@ -540,10 +579,19 @@ class ServeCommand(BaseTransformersCLICommand):
 
         return quantization_config
 
-    def load_model_and_tokenizer(self, args: ServeArguments) -> tuple[PreTrainedModel, PreTrainedTokenizerFast]:
+    def load_model_and_tokenizer(
+        self, model_id_and_revision: str, args: ServeArguments
+    ) -> tuple[PreTrainedModel, PreTrainedTokenizerFast]:
+        logger.warning(f"Loading {model_id_and_revision}")
+
+        if "@" in model_id_and_revision:
+            model_id, revision = model_id_and_revision.split("@", 1)
+        else:
+            model_id, revision = model_id_and_revision, "main"
+
         tokenizer = AutoTokenizer.from_pretrained(
-            args.model_name_or_path,
-            revision=args.model_revision,
+            model_id,
+            revision=revision,
             trust_remote_code=args.trust_remote_code,
         )
 
@@ -551,7 +599,7 @@ class ServeCommand(BaseTransformersCLICommand):
         quantization_config = self.get_quantization_config(args)
 
         model_kwargs = {
-            "revision": args.model_revision,
+            "revision": revision,
             "attn_implementation": args.attn_implementation,
             "torch_dtype": torch_dtype,
             "device_map": "auto",
@@ -559,7 +607,7 @@ class ServeCommand(BaseTransformersCLICommand):
             "trust_remote_code": args.trust_remote_code,
         }
 
-        model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, **model_kwargs)
+        model = AutoModelForCausalLM.from_pretrained(model_id, **model_kwargs)
 
         if model.generation_config.max_new_tokens is not None and model.generation_config.max_new_tokens < 256:
             model.generation_config.max_new_tokens = 256
@@ -567,6 +615,9 @@ class ServeCommand(BaseTransformersCLICommand):
         if getattr(model, "hf_device_map", None) is None:
             model = model.to(args.device)
 
+        self.loaded_model = model_id_and_revision
+
+        print("Loaded model", model_id_and_revision)
         return model, tokenizer
 
 
