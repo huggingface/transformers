@@ -790,27 +790,26 @@ class ContinuousBatchProcessor:
     def setup_static_tensors(self):
         T = self.max_batch_tokens
         max_token_budget = self.cache.num_blocks * self.cache.block_size
-        tensor_metadata = {"dtype": torch.int32, "device": self.model_device, "pin_memory": True}
+        tensor_metadata = {"dtype": torch.int32, "pin_memory": True}
         self.tensor_metadata = tensor_metadata
-        self.input_ids = torch.zeros((1, T), **tensor_metadata)
-        self.position_ids = torch.zeros((1, T), **tensor_metadata)
-        self.attention_mask = torch.zeros(
-            (1, 1, T, max_token_budget), dtype=self.model_dtype, device=self.model_device
+        self.input_ids = torch.zeros((1, T), **tensor_metadata).to(self.model_device, non_blocking=True)
+        self.position_ids = torch.zeros((1, T), **tensor_metadata).to(self.model_device, non_blocking=True)
+        self.attention_mask = torch.zeros((1, 1, T, max_token_budget), dtype=self.model_dtype).to(
+            self.model_device, non_blocking=True
         )
-        self.cumulative_seqlens_q = torch.zeros((T + 1,), **tensor_metadata)
-        self.cumulative_seqlens_k = torch.zeros((T + 1,), **tensor_metadata)
-        self.write_index = torch.zeros((T,), **tensor_metadata)
-        self.read_index = torch.zeros((max_token_budget,), **tensor_metadata)
-        self.logits_indices = torch.full((T,), -1, **tensor_metadata)
+        self.cumulative_seqlens_q = torch.zeros((T + 1,), **tensor_metadata).to(self.model_device, non_blocking=True)
+        self.cumulative_seqlens_k = torch.zeros((T + 1,), **tensor_metadata).to(self.model_device, non_blocking=True)
+        self.write_index = torch.zeros((T,), **tensor_metadata).to(self.model_device, non_blocking=True)
+        self.read_index = torch.zeros((max_token_budget,), **tensor_metadata).to(self.model_device, non_blocking=True)
+        self.logits_indices = torch.full((T,), -1, **tensor_metadata).to(self.model_device, non_blocking=True)
         self.max_seqlen_q = 0
         self.max_seqlen_k = 0
-        self.output_ids = torch.full((1, T), -1, **tensor_metadata)
+        self.output_ids = torch.full((1, T), -1, **tensor_metadata).to(self.model_device, non_blocking=True)
         self.block_table = torch.full(
             (T, 24),
             -1,
             dtype=torch.int32,
-            device=self.model_device,  # default 24 blocks
-        )
+        ).to(self.model_device, non_blocking=True)
 
     @traced
     @torch.no_grad()
