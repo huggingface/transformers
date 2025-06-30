@@ -123,7 +123,7 @@ class OpenAIMoeExperts(nn.Module):
             if torch.distributed.get_rank() == 0:
                 next_states = next_states + self.down_proj_bias[..., None, :]
             next_states = next_states.view(-1, self.hidden_size)
-        return next_states
+        return next_states, None # bcz GatherParallel allreduces first element
 
 
 class OpenAIMoeMLP(nn.Module):
