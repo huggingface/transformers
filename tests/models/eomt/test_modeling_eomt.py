@@ -344,14 +344,10 @@ class EomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
         with torch.inference_mode():
             outputs = model(**inputs)
 
-        patch_offsets = model.patch_offsets
-
         self.assertTrue(outputs.class_queries_logits.shape == (2, 100, 151))
         self.assertTrue(outputs.masks_queries_logits.shape == (2, 100, 128, 128))
 
-        preds = processor.post_process_semantic_segmentation(
-            outputs, target_sizes=[(image.size[1], image.size[0])], patch_offsets=patch_offsets
-        )
+        preds = processor.post_process_semantic_segmentation(outputs, target_sizes=[(image.size[1], image.size[0])])
 
         self.assertTrue(preds.shape[1:] == (image.size[1], image.size[0]))
 
