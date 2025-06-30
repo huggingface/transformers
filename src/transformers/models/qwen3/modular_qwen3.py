@@ -17,7 +17,6 @@
 from typing import Callable, Optional
 
 import torch
-import torch.utils.checkpoint
 
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -162,7 +161,6 @@ __all__ = [
     "Qwen3ForCausalLM",
     "Qwen3ForQuestionAnswering",
     "Qwen3Model",
-    "Qwen3PreTrainedModel",  # noqa: F822
     "Qwen3ForSequenceClassification",
     "Qwen3ForTokenClassification",
 ]

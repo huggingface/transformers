@@ -39,7 +39,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
 from .configuration_jamba import JambaConfig
-
+from ...utils import TransformersKwargs
 
 if is_flash_attn_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
@@ -1145,6 +1145,7 @@ class JambaModel(JambaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_router_logits = (
@@ -1331,7 +1332,7 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
         output_router_logits: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **loss_kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> MoeCausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
