@@ -173,8 +173,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 class Cohere2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    return_hooks = {"attentions", 1}
-
     def __init__(self, config: Cohere2Config, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
@@ -344,6 +342,10 @@ class Cohere2PreTrainedModel(PreTrainedModel):
     _supports_quantized_cache = True
     _supports_static_cache = True
     _supports_attention_backend = True
+    _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
+        "hidden_states": (Cohere2DecoderLayer, 0),
+        "attentions": (Cohere2Attention, 1),
+    }
 
     def _init_weights(self, module):
         std = self.config.initializer_range

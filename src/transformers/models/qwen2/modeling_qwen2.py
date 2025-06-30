@@ -124,8 +124,6 @@ def eager_attention_forward(
 class Qwen2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    return_hooks = {"attentions", 1}
-
     def __init__(self, config: Qwen2Config, layer_idx: int):
         super().__init__()
         self.config = config
@@ -208,8 +206,6 @@ class Qwen2RMSNorm(nn.Module):
 
 
 class Qwen2DecoderLayer(GradientCheckpointingLayer):
-    return_hooks = {"hidden_states", 0}
-
     def __init__(self, config: Qwen2Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -270,6 +266,10 @@ class Qwen2PreTrainedModel(PreTrainedModel):
     _supports_quantized_cache = True
     _supports_static_cache = True
     _supports_attention_backend = True
+    _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
+        "hidden_states": (Qwen2DecoderLayer, 0),
+        "attentions": (Qwen2Attention, 1),
+    }
 
     def _init_weights(self, module):
         std = self.config.initializer_range

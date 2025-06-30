@@ -1261,8 +1261,6 @@ def apply_rotary_pos_emb(
 class Gemma3nTextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    return_hooks = {"attentions", 1}
-
     def __init__(self, config: Gemma3nTextConfig, layer_idx: int):
         super().__init__()
         self.is_sliding = config.layer_types[layer_idx] == "sliding_attention"
@@ -1486,6 +1484,10 @@ class Gemma3nPreTrainedModel(PreTrainedModel):
     _supports_quantized_cache = True
     _supports_static_cache = True
     _supports_attention_backend = True
+    _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
+        "hidden_states": (Gemma3nTextDecoderLayer, 0),
+        "attentions": (Gemma3nTextAttention, 1),
+    }
 
     def _init_weights(self, module):
         # important: this ported version of Gemma2 isn't meant for training from scratch - only

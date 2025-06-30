@@ -342,8 +342,6 @@ def eager_attention_forward(
 class MiniMaxAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    return_hooks = {"attentions", 1}
-
     def __init__(self, config: MiniMaxConfig, layer_idx: int):
         super().__init__()
         self.config = config
@@ -599,6 +597,10 @@ class MiniMaxPreTrainedModel(PreTrainedModel):
     _supports_quantized_cache = False
     _supports_static_cache = False
     _supports_attention_backend = True
+    _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
+        "hidden_states": (MiniMaxDecoderLayer, 0),
+        "attentions": (MiniMaxAttention, 1),
+    }
 
     def _init_weights(self, module):
         std = self.config.initializer_range

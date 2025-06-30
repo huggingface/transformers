@@ -125,8 +125,6 @@ def eager_attention_forward(
 class Qwen3MoeAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    return_hooks = {"attentions", 1}
-
     def __init__(self, config: Qwen3MoeConfig, layer_idx: int):
         super().__init__()
         self.config = config
@@ -433,6 +431,10 @@ class Qwen3MoePreTrainedModel(PreTrainedModel):
     _supports_quantized_cache = True
     _supports_static_cache = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _supports_attention_backend = True
+    _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
+        "hidden_states": (Qwen3MoeDecoderLayer, 0),
+        "attentions": (Qwen3MoeAttention, 1),
+    }
 
     def _init_weights(self, module):
         std = self.config.initializer_range

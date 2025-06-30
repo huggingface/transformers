@@ -498,8 +498,6 @@ DIFFLLAMA_ATTENTION_CLASSES = {
 
 
 class DiffLlamaDecoderLayer(GradientCheckpointingLayer):
-    return_hooks = {"hidden_states", 0}
-
     def __init__(self, config: DiffLlamaConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -559,6 +557,10 @@ class DiffLlamaPreTrainedModel(PreTrainedModel):
     _supports_quantized_cache = True
     _supports_static_cache = True
     _supports_attention_backend = False
+    _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
+        "hidden_states": (DiffLlamaDecoderLayer, 0),
+        "attentions": (DiffLlamaAttention, 1),
+    }
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -654,14 +656,14 @@ class DiffLlamaModel(DiffLlamaPreTrainedModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
+            inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache()
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
+            cache_position: torch.Tensor = torch.arange(
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
 

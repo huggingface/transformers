@@ -124,8 +124,6 @@ def eager_attention_forward(
 class MistralAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    return_hooks = {"attentions", 1}
-
     def __init__(self, config: MistralConfig, layer_idx: int):
         super().__init__()
         self.config = config
@@ -207,8 +205,6 @@ class MistralRMSNorm(nn.Module):
 
 
 class MistralDecoderLayer(GradientCheckpointingLayer):
-    return_hooks = {"hidden_states", 0}
-
     def __init__(self, config: MistralConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -266,6 +262,10 @@ class MistralPreTrainedModel(PreTrainedModel):
     _supports_quantized_cache = True
     _supports_static_cache = True
     _supports_attention_backend = True
+    _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
+        "hidden_states": (MistralDecoderLayer, 0),
+        "attentions": (MistralAttention, 1),
+    }
 
     def _init_weights(self, module):
         std = self.config.initializer_range

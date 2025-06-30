@@ -214,8 +214,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 class Glm4Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    return_hooks = {"attentions", 1}
-
     def __init__(self, config: Glm4Config, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
@@ -353,6 +351,10 @@ class Glm4PreTrainedModel(PreTrainedModel):
     _supports_quantized_cache = True
     _supports_static_cache = True
     _supports_attention_backend = True
+    _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
+        "hidden_states": (Glm4DecoderLayer, 0),
+        "attentions": (Glm4Attention, 1),
+    }
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -416,7 +418,7 @@ class Glm4Model(Glm4PreTrainedModel):
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
+            cache_position: torch.Tensor = torch.arange(
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
 

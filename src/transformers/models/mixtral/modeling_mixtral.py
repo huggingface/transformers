@@ -236,8 +236,6 @@ def eager_attention_forward(
 class MixtralAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    return_hooks = {"attentions", 1}
-
     def __init__(self, config: MixtralConfig, layer_idx: int):
         super().__init__()
         self.config = config
@@ -426,6 +424,10 @@ class MixtralPreTrainedModel(PreTrainedModel):
     _supports_quantized_cache = True
     _supports_static_cache = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _supports_attention_backend = True
+    _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
+        "hidden_states": (MixtralDecoderLayer, 0),
+        "attentions": (MixtralAttention, 1),
+    }
 
     def _init_weights(self, module):
         std = self.config.initializer_range

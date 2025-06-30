@@ -234,8 +234,6 @@ class Phi3RMSNorm(nn.Module):
 
 
 class Phi3DecoderLayer(GradientCheckpointingLayer):
-    return_hooks = {"hidden_states", 0}
-
     def __init__(self, config: Phi3Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -325,6 +323,10 @@ class Phi3PreTrainedModel(PreTrainedModel):
     _supports_quantized_cache = True
     _supports_static_cache = True
     _supports_attention_backend = True
+    _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
+        "hidden_states": (Phi3DecoderLayer, 0),
+        "attentions": (Phi3Attention, 1),
+    }
     _version = "0.0.5"
 
     def _init_weights(self, module):

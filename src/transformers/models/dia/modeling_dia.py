@@ -255,8 +255,6 @@ def eager_attention_forward(
 class DiaSelfAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    return_hooks = {"attentions", 1}
-
     def __init__(self, config: Union[DiaEncoderConfig, DiaDecoderConfig], layer_idx: int, is_causal: bool = False):
         super().__init__()
         self.config = config

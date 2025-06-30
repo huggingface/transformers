@@ -176,8 +176,6 @@ def eager_attention_forward(
 class LightGlueAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    return_hooks = {"attentions", 1}
-
     def __init__(self, config: LightGlueConfig, layer_idx: int):
         super().__init__()
         self.config = config

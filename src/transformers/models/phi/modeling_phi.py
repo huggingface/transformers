@@ -107,8 +107,6 @@ def eager_attention_forward(
 class PhiAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    return_hooks = {"attentions", 1}
-
     def __init__(self, config: PhiConfig, layer_idx: int):
         super().__init__()
         self.config = config
@@ -305,6 +303,10 @@ class PhiPreTrainedModel(PreTrainedModel):
     _supports_quantized_cache = True
     _supports_static_cache = True
     _supports_attention_backend = True
+    _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
+        "hidden_states": (PhiDecoderLayer, 0),
+        "attentions": (PhiAttention, 1),
+    }
 
     def _init_weights(self, module):
         std = self.config.initializer_range

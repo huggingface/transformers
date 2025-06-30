@@ -172,8 +172,6 @@ def eager_attention_forward(
 class Dots1Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    return_hooks = {"attentions", 1}
-
     def __init__(self, config: Dots1Config, layer_idx: int):
         super().__init__()
         self.config = config
@@ -362,8 +360,6 @@ class Dots1TopkRouter(nn.Module):
 
 
 class Dots1DecoderLayer(GradientCheckpointingLayer):
-    return_hooks = {"hidden_states", 0}
-
     def __init__(self, config: Dots1Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -428,6 +424,10 @@ class Dots1PreTrainedModel(PreTrainedModel):
     _supports_quantized_cache = True
     _supports_static_cache = True
     _supports_attention_backend = True
+    _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
+        "hidden_states": (Dots1DecoderLayer, 0),
+        "attentions": (Dots1Attention, 1),
+    }
 
     def _init_weights(self, module):
         std = self.config.initializer_range

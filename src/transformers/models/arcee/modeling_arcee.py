@@ -195,8 +195,6 @@ def eager_attention_forward(
 class ArceeAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    return_hooks = {"attentions", 1}
-
     def __init__(self, config: ArceeConfig, layer_idx: int):
         super().__init__()
         self.config = config
@@ -265,8 +263,6 @@ class ArceeAttention(nn.Module):
 
 
 class ArceeDecoderLayer(GradientCheckpointingLayer):
-    return_hooks = {"hidden_states", 0}
-
     def __init__(self, config: ArceeConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -326,6 +322,10 @@ class ArceePreTrainedModel(PreTrainedModel):
     _supports_quantized_cache = True
     _supports_static_cache = True
     _supports_attention_backend = True
+    _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
+        "hidden_states": (ArceeDecoderLayer, 0),
+        "attentions": (ArceeAttention, 1),
+    }
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -382,14 +382,14 @@ class ArceeModel(ArceePreTrainedModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
+            inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache()
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
+            cache_position: torch.Tensor = torch.arange(
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
 
@@ -408,7 +408,7 @@ class ArceeModel(ArceePreTrainedModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            layer_outputs = decoder_layer(
+            hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
@@ -417,8 +417,6 @@ class ArceeModel(ArceePreTrainedModel):
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
-
-            hidden_states = layer_outputs[0]
 
         hidden_states = self.norm(hidden_states)
         return BaseModelOutputWithPast(

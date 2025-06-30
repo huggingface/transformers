@@ -170,8 +170,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 class MoonshineAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    return_hooks = {"attentions", 1}
-
     def __init__(
         self,
         config: MoonshineConfig,
@@ -332,8 +330,6 @@ class MoonshineRotaryEmbedding(nn.Module):
 
 
 class MoonshineEncoderLayer(GradientCheckpointingLayer):
-    return_hooks = {"hidden_states", 0}
-
     def __init__(self, config: MoonshineConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size

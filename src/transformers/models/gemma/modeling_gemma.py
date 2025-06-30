@@ -192,8 +192,6 @@ def eager_attention_forward(
 class GemmaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    return_hooks = {"attentions", 1}
-
     def __init__(self, config: GemmaConfig, layer_idx: int):
         super().__init__()
         self.config = config
@@ -262,8 +260,6 @@ class GemmaAttention(nn.Module):
 
 
 class GemmaDecoderLayer(GradientCheckpointingLayer):
-    return_hooks = {"hidden_states", 0}
-
     def __init__(self, config: GemmaConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -323,6 +319,10 @@ class GemmaPreTrainedModel(PreTrainedModel):
     _supports_quantized_cache = True
     _supports_static_cache = True
     _supports_attention_backend = True
+    _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
+        "hidden_states": (GemmaDecoderLayer, 0),
+        "attentions": (GemmaAttention, 1),
+    }
 
     def _init_weights(self, module):
         std = self.config.initializer_range
