@@ -1000,6 +1000,7 @@ class Qwen3MoeForQuestionAnswering(Qwen3MoePreTrainedModel):
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            **kwargs,
         )
 
         sequence_output = outputs.last_hidden_state

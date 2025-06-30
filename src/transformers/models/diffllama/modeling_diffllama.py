@@ -517,9 +517,8 @@ class DiffLlamaDecoderLayer(GradientCheckpointingLayer):
     ) -> tuple[torch.Tensor]:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
-
         # Self Attention
-        hidden_states = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -528,7 +527,7 @@ class DiffLlamaDecoderLayer(GradientCheckpointingLayer):
             cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
-        )[0]
+        )
         hidden_states = residual + hidden_states
 
         # Fully Connected
@@ -929,6 +928,7 @@ class DiffLlamaForQuestionAnswering(DiffLlamaPreTrainedModel):
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            **kwargs,
         )
 
         sequence_output = outputs.last_hidden_state

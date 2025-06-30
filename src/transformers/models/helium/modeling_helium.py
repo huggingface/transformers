@@ -284,9 +284,8 @@ class HeliumDecoderLayer(GradientCheckpointingLayer):
     ) -> tuple[torch.Tensor]:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
-
         # Self Attention
-        hidden_states = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -295,7 +294,7 @@ class HeliumDecoderLayer(GradientCheckpointingLayer):
             cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
-        )[0]
+        )
         hidden_states = residual + hidden_states
 
         # Fully Connected
