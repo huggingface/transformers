@@ -1098,7 +1098,9 @@ class ProcessorMixin(PushToHubMixin):
         )
 
         # update args that are already in processor_dict to avoid duplicate arguments
-        args_to_update = {i: valid_kwargs.pop(arg) for i, arg in enumerate(accepted_args_and_kwargs) if arg in valid_kwargs}
+        args_to_update = {
+            i: valid_kwargs.pop(arg) for i, arg in enumerate(accepted_args_and_kwargs) if arg in valid_kwargs
+        }
         args = [arg if i not in args_to_update else args_to_update[i] for i, arg in enumerate(args)]
 
         # instantiate processor with used (and valid) kwargs only
