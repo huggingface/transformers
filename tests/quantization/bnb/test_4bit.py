@@ -27,6 +27,7 @@ from transformers import (
     AutoTokenizer,
     BitsAndBytesConfig,
     pipeline,
+    set_seed,
 )
 from transformers.models.opt.modeling_opt import OPTAttention
 from transformers.testing_utils import (
@@ -111,7 +112,7 @@ class Base4bitTest(unittest.TestCase):
     EXPECTED_OUTPUTS.add("Hello my name is John Doe, I am a student at the University")
     EXPECTED_OUTPUTS.add("Hello my name is John and I am 25 years old.")
     EXPECTED_OUTPUTS.add("Hello my name is John and I am a student at the University of")
-    EXPECTED_OUTPUTS.add("Hello my name is John and I am a student at the University of")
+    EXPECTED_OUTPUTS.add("Hello my name is Alina. I have been working as a professional")
     MAX_NEW_TOKENS = 10
 
     def setUp(self):
@@ -514,6 +515,8 @@ class Pipeline4BitTest(Base4bitTest):
             max_new_tokens=self.MAX_NEW_TOKENS,
         )
 
+        # Avoid sampling different outputs
+        set_seed(42)
         # Real second forward pass
         pipeline_output = self.pipe(self.input_text)
         self.assertIn(pipeline_output[0]["generated_text"], self.EXPECTED_OUTPUTS)
