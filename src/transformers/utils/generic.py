@@ -996,23 +996,23 @@ def check_model_inputs(func):
         # TODO @Lysandre add the head we have today about GC and training
         # and all of the rest that is general transformers checking
         # THIS PART :
-        # if self.gradient_checkpointing and self.training and use_cache:
-        #     logger.warning_once(
-        #         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
-        #     )
-        #     use_cache = False
+        if self.gradient_checkpointing and self.training and use_cache:
+            logger.warning_once(
+                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
+            )
+            use_cache = False
         #
         # # TODO (joao): remove this exception in v4.56 -- it exists for users that try to pass a legacy cache
         # if not isinstance(past_key_values, (type(None), Cache)):
         #     raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
         #
         hooks = []
-        collected_outputs = defaultdict(list)
+        collected_outputs = defaultdict(tuple)
 
         def make_capture_fn(key, index):
             def capture_fn(module, input, output):
                 if output[index] is not None:
-                    collected_outputs[key].append(output[index])
+                    collected_outputs[key] += (output[index],)
 
             return capture_fn
 
@@ -1035,10 +1035,9 @@ def check_model_inputs(func):
         for h in hooks:
             if h is not None:
                 h.remove()
-
         for key in collected_outputs:
             if key == "hidden_states":
-                collected_outputs[key].append(outputs.last_hidden_state)
+                collected_outputs[key] += (outputs.last_hidden_state,)
             outputs[key] = collected_outputs[key]
         if return_dict is False:
             outputs = outputs.to_tuple()

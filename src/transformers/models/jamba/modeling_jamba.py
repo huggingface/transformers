@@ -35,7 +35,8 @@ from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask,
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, can_return_tuple, logging
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
 from .configuration_jamba import JambaConfig
 
