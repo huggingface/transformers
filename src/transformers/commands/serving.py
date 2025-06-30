@@ -171,11 +171,6 @@ class ServeArguments:
     `transformers serve --help`
     """
 
-    # Model loading
-    model_revision: str = field(
-        default="main",
-        metadata={"help": "Specific model version to use (can be a branch name, tag name or commit id)."},
-    )
     device: str = field(default="cpu", metadata={"help": "Device to use for inference."})
     torch_dtype: Optional[str] = field(
         default="auto",
@@ -217,7 +212,9 @@ class ServeArguments:
 
 
 class ServeCommand(BaseTransformersCLICommand):
-    loaded_model_id: Optional[str] = field()
+    loaded_model: Optional[str] = None
+    model: PreTrainedModel
+    tokenizer: PreTrainedTokenizerFast
 
     @staticmethod
     def register_subcommand(parser: ArgumentParser):
@@ -229,9 +226,6 @@ class ServeCommand(BaseTransformersCLICommand):
         """
         dataclass_types = (ServeArguments,)
         serve_parser = parser.add_parser("serve", dataclass_types=dataclass_types)
-
-        group = serve_parser.add_argument_group("Positional arguments")
-        group.add_argument("model_name_or_path", type=str, default=None, help="Name of the pre-trained model.")
         serve_parser.set_defaults(func=serve_command_factory)
 
     def __init__(self, args: ServeArguments):
@@ -266,7 +260,7 @@ class ServeCommand(BaseTransformersCLICommand):
             "object": "chat.completion.chunk",
             "id": request_id,
             "created": int(time.time()),
-            "model": self.args.model_name_or_path,
+            "model": self.loaded_model,
             "system_fingerprint": "",
             "choices": [
                 ChatCompletionStreamOutputChoice(
@@ -346,11 +340,10 @@ class ServeCommand(BaseTransformersCLICommand):
             if not req.stream:
                 return {"error": "Only streaming mode is supported."}
 
-            update_model = req.model != self.loaded_model_id
+            update_model = req.model != self.loaded_model
 
             if update_model:
-                self.args.model_name_or_path = req.model
-                self.model, self.tokenizer = self.load_model_and_tokenizer(self.args)
+                self.model, self.tokenizer = self.load_model_and_tokenizer(req.model, self.args)
 
             chat = req.messages
 
@@ -418,11 +411,10 @@ class ServeCommand(BaseTransformersCLICommand):
     def generate(self, app):
         @app.post("/v1/chat/completions")
         def _serve(req: ChatCompletionInput):
-            update_model = req.model != self.loaded_model_id
+            update_model = req.model != self.loaded_model
 
             if update_model:
-                self.args.model_name_or_path = req.model
-                self.model, self.tokenizer = self.load_model_and_tokenizer(self.args)
+                self.model, self.tokenizer = self.load_model_and_tokenizer(req.model, self.args)
 
             if not req.stream:
                 return {"error": "Only streaming mode is supported."}
@@ -559,6 +551,7 @@ class ServeCommand(BaseTransformersCLICommand):
                     thread.join()
                 except Exception as e:
                     logger.error(str(e))
+                    raise
                     yield f'data: {{"error": "{str(e)}"}}'
 
                 finally:
@@ -586,11 +579,19 @@ class ServeCommand(BaseTransformersCLICommand):
 
         return quantization_config
 
-    def load_model_and_tokenizer(self, args: ServeArguments) -> tuple[PreTrainedModel, PreTrainedTokenizerFast]:
-        print(f"Loading {args.model_name_or_path}")
+    def load_model_and_tokenizer(
+        self, model_id_and_revision: str, args: ServeArguments
+    ) -> tuple[PreTrainedModel, PreTrainedTokenizerFast]:
+        logger.warning(f"Loading {model_id_and_revision}")
+
+        if "@" in model_id_and_revision:
+            model_id, revision = model_id_and_revision.split("@", 1)
+        else:
+            model_id, revision = model_id_and_revision, "main"
+
         tokenizer = AutoTokenizer.from_pretrained(
-            args.model_name_or_path,
-            revision=args.model_revision,
+            model_id,
+            revision=revision,
             trust_remote_code=args.trust_remote_code,
         )
 
@@ -598,7 +599,7 @@ class ServeCommand(BaseTransformersCLICommand):
         quantization_config = self.get_quantization_config(args)
 
         model_kwargs = {
-            "revision": args.model_revision,
+            "revision": revision,
             "attn_implementation": args.attn_implementation,
             "torch_dtype": torch_dtype,
             "device_map": "auto",
@@ -606,7 +607,7 @@ class ServeCommand(BaseTransformersCLICommand):
             "trust_remote_code": args.trust_remote_code,
         }
 
-        model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, **model_kwargs)
+        model = AutoModelForCausalLM.from_pretrained(model_id, **model_kwargs)
 
         if model.generation_config.max_new_tokens is not None and model.generation_config.max_new_tokens < 256:
             model.generation_config.max_new_tokens = 256
@@ -614,8 +615,9 @@ class ServeCommand(BaseTransformersCLICommand):
         if getattr(model, "hf_device_map", None) is None:
             model = model.to(args.device)
 
-        self.loaded_model_id = args.model_name_or_path
+        self.loaded_model = model_id_and_revision
 
+        print("Loaded model", model_id_and_revision)
         return model, tokenizer
 
 
