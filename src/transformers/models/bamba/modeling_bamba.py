@@ -265,6 +265,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 class BambaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
+    return_hooks = {"attentions", 1}
+
     def __init__(self, config: BambaConfig, layer_idx: int):
         super().__init__()
         self.config = config
@@ -296,7 +298,7 @@ class BambaAttention(nn.Module):
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 

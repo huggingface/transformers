@@ -1448,6 +1448,8 @@ class Phi4MultimodalAttention(nn.Module):
 
 
 class Phi4MultimodalDecoderLayer(GradientCheckpointingLayer):
+    return_hooks = {"hidden_states", 0}
+
     def __init__(self, config: Phi4MultimodalConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -1622,7 +1624,6 @@ class Phi4MultimodalPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["Phi4MultimodalDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_3 = True
     _supports_flash_attn_2 = True
     _supports_sdpa = True
     _supports_flex_attn = True

@@ -36,6 +36,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import LossKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.generic import check_model_inputs
 from .configuration_granite import GraniteConfig
 
 
@@ -117,6 +118,8 @@ def eager_attention_forward(
 class GraniteAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
+    return_hooks = {"attentions", 1}
+
     def __init__(self, config: GraniteConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
@@ -148,7 +151,7 @@ class GraniteAttention(nn.Module):
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -222,6 +225,8 @@ class GraniteMLP(nn.Module):
 
 
 class GraniteDecoderLayer(GradientCheckpointingLayer):
+    return_hooks = {"hidden_states", 0}
+
     def __init__(self, config: GraniteConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -305,7 +310,6 @@ class GranitePreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["GraniteDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_3 = True
     _supports_flash_attn_2 = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -387,7 +391,7 @@ class GraniteModel(GranitePreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    @can_return_tuple
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
