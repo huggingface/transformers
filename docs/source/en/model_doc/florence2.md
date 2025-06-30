@@ -33,10 +33,6 @@ The original code can be found [here](https://huggingface.co/microsoft/Florence-
 
 [[autodoc]] Florence2VisionConfig
 
-## Florence2LanguageConfig
-
-[[autodoc]] Florence2LanguageConfig
-
 ## Florence2Config
 
 [[autodoc]] Florence2Config
@@ -48,11 +44,6 @@ The original code can be found [here](https://huggingface.co/microsoft/Florence-
 ## Florence2ForConditionalGeneration
 
 [[autodoc]] Florence2ForConditionalGeneration
-    - forward
-
-## Florence2LanguageForConditionalGeneration
-
-[[autodoc]] Florence2LanguageForConditionalGeneration
     - forward
 
 ## Florence2VisionBackbone
