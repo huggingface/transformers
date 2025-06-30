@@ -45,7 +45,7 @@ from ..gemma2.modeling_gemma2 import (
     eager_attention_forward,
 )
 from ..paligemma.modeling_paligemma import (
-    PaligemmaCausalLMOutputWithPast,
+    PaliGemmaCausalLMOutputWithPast,
     PaliGemmaForConditionalGeneration,
     PaliGemmaModel,
     PaligemmaModelOutputWithPast,
@@ -349,7 +349,7 @@ class Gemma3ModelOutputWithPast(PaligemmaModelOutputWithPast):
     pass
 
 
-class Gemma3CausalLMOutputWithPast(PaligemmaCausalLMOutputWithPast):
+class Gemma3CausalLMOutputWithPast(PaliGemmaCausalLMOutputWithPast):
     pass
 
 

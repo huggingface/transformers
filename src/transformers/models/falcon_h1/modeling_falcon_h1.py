@@ -30,8 +30,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from transformers.activations import ACT2FN
-
+from ...activations import ACT2FN
 from ...cache_utils import (
     Cache,
     DynamicCache,  # we need __iter__ and __len__ of pkv
@@ -503,7 +502,7 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     return hidden_states
 
 
-# Adapted from transformers.models.mamba2.modeling_mamba2.Mamba2Mixer
+# Adapted from ..mamba2.modeling_mamba2.Mamba2Mixer
 class FalconH1Mixer(nn.Module):
     """
     FalconH1Mixer is identical to classic Mamba2 mixer classes but differs on two different things
@@ -1219,7 +1218,7 @@ def compute_mup_vector(config):
 
 
 @auto_docstring
-# Adapted from transformers.models.jamba.modeling_jamba.JambaModel
+# Adapted from ..jamba.modeling_jamba.JambaModel
 class FalconH1Model(FalconH1PreTrainedModel):
     def __init__(self, config: FalconH1Config):
         super().__init__(config)

@@ -4,11 +4,10 @@ import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from transformers.models.ijepa.configuration_ijepa import IJepaConfig
-
 from ...modeling_outputs import ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, torch_int
+from ..ijepa.configuration_ijepa import IJepaConfig
 from ..vit.modeling_vit import ViTEmbeddings, ViTForImageClassification, ViTModel
 
 
