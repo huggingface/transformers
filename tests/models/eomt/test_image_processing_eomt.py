@@ -84,10 +84,11 @@ class EomtImageProcessingTester:
             "num_labels": self.num_labels,
         }
 
-    def prepare_fake_eomt_outputs(self, batch_size):
+    def prepare_fake_eomt_outputs(self, batch_size, patch_offsets=None):
         return EomtForUniversalSegmentationOutput(
             masks_queries_logits=torch.randn((batch_size, self.num_queries, self.height, self.width)),
             class_queries_logits=torch.randn((batch_size, self.num_queries, self.num_classes + 1)),
+            patch_offsets=patch_offsets,
         )
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
@@ -263,13 +264,13 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
         inputs = processor(images=image, do_split_image=True, return_tensors="pt")
-        patch_offsets = inputs.pop("patch_offsets")
+        patch_offsets = inputs["patch_offsets"]
 
-        original_sizes = [image.size[::-1]]
+        target_sizes = [image.size[::-1]]
 
         # For semantic segmentation, the BS of output is 2 coz, two patches are created for the image.
-        outputs = self.image_processor_tester.prepare_fake_eomt_outputs(inputs["pixel_values"].shape[0])
-        segmentation = processor.post_process_semantic_segmentation(outputs, patch_offsets, original_sizes)
+        outputs = self.image_processor_tester.prepare_fake_eomt_outputs(inputs["pixel_values"].shape[0], patch_offsets)
+        segmentation = processor.post_process_semantic_segmentation(outputs, target_sizes)
 
         self.assertEqual(segmentation[0].shape, (image.height, image.width))
 
