@@ -15,6 +15,7 @@
 The Trainer class, to easily train a 🤗 Transformers from scratch or finetune it on a new task.
 """
 
+import atexit
 import contextlib
 import copy
 import functools
@@ -27,6 +28,7 @@ import os
 import random
 import re
 import shutil
+import signal
 import sys
 import tempfile
 import time
@@ -773,6 +775,35 @@ class Trainer:
                 cb for cb in self.callback_handler.callbacks + [self.control] if isinstance(cb, ExportableState)
             ],
         )
+        # Flag to prevent multiple simultaneous emergency saves
+        self._emergency_save_running = False
+
+        # New flag to indicate if an emergency save has already completed
+        self._emergency_save_completed_this_run = False  # <--- ADD THIS LINE
+
+        if self.args.enable_emergency_checkpoint:
+            # Define signal handler wrapper
+            def signal_handler_wrapper(signum, frame):
+                # Only attempt to save if training has started and isn't gracefully stopping
+                if self.is_in_train and not self.control.should_training_stop:
+                    self._common_emergency_save(f"signal_{signal.Signals(signum).name}")
+                # Re-raise the signal to ensure the process terminates as expected by the OS/scheduler
+                # For SIGINT/SIGTERM, it's crucial to exit after cleanup.
+                sys.exit(1)
+
+            # Register signal handlers for graceful shutdown requests
+            signal.signal(signal.SIGTERM, signal_handler_wrapper)  # For graceful shutdown by orchestrators
+            signal.signal(signal.SIGINT, signal_handler_wrapper)  # For Ctrl+C interruption
+
+            # Define atexit handler
+            def atexit_handler_wrapper():
+                # Only trigger atexit save if training was in progress and not already cleanly finished/stopped
+                if self.is_in_train and not self.control.should_training_stop:
+                    self._common_emergency_save("unhandled_exception")
+
+            # Register the atexit handler
+            atexit.register(atexit_handler_wrapper)
+
         # Internal variable to count flos in each process, will be accumulated in `self.state.total_flos` then
         # returned to 0 every time flos need to be logged
         self.current_flos = 0
@@ -2190,25 +2221,33 @@ class Trainer:
         inner_training_loop = find_executable_batch_size(
             self._inner_training_loop, self._train_batch_size, args.auto_find_batch_size
         )
-        if args.push_to_hub:
-            try:
-                # Disable progress bars when uploading models during checkpoints to avoid polluting stdout
-                hf_hub_utils.disable_progress_bars()
+
+        try:
+            if args.push_to_hub:
+                try:
+                    # Disable progress bars when uploading models during checkpoints to avoid polluting stdout
+                    hf_hub_utils.disable_progress_bars()
+                    return inner_training_loop(
+                        args=args,
+                        resume_from_checkpoint=resume_from_checkpoint,
+                        trial=trial,
+                        ignore_keys_for_eval=ignore_keys_for_eval,
+                    )
+                finally:
+                    hf_hub_utils.enable_progress_bars()
+            else:
                 return inner_training_loop(
                     args=args,
                     resume_from_checkpoint=resume_from_checkpoint,
                     trial=trial,
                     ignore_keys_for_eval=ignore_keys_for_eval,
                 )
-            finally:
-                hf_hub_utils.enable_progress_bars()
-        else:
-            return inner_training_loop(
-                args=args,
-                resume_from_checkpoint=resume_from_checkpoint,
-                trial=trial,
-                ignore_keys_for_eval=ignore_keys_for_eval,
-            )
+        except Exception as e:
+            # This is where you explicitly call your emergency save logic
+            logger.error(f"Caught an unexpected exception during training: {e}")
+            if self.args.enable_emergency_checkpoint:
+                self._common_emergency_save("training_exception")
+            raise e  # Re-raise the exception to signal that training failed
 
     def get_tp_size(self) -> int:
         """Get the tensor parallel size from either the model or DeepSpeed config."""
@@ -3234,6 +3273,52 @@ class Trainer:
         if self.args.should_save:
             # we use mtime as default, filesystems without mtime support will be detected in `_sorted_checkpoints`
             self._rotate_checkpoints(use_mtime=True, output_dir=run_dir)
+
+    def _common_emergency_save(self, reason: str):
+        # This flag prevents multiple simultaneous emergency saves
+        # if both a signal and an atexit hook trigger around the same time.
+        if hasattr(self, "_emergency_save_running") and self._emergency_save_running:
+            return
+
+        # Check if an emergency save has already completed or is in progress from another trigger
+        # This prevents the atexit handler from running if the try...except in train() already initiated a save
+        if self._emergency_save_completed_this_run:  # <--- ADD THIS CHECK HERE
+            return
+
+        self._emergency_save_running = True
+        self._emergency_save_completed_this_run = True
+
+        emergency_output_dir = os.path.join(self.args.output_dir, "checkpoint-emergency")
+        os.makedirs(emergency_output_dir, exist_ok=True)
+
+        logger.warning(f"Initiating emergency checkpoint due to: {reason}. Saving to {emergency_output_dir}")
+        try:
+            # Re-use existing save_model for the model weights
+            self.save_model(emergency_output_dir, _internal_call=True)
+            self._save_optimizer_and_scheduler(emergency_output_dir)
+            self._save_scaler(emergency_output_dir)
+            self._save_rng_state(emergency_output_dir)
+
+            # Save the Trainer state with current global_step and epoch
+            # Ensure only rank 0 saves the main trainer_state.json if not already handled
+            if self.is_world_process_zero():
+                minimal_state_path = os.path.join(emergency_output_dir, TRAINER_STATE_NAME)
+                minimal_state = {
+                    "global_step": self.state.global_step,
+                    "epoch": self.state.epoch,
+                    "is_world_process_zero": self.state.is_world_process_zero,  # Useful for sanity check on resume
+                    "is_local_process_zero": self.state.is_local_process_zero,
+                }
+                with open(minimal_state_path, "w") as f:
+                    json.dump(minimal_state, f)
+
+            logger.info(f"Emergency checkpoint complete for reason: {reason} at step {self.state.global_step}")
+            self._emergency_save_completed_this_run = True
+        except Exception as e:
+            logger.error(f"Failed to save emergency checkpoint due to an error: {e}")
+        finally:
+            # Clean up the flag
+            self._emergency_save_running = False
 
     def _save_rng_state(self, output_dir):
         # Save RNG state in non-distributed training
