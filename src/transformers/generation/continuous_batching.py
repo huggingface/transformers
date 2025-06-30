@@ -954,7 +954,7 @@ class ContinuousBatchProcessor:
             state.position_offset += query_length
 
             block_list = self.cache.get_block_table(state.request_id)
-            self.block_tables[: len(block_list), :] = torch.tensor(
+            self.block_tables[len(cumulative_seqlens_q) , :len(block_list)] = torch.tensor(
                 block_list, dtype=torch.int32, device=self.model_device
             )
 
