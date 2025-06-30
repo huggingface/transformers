@@ -283,7 +283,7 @@ image_pose_result = pose_results[0]
 
 Refer to resources below to learn more about using ViTPose.
 
-- This [notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/ViTPose/Inference_with_ViTPose_for_human_pose_estimation.ipynb) demonstrates inference and visualization.
+- This [notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/ViTPose/Inference_with_ViTPose_for_body_pose_estimation.ipynb) demonstrates inference and visualization.
 - This [Space](https://huggingface.co/spaces/hysts/ViTPose-transformers) demonstrates ViTPose on images and video.
 
 ## VitPoseImageProcessor
