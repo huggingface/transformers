@@ -1113,7 +1113,7 @@ class ProcessorMixin(PushToHubMixin):
         # instantiate processor with used (and valid) kwargs only
         processor = cls(*args, **valid_kwargs)
 
-        logger.info(f"Processor {processor}")
+        # logger.info(f"Processor {processor}")
         if return_unused_kwargs:
             return processor, unused_kwargs
         else:
@@ -1422,7 +1422,8 @@ class ProcessorMixin(PushToHubMixin):
         chat_template: Optional[str] = None,
         **kwargs: Unpack[AllKwargsForChatTemplate],
     ) -> str:
-        logger.info(f'calling apply_chat_template file {__file__} line {1389} with chat_template={chat_template}')
+        # logger.info(f'calling apply_chat_template file {__file__} line {1389} with chat_template={chat_template}')
+        # logger.info(f'and kwargs={kwargs} and conversation={conversation}')
         """
         Similar to the `apply_chat_template` method on tokenizers, this method applies a Jinja template to input
         conversations to turn them into a single tokenizable string.
@@ -1498,6 +1499,7 @@ class ProcessorMixin(PushToHubMixin):
 
         for kwarg_type in processed_kwargs:
             for key in AllKwargsForChatTemplate.__annotations__[kwarg_type].__annotations__.keys():
+                # logger.info(f'handling key {key} of type {kwarg_type} in apply_chat_template')
                 kwarg_type_defaults = AllKwargsForChatTemplate.__annotations__[kwarg_type]
                 default_value = getattr(kwarg_type_defaults, key, None)
                 value = kwargs.pop(key, default_value)
@@ -1519,6 +1521,7 @@ class ProcessorMixin(PushToHubMixin):
         tokenize = processed_kwargs["template_kwargs"].pop("tokenize", False)
         return_dict = processed_kwargs["template_kwargs"].pop("return_dict", False)
         mm_load_kwargs = processed_kwargs["mm_load_kwargs"]
+        # logger.info(f'processed_kwargs={processed_kwargs} after processing')
 
         if tokenize:
             batch_images, batch_videos = [], []
@@ -1579,18 +1582,13 @@ class ProcessorMixin(PushToHubMixin):
                         else:
                             # video is an object, not a file path or URL, it is a VideoInput type
                             # incase of video object, we expect user to pass fps in
-                            metadata = mm_load_kwargs.get("video_metadata", None)
-                            if metadata is None:
-                                raise ValueError(
-                                    "When passing a video object, you must provide `video_metadata` with at least `fps`."
-                                )
                             video, metadata = process_video_object(
-                                video_obj=fname,
-                                video_fps=mm_load_kwargs["video_fps"],
-                                sampling_fps=mm_load_kwargs["sampling_fps"],
-                                video_load_backend=mm_load_kwargs["video_load_backend"],
-                                sample_indices_fn=mm_load_kwargs["sample_indices_fn"],
-                                kwargs=mm_load_kwargs.get("video_load_kwargs", {}),
+                                video=fname,
+                                video_fps=mm_load_kwargs["video_fps"] if 'video_fps' in mm_load_kwargs else None,
+                                sampling_fps=mm_load_kwargs["sampling_fps"] if 'sampling_fps' in mm_load_kwargs else None,
+                                video_load_backend=mm_load_kwargs["video_load_backend"] if 'video_load_backend' in mm_load_kwargs else "pyav",
+                                sample_indices_fn=mm_load_kwargs["sample_indices_fn"] if 'sample_indices_fn' in mm_load_kwargs else None,
+                                num_frames=mm_load_kwargs["num_frames"] if 'num_frames' in mm_load_kwargs else None
                             )
                         
                         videos.append(video)

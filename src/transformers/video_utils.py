@@ -511,7 +511,7 @@ VIDEO_DECODERS = {
 }
 
 def process_video_object(
-        video_obj: "VideoInput",
+        video: "VideoInput",
         video_fps: Optional[float] = None,
         num_frames: Optional[int] = None,
         sampling_fps: Optional[int] = None,
@@ -521,7 +521,7 @@ def process_video_object(
     """
         Process the video object (ndarray or torch.tensor) provided in the apply_chat_template function.
         Args:
-            video_obj (`VideoInput`):
+            video (`VideoInput`):
                 The video object to process. Can be a list of PIL frames, a numpy array, or a torch tensor. By default, video will be sampled based on `num_frames` or `sampling_fps` and `video_fps` or sample_indices_fn. While sampling, sample_indices_fn will have first priority, second priority will be given to time based sampling with `video_fps` and `sampling_fps`, third priority will given to `num_frames`. If none of them are provided, the whole video will be loaded.
             video_fps (`float`, *optional*):
                 Frames per second of the video. If not provided, any time based sampling (sampling with sampling_fps) will not be performed.
@@ -548,12 +548,13 @@ def process_video_object(
         
     """
 
-    if not is_valid_video(video_obj):
+    if not is_valid_video(video):
         raise ValueError(
             f"Invalid video input. Expected either a list of PIL frames or an input of 4 dimensions, but got"
-            f" type {type(video_obj)}."
+            f" type {type(video)}."
         )
-    
+    if isinstance(video, np.ndarray):
+        video = torch.from_numpy(video)
     total_num_frames = video.size(0)
     # if sample_indices_fn is provided, we prioritize it over other arguments
     if sample_indices_fn is not None:
