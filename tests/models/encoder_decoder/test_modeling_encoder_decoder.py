@@ -809,6 +809,7 @@ class BertEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
         encoder_config = config_and_inputs["config"]
         decoder_config = config_and_inputs["decoder_config"]
 
+        encoder_config._attn_implementation = "eager"
         decoder_config._attn_implementation = "eager"
         encoder_config.position_embedding_type = "relative_key_query"
         decoder_config.position_embedding_type = "relative_key_query"
