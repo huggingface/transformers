@@ -422,9 +422,6 @@ class MixtralModel(MistralModel):
         )
 
 
-class TransformersKwargs(FlashAttentionKwargs, TransformersKwargs): ...
-
-
 class MixtralForCausalLM(MistralForCausalLM):
     _tied_weights_keys = ["lm_head.weight"]
 

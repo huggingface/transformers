@@ -840,9 +840,6 @@ class InstructBlipVideoQFormerEmbeddings(nn.Module):
         return embeddings
 
 
-class TransformersKwargs(FlashAttentionKwargs, TransformersKwargs): ...
-
-
 @auto_docstring
 class InstructBlipVideoPreTrainedModel(PreTrainedModel):
     config_class = InstructBlipVideoConfig

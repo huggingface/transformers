@@ -799,9 +799,6 @@ class SmolVLMCausalLMOutputWithPast(ModelOutput):
     image_hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
-class TransformersKwargs(FlashAttentionKwargs, TransformersKwargs): ...
-
-
 @auto_docstring(
     custom_intro="""
     The SmolVLM Model with a language modeling head. It is made up a SigLIP vision encoder, with a language modeling head on top.

@@ -339,9 +339,6 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
         )
 
 
-class TransformersKwargs(FlashAttentionKwargs, TransformersKwargs): ...
-
-
 @auto_docstring(
     custom_intro="""
     The AYA_VISION model which consists of a vision backbone and a language model.

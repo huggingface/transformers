@@ -691,9 +691,6 @@ class BioGptModel(BioGptPreTrainedModel):
         )
 
 
-class TransformersKwargs(FlashAttentionKwargs, TransformersKwargs): ...
-
-
 @auto_docstring(
     custom_intro="""
     BioGPT Model with a `language modeling` head on top for CLM fine-tuning.

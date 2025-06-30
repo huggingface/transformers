@@ -805,9 +805,6 @@ class AriaTextModel(AriaTextPreTrainedModel):
         )
 
 
-class TransformersKwargs(FlashAttentionKwargs, TransformersKwargs): ...
-
-
 @auto_docstring
 class AriaTextForCausalLM(AriaTextPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]

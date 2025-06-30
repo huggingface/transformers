@@ -1329,9 +1329,6 @@ class AriaTextModel(LlamaModel):
         self.post_init()
 
 
-class TransformersKwargs(FlashAttentionKwargs, TransformersKwargs): ...
-
-
 class AriaTextForCausalLM(AriaTextPreTrainedModel, LlamaForCausalLM):
     _tied_weights_keys = ["lm_head.weight"]
 

@@ -393,9 +393,6 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         )
 
 
-class TransformersKwargs(FlashAttentionKwargs, TransformersKwargs): ...
-
-
 @auto_docstring(
     custom_intro="""
     The VideoLlava model which consists of a vision backbone and a language model.

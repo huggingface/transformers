@@ -321,9 +321,6 @@ class LlavaModel(LlavaPreTrainedModel):
         )
 
 
-class TransformersKwargs(FlashAttentionKwargs, TransformersKwargs): ...
-
-
 @auto_docstring(
     custom_intro="""
     The LLAVA model which consists of a vision backbone and a language model.

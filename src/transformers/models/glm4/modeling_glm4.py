@@ -279,9 +279,6 @@ class Glm4Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class TransformersKwargs(FlashAttentionKwargs, TransformersKwargs): ...
-
-
 @use_kernel_forward_from_hub("RMSNorm")
 class Glm4RMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):

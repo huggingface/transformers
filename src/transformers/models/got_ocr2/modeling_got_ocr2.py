@@ -691,9 +691,6 @@ class GotOcr2Model(GotOcr2PreTrainedModel):
         )
 
 
-class TransformersKwargs(FlashAttentionKwargs, TransformersKwargs): ...
-
-
 @auto_docstring(
     custom_intro="""
     The GOT_OCR2 model which consists of a vision backbone and a language model.

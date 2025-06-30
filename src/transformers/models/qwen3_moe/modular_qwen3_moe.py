@@ -225,9 +225,6 @@ class Qwen3MoeModel(MixtralModel):
         )
 
 
-class TransformersKwargs(FlashAttentionKwargs, TransformersKwargs): ...
-
-
 class Qwen3MoeForCausalLM(MixtralForCausalLM):
     def __init__(self, config):
         super().__init__(config)

@@ -519,9 +519,6 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         )
 
 
-class TransformersKwargs(FlashAttentionKwargs, TransformersKwargs): ...
-
-
 @auto_docstring(
     custom_intro="""
     GPTNeoX Model with a `language modeling` head on top for CLM fine-tuning.

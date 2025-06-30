@@ -100,9 +100,6 @@ class Glm4Attention(GlmAttention):
     pass
 
 
-class TransformersKwargs(FlashAttentionKwargs, TransformersKwargs): ...
-
-
 class Glm4ForCausalLM(GlmForCausalLM):
     def forward(
         self,

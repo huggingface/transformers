@@ -756,9 +756,6 @@ class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
         return outputs
 
 
-class TransformersKwargs(FlashAttentionKwargs, TransformersKwargs): ...
-
-
 @dataclass
 @auto_docstring(
     custom_intro="""

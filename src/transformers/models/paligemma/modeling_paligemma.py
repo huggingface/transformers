@@ -377,9 +377,6 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
         )
 
 
-class TransformersKwargs(FlashAttentionKwargs, TransformersKwargs): ...
-
-
 @auto_docstring(
     custom_intro="""
     The Base Paligemma model which consists of a vision backbone and a language model without language modeling head.,

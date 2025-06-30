@@ -995,7 +995,17 @@ def check_model_inputs(func):
 
         # TODO @Lysandre add the head we have today about GC and training
         # and all of the rest that is general transformers checking
-
+        # THIS PART :
+        # if self.gradient_checkpointing and self.training and use_cache:
+        #     logger.warning_once(
+        #         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
+        #     )
+        #     use_cache = False
+        #
+        # # TODO (joao): remove this exception in v4.56 -- it exists for users that try to pass a legacy cache
+        # if not isinstance(past_key_values, (type(None), Cache)):
+        #     raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
+        #
         hooks = []
         collected_outputs = defaultdict(list)
 

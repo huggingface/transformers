@@ -227,9 +227,6 @@ class GraniteModel(LlamaModel):
         )
 
 
-class TransformersKwargs(FlashAttentionKwargs, TransformersKwargs): ...
-
-
 class GraniteForCausalLM(LlamaForCausalLM):
     def forward(
         self,

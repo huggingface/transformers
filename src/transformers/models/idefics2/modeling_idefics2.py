@@ -1106,9 +1106,6 @@ class Idefics2Model(Idefics2PreTrainedModel):
         )
 
 
-class TransformersKwargs(FlashAttentionKwargs, TransformersKwargs): ...
-
-
 @auto_docstring(
     custom_intro="""
     The Idefics2 Model with a language modeling head. It is made up a SigLIP vision encoder, with a language modeling head on top.

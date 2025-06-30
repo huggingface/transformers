@@ -1177,9 +1177,6 @@ class ChameleonModel(ChameleonPreTrainedModel):
         return causal_mask
 
 
-class TransformersKwargs(FlashAttentionKwargs, TransformersKwargs): ...
-
-
 @auto_docstring(
     custom_intro="""
     Chameleon Model with a head on top used for outputting logits for next token prediction.

@@ -292,9 +292,6 @@ class CohereModel(LlamaModel):
         self.norm = CohereLayerNorm(hidden_size=(config.hidden_size), eps=config.layer_norm_eps)
 
 
-class TransformersKwargs(FlashAttentionKwargs, TransformersKwargs): ...
-
-
 class CohereForCausalLM(LlamaForCausalLM):
     def __init__(self, config):
         super().__init__(config)

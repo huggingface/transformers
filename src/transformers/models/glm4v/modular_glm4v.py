@@ -911,9 +911,6 @@ class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
         return outputs
 
 
-class TransformersKwargs(FlashAttentionKwargs, TransformersKwargs): ...
-
-
 class Glm4vModelOutputWithPast(Qwen2_5_VLModelOutputWithPast):
     pass
 

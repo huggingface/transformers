@@ -116,9 +116,6 @@ class Qwen3Model(Qwen2Model):
     pass
 
 
-class TransformersKwargs(FlashAttentionKwargs, TransformersKwargs): ...
-
-
 class Qwen3ForCausalLM(Qwen2ForCausalLM):
     def forward(
         self,

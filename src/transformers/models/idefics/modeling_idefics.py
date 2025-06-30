@@ -923,9 +923,6 @@ class IdeficsPreTrainedModel(PreTrainedModel):
             module.latents.data.normal_()
 
 
-class TransformersKwargs(FlashAttentionKwargs, TransformersKwargs): ...
-
-
 @auto_docstring
 class IdeficsModel(IdeficsPreTrainedModel):
     """

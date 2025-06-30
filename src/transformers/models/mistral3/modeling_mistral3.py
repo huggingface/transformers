@@ -357,9 +357,6 @@ class Mistral3Model(Mistral3PreTrainedModel):
         )
 
 
-class TransformersKwargs(FlashAttentionKwargs, TransformersKwargs): ...
-
-
 @auto_docstring(
     custom_intro="""
     The MISTRAL3 model which consists of a vision backbone and a language model.

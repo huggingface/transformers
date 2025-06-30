@@ -1459,9 +1459,6 @@ class MllamaTextModel(MllamaPreTrainedModel):
         )
 
 
-class TransformersKwargs(FlashAttentionKwargs, TransformersKwargs): ...
-
-
 @auto_docstring(
     custom_intro="""
     The Mllama Text Model with a language modeling head on top.

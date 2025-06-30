@@ -1182,9 +1182,6 @@ class InstructBlipQFormerModel(InstructBlipPreTrainedModel):
         )
 
 
-class TransformersKwargs(FlashAttentionKwargs, TransformersKwargs): ...
-
-
 @auto_docstring(
     custom_intro="""
     InstructBLIP base Model consisting of language model, qformer and vision encoder.
