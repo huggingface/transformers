@@ -29,7 +29,6 @@ from PIL import Image
 
 from transformers import (
     Sam2Config,
-    Sam2ImageEncoderConfig,
     Sam2ImageProcessorFast,
     Sam2MaskDecoderConfig,
     Sam2MemoryAttentionConfig,
@@ -38,24 +37,25 @@ from transformers import (
     Sam2Processor,
     Sam2PromptEncoderConfig,
     Sam2VideoProcessor,
+    Sam2VisionConfig,
 )
 
 
 def get_config(model_name):
     if "sam2.1_hiera_tiny" in model_name:
-        image_encoder_config = Sam2ImageEncoderConfig()
+        vision_config = Sam2VisionConfig()
         prompt_encoder_config = Sam2PromptEncoderConfig()
         mask_decoder_config = Sam2MaskDecoderConfig()
         memory_attention_config = Sam2MemoryAttentionConfig()
         memory_encoder_config = Sam2MemoryEncoderConfig()
     elif "sam2.1_hiera_small" in model_name:
-        image_encoder_config = Sam2ImageEncoderConfig(stages=(1, 2, 11, 2), global_attention_blocks=(7, 10, 13))
+        vision_config = Sam2VisionConfig(stages=(1, 2, 11, 2), global_attention_blocks=(7, 10, 13))
         prompt_encoder_config = Sam2PromptEncoderConfig()
         mask_decoder_config = Sam2MaskDecoderConfig()
         memory_attention_config = Sam2MemoryAttentionConfig()
         memory_encoder_config = Sam2MemoryEncoderConfig()
     elif "sam2.1_hiera_base_plus" in model_name:
-        image_encoder_config = Sam2ImageEncoderConfig(
+        vision_config = Sam2VisionConfig(
             hidden_size=112,
             num_heads=2,
             stages=(2, 3, 16, 3),
@@ -68,7 +68,7 @@ def get_config(model_name):
         memory_attention_config = Sam2MemoryAttentionConfig()
         memory_encoder_config = Sam2MemoryEncoderConfig()
     elif "sam2.1_hiera_large" in model_name:
-        image_encoder_config = Sam2ImageEncoderConfig(
+        vision_config = Sam2VisionConfig(
             hidden_size=144,
             num_heads=2,
             stages=(2, 6, 36, 4),
@@ -83,7 +83,7 @@ def get_config(model_name):
         memory_encoder_config = Sam2MemoryEncoderConfig()
 
     config = Sam2Config(
-        image_encoder_config=image_encoder_config,
+        vision_config=vision_config,
         prompt_encoder_config=prompt_encoder_config,
         mask_decoder_config=mask_decoder_config,
         memory_attention_config=memory_attention_config,
@@ -112,11 +112,11 @@ KEYS_TO_MODIFY_MAPPING = {
     "pe_layer.positional_encoding_gaussian_matrix": "shared_embedding.positional_embedding",
     "obj_ptr_tpos_proj": "temporal_positional_encoding_projection_layer",
     "no_obj_embed_spatial": "occlusion_spatial_embedding_parameter",
-    "vision_encoder": "image_encoder",
     "sam_prompt_encoder": "prompt_encoder",
     "sam_mask_decoder": "mask_decoder",
     "maskmem_tpos_enc": "memory_temporal_positional_encoding",
     "gamma": "scale",
+    "image_encoder": "vision_encoder",
     "neck.0": "neck.conv1",
     "neck.1": "neck.layer_norm1",
     "neck.2": "neck.conv2",
@@ -136,8 +136,8 @@ def replace_keys(state_dict):
     output_hypernetworks_mlps_pattern = r".*.output_hypernetworks_mlps.(\d+).layers.(\d+).*"
     output_mask_decoder_mlps_pattern = r"mask_decoder.transformer.layers.(\d+).mlp.layers.(\d+).*"
     output_mask_decoder_score_head_pattern = r"mask_decoder.pred_obj_score_head.layers.(\d+).*"
-    output_image_encoder_mlps_pattern = r"image_encoder.blocks.(\d+).mlp.layers.(\d+).*"
-    output_image_encoder_neck_pattern = r"image_encoder.neck.convs.(\d+).conv"
+    output_vision_encoder_mlps_pattern = r"vision_encoder.blocks.(\d+).mlp.layers.(\d+).*"
+    output_vision_encoder_neck_pattern = r"vision_encoder.neck.convs.(\d+).conv"
     output_memory_encoder_projection_pattern = r"memory_encoder.out_proj.*"
     output_object_pointer_proj_pattern = r"object_pointer_proj.layers.(\d+).*"
 
@@ -146,9 +146,9 @@ def replace_keys(state_dict):
             if key_to_modify in key:
                 key = key.replace(key_to_modify, new_key)
 
-        # image_encoder.blocks.0.mlp.layers.1.weight -> image_encoder.blocks.0.mlp.proj_out.weight
-        if re.match(output_image_encoder_mlps_pattern, key):
-            layer_nb = int(re.match(output_image_encoder_mlps_pattern, key).group(2))
+        # vision_encoder.blocks.0.mlp.layers.1.weight -> vision_encoder.blocks.0.mlp.proj_out.weight
+        if re.match(output_vision_encoder_mlps_pattern, key):
+            layer_nb = int(re.match(output_vision_encoder_mlps_pattern, key).group(2))
             if layer_nb == 0:
                 key = key.replace("layers.0", "proj_in")
             elif layer_nb == 1:
@@ -181,8 +181,8 @@ def replace_keys(state_dict):
             elif layer_nb == 2:
                 key = key.replace("layers.2", "proj_out")
 
-        # image_encoder.neck.convs.1.conv.bias -> image_encoder.neck.convs.1.bias
-        if re.match(output_image_encoder_neck_pattern, key):
+        # vision_encoder.neck.convs.1.conv.bias -> vision_encoder.neck.convs.1.bias
+        if re.match(output_vision_encoder_neck_pattern, key):
             key = key.replace(".conv.", ".")
 
         # memory_encoder.out_proj.weight -> memory_encoder.projection.weight
@@ -239,7 +239,7 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
 
         with torch.no_grad():
             output = hf_model(**inputs)
-        scores = output.ious.squeeze()
+        scores = output.iou_scores.squeeze()
 
         assert torch.allclose(scores, torch.tensor([0.0314, 0.9649, 0.1026]).cuda(), atol=1e-4)
     elif model_name == "sam2.1_hiera_small":
@@ -249,7 +249,7 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
 
         with torch.no_grad():
             output = hf_model(**inputs)
-        scores = output.ious.squeeze()
+        scores = output.iou_scores.squeeze()
         # [0.953125   0.15625    0.05175781]
         assert torch.allclose(scores, torch.tensor([0.9664, 0.1494, 0.0456]).cuda(), atol=1e-4)
     elif model_name == "sam2.1_hiera_base_plus":
@@ -259,7 +259,7 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
 
         with torch.no_grad():
             output = hf_model(**inputs)
-        scores = output.ious.squeeze()
+        scores = output.iou_scores.squeeze()
         # [0.0378418  0.9765625  0.12255859]
         assert torch.allclose(scores, torch.tensor([0.0361, 0.9775, 0.1308]).cuda(), atol=1e-4)
     elif model_name == "sam2.1_hiera_large":
@@ -269,7 +269,7 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
 
         with torch.no_grad():
             output = hf_model(**inputs)
-        scores = output.ious.squeeze()
+        scores = output.iou_scores.squeeze()
         # [0.96484375 0.03564453 0.1953125 ]
         assert torch.allclose(scores, torch.tensor([0.9648, 0.0371, 0.1899]).cuda(), atol=1e-4)
 

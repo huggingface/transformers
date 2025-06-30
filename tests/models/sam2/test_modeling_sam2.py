@@ -21,10 +21,11 @@ import requests
 
 from transformers import (
     Sam2Config,
-    Sam2ImageEncoderConfig,
     Sam2MaskDecoderConfig,
+    Sam2MemoryEncoderConfig,
     Sam2Processor,
     Sam2PromptEncoderConfig,
+    Sam2VisionConfig,
     pipeline,
 )
 from transformers.testing_utils import backend_empty_cache, require_torch, slow, torch_device
@@ -129,6 +130,103 @@ class Sam2MaskDecoderTester:
         return config, dummy_inputs
 
 
+class Sam2MemoryEncoderTester:
+    def __init__(
+        self,
+        hidden_size=32,
+        num_heads=1,
+        num_channels=3,
+        image_size=24,
+        patch_kernel_size=2,
+        patch_stride=2,
+        patch_padding=1,
+        drop_path_rate=0.0,
+        q_pool=3,
+        q_stride=(2, 2),
+        stages=(1, 2, 7, 2),
+        dim_mul=2.0,
+        head_mul=2.0,
+        window_positional_embedding_background_size=(7, 7),
+        window_spec=(8, 4, 14, 7),
+        global_attention_blocks=(5, 7, 9),
+        backbone_channel_list=[768, 384, 192, 96],
+        backbone_feature_sizes=[[256, 256], [128, 128], [64, 64]],
+        fpn_hidden_size=256,
+        fpn_kernel_size=1,
+        fpn_stride=1,
+        fpn_padding=0,
+        fpn_top_down_levels=[2, 3],
+        fpn_interpolation_mode="nearest",
+        num_feature_levels=3,
+        fuse_type="sum",
+        hidden_act="gelu",
+        layer_norm_eps=1e-6,
+    ):
+        self.hidden_size = hidden_size
+        self.num_heads = num_heads
+        self.num_channels = num_channels
+        self.image_size = image_size
+        self.patch_kernel_size = patch_kernel_size
+        self.patch_stride = patch_stride
+        self.patch_padding = patch_padding
+        self.drop_path_rate = drop_path_rate
+        self.q_pool = q_pool
+        self.q_stride = q_stride
+        self.stages = stages
+        self.dim_mul = dim_mul
+        self.head_mul = head_mul
+        self.window_positional_embedding_background_size = window_positional_embedding_background_size
+        self.window_spec = window_spec
+        self.global_attention_blocks = global_attention_blocks
+        self.backbone_channel_list = backbone_channel_list
+        self.backbone_feature_sizes = backbone_feature_sizes
+        self.fpn_hidden_size = fpn_hidden_size
+        self.fpn_kernel_size = fpn_kernel_size
+        self.fpn_stride = fpn_stride
+        self.fpn_padding = fpn_padding
+        self.fpn_top_down_levels = fpn_top_down_levels
+        self.fpn_interpolation_mode = fpn_interpolation_mode
+        self.num_feature_levels = num_feature_levels
+        self.fuse_type = fuse_type
+        self.hidden_act = hidden_act
+        self.layer_norm_eps = layer_norm_eps
+
+    def get_config(self):
+        return Sam2MemoryEncoderConfig(
+            hidden_size=self.hidden_size,
+            num_heads=self.num_heads,
+            num_channels=self.num_channels,
+            image_size=self.image_size,
+            patch_kernel_size=self.patch_kernel_size,
+            patch_stride=self.patch_stride,
+            patch_padding=self.patch_padding,
+            drop_path_rate=self.drop_path_rate,
+            q_pool=self.q_pool,
+            q_stride=self.q_stride,
+            stages=self.stages,
+            dim_mul=self.dim_mul,
+            head_mul=self.head_mul,
+            window_positional_embedding_background_size=self.window_positional_embedding_background_size,
+            window_spec=self.window_spec,
+            global_attention_blocks=self.global_attention_blocks,
+            backbone_channel_list=self.backbone_channel_list,
+            backbone_feature_sizes=self.backbone_feature_sizes,
+            fpn_hidden_size=self.fpn_hidden_size,
+            fpn_kernel_size=self.fpn_kernel_size,
+            fpn_stride=self.fpn_stride,
+            fpn_padding=self.fpn_padding,
+        )
+
+    def prepare_config_and_inputs(self):
+        config = self.get_config()
+
+        dummy_inputs = {
+            "image_embedding": floats_tensor([self.batch_size, self.hidden_size]),
+        }
+
+        return config, dummy_inputs
+
+
 class Sam2ModelTester:
     def __init__(
         self,
@@ -192,6 +290,7 @@ class Sam2ModelTester:
 
         self.prompt_encoder_tester = Sam2PromptEncoderTester()
         self.mask_decoder_tester = Sam2MaskDecoderTester()
+        self.memory_encoder_tester = Sam2MemoryEncoderTester()
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -200,7 +299,7 @@ class Sam2ModelTester:
         return config, pixel_values
 
     def get_config(self):
-        vision_config = Sam2ImageEncoderConfig(
+        vision_config = Sam2VisionConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -496,10 +595,10 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
 
         with torch.no_grad():
             outputs = self.model(**inputs)
-        self.assertEqual(outputs.ious.shape, (1, 1, 3))
+        self.assertEqual(outputs.iou_scores.shape, (1, 1, 3))
         self.assertEqual(outputs.low_res_masks.shape, (1, 1, 3, 256, 256))
-        sorted_indices = torch.argsort(outputs.ious.squeeze(), descending=True)
-        scores = outputs.ious.squeeze()[sorted_indices]
+        sorted_indices = torch.argsort(outputs.iou_scores.squeeze(), descending=True)
+        scores = outputs.iou_scores.squeeze()[sorted_indices]
         masks_logits = outputs.low_res_masks.squeeze()[sorted_indices][0, :3, :3]
 
         torch.testing.assert_close(
@@ -525,9 +624,9 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
 
         with torch.no_grad():
             outputs = self.model(**inputs, multimask_output=False)
-        self.assertEqual(outputs.ious.shape, (1, 1, 1))
+        self.assertEqual(outputs.iou_scores.shape, (1, 1, 1))
         self.assertEqual(outputs.low_res_masks.shape, (1, 1, 1, 256, 256))
-        scores = outputs.ious.squeeze((0, 1))
+        scores = outputs.iou_scores.squeeze((0, 1))
         masks_logits = outputs.low_res_masks.squeeze((0, 1))[0, :3, :3]
 
         torch.testing.assert_close(scores, torch.tensor([0.9366]).to(torch_device), atol=1e-4, rtol=1e-4)
@@ -588,14 +687,14 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
 
         with torch.no_grad():
             outputs = self.model(**inputs)
-        self.assertEqual(outputs.ious.shape, (2, 1, 3))
+        self.assertEqual(outputs.iou_scores.shape, (2, 1, 3))
         self.assertEqual(outputs.low_res_masks.shape, (2, 1, 3, 256, 256))
 
-        sorted_indices = torch.argsort(outputs.ious[0].squeeze(), descending=True)
-        scores1 = outputs.ious[0].squeeze()[sorted_indices]
+        sorted_indices = torch.argsort(outputs.iou_scores[0].squeeze(), descending=True)
+        scores1 = outputs.iou_scores[0].squeeze()[sorted_indices]
         masks_logits1 = outputs.low_res_masks[0].squeeze()[sorted_indices][0, :3, :3]
-        sorted_indices = torch.argsort(outputs.ious[1].squeeze(), descending=True)
-        scores2 = outputs.ious[1].squeeze()[sorted_indices]
+        sorted_indices = torch.argsort(outputs.iou_scores[1].squeeze(), descending=True)
+        scores2 = outputs.iou_scores[1].squeeze()[sorted_indices]
         masks_logits2 = outputs.low_res_masks[1].squeeze()[sorted_indices][0, :3, :3]
 
         torch.testing.assert_close(

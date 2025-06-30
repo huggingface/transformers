@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 SAM2 (Segment Anything Model 2) was proposed in [Segment Anything in Images and Videos](https://scontent-ssn1-1.xx.fbcdn.net/v/t39.2365-6/453323338_287900751050452_6064535069828837026_n.pdf?_nc_cat=107&ccb=1-7&_nc_sid=3c67a6&_nc_ohc=TnvI-AaGawoQ7kNvgEl0dlN&_nc_ht=scontent-ssn1-1.xx&gid=AX-dMq559vcArFkUSUxhQLn&oh=00_AYD10LO4L0BLTWS7vaKw_fnxjCb8G4q2cGjlCf1EDcfShQ&oe=66ADE939) by Nikhila Ravi, Valentin Gabeur, Yuan-Ting Hu, Ronghang Hu, Chaitanya Ryali, Tengyu Ma, Haitham Khedr, Roman Rädle, Chloe Rolland, Laura Gustafson, Eric Mintun, Junting Pan, Kalyan Vasudev Alwala, Nicolas Carion, Chao-Yuan Wu, Ross Girshick, Piotr Dollár, Christoph Feichtenhofer.
 
-The model can be used to predict segmentation masks of any object of interest given an input image. 
+The model can be used to predict segmentation masks of any object of interest given an input image.
 
 ![example image](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-output.png)
 
@@ -32,9 +32,9 @@ Tips:
 
 - The model predicts binary masks that states the presence or not of the object of interest given an image.
 - The model predicts much better results if input 2D points and/or input bounding boxes are provided
-- You can prompt multiple points for the same image, and predict a single mask. 
+- You can prompt multiple points for the same image, and predict a single mask.
 - Fine-tuning the model is not supported yet
-- According to the paper, textual input should be also supported. However, at this time of writing this seems to be not supported according to [the official repository](https://github.com/facebookresearch/segment-anything/issues/4#issuecomment-1497626844). 
+- According to the paper, textual input should be also supported. However, at this time of writing this seems to be not supported according to [the official repository](https://github.com/facebookresearch/segment-anything/issues/4#issuecomment-1497626844).
 
 
 This model was contributed by [sangbumchoi](https://github.com/SangbumChoi).
@@ -107,9 +107,9 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] Sam2Config
 
-## Sam2ImageEncoderConfig
+## Sam2VisionConfig
 
-[[autodoc]] Sam2ImageEncoderConfig
+[[autodoc]] Sam2VisionConfig
 
 ## Sam2MaskDecoderConfig
 
