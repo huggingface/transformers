@@ -5837,8 +5837,13 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
         else None
     )
     total_byte_count = defaultdict(lambda: 0)
+    tied_param_names = _get_tied_weight_keys(model)
     for param_name, device in accelerator_device_map.items():
         param = model.get_parameter_or_buffer(param_name)
+        # Skip if the parameter has already been accounted for (tied weights)
+        if param_name in tied_param_names:
+            continue
+
         # The dtype of different parameters may be different with composite models or `keep_in_fp32_modules`
         param_byte_count = param.numel() * param.element_size()
 
