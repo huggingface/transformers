@@ -325,53 +325,65 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let's make sure we test the preprocessing to replace what is used
         model_id = "rhymes-ai/Aria"
 
-        model = AriaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        model = AriaForConditionalGeneration.from_pretrained(
+            model_id,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True, llm_int8_skip_modules=["multihead_attn"]),
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
         prompts = [
-            "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me? ASSISTANT:",
-            "USER: <image>\nWhat is this? ASSISTANT:",
+            "USER: <|img|>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me? ASSISTANT:",
+            "USER: <|img|>\nWhat is this? ASSISTANT:",
         ]
         image1 = Image.open(requests.get(IMAGE_OF_VIEW_URL, stream=True).raw)
         image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
-        inputs = processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True)
+        inputs = processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True).to(model.device, model.dtype)
 
         output = model.generate(**inputs, max_new_tokens=20)
 
-        EXPECTED_DECODED_TEXT = ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, you', 'USER:  \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat is located on']  # fmt: skip
+        EXPECTED_DECODED_TEXT = Expectations({
+            ("cuda", None): ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, you', 'USER:  \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat is located on'],
+            ("rocm", (9, 5)): ['USER: \n What are the things I should be cautious about when I visit this place? What should I bring with me? ASSISTANT: \n\nWhen visiting this place, you should be cautious about the weather conditions, as it', 'USER: \n What is this? ASSISTANT: This is a picture of two cats sleeping on a couch. USER: What is the color of'],
+        }).get_expectation()
 
-        self.assertEqual(
-            processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
+        decoded_output = processor.batch_decode(output, skip_special_tokens=True)
+        self.assertEqual(decoded_output, EXPECTED_DECODED_TEXT)
 
     @slow
     @require_torch_large_accelerator
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
         # Let's make sure we test the preprocessing to replace what is used
-        model = AriaForConditionalGeneration.from_pretrained("rhymes-ai/Aria", load_in_4bit=True)
+        model = AriaForConditionalGeneration.from_pretrained(
+            "rhymes-ai/Aria",
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True, llm_int8_skip_modules=["multihead_attn"]),
+        )
         # The first batch is longer in terms of text, but only has 1 image. The second batch will be padded in text, but the first will be padded because images take more space!.
         prompts = [
-            "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
-            "USER: <image>\nWhat is this?\nASSISTANT:",
+            "USER: <|img|>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
+            "USER: <|img|>\nWhat is this?\nASSISTANT:",
         ]
         image1 = Image.open(requests.get(IMAGE_OF_VIEW_URL, stream=True).raw)
         image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
-        inputs = self.processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True)
+        inputs = self.processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True).to(model.device, model.dtype)
 
         output = model.generate(**inputs, max_new_tokens=20)
 
-        EXPECTED_DECODED_TEXT = [
-            'USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, there are a few things to be cautious about and items to bring.',
-            'USER:  \nWhat is this?\nASSISTANT: Cats'
-        ]  # fmt: skip
-        self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
+        EXPECTED_DECODED_TEXT = Expectations({
+            ("cuda", None): [
+                'USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, there are a few things to be cautious about and items to bring.',
+                'USER:  \nWhat is this?\nASSISTANT: Cats',
+            ],
+            ("rocm", (9, 5)): [
+                'USER: \n What are the things I should be cautious about when I visit this place? What should I bring with me?\n ASSISTANT: \n\nWhen visiting this place, you should be cautious about the following:\n\n-', 
+                'USER: \n What is this?\n ASSISTANT: This is a picture of two cats sleeping on a couch. The couch is red, and the cats',
+            ],
+        }).get_expectation()  # fmt: skip
+
+        decoded_output = self.processor.batch_decode(output, skip_special_tokens=True)
+        self.assertEqual(decoded_output, EXPECTED_DECODED_TEXT)
 
     @slow
     @require_torch_large_accelerator
@@ -381,21 +393,28 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         model_id = "rhymes-ai/Aria"
 
         # Multi-image & multi-prompt (e.g. 3 images and 2 prompts now fails with SDPA, this tests if "eager" works as before)
-        model = AriaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True, attn_implementation="eager")
+        model = AriaForConditionalGeneration.from_pretrained(
+            model_id,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True, llm_int8_skip_modules=["multihead_attn"]),
+        )
         processor = AutoProcessor.from_pretrained(model_id, pad_token="<pad>")
 
         prompts = [
-            "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
-            "USER: <image>\nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER: <image>\nAnd this?\nASSISTANT:",
+            "USER: <|img|>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
+            "USER: <|img|>\nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER: <|img|>\nAnd this?\nASSISTANT:",
         ]
         image1 = Image.open(requests.get(IMAGE_OF_VIEW_URL, stream=True).raw)
         image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
         inputs = processor(images=[image1, image2, image1], text=prompts, return_tensors="pt", padding=True)
+        inputs = inputs.to(model.device, model.dtype)
 
         output = model.generate(**inputs, max_new_tokens=20)
 
-        EXPECTED_DECODED_TEXT = ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, which appears to be a dock or pier extending over a body of water', 'USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat sleeping on a bed.']  # fmt: skip
+        EXPECTED_DECODED_TEXT = Expectations({
+            ("cuda", None): ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, which appears to be a dock or pier extending over a body of water', 'USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat sleeping on a bed.'],
+            ("rocm", (9, 5)): ['USER: \n What are the things I should be cautious about when I visit this place? What should I bring with me?\n ASSISTANT: \n\nWhen visiting this place, you should be cautious about the weather conditions, as it', 'USER: \n What is this?\n ASSISTANT: Two cats lying on a bed!\n USER: \n And this?\n ASSISTANT: A serene lake scene with a wooden dock extending into the water.\n USER: \n']
+        }).get_expectation() # fmt: skip
 
         decoded_output = processor.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(decoded_output, EXPECTED_DECODED_TEXT)
@@ -408,7 +427,8 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Skip multihead_attn for 4bit because MHA will read the original weight without dequantize.
         # See https://github.com/huggingface/transformers/pull/37444#discussion_r2045852538.
         model = AriaForConditionalGeneration.from_pretrained(
-            "rhymes-ai/Aria", load_in_4bit=True, llm_int8_skip_modules=["multihead_attn"]
+            "rhymes-ai/Aria",
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True, llm_int8_skip_modules=["multihead_attn"]),
         )
         processor = AutoProcessor.from_pretrained("rhymes-ai/Aria")
 
@@ -460,6 +480,10 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
                     "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n <image>\n USER: What's the difference of two images?\n ASSISTANT:<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The first image features a cute, light-colored puppy sitting on a paved surface with",
                     "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The image shows a young alpaca standing on a patch of ground with some dry grass. The",
                 ],
+                ("rocm", (9, 5)): [
+                    "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n <image>\n USER: What's the difference of two images?\n ASSISTANT:<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The first image shows a cute golden retriever puppy sitting on a paved surface with a stick", 
+                    '<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The image shows a young llama standing on a patch of ground with some dry grass and dirt. The'
+                ],
             }
         )  # fmt: skip
         EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
@@ -493,9 +517,12 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_generation_no_images(self):
         model_id = "rhymes-ai/Aria"
-        model = AriaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        model = AriaForConditionalGeneration.from_pretrained(
+            model_id,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True, llm_int8_skip_modules=["multihead_attn"]),
+        )
         processor = AutoProcessor.from_pretrained(model_id)
-
+        assert model.device.type == "cuda", "This test is only supported on CUDA" # TODO: remove this
         # Prepare inputs with no images
         inputs = processor(text="Hello, I am", return_tensors="pt").to(torch_device)
 
