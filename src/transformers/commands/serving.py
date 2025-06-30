@@ -202,7 +202,7 @@ class ServeArguments:
     use_bnb_nested_quant: bool = field(default=False, metadata={"help": "Whether to use nested quantization."})
 
     # Serving settings
-    host: str = field(default="localhost", metadata={"help": "Interface the server will listen to.."})
+    host: str = field(default="localhost", metadata={"help": "Interface the server will listen to."})
     port: int = field(default=8000, metadata={"help": "Port the server will listen to."})
 
     # Other settings
