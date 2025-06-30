@@ -2185,7 +2185,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     added_tokens_decoder[int(idx)] = token
                     added_tokens_map[str(token)] = token
                 else:
-                    raise ValueError(
+                    raise TypeError(
                         f"Found a {token.__class__} in the saved `added_tokens_decoder`, should be a dictionary or an AddedToken instance"
                     )
         else:

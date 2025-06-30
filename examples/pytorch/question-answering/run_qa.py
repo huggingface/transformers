@@ -356,7 +356,7 @@ def main():
 
     # Tokenizer check: this script requires a fast tokenizer.
     if not isinstance(tokenizer, PreTrainedTokenizerFast):
-        raise ValueError(
+        raise TypeError(
             "This example script only works for models that have a fast tokenizer. Check out the big table of models at"
             " https://huggingface.co/transformers/index.html#supported-frameworks to find the model types that meet"
             " this requirement"
@@ -367,8 +367,6 @@ def main():
     if training_args.do_train:
         column_names = raw_datasets["train"].column_names
     elif training_args.do_eval:
-        column_names = raw_datasets["validation"].column_names
-    else:
         column_names = raw_datasets["test"].column_names
     question_column_name = "question" if "question" in column_names else column_names[0]
     context_column_name = "context" if "context" in column_names else column_names[1]

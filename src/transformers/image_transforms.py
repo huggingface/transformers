@@ -416,7 +416,7 @@ def normalize(
             The channel dimension format of the input image. If unset, will use the inferred format from the input.
     """
     if not isinstance(image, np.ndarray):
-        raise ValueError("image must be a numpy array")
+        raise TypeError("image must be a numpy array")
 
     if input_data_format is None:
         input_data_format = infer_channel_dimension_format(image)
