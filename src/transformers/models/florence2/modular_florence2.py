@@ -23,32 +23,204 @@ import torch.nn.functional as F
 from transformers.activations import ACT2FN
 
 from ...cache_utils import Cache
+from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import Seq2SeqLMOutput
 from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import (
+    LossKwargs,
     auto_docstring,
     can_return_tuple,
     logging,
 )
-from ..bart.modeling_bart import (
-    BartDecoder,
-    BartDecoderLayer,
-    BartEncoder,
-    BartEncoderLayer,
-    BartForConditionalGeneration,
-    BartModel,
-    BartPreTrainedModel,
-    BartScaledWordEmbedding,
-)
+from ..auto import CONFIG_MAPPING, AutoConfig, AutoModelForSeq2SeqLM
 from ..beit.modeling_beit import BeitDropPath
 from ..detr.modeling_detr import DetrLearnedPositionEmbedding
-from .configuration_florence2 import Florence2Config, Florence2LanguageConfig, Florence2VisionConfig
 
-
-_CHECKPOINT_FOR_DOC = "microsoft/Florence-2-large"
 
 logger = logging.get_logger(__name__)
+
+
+class Florence2VisionConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`Florence2VisionModel`]. It is used to instantiate a Florence2VisionModel
+    according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the Florence2VisionModel architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        in_channels (`int`, *optional*, defaults to 3):
+            Number of input image channels.
+        depths (`Tuple[int]`, *optional*, defaults to `(1, 1, 9, 1)`):
+            The depth of the model.
+        patch_size (`Tuple[int]`, *optional*, defaults to `(7, 3, 3, 3)`):
+            The patch size of the image.
+        patch_stride (`Tuple[int]`, *optional*, defaults to `(4, 2, 2, 2)`):
+            The patch stride of the image.
+        patch_padding (`Tuple[int]`, *optional*, defaults to `(3, 1, 1, 1)`):
+            The patch padding of the image.
+        patch_prenorm (`Tuple[bool]`, *optional*, defaults to `(False, True, True, True)`):
+            Whether to apply layer normalization before the patch embedding layer.
+        embed_dim (`Tuple[int]`, *optional*, defaults to `(128, 256, 512, 1024)`):
+            The dimension of the embedding layer.
+        num_heads (`Tuple[int]`, *optional*, defaults to `(4, 8, 16, 32)`):
+            The number of attention heads.
+        num_groups (`Tuple[int]`, *optional*, defaults to `(4, 8, 16, 32)`):
+            The number of groups.
+        window_size (`int`, *optional*, defaults to 12):
+            The window size of the model.
+        drop_path_rate (`float`, *optional*, defaults to 0.1):
+            The dropout rate of the drop path layer.
+        mlp_ratio (`int`, *optional*, defaults to 4.0):
+            Ratio of mlp hidden dim to embedding dim.
+        qkv_bias (`bool`, *optional*, defaults to `True`):
+            If True, add a learnable bias to query, key, value.
+        activation_function (`str` or `function`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"silu"` and `"gelu_new"` are supported.
+        projection_dim (`int`, *optional*, defaults to 1024):
+            The dimension of the projection layer.
+        max_temporal_embeddings (`int`, *optional*, defaults to 100):
+            The configuration of the visual temporal embedding.
+        max_position_embeddings (`int`, *optional*, defaults to 50):
+            The configuration of the image position embedding.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+    Example:
+
+    ```python
+    >>> from transformers import Florence2VisionConfig, Florence2VisionModel
+
+    >>> # Initializing a Florence2 Vision style configuration
+    >>> configuration = Florence2VisionConfig()
+
+    >>> # Initializing a model (with random weights)
+    >>> model = Florence2VisionModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "florence_vision"
+
+    def __init__(
+        self,
+        in_channels=3,
+        depths=(1, 1, 9, 1),
+        patch_size=(7, 3, 3, 3),
+        patch_stride=(4, 2, 2, 2),
+        patch_padding=(3, 1, 1, 1),
+        patch_prenorm=(False, True, True, True),
+        embed_dim=(128, 256, 512, 1024),
+        num_heads=(4, 8, 16, 32),
+        num_groups=(4, 8, 16, 32),
+        window_size=12,
+        drop_path_rate=0.1,
+        mlp_ratio=4.0,
+        qkv_bias=True,
+        activation_function="gelu",
+        projection_dim=1024,
+        max_temporal_embeddings=100,
+        max_position_embeddings=50,
+        initializer_range=0.02,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+
+        self.in_channels = in_channels
+        self.depths = depths
+        self.patch_size = patch_size
+        self.patch_stride = patch_stride
+        self.patch_padding = patch_padding
+        self.patch_prenorm = patch_prenorm
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.num_groups = num_groups
+        self.window_size = window_size
+        self.drop_path_rate = drop_path_rate
+        self.mlp_ratio = mlp_ratio
+        self.qkv_bias = qkv_bias
+        self.projection_dim = projection_dim
+        self.max_temporal_embeddings = max_temporal_embeddings
+        self.max_position_embeddings = max_position_embeddings
+        self.initializer_range = initializer_range
+        self.activation_function = activation_function
+
+
+class Florence2Config(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`Florence2ForConditionalGeneration`]. It is used to instantiate an
+    Florence-2 model according to the specified arguments, defining the model architecture.
+
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the Florence-2
+    [microsoft/Florence-2-base](https://huggingface.co/microsoft/Florence-2-base) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        text_config (`dict`, *optional*):
+            Dictionary of configuration options used to initialize [`Florence2LanguageConfig`].
+        vision_config (`dict`, *optional*):
+            Dictionary of configuration options used to initialize [`Florence2VisionConfig`].
+
+    Example:
+
+    ```python
+    >>> from transformers import Florence2ForConditionalGeneration, Florence2Config, CLIPVisionConfig, BartConfig
+
+    >>> # Initializing a clip-like vision config
+    >>> vision_config = CLIPVisionConfig()
+
+    >>> # Initializing a Bart config
+    >>> text_config = BartConfig()
+
+    >>> # Initializing a Florence-2 configuration
+    >>> configuration = Florence2Config(vision_config, text_config)
+
+    >>> # Initializing a model from the florence-2 configuration
+    >>> model = Florence2ForConditionalGeneration(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "florence2"
+    sub_configs = {
+        "text_config": AutoConfig,
+        "vision_config": Florence2VisionConfig,
+    }
+
+    def __init__(
+        self,
+        text_config=None,
+        vision_config=None,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+
+        if isinstance(text_config, dict):
+            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "bart"
+            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
+        elif text_config is None:
+            text_config = CONFIG_MAPPING["bart"]()
+
+        if isinstance(vision_config, dict):
+            vision_config = Florence2VisionConfig(**vision_config)
+        elif vision_config is None:
+            logger.info("vision_config is None. Initializing the Florence2VisionConfig with default values.")
+            vision_config = Florence2VisionConfig()
+
+        self.text_config = text_config
+        self.vision_config = vision_config
+
+        self.vocab_size = self.text_config.vocab_size
+        self.is_encoder_decoder = self.text_config.is_encoder_decoder
+        self.projection_dim = self.vision_config.projection_dim
 
 
 class Florence2VisionDropPath(BeitDropPath):
@@ -551,74 +723,41 @@ class Florence2VisionBackbone(Florence2VisionPreTrainedModel):
     def dim_out(self):
         return self.embed_dim[-1]
 
-    def forward_features_unpool(self, hidden_states: torch.Tensor):
+    def forward(self, hidden_states: torch.Tensor):
         for conv, block in zip(self.convs, self.blocks):
             hidden_states = conv(hidden_states)
             for layer in block:
                 hidden_states = layer(hidden_states)
         return hidden_states
 
-    def forward(self, hidden_states: torch.Tensor):
-        hidden_states = self.forward_features_unpool(hidden_states)
-        hidden_states = hidden_states.permute(0, 2, 3, 1).reshape(1, -1, 1024)
-        return hidden_states
 
+class Florence2VisionProjector(nn.Module):
+    def __init__(self, config: Florence2VisionConfig):
+        super().__init__()
+        self.vision_embedding_dim = config.embed_dim[-1]
+        self.vision_projection_dim = config.projection_dim
+        self.image_projection = nn.Linear(self.vision_embedding_dim, self.vision_projection_dim, bias=False)
+        self.image_proj_norm = nn.LayerNorm(self.vision_projection_dim)
+        self.image_position_embed = Florence2VisionLearnedAbsolutePositionEmbedding2D(
+            embedding_dim=self.vision_embedding_dim, num_pos=config.max_position_embeddings
+        )
+        self.visual_temporal_embed = Florence2VisionPositionalEmbeddingCosine1D(
+            embed_dim=self.vision_embedding_dim, max_seq_len=config.max_temporal_embeddings
+        )
 
-class Florence2LanguageScaledWordEmbedding(BartScaledWordEmbedding):
-    pass
-
-
-class Florence2LanguageEncoderLayer(BartEncoderLayer):
-    pass
-
-
-class Florence2LanguageDecoderLayer(BartDecoderLayer):
-    pass
-
-
-@auto_docstring
-class Florence2LanguagePreTrainedModel(BartPreTrainedModel):
-    config_class = Florence2LanguageConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_unexpected = ["encoder.version", "decoder.version"]
-    _no_split_modules = [r"Florence2LanguageEncoderLayer", r"Florence2LanguageDecoderLayer"]
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_static_cache = True
-
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-
-
-class Florence2LanguageEncoder(BartEncoder):
-    pass
-
-
-class Florence2LanguageDecoder(BartDecoder):
-    pass
-
-
-class Florence2LanguageModel(BartModel):
-    pass
-
-
-class Florence2LanguageForConditionalGeneration(BartForConditionalGeneration, GenerationMixin):
-    pass
+    def forward(self, image_features):
+        position_features = image_features + self.image_position_embed(image_features)
+        position_features = position_features.flatten(2).transpose(1, 2)
+        temporal_features = self.visual_temporal_embed(position_features[:, :, 0])
+        temporal_features = temporal_features.unsqueeze(1)
+        visual_token_features = position_features + temporal_features
+        visual_token_features = visual_token_features.unsqueeze(1)
+        spatial_image_features = visual_token_features.mean(dim=2)
+        temporal_image_features = visual_token_features.mean(dim=1)
+        image_features = torch.cat([spatial_image_features, temporal_image_features], dim=1)
+        image_features = self.image_projection(image_features)
+        image_features = self.image_proj_norm(image_features)
+        return image_features
 
 
 @dataclass
@@ -629,17 +768,20 @@ class Florence2LanguageForConditionalGeneration(BartForConditionalGeneration, Ge
     """
 )
 class Florence2Seq2SeqLMOutput(Seq2SeqLMOutput):
-    """
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        image_hidden_states (`torch.FloatTensor`, *optional*):
-            Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size,
-            num_image_tokens, hidden_size)`.
-            image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
 
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    image_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_image_tokens, hidden_size)`.
+        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
     image_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
@@ -661,10 +803,8 @@ class Florence2PreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.Embedding, nn.LayerNorm]) -> None:
-        std = self.config.text_config.initializer_range
-        if isinstance(module, Florence2ForConditionalGeneration):
-            nn.init.normal_(module.image_projection, mean=0.0, std=std)
-        elif isinstance(module, (nn.Linear, nn.Conv2d)):
+        std = self.config.vision_config.initializer_range
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -675,6 +815,9 @@ class Florence2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.weight.data.fill_(1.0)
             module.bias.data.zero_()
+
+
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 @auto_docstring(
@@ -694,28 +837,15 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         self.vocab_size = config.vocab_size
 
         self.vision_tower = Florence2VisionBackbone(config=config.vision_config)
-        self.vision_embedding_dim = config.vision_config.embed_dim[-1]
-        self.vision_projection_dim = config.vision_config.projection_dim
-        self.image_projection = nn.Parameter(torch.ones(self.vision_embedding_dim, self.vision_projection_dim))
-        self.image_proj_norm = nn.LayerNorm(self.vision_projection_dim)
+        self.vision_projector = Florence2VisionProjector(config=config.vision_config)
+        self.language_model = AutoModelForSeq2SeqLM.from_config(config=config.text_config)
 
-        self.image_position_embed = Florence2VisionLearnedAbsolutePositionEmbedding2D(
-            embedding_dim=self.vision_embedding_dim, num_pos=config.vision_config.max_position_embeddings
-        )
-
-        self.visual_temporal_embed = Florence2VisionPositionalEmbeddingCosine1D(
-            embed_dim=self.vision_embedding_dim, max_seq_len=config.vision_config.max_temporal_embeddings
-        )
-
-        self.language_model = Florence2LanguageForConditionalGeneration(config=config.text_config)
-
-        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
 
-    def get_encoder(self) -> Florence2LanguageEncoder:
+    def get_encoder(self):
         return self.language_model.get_encoder()
 
-    def get_decoder(self) -> Florence2LanguageDecoder:
+    def get_decoder(self):
         return self.language_model.get_decoder()
 
     def set_input_embeddings(self, value: nn.Module) -> None:
@@ -738,45 +868,10 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         return model_embeds
 
     @auto_docstring
-    def get_image_features(self, pixel_values: torch.Tensor):
-        vision_features = self.vision_tower.forward_features_unpool(pixel_values)
-        position_features = vision_features + self.image_position_embed(vision_features)
-        position_features = position_features.flatten(2).transpose(1, 2)
-        temporal_features = self.visual_temporal_embed(position_features[:, :, 0])
-        temporal_features = temporal_features.unsqueeze(1)
-        visual_token_features = position_features + temporal_features
-        visual_token_features = visual_token_features.unsqueeze(1)
-        spatial_image_features = visual_token_features.mean(dim=2)
-        temporal_image_features = visual_token_features.mean(dim=1)
-        image_features = torch.cat([spatial_image_features, temporal_image_features], dim=1)
-        image_features = image_features @ self.image_projection
-        image_features = self.image_proj_norm(image_features)
-        return image_features
-
-    def _merge_input_ids_with_image_features(
-        self,
-        image_features: torch.Tensor,
-        inputs_embeds: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-    ):
-        batch_size, image_token_length = image_features.size()[:-1]
-        device = image_features.device
-        image_attention_mask = torch.ones(batch_size, image_token_length, device=device)
-
-        # task_prefix_embeds: [batch_size, padded_context_length, hidden_size]
-        # task_prefix_attention_mask: [batch_size, context_length]
-        if inputs_embeds is None:
-            return image_features, image_attention_mask
-
-        task_prefix_embeds = inputs_embeds
-        if attention_mask is None:
-            attention_mask = torch.ones(batch_size, task_prefix_embeds.size(1), device=device)
-
-        # concat [image embeds, task prefix embeds]
-        inputs_embeds = torch.cat([image_features, task_prefix_embeds], dim=1)
-        attention_mask = torch.cat([image_attention_mask, attention_mask], dim=1)
-
-        return inputs_embeds, attention_mask
+    def get_image_features(self, pixel_values: torch.Tensor, **kwargs):
+        image_features = self.vision_tower(pixel_values, **kwargs)
+        image_embeds = self.vision_projector(image_features)
+        return image_embeds
 
     @can_return_tuple
     @auto_docstring
@@ -793,8 +888,9 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs,
+        **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[tuple, Florence2Seq2SeqLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -827,18 +923,20 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        image_features = None
         if inputs_embeds is None:
-            # 1. Extra the input embeddings
-            if input_ids is not None:
-                inputs_embeds = self.get_input_embeddings()(input_ids)
-            # 2. Merge text and images
-            if pixel_values is not None:
-                image_features = self.get_image_features(pixel_values)
-                inputs_embeds, attention_mask = self._merge_input_ids_with_image_features(
-                    image_features, inputs_embeds, attention_mask
-                )
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        if attention_mask is None:
+            attention_mask = torch.ones(inputs_embeds.size()[:-1], dtype=torch.long, device=inputs_embeds.device)
+
+        image_embeds = None
+        if pixel_values is not None:
+            image_embeds = self.get_image_features(pixel_values)
+            image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
+            inputs_embeds = torch.cat([image_embeds, inputs_embeds], dim=1)
+            attention_mask = torch.cat([image_attention_mask, attention_mask], dim=1)
 
         outputs = self.language_model(
             attention_mask=attention_mask,
@@ -854,15 +952,9 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
             **kwargs,
         )
 
-        loss = None
-        logits = outputs.logits
-        if labels is not None:
-            loss = outputs.loss
-            logits = logits.float()
-
         return Florence2Seq2SeqLMOutput(
-            loss=loss,
-            logits=logits,
+            loss=outputs.loss,
+            logits=outputs.logits,
             past_key_values=outputs.past_key_values,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
@@ -870,44 +962,41 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
-            image_hidden_states=image_features,
+            image_hidden_states=image_embeds,
         )
 
     def generate(
         self,
-        input_ids: torch.Tensor,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        pixel_values: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ):
         if inputs_embeds is None:
-            # 1. Extra the input embeddings
-            if input_ids is not None:
-                inputs_embeds = self.get_input_embeddings()(input_ids)
-            # 2. Merge text and images
-            if pixel_values is not None:
-                image_features = self.get_image_features(pixel_values)
-                inputs_embeds, attention_mask = self._merge_input_ids_with_image_features(
-                    image_features, inputs_embeds, attention_mask
-                )
+            inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        return self.language_model.generate(
-            input_ids=None, inputs_embeds=inputs_embeds, attention_mask=attention_mask, **kwargs
-        )
+        if attention_mask is None:
+            attention_mask = torch.ones_like(input_ids, dtype=torch.long, device=inputs_embeds.device)
+
+        if pixel_values is not None:
+            image_features = self.get_image_features(pixel_values)
+            image_attention_mask = torch.ones(
+                image_features.size()[:-1], dtype=torch.long, device=image_features.device
+            )
+            inputs_embeds = torch.cat([image_features, inputs_embeds], dim=1)
+            attention_mask = torch.cat([image_attention_mask, attention_mask], dim=1)
+
+        return self.language_model.generate(input_ids=None, inputs_embeds=inputs_embeds, **kwargs)
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return self.language_model.shift_tokens_right(labels)
 
-    def _reorder_cache(self, *args, **kwargs):
-        return self.language_model._reorder_cache(*args, **kwargs)
-
 
 __all__ = [
+    "Florence2Config",
+    "Florence2VisionConfig",
     "Florence2ForConditionalGeneration",
-    "Florence2LanguageForConditionalGeneration",
-    "Florence2LanguageModel",
-    "Florence2LanguagePreTrainedModel",
     "Florence2PreTrainedModel",
     "Florence2VisionBackbone",
     "Florence2VisionPreTrainedModel",

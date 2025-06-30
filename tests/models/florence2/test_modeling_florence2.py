@@ -22,8 +22,6 @@ from transformers import (
     AutoProcessor,
     Florence2Config,
     Florence2ForConditionalGeneration,
-    Florence2LanguageConfig,
-    Florence2VisionConfig,
     is_torch_available,
     is_vision_available,
 )
@@ -123,39 +121,40 @@ class Florence2VisionText2TextModelTester:
         self.projection_dim = projection_dim
 
     def get_config(self):
-        text_config = Florence2LanguageConfig(
-            vocab_size=self.vocab_size,
-            max_position_embeddings=self.max_position_embeddings,
-            encoder_layers=self.encoder_layers,
-            encoder_ffn_dim=self.encoder_ffn_dim,
-            encoder_attention_heads=self.num_attention_heads,
-            decoder_layers=self.decoder_layers,
-            decoder_ffn_dim=self.decoder_ffn_dim,
-            decoder_attention_heads=self.num_attention_heads,
-            d_model=self.d_model,
-            activation_function=self.activation_function,
-            dropout=self.dropout,
-            attention_dropout=self.dropout,
-            activation_dropout=self.dropout,
-            eos_token_id=self.eos_token_id,
-            bos_token_id=self.bos_token_id,
-            pad_token_id=self.pad_token_id,
-        )
+        text_config = {
+            "model_type": "bart",
+            "vocab_size": self.vocab_size,
+            "max_position_embeddings": self.max_position_embeddings,
+            "encoder_layers": self.encoder_layers,
+            "encoder_ffn_dim": self.encoder_ffn_dim,
+            "encoder_attention_heads": self.num_attention_heads,
+            "decoder_layers": self.decoder_layers,
+            "decoder_ffn_dim": self.decoder_ffn_dim,
+            "decoder_attention_heads": self.num_attention_heads,
+            "d_model": self.d_model,
+            "activation_function": self.activation_function,
+            "dropout": self.dropout,
+            "attention_dropout": self.dropout,
+            "activation_dropout": self.dropout,
+            "eos_token_id": self.eos_token_id,
+            "bos_token_id": self.bos_token_id,
+            "pad_token_id": self.pad_token_id,
+        }
 
-        vision_config = Florence2VisionConfig(
-            drop_path_rate=self.drop_path_rate,
-            patch_size=self.patch_size,
-            depths=self.depths,
-            patch_stride=self.patch_stride,
-            patch_padding=self.patch_padding,
-            patch_prenorm=self.patch_prenorm,
-            embed_dim=self.embed_dim,
-            num_heads=self.num_heads,
-            num_groups=self.num_groups,
-            window_size=self.window_size,
-            activation_function=self.activation_function,
-            projection_dim=self.projection_dim,
-        )
+        vision_config = {
+            "drop_path_rate": self.drop_path_rate,
+            "patch_size": self.patch_size,
+            "depths": self.depths,
+            "patch_stride": self.patch_stride,
+            "patch_padding": self.patch_padding,
+            "patch_prenorm": self.patch_prenorm,
+            "embed_dim": self.embed_dim,
+            "num_heads": self.num_heads,
+            "num_groups": self.num_groups,
+            "window_size": self.window_size,
+            "activation_function": self.activation_function,
+            "projection_dim": self.projection_dim,
+        }
 
         return Florence2Config(text_config=text_config, vision_config=vision_config)
 
