@@ -101,7 +101,7 @@ def generate(
 def main(prompt: str = "my name is", model_name: str = "blt-1b"):
     device = "cuda"
 
-    blt_repo = "itazap/blt-1b-hf"
+    blt_repo = "itazap/blt-1b-converted" 
 
     model = BLTModel.from_pretrained(blt_repo).to(device)
     tokenizer = BLTTokenizer(add_bos_token=True, add_eos_token=True)
