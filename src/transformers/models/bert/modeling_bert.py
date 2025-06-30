@@ -715,10 +715,9 @@ class BertPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True
     _supports_sdpa = True
-    _supports_sdpa = True
+    _supports_flex_attn = True
     _supports_cache_class = True
-    # Not many will use bert as decoder so low prio TODO: check if new things change this comp
-    _supports_static_cache = False
+    _supports_static_cache = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -916,8 +915,12 @@ class BertModel(BertPreTrainedModel):
                     attention_mask,
                     embedding_output,
                 )
-        else:
-            # TODO: _supports_flash_attn_2 should error out here as fa can't support 3-4D
+        elif attention_mask.dim() == 3:
+            if self.config._attn_implementation in ["flash_attention_2", "flex_attention"]:
+                raise ValueError(
+                    "Passing attention mask with a 3D/4D shape does not work with type "
+                    f"{self.config._attn_implementation} - please use either `sdpa` or `eager` instead."
+                )
             attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
 
         if encoder_attention_mask is not None:
@@ -929,7 +932,11 @@ class BertModel(BertPreTrainedModel):
                     embedding_output,
                 )
             else:
-                # TODO: _supports_flash_attn_2 should error out here as fa can't support 3-4D
+                if self.config._attn_implementation in ["flash_attention_2", "flex_attention"]:
+                    raise ValueError(
+                        "Passing attention mask with a 3D/4D shape does not work with type "
+                        f"{self.config._attn_implementation} - please use either `sdpa` or `eager` instead."
+                    )
                 encoder_attention_mask = self.invert_attention_mask(encoder_attention_mask)
 
         # Prepare head mask if needed
@@ -938,7 +945,6 @@ class BertModel(BertPreTrainedModel):
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-        # TODO: flex head mask
 
         encoder_outputs = self.encoder(
             embedding_output,
