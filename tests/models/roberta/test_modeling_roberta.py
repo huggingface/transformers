@@ -395,6 +395,12 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     fx_compatible = True
     model_split_percents = [0.5, 0.8, 0.9]
 
+    # Overwriting to add `is_decoder` flag
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
+        config, inputs = super().prepare_config_and_inputs_for_generate(batch_size)
+        config.is_decoder = True
+        return config, inputs
+
     def setUp(self):
         self.model_tester = RobertaModelTester(self)
         self.config_tester = ConfigTester(self, config_class=RobertaConfig, hidden_size=37)
@@ -410,6 +416,7 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         for type in ["absolute", "relative_key", "relative_key_query"]:
             config_and_inputs[0].position_embedding_type = type
+            config_and_inputs[0]._attn_implementation = "eager"
             self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_model_as_decoder(self):
@@ -454,6 +461,7 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_decoder_model_past_with_large_inputs_relative_pos_emb(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         config_and_inputs[0].position_embedding_type = "relative_key"
+        config_and_inputs[0]._attn_implementation = "eager"
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
     def test_for_masked_lm(self):
@@ -516,6 +524,14 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         position_ids = embeddings.create_position_ids_from_inputs_embeds(inputs_embeds)
         self.assertEqual(position_ids.shape, expected_positions.shape)
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
+
+    @unittest.skip("Roberta token type ids does not work with the flash attention position ids")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Roberta token type ids does not work with the flash attention position ids")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        pass
 
 
 @require_torch
