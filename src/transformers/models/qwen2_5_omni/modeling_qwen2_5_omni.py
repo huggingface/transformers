@@ -656,12 +656,12 @@ class Qwen2_5OmniAudioAttention(nn.Module):
             key_states,
             value_states,
             attention_mask=attention_mask,
-            dropout=0.0 if not self.training else self.dropout,
+            dropout=0.0,
             scaling=self.scaling,
-            cu_seqlens_q=cu_seqlens,  # pass cu seq lens for FA2
-            cu_seqlens_k=cu_seqlens,
-            max_seqlen_q=max_seqlen,
-            max_seqlen_k=max_seqlen,
+            cu_seq_lens_q=cu_seqlens,  # pass cu seq lens for FA2
+            cu_seq_lens_k=cu_seqlens,
+            max_length_q=max_seqlen,
+            max_length_k=max_seqlen,
             is_causal=False,
             **kwargs,
         )
@@ -959,9 +959,9 @@ class Qwen2_5OmniVisionAttention(nn.Module):
             for i in range(1, len(cu_seqlens)):
                 attention_mask[..., cu_seqlens[i - 1] : cu_seqlens[i], cu_seqlens[i - 1] : cu_seqlens[i]] = 0
 
-        query_states = query_states.transpose(0, 1).unsqueeze(0)  # unsqueeze batch_dim
-        key_states = key_states.transpose(0, 1).unsqueeze(0)  # unsqueeze batch_dim
-        value_states = value_states.transpose(0, 1).unsqueeze(0)  # unsqueeze batch_dim
+        query_states = query_states.transpose(0, 1).unsqueeze(0)
+        key_states = key_states.transpose(0, 1).unsqueeze(0)
+        value_states = value_states.transpose(0, 1).unsqueeze(0)
         max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
 
         attention_interface: Callable = eager_attention_forward
@@ -976,10 +976,10 @@ class Qwen2_5OmniVisionAttention(nn.Module):
             attention_mask=attention_mask,
             dropout=0.0,
             scaling=self.scaling,
-            cu_seqlens_q=cu_seqlens,  # pass cu seq lens for FA2
-            cu_seqlens_k=cu_seqlens,
-            max_seqlen_q=max_seqlen,
-            max_seqlen_k=max_seqlen,
+            cu_seq_lens_q=cu_seqlens,  # pass cu seq lens for FA2
+            cu_seq_lens_k=cu_seqlens,
+            max_length_q=max_seqlen,
+            max_length_k=max_seqlen,
             is_causal=False,
             **kwargs,
         )
