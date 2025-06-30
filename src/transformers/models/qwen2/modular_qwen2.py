@@ -12,7 +12,8 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, check_model_inputs, logging
+from ...utils import auto_docstring, logging
+from ...utils.generic import check_model_inputs
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
