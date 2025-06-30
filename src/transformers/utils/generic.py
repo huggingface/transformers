@@ -1011,7 +1011,10 @@ def check_model_inputs(func):
 
         def make_capture_fn(key, index):
             def capture_fn(module, input, output):
-                if output[index] is not None:
+                if len(output) == 0:
+                    collected_outputs[key] += (output,)
+                elif output[index] is not None:
+                    print(key, module.__class__, output[index].shape, output[0].shape)
                     collected_outputs[key] += (output[index],)
 
             return capture_fn
