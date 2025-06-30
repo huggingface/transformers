@@ -14,212 +14,180 @@ rendered properly in your Markdown viewer.
 
 -->
 
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+          <img alt="Model downloads" src="https://img.shields.io/huggingface/model-downloads/Helsinki-NLP/opus-mt-en-de?logo=huggingface" />
+           <img alt="License" src="https://img.shields.io/github/license/huggingface/transformers?logo=open-source-initiative" />
+           <img alt="Task Translation" src="https://img.shields.io/badge/task-translation-blue?logo=google-translate" />
+           <img alt="Model size" src="https://img.shields.io/badge/model-size-298MB-green" />
+    </div>
+</div>
+
 # MarianMT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
-<img alt="Flax" src="https://img.shields.io/badge/Flax-29a79b.svg?style=flat&logo=data:image/png;base64,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
-">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[MarianMT: Fast Neural Machine Translation in C++](https://arxiv.org/abs/2001.08210)
 
 ## Overview
 
-A framework for translation models, using the same models as BART. Translations should be similar, but not identical to output in the test set linked to in each model card.
-This model was contributed by [sshleifer](https://huggingface.co/sshleifer).
+MarianMT is a machine translation model developed by the Microsoft Translator team and trained originally by Jörg Tiedemann using the Marian C++ library. MarianMT models are designed to be fast, efficient, and lightweight for translation tasks. Unlike very large general models, MarianMT provides compact, language-specific models that are small enough to run on CPUs or low-resource environments, making it ideal for production and offline usage.
 
+All MarianMT models are Transformer encoder-decoder architectures with 6 layers each in both encoder and decoder, similar in design to BART but with important modifications for translation tasks:
 
-## Implementation Notes
+- Static (sinusoidal) positional embeddings (`MarianConfig.static_position_embeddings=True`)
+- No layer normalization on embeddings (`MarianConfig.normalize_embedding=False`)
+- Starts decoding with `pad_token_id` instead of special `<s>` tokens as BART does
 
-- Each model is about 298 MB on disk, there are more than 1,000 models.
-- The list of supported language pairs can be found [here](https://huggingface.co/Helsinki-NLP).
-- Models were originally trained by [Jörg Tiedemann](https://researchportal.helsinki.fi/en/persons/j%C3%B6rg-tiedemann) using the [Marian](https://marian-nmt.github.io/) C++ library, which supports fast training and translation.
-- All models are transformer encoder-decoders with 6 layers in each component. Each model's performance is documented
-  in a model card.
-- The 80 opus models that require BPE preprocessing are not supported.
-- The modeling code is the same as [`BartForConditionalGeneration`] with a few minor modifications:
+There are over **1,000 MarianMT models**, covering a wide variety of language pairs. Each model is around **298 MB** on disk.
 
-  - static (sinusoid) positional embeddings (`MarianConfig.static_position_embeddings=True`)
-  - no layernorm_embedding (`MarianConfig.normalize_embedding=False`)
-  - the model starts generating with `pad_token_id` (which has 0 as a token_embedding) as the prefix (Bart uses
-    `<s/>`),
-- Code to bulk convert models can be found in `convert_marian_to_pytorch.py`.
+You can find all the original MarianMT checkpoints under the [Helsinki-NLP](https://huggingface.co/Helsinki-NLP) collection.
 
+The MarianMT code and framework are open source and available on [Marian GitHub](https://github.com/marian-nmt/marian).
 
-## Naming
+> [!TIP]
+> Click on the MarianMT models in the right sidebar to see more examples of how to apply MarianMT to different translation tasks.
 
-- All model names use the following format: `Helsinki-NLP/opus-mt-{src}-{tgt}`
-- The language codes used to name models are inconsistent. Two digit codes can usually be found [here](https://developers.google.com/admin-sdk/directory/v1/languages), three digit codes require googling "language
-  code {code}".
-- Codes formatted like `es_AR` are usually `code_{region}`. That one is Spanish from Argentina.
-- The models were converted in two stages. The first 1000 models use ISO-639-2 codes to identify languages, the second
-  group use a combination of ISO-639-5 codes and ISO-639-2 codes.
+---
 
+The example below demonstrates how to translate text using [`Pipeline`] or the [`AutoModelForSeq2SeqLM`] class.
 
-## Examples
-
-- Since Marian models are smaller than many other translation models available in the library, they can be useful for
-  fine-tuning experiments and integration tests.
-- [Fine-tune on GPU](https://github.com/huggingface/transformers/blob/master/examples/legacy/seq2seq/train_distil_marian_enro.sh)
-
-## Multilingual Models
-
-- All model names use the following format: `Helsinki-NLP/opus-mt-{src}-{tgt}`:
-- If a model can output multiple languages, and you should specify a language code by prepending the desired output
-  language to the `src_text`.
-- You can see a models's supported language codes in its model card, under target constituents, like in [opus-mt-en-roa](https://huggingface.co/Helsinki-NLP/opus-mt-en-roa).
-- Note that if a model is only multilingual on the source side, like `Helsinki-NLP/opus-mt-roa-en`, no language
-  codes are required.
-
-New multi-lingual models from the [Tatoeba-Challenge repo](https://github.com/Helsinki-NLP/Tatoeba-Challenge)
-require 3 character language codes:
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
 ```python
->>> from transformers import MarianMTModel, MarianTokenizer
 
->>> src_text = [
-...     ">>fra<< this is a sentence in english that we want to translate to french",
-...     ">>por<< This should go to portuguese",
-...     ">>esp<< And this to Spanish",
-... ]
+from transformers import pipeline
 
->>> model_name = "Helsinki-NLP/opus-mt-en-roa"
->>> tokenizer = MarianTokenizer.from_pretrained(model_name)
->>> print(tokenizer.supported_language_codes)
-['>>zlm_Latn<<', '>>mfe<<', '>>hat<<', '>>pap<<', '>>ast<<', '>>cat<<', '>>ind<<', '>>glg<<', '>>wln<<', '>>spa<<', '>>fra<<', '>>ron<<', '>>por<<', '>>ita<<', '>>oci<<', '>>arg<<', '>>min<<']
+translator = pipeline("translation_en_to_de", model="Helsinki-NLP/opus-mt-en-de")
+result = translator("Hello, how are you?")
+print(result)
 
->>> model = MarianMTModel.from_pretrained(model_name)
->>> translated = model.generate(**tokenizer(src_text, return_tensors="pt", padding=True))
->>> [tokenizer.decode(t, skip_special_tokens=True) for t in translated]
-["c'est une phrase en anglais que nous voulons traduire en français",
- 'Isto deve ir para o português.',
- 'Y esto al español']
 ```
 
-Here is the code to see all available pretrained models on the hub:
+</hfoption>
+
+<hfoption id="AutoModel">
 
 ```python
-from huggingface_hub import list_models
 
-model_list = list_models()
-org = "Helsinki-NLP"
-model_ids = [x.id for x in model_list if x.id.startswith(org)]
-suffix = [x.split("/")[1] for x in model_ids]
-old_style_multi_models = [f"{org}/{s}" for s in suffix if s != s.lower()]
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
+model_name = "Helsinki-NLP/opus-mt-en-de"
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+
+inputs = tokenizer("Hello, how are you?", return_tensors="pt")
+outputs = model.generate(**inputs)
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+
 ```
 
-## Old Style Multi-Lingual Models
+</hfoption>
+<hfoption id="transformers-cli">
 
-These are the old style multi-lingual models ported from the OPUS-MT-Train repo: and the members of each language
-group:
+Not supported for this model.
 
-```python no-style
-['Helsinki-NLP/opus-mt-NORTH_EU-NORTH_EU',
- 'Helsinki-NLP/opus-mt-ROMANCE-en',
- 'Helsinki-NLP/opus-mt-SCANDINAVIA-SCANDINAVIA',
- 'Helsinki-NLP/opus-mt-de-ZH',
- 'Helsinki-NLP/opus-mt-en-CELTIC',
- 'Helsinki-NLP/opus-mt-en-ROMANCE',
- 'Helsinki-NLP/opus-mt-es-NORWAY',
- 'Helsinki-NLP/opus-mt-fi-NORWAY',
- 'Helsinki-NLP/opus-mt-fi-ZH',
- 'Helsinki-NLP/opus-mt-fi_nb_no_nn_ru_sv_en-SAMI',
- 'Helsinki-NLP/opus-mt-sv-NORWAY',
- 'Helsinki-NLP/opus-mt-sv-ZH']
-GROUP_MEMBERS = {
- 'ZH': ['cmn', 'cn', 'yue', 'ze_zh', 'zh_cn', 'zh_CN', 'zh_HK', 'zh_tw', 'zh_TW', 'zh_yue', 'zhs', 'zht', 'zh'],
- 'ROMANCE': ['fr', 'fr_BE', 'fr_CA', 'fr_FR', 'wa', 'frp', 'oc', 'ca', 'rm', 'lld', 'fur', 'lij', 'lmo', 'es', 'es_AR', 'es_CL', 'es_CO', 'es_CR', 'es_DO', 'es_EC', 'es_ES', 'es_GT', 'es_HN', 'es_MX', 'es_NI', 'es_PA', 'es_PE', 'es_PR', 'es_SV', 'es_UY', 'es_VE', 'pt', 'pt_br', 'pt_BR', 'pt_PT', 'gl', 'lad', 'an', 'mwl', 'it', 'it_IT', 'co', 'nap', 'scn', 'vec', 'sc', 'ro', 'la'],
- 'NORTH_EU': ['de', 'nl', 'fy', 'af', 'da', 'fo', 'is', 'no', 'nb', 'nn', 'sv'],
- 'SCANDINAVIA': ['da', 'fo', 'is', 'no', 'nb', 'nn', 'sv'],
- 'SAMI': ['se', 'sma', 'smj', 'smn', 'sms'],
- 'NORWAY': ['nb_NO', 'nb', 'nn_NO', 'nn', 'nog', 'no_nb', 'no'],
- 'CELTIC': ['ga', 'cy', 'br', 'gd', 'kw', 'gv']
-}
-```
+</hfoption>
+</hfoptions>
 
-Example of translating english to many romance languages, using old-style 2 character language codes
+## Quantization
 
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+
+The example below uses [dynamic quantization](https://docs.pytorch.org/docs/stable/quantization.html#dynamic-quantization) to only quantize the weights to INT8.
 
 ```python
->>> from transformers import MarianMTModel, MarianTokenizer
 
->>> src_text = [
-...     ">>fr<< this is a sentence in english that we want to translate to french",
-...     ">>pt<< This should go to portuguese",
-...     ">>es<< And this to Spanish",
-... ]
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+import torch
 
->>> model_name = "Helsinki-NLP/opus-mt-en-ROMANCE"
->>> tokenizer = MarianTokenizer.from_pretrained(model_name)
+model_name = "Helsinki-NLP/opus-mt-en-de"
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
 
->>> model = MarianMTModel.from_pretrained(model_name)
->>> translated = model.generate(**tokenizer(src_text, return_tensors="pt", padding=True))
->>> tgt_text = [tokenizer.decode(t, skip_special_tokens=True) for t in translated]
-["c'est une phrase en anglais que nous voulons traduire en français",
- 'Isto deve ir para o português.',
- 'Y esto al español']
+quantized_model = torch.quantization.quantize_dynamic(
+    model, {torch.nn.Linear}, dtype=torch.qint8
+)
+
+inputs = tokenizer("Hello, how are you?", return_tensors="pt")
+outputs = quantized_model.generate(**inputs)
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
+
+## Attention Mask Visualizer Support
+
+Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
+
+```python
+from transformers.utils.attention_visualizer import AttentionMaskVisualizer
+
+visualizer = AttentionMaskVisualizer("Helsinki-NLP/opus-mt-en-de")
+visualizer("Hello, how are you?")
+```
+
+
+## Supported Languages
+All models follow the naming convention:
+Helsinki-NLP/opus-mt-{src}-{tgt}, where src is the source language code and tgt is the target language code.
+
+The list of supported languages and codes is available in each model card.
+
+Some models are multilingual; for example, opus-mt-en-ROMANCE translates English to multiple Romance languages (French, Spanish, Portuguese, etc.).
+
+Newer models use 3-character language codes, e.g., >>fra<< for French, >>por<< for Portuguese.
+
+Older models use 2-character or region-specific codes like es_AR (Spanish from Argentina).
+
+Example of translating English to multiple Romance languages:
+```python
+from transformers import MarianMTModel, MarianTokenizer
+
+src_text = [
+    ">>fra<< This is a sentence in English to translate to French.",
+    ">>por<< This should go to Portuguese.",
+    ">>spa<< And this to Spanish."
+]
+
+model_name = "Helsinki-NLP/opus-mt-en-roa"
+tokenizer = MarianTokenizer.from_pretrained(model_name)
+model = MarianMTModel.from_pretrained(model_name)
+
+inputs = tokenizer(src_text, return_tensors="pt", padding=True)
+outputs = model.generate(**inputs)
+result = [tokenizer.decode(t, skip_special_tokens=True) for t in outputs]
+print(result)
+
+```
+
+
+## Notes
+
+- MarianMT models are smaller than many other translation models, enabling faster inference, low memory usage, and suitability for CPU environments.
+
+- Based on Transformer encoder-decoder architecture with 6 layers each.
+
+- Originally trained with the Marian C++ framework for efficiency.
+
+- Does not support the older OPUS models that require BPE preprocessing (80 models not supported).
+
+- When using quantization, expect a small trade-off in accuracy for a significant gain in speed and memory.
+
+- The modeling code is based on BartForConditionalGeneration with adjustments for translation.
+
 
 ## Resources
 
-- [Translation task guide](../tasks/translation)
-- [Summarization task guide](../tasks/summarization)
-- [Causal language modeling task guide](../tasks/language_modeling)
+- **Marian Research Paper:** [Marian: Fast Neural Machine Translation in C++](https://arxiv.org/abs/2001.08210)  
+- **MarianMT Model Collection:** [Helsinki-NLP on Hugging Face](https://huggingface.co/Helsinki-NLP)  
+- **Marian Official Framework:** [Marian-NMT GitHub](https://github.com/marian-nmt/marian)  
+- **Language Codes Reference:** [ISO 639-1 Language Codes](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes)  
+- **Translation Task Guide:** [Hugging Face Translation Guide](https://huggingface.co/tasks/translation)  
+- **Quantization Overview:** [Transformers Quantization Docs](https://huggingface.co/docs/transformers/main/en/perf_optimization#model-quantization)  
+- **Tokenizer Guide:** [Hugging Face Tokenizer Documentation](https://huggingface.co/docs/transformers/main/en/main_classes/tokenizer)  
+- **Model Conversion Tool:** [convert_marian_to_pytorch.py (GitHub)](https://github.com/huggingface/transformers/blob/main/src/transformers/models/marian/convert_marian_to_pytorch.py)  
+- **Supported Language Pairs:** Refer to individual model cards under [Helsinki-NLP](https://huggingface.co/Helsinki-NLP) for supported languages.  
 
-## MarianConfig
 
-[[autodoc]] MarianConfig
 
-## MarianTokenizer
-
-[[autodoc]] MarianTokenizer
-    - build_inputs_with_special_tokens
-
-<frameworkcontent>
-<pt>
-
-## MarianModel
-
-[[autodoc]] MarianModel
-    - forward
-
-## MarianMTModel
-
-[[autodoc]] MarianMTModel
-    - forward
-
-## MarianForCausalLM
-
-[[autodoc]] MarianForCausalLM
-    - forward
-
-</pt>
-<tf>
-
-## TFMarianModel
-
-[[autodoc]] TFMarianModel
-    - call
-
-## TFMarianMTModel
-
-[[autodoc]] TFMarianMTModel
-    - call
-
-</tf>
-<jax>
-
-## FlaxMarianModel
-
-[[autodoc]] FlaxMarianModel
-    - __call__
-
-## FlaxMarianMTModel
-
-[[autodoc]] FlaxMarianMTModel
-    - __call__
 
 </jax>
 </frameworkcontent>
