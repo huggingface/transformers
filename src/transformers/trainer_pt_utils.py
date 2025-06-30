@@ -1261,6 +1261,9 @@ class AcceleratorConfig:
             the value in the environment variable `ACCELERATE_MIXED_PRECISION`, which will use the default value in the
             accelerate config of the current system or the flag passed with the `accelerate.launch` command. 'fp8'
             requires the installation of `transformers-engine`.
+        fp8_config (`dict`, *optional*):
+            Configuration for FP8 mixed precision training.
+            See [`accelerate.utils.dataclasses`] for more details.
 
     """
 
@@ -1337,6 +1340,12 @@ class AcceleratorConfig:
             "the value in the environment variable `ACCELERATE_MIXED_PRECISION`, which will use the default value in the"
             "accelerate config of the current system or the flag passed with the `accelerate.launch` command. 'fp8' requires"
             "the installation of `transformers-engine`."
+        },
+    )
+    fp8_config: Optional[dict] = field(
+        default=None,
+        metadata={
+            "help": "Configuration for FP8 mixed precision training. See [`accelerate.utils.dataclasses`] for more details."
         },
     )
 

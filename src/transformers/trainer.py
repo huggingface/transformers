@@ -3735,6 +3735,11 @@ class Trainer:
         Return:
             `torch.Tensor`: The tensor with training loss on this batch.
         """
+        import torch.distributed as dist
+        if dist.get_rank() == 0:
+            import ipdb; ipdb.set_trace()
+        dist.barrier()
+
         model.train()
         if hasattr(self.optimizer, "train") and callable(self.optimizer.train):
             self.optimizer.train()
@@ -5194,6 +5199,24 @@ class Trainer:
             args["dataloader_config"] = dataloader_config
         else:
             args.update(accelerator_config)
+
+        from accelerate.utils import AORecipeKwargs, TERecipeKwargs, MSAMPRecipeKwargs
+
+        BACKEND_TO_KWARGS = {
+            "AO": AORecipeKwargs,
+            "TE": TERecipeKwargs,
+            "MSAMP": MSAMPRecipeKwargs,
+        }
+        if "mixed_precision" in accelerator_config:
+            args["mixed_precision"] = accelerator_config["mixed_precision"]
+        if "fp8_config" in accelerator_config:
+            if "backend" in accelerator_config["fp8_config"]:
+                recipe_kwargs = BACKEND_TO_KWARGS[accelerator_config["fp8_config"]["backend"]]
+                fp8_config = accelerator_config["fp8_config"].copy()
+                fp8_config.pop("backend")
+                kwargs_handlers = [recipe_kwargs(**fp8_config)]
+                args["kwargs_handlers"] = kwargs_handlers
+
         # tp is initialized at Accelerator init phase so
         # args should be prepared here
         if hasattr(self.model, "tp_size") and self.model.tp_size is not None and self.model.tp_size > 1:
