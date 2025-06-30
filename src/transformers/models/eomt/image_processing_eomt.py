@@ -640,7 +640,7 @@ class EomtImageProcessor(BaseImageProcessor):
         )
 
         if do_split_image and patch_offsets:
-            encoded_inputs["patch_offsets"] = patch_offsets
+            encoded_inputs["patch_offsets"] = [torch.tensor(offsets) for offsets in patch_offsets]
 
         return encoded_inputs
 
@@ -843,7 +843,7 @@ class EomtImageProcessor(BaseImageProcessor):
 
         output_logits = self.merge_image_patches(segmentation_logits, patch_offsets, target_sizes, size)
 
-        preds = torch.stack(output_logits).argmax(dim=1)
+        preds = [logit.argmax(dim=0) for logit in output_logits]
         return preds
 
     def post_process_panoptic_segmentation(

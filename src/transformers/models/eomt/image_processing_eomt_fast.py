@@ -340,7 +340,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
             outputs["class_labels"] = class_labels
 
         if patch_offsets:
-            outputs["patch_offsets"] = patch_offsets
+            outputs["patch_offsets"] = [torch.tensor(offsets) for offsets in patch_offsets]
 
         return outputs
 
@@ -451,7 +451,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
 
         output_logits = self.merge_image_patches(segmentation_logits, patch_offsets, target_sizes, size)
 
-        preds = torch.stack(output_logits).argmax(dim=1)
+        preds = [logit.argmax(dim=0) for logit in output_logits]
         return preds
 
     def post_process_panoptic_segmentation(
