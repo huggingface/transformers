@@ -2112,10 +2112,9 @@ class Gemma3nTextModel(Gemma3TextModel):
             # altup_proj adapted from jax.numpy.einsum("btp,pd->btd", ...)
             altup_proj = self.altup_projections[i - 1](hidden_states_0)
             current_hidden_state = altup_proj.to(dtype=hidden_states_0.dtype, device=target_magnitude.device)
-            new_magnitude = torch.mean(current_hidden_state**2, dim=-1, keepdim=True) ** 0.5
-            current_hidden_state = current_hidden_state * (
-                target_magnitude / torch.maximum(new_magnitude, epsilon_tensor.to(target_magnitude.device))
-            )
+            new_magnitude = torch.mean(current_hidden_state**2, dim=-1, keepdim=True)
+            new_magnitude = torch.sqrt(torch.maximum(new_magnitude, epsilon_tensor.to(target_magnitude.device)))
+            current_hidden_state = current_hidden_state * target_magnitude / new_magnitude
             temp_hidden_states.append(current_hidden_state)
 
         hidden_states = torch.stack(temp_hidden_states, dim=0)  # [num_altup_inputs, batch, seq_len, hidden_size]
@@ -2133,9 +2132,9 @@ class Gemma3nTextModel(Gemma3TextModel):
 
             layer_outputs = decoder_layer(
                 hidden_states,
-                position_embeddings_global=position_embeddings_global,
-                position_embeddings_local=position_embeddings_local,
-                per_layer_input=per_layer_input,
+                position_embeddings_global,
+                position_embeddings_local,
+                per_layer_input,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
                 past_key_value=past_key_values,
@@ -2161,10 +2160,9 @@ class Gemma3nTextModel(Gemma3TextModel):
             # altup_unembed_projections adapted from jax.numpy.einsum("btp,pd->btd", ...)
             altup_unemb_proj: torch.Tensor = self.altup_unembed_projections[i - 1](hidden_states[i])
             current_hidden_state = altup_unemb_proj.to(dtype=hidden_states_0.dtype, device=target_magnitude.device)
-            new_magnitude = torch.mean(current_hidden_state**2, dim=-1, keepdim=True) ** 0.5
-            current_hidden_state = current_hidden_state * (
-                target_magnitude / torch.maximum(new_magnitude, epsilon_tensor.to(target_magnitude.device))
-            )
+            new_magnitude = torch.mean(current_hidden_state**2, dim=-1, keepdim=True)
+            new_magnitude = torch.sqrt(torch.maximum(new_magnitude, epsilon_tensor.to(target_magnitude.device)))
+            current_hidden_state = current_hidden_state * target_magnitude / new_magnitude
             temp_hidden_states.append(current_hidden_state)
 
         hidden_states = torch.stack(temp_hidden_states)
