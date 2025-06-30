@@ -225,6 +225,7 @@ class MllamaVisionAttention(nn.Module):
         self.head_dim = config.hidden_size // config.attention_heads
         self.scaling = self.head_dim**-0.5
         self.num_key_value_groups = 1
+        self.is_causal = False
 
         self.q_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=False)
@@ -584,6 +585,7 @@ class MllamaTextSelfAttention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.rope_theta = config.rope_theta
         self.layer_idx = layer_idx
+        self.is_causal = True
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
@@ -1028,6 +1030,7 @@ class MllamaPreTrainedModel(PreTrainedModel):
 class MllamaVisionModel(MllamaPreTrainedModel):
     config_class = MllamaVisionConfig
     base_model_prefix = "vision_model"
+    _supports_flash_attn_2 = False # TODO: check this is right
 
     def __init__(self, config: MllamaVisionConfig):
         super().__init__(config)
@@ -1617,6 +1620,7 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
 class MllamaModel(MllamaPreTrainedModel):
     _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
     _supports_quantized_cache = False  # quant cache not supported in encoder-decoder setting
+    _supports_flash_attn_2 = False # the vision model does not support FA2
 
     def __init__(self, config: MllamaConfig):
         super().__init__(config)
@@ -1778,6 +1782,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
     }
     _supports_quantized_cache = False  # quant cache not supported in encoder-decoder setting
     _tied_weights_keys = ["lm_head.weight"]
+    _supports_flash_attn_2 = False # the vision model does not support FA2
 
     def __init__(self, config: MllamaConfig):
         super().__init__(config)
