@@ -3629,7 +3629,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                         module_map[name + f".{key}"] = module
             state_dict = model_to_save.state_dict()
 
-        if any(allowed_name in self.__class__.__name__.lower() for allowed_name in VLMS):
+        if any(
+            allowed_name in class_name.__name__.lower()
+            for class_name in self.__class__.__mro__[:-1]
+            for allowed_name in VLMS
+        ):
             reverse_key_mapping = {v: k for k, v in self._checkpoint_conversion_mapping.items()}
 
             original_state_dict = {}
