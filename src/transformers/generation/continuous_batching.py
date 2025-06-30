@@ -805,9 +805,9 @@ class ContinuousBatchProcessor:
         self.max_seqlen_q = 0
         self.max_seqlen_k = 0
         self.output_ids = torch.full((1, T), -1, **tensor_metadata).to(self.model_device, non_blocking=True)
-        self.block_table = torch.full(
+        self.block_tables = torch.full(
             (T, 24),
-            -1,
+            fill_value=-1,
             dtype=torch.int32,
         ).to(self.model_device, non_blocking=True)
 
@@ -954,8 +954,8 @@ class ContinuousBatchProcessor:
             state.position_offset += query_length
 
             block_list = self.cache.get_block_table(state.request_id)
-            self.block_table[: len(block_list), :] = torch.tensor(
-                block_list, torch.int32, device=self.model_device, pin_memory=True
+            self.block_tables[: len(block_list), :] = torch.tensor(
+                block_list, dtype=torch.int32, device=self.model_device
             )
 
         logger.warning(
