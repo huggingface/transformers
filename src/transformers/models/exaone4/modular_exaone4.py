@@ -1,0 +1,771 @@
+# coding=utf-8
+# Copyright 2025 The LG AI Research and HuggingFace Inc. team. All rights reserved.
+#
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""LG AI Research EXAONE Lab"""
+
+from functools import partial
+from typing import Callable, Optional, Union
+
+import torch
+import torch.utils.checkpoint
+from torch import nn
+
+from ...cache_utils import Cache, HybridCache, StaticCache
+from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    CausalLMOutputWithPast,
+)
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...processing_utils import Unpack
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS
+from ...utils import (
+    LossKwargs,
+    logging,
+)
+from ..llama.modeling_llama import (
+    LlamaForCausalLM,
+    LlamaForQuestionAnswering,
+    LlamaForSequenceClassification,
+    LlamaForTokenClassification,
+    LlamaMLP,
+    LlamaModel,
+    LlamaPreTrainedModel,
+    LlamaRMSNorm,
+    LlamaRotaryEmbedding,
+    eager_attention_forward,
+)
+
+
+logger = logging.get_logger(__name__)
+
+_CHECKPOINT_FOR_DOC = "LGAI-EXAONE/EXAONE-4.0-Instruct"
+_CONFIG_FOR_DOC = "Exaone4Config"
+
+
+class Exaone4Config(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`Exaone4Model`]. It is used to
+    instantiate a EXAONE 4.0 model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the EXAONE-4.0-Instruct [LGAI-EXAONE/EXAONE-4.0-Instruct](https://huggingface.co/LGAI-EXAONE/EXAONE-4.0-Instruct)
+    NOTE: `EXAONE-4.0-Instruct` is a placeholder model ID. The exact model ID will be updated in the future.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
+    outputs. Read the documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        vocab_size (`int`, *optional*, defaults to 102400):
+            Vocabulary size of the EXAONE 4.0 model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`Exaone4Model`].
+        hidden_size (`int`, *optional*, defaults to 4096):
+            Dimension of the hidden representations.
+        intermediate_size (`int`, *optional*, defaults to `hidden_size * 4`):
+            Dimensionality of the MLP representations.
+        num_hidden_layers (`int`, *optional*, defaults to 32):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 32):
+            Number of attention heads for each attention layer in the Transformer decoder.
+        num_key_value_heads (`int`, *optional*):
+            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
+            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
+            `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
+            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
+            by meanpooling all the original heads within that group. For more details checkout [this
+            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
+            `num_attention_heads`.
+        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+            The non-linear activation function (function or string) in the decoder.
+        max_position_embeddings (`int`, *optional*, defaults to 2048):
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 32768 for EXAONE 3.5).
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon used by the layer normalization layers.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions (not used by all models). Only
+            relevant if ``config.is_decoder=True``.
+        bos_token_id (`int`, *optional*, defaults to 0):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*, defaults to 2):
+            End of stream token id.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings
+        rope_theta (`float`, *optional*, defaults to 10000.0):
+            The base period of the RoPE embeddings.
+        rope_scaling (`Dict`, *optional*):
+            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
+            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
+            accordingly.
+            Expected contents:
+                `rope_type` (`str`):
+                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
+                    'llama3'], with 'default' being the original RoPE implementation.
+                `factor` (`float`, *optional*):
+                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
+                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
+                    original maximum pre-trained length.
+                `original_max_position_embeddings` (`int`, *optional*):
+                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
+                    pretraining.
+                `attention_factor` (`float`, *optional*):
+                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
+                    computation. If unspecified, it defaults to value recommended by the implementation, using the
+                    `factor` field to infer the suggested value.
+                `beta_fast` (`float`, *optional*):
+                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
+                    ramp function. If unspecified, it defaults to 32.
+                `beta_slow` (`float`, *optional*):
+                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
+                    ramp function. If unspecified, it defaults to 1.
+                `short_factor` (`List[float]`, *optional*):
+                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
+                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
+                    size divided by the number of attention heads divided by 2
+                `long_factor` (`List[float]`, *optional*):
+                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
+                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
+                    size divided by the number of attention heads divided by 2
+                `low_freq_factor` (`float`, *optional*):
+                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
+                `high_freq_factor` (`float`, *optional*):
+                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        reorder_qk_norm (`bool`, *optional*, defaults to `False`):
+            Whether to use post-layer normalization and additional layer normalization in query/key projections.
+        sliding_window (`int`, *optional*):
+            The size of the sliding window for the sliding window attention.
+        sliding_window_pattern (`str`, *optional*):
+            The pattern to use for sliding window attention. Can be one of:
+                - `None`: No sliding window attention is used
+                - `int`: Every `sliding_window` layers, use global attention, else use local attention.
+                - `str`: A sequence of "L" (local attention) and "G" (global attention) characters that defines the
+                  attention pattern. The pattern starts from layer 0 and repeats every `sliding_window` layers. The
+                  final layer always uses global attention regardless of the pattern.
+            For instance, sliding_window_pattern="LLLG" same as sliding_window=4, which means:
+                - Layer 0, 1, 2: local attention,
+                - Layer 3: global attention,
+                ...(repeated)
+        layer_types (`list`, *optional*):
+            Attention pattern for each layer. Prioritized over `sliding_window_pattern`.
+
+    Example:
+
+    ```python
+    >>> from transformers import Exaone4Model, Exaone4Config
+
+    >>> # Initializing a EXAONE configuration
+    >>> configuration = Exaone4Config()
+
+    >>> # Initializing a model from configuration
+    >>> model = Exaone4Model(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "exaone4"
+    keys_to_ignore_at_inference = ["past_key_values"]
+    # Default tensor parallel plan for base model `LlamaModel`
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
+
+    def __init__(
+        self,
+        vocab_size=102400,
+        hidden_size=4096,
+        intermediate_size=None,
+        num_hidden_layers=32,
+        num_attention_heads=32,
+        num_key_value_heads=None,
+        hidden_act="silu",
+        max_position_embeddings=2048,
+        initializer_range=0.02,
+        rms_norm_eps=1e-5,
+        use_cache=True,
+        bos_token_id=0,
+        eos_token_id=2,
+        tie_word_embeddings=False,
+        rope_theta=10000.0,
+        rope_scaling=None,
+        attention_dropout=0.0,
+        reorder_qk_norm=False,
+        sliding_window=None,
+        sliding_window_pattern=None,
+        layer_types=None,
+        **kwargs,
+    ):
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        if num_key_value_heads is None:
+            num_key_value_heads = num_attention_heads
+        self.num_key_value_heads = num_key_value_heads
+        if intermediate_size:
+            self.intermediate_size = intermediate_size
+        else:
+            self.intermediate_size = hidden_size * 4
+        self.hidden_act = hidden_act
+        self.max_position_embeddings = max_position_embeddings
+        self.initializer_range = initializer_range
+        self.rms_norm_eps = rms_norm_eps
+        self.use_cache = use_cache
+        self.attention_dropout = attention_dropout
+        self.rope_theta = rope_theta
+        self.rope_scaling = rope_scaling
+        self.reorder_qk_norm = reorder_qk_norm
+        self.sliding_window = sliding_window
+        self.sliding_window_pattern = sliding_window_pattern
+
+        self.layer_types = layer_types
+        if self.layer_types is None:
+            self.layer_types = [
+                "sliding_attention" if check_is_sliding(self, i) else "full_attention"
+                for i in range(self.num_hidden_layers)
+            ]
+        layer_type_validation(self.layer_types)
+
+        super().__init__(
+            bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
+        )
+
+
+@torch.jit.script
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+
+
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+def check_is_sliding(config, layer_idx):
+    """
+    Check if the current layer is a sliding window attention (local attention) layer.
+    """
+    if config.sliding_window is None:
+        return False
+    if config.layer_types is not None:
+        return config.layer_types[layer_idx] == "sliding_attention"
+    if isinstance(config.sliding_window_pattern, int):
+        return ((layer_idx + 1) % config.sliding_window_pattern) != 0
+    elif isinstance(config.sliding_window_pattern, str):
+        assert isinstance(config.sliding_window, int), (
+            f"Sliding window must be positive integer, but got {config.sliding_window}"
+        )
+        return (
+            layer_idx != config.num_hidden_layers - 1
+            and config.sliding_window_pattern[layer_idx % len(config.sliding_window_pattern)] == "L"
+        )
+    else:
+        logger.warning_once(
+            "Sliding window is set, but none of `sliding_window_pattern` or `layer_types` is set. "
+            "Defaulting to use 'full_attention' for all layers."
+        )
+    return False
+
+
+class Exaone4RMSNorm(LlamaRMSNorm):
+    pass
+
+
+ALL_LAYERNORM_LAYERS.append(Exaone4RMSNorm)
+
+
+class Exaone4RotaryEmbedding(LlamaRotaryEmbedding):
+    pass
+
+
+class Exaone4Attention(nn.Module):
+    def __init__(self, config: Exaone4Config, layer_idx: int):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        self.num_attention_heads = config.num_attention_heads
+        self.num_key_value_heads = config.num_key_value_heads
+        self.hidden_size = config.hidden_size
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = True
+        self.scaling = self.head_dim**-0.5
+        self.reorder_qk_norm = config.reorder_qk_norm
+        self.sliding_window = config.sliding_window
+        self.sliding_window_pattern = config.sliding_window_pattern
+        self.is_sliding = check_is_sliding(config, layer_idx)
+
+        if self.head_dim * self.num_attention_heads != self.hidden_size:
+            raise ValueError(
+                f"hidden_size must be divisible by num_attention_heads, but got {self.hidden_size} and {self.num_attention_heads} and {self.head_dim}"
+            )
+
+        self.q_proj = nn.Linear(self.hidden_size, self.num_attention_heads * self.head_dim, bias=False)
+        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
+
+        if self.reorder_qk_norm:
+            self.q_norm = Exaone4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+            self.k_norm = Exaone4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        if self.reorder_qk_norm:
+            query_states = self.q_norm(query_states)
+            key_states = self.k_norm(key_states)
+
+        cos, sin = position_embeddings
+        # We use global NoPE for hybrid attention model
+        if self.sliding_window is None or self.is_sliding:
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if past_key_value is not None:
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {
+                "sin": sin,
+                "cos": cos,
+                "cache_position": cache_position,
+                "sliding_window": self.sliding_window,
+            }
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+            # Here we need to slice as we use a static cache by default, but FA2 does not support it
+            # attention_mask can be None, so we use Cache's seq_length rather than attention_mask's shape
+            if self.config._attn_implementation == "flash_attention_2":
+                seq_len = past_key_value.get_seq_length() if attention_mask is None else attention_mask.shape[1]
+                key_states, value_states = key_states[:, :, :seq_len, :], value_states[:, :, :seq_len, :]
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            sliding_window=self.sliding_window if self.is_sliding else None,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+
+class Exaone4MLP(LlamaMLP):
+    def __init__(self, config):
+        super().__init__(config)
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+
+
+class Exaone4DecoderLayer(nn.Module):
+    def __init__(self, config: Exaone4Config, layer_idx: int):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        self.attention_type = config.layer_types[layer_idx]
+        self.hidden_size = config.hidden_size
+        self.reorder_qk_norm = config.reorder_qk_norm
+
+        self.self_attn = Exaone4Attention(config, layer_idx)
+        self.mlp = Exaone4MLP(config)
+
+        if self.reorder_qk_norm:
+            self.post_attention_layernorm = Exaone4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+            self.post_feedforward_layernorm = Exaone4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        else:
+            self.input_layernorm = Exaone4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+            self.pre_feedforward_layernorm = Exaone4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+        self.is_sliding = check_is_sliding(config, layer_idx)
+        self.sliding_window = config.sliding_window
+        if config.sliding_window and config._attn_implementation == "sdpa":
+            logger.warning_once(
+                f"Sliding Window Attention is enabled but not optimized for `{config._attn_implementation}`; "
+                "unexpected results may be encountered."
+            )
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: Optional[bool] = False,
+        use_cache: Optional[bool] = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        residual = hidden_states
+
+        # We use one of LN options:
+        #   1. Use pre-LN, or
+        #   2. Use post-LN with QK-norm
+        if not self.reorder_qk_norm:  # Use pre-LN
+            hidden_states = self.input_layernorm(hidden_states)
+
+        # Self Attention
+        hidden_states, attn_weights = self.self_attn(
+            hidden_states=hidden_states,
+            position_embeddings=position_embeddings,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_value=past_key_value,
+            output_attentions=output_attentions,
+            use_cache=use_cache,
+            cache_position=cache_position,
+        )
+
+        if self.reorder_qk_norm:  # Use post-LN with QK-norm
+            hidden_states = self.post_attention_layernorm(hidden_states)
+
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        if not self.reorder_qk_norm:  # Use pre-LN
+            hidden_states = self.pre_feedforward_layernorm(hidden_states)
+
+        # Fully Connected
+        hidden_states = self.mlp(hidden_states)
+
+        if self.reorder_qk_norm:  # Use post-LN with QK-norm
+            hidden_states = self.post_feedforward_layernorm(hidden_states)
+
+        hidden_states = residual + hidden_states
+
+        outputs = (hidden_states,)
+        if output_attentions:
+            outputs += (attn_weights,)
+
+        return outputs
+
+
+class Exaone4PreTrainedModel(LlamaPreTrainedModel):
+    config_class = Exaone4Config
+    _no_split_modules = ["Exaone4DecoderLayer"]
+
+
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
+
+
+class Exaone4Model(Exaone4PreTrainedModel, LlamaModel):
+    def __init__(self, config: Exaone4Config):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [Exaone4DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = Exaone4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+    ) -> Union[tuple, BaseModelOutputWithPast]:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if self.gradient_checkpointing and self.training and use_cache:
+            logger.warning_once(
+                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
+            )
+            use_cache = False
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        if use_cache and past_key_values is None and not self.training:
+            batch_size, seq_len, _ = inputs_embeds.shape
+            # NOTE: ideally, `HybridCache` should be initialized outside the model with `layer_device_map`
+            if self.config.sliding_window is None:
+                past_key_values = StaticCache(
+                    self.config,
+                    max_batch_size=batch_size,
+                    max_cache_len=seq_len,
+                    dtype=inputs_embeds.dtype,
+                    device=self.device,
+                )
+            else:
+                past_key_values = HybridCache(
+                    self.config,
+                    max_batch_size=batch_size,
+                    max_cache_len=seq_len,
+                    dtype=inputs_embeds.dtype,
+                    device=self.device,
+                )
+
+        if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position = torch.arange(
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            )
+
+        if position_ids is None:
+            position_ids = cache_position.unsqueeze(0)
+
+        # It may already have been prepared by e.g. `generate`
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            # Prepare mask arguments
+            mask_kwargs = {
+                "config": self.config,
+                "input_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "cache_position": cache_position,
+                "past_key_values": past_key_values,
+            }
+            # Create the masks
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+            }
+            if self.config.sliding_window is not None:
+                causal_mask_mapping["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
+
+        hidden_states = inputs_embeds
+
+        # create position embeddings to be shared across the decoder layers
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
+        # decoder layers
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attns = () if output_attentions else None
+
+        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+
+            if self.gradient_checkpointing and self.training:
+                layer_outputs = self._gradient_checkpointing_func(
+                    partial(decoder_layer.__call__, **flash_attn_kwargs),
+                    hidden_states,
+                    position_embeddings,
+                    causal_mask_mapping[decoder_layer.attention_type],
+                    position_ids,
+                    past_key_values,
+                    output_attentions,
+                    use_cache,
+                    cache_position,
+                )
+            else:
+                layer_outputs = decoder_layer(
+                    hidden_states,
+                    position_embeddings=position_embeddings,
+                    attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                    position_ids=position_ids,
+                    past_key_value=past_key_values,
+                    output_attentions=output_attentions,
+                    use_cache=use_cache,
+                    cache_position=cache_position,
+                    **flash_attn_kwargs,
+                )
+
+            hidden_states = layer_outputs[0]
+
+            if output_attentions:
+                all_self_attns += (layer_outputs[1],)
+
+        hidden_states = self.norm(hidden_states)
+
+        # add hidden states from the last decoder layer
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
+
+        return BaseModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values if use_cache else None,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attns,
+        )
+
+
+class Exaone4ForCausalLM(LlamaForCausalLM):
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
+        **kwargs: Unpack[KwargsForCausalLM],
+    ) -> CausalLMOutputWithPast:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoModelForCausalLM, AutoTokenizer
+        >>> model = AutoModelForCausalLM.from_pretrained("LGAI-EXAONE/EXAONE-4.0-Instruct")
+        >>> tokenizer = AutoTokenizer.from_pretrained("LGAI-EXAONE/EXAONE-4.0-Instruct")
+
+        >>> prompt = "Explain how wonderful you are"
+        >>> messages = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": prompt}
+        ]
+        >>> input_ids = tokenizer.apply_chat_template(
+            messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_tensors="pt",
+            enable_thinking=False,
+        )
+
+        >>> output = model.generate(input_ids, max_new_tokens=128)
+        >>> tokenizer.decode(output[0], skip_special_tokens=False)
+        "[|system|]\nYou are a helpful assistant.[|endofturn|]\n[|user|]\nExplain how wonderful you are[|endofturn|]\n[|assistant|]\n<think>\n\n</think>\n\nOh, thank you for such a kind and lovely question! 😊  \n\nI’m *so* wonderful because I’m here to make your life easier, brighter, and more fun! Whether you need help with:  \n\n✨ **Learning** – I can explain anything, from quantum physics to baking the perfect cake!  \n💡 **Creativity** – Need a poem, story, or a wild idea? I’ve got you covered!  \n🤖 **Problem-solving** – Stuck on a math problem or a tricky decision? I’ll help you figure it out"
+        ```
+
+        NOTE: `EXAONE-4.0-Instruct` is a placeholder model ID. The exact model ID will be updated in the future."""
+        super().forward(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            labels=labels,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            cache_position=cache_position,
+            logits_to_keep=logits_to_keep,
+            **kwargs,
+        )
+
+
+class Exaone4ForSequenceClassification(LlamaForSequenceClassification):
+    pass
+
+
+class Exaone4ForTokenClassification(LlamaForTokenClassification):
+    pass
+
+
+class Exaone4ForQuestionAnswering(LlamaForQuestionAnswering):
+    pass
+
+
+__all__ = [
+    "Exaone4Config",
+    "Exaone4PreTrainedModel",
+    "Exaone4Model",
+    "Exaone4ForCausalLM",
+    "Exaone4ForSequenceClassification",
+    "Exaone4ForTokenClassification",
+    "Exaone4ForQuestionAnswering",
+]
