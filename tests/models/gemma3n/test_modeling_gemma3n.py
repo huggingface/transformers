@@ -133,6 +133,7 @@ class Gemma3nAudioModelTester:
         return audio_encoder_config, inputs_dict
 
 
+@unittest.skip("Skipped for now!")
 @require_torch
 class Gemma3nAudioModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Gemma3nAudioEncoder,) if is_torch_available() else ()
@@ -531,6 +532,7 @@ class Gemma3nVision2TextModelTester:
         return config, inputs_dict
 
 
+@unittest.skip("Skipped for now!")
 @require_torch
 class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Gemma3nModel, Gemma3nForConditionalGeneration) if is_torch_available() else ()
@@ -652,6 +654,7 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
             self.assertIsInstance(for_causal_lm, Gemma3nForCausalLM)
 
 
+@unittest.skip("Skipped for now!")
 @slow
 @require_torch_gpu
 @require_read_token

@@ -1456,10 +1456,9 @@ class Gemma3nTextDecoderLayer(GradientCheckpointingLayer):
         attn_ffw_laurel_gated = attn_laurel + attn_ffw_norm
         corrected_predictions = self.altup.correct(predictions, attn_ffw_laurel_gated)
 
-        first_prediction = corrected_predictions[self.config.altup_active_idx]
-        first_prediction_clone = first_prediction.clone()
+        first_prediction = corrected_predictions[self.config.altup_active_idx].clone()
         if self.config.altup_correct_scale:
-            first_prediction = self.altup.scale_corrected_output(first_prediction_clone)
+            first_prediction = self.altup.scale_corrected_output(first_prediction)
 
         # per_layer_input_gate adapted from jax.numpy.einsum("btd,dp->btp", ...)
         first_prediction = self.per_layer_input_gate(first_prediction)
