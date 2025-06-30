@@ -36,7 +36,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_optimum_quanto_available, is_torch_greater_or_equal
+from transformers.utils import is_hqq_available, is_optimum_quanto_available, is_torch_greater_or_equal
 
 
 if is_torch_available():
@@ -52,11 +52,13 @@ if is_torch_available():
         GenerationConfig,
         HybridCache,
         LlamaConfig,
+        QuantizedCache,
         SlidingWindowCache,
         StaticCache,
         convert_and_export_with_cache,
         pipeline,
     )
+    from transformers.cache_utils import HQQQuantizedCacheProcessor, QuantoQuantizedCacheProcessor
     from transformers.integrations.executorch import export_with_dynamic_cache
 
 
@@ -282,6 +284,61 @@ class CacheIntegrationTest(unittest.TestCase):
         # Confirm that the output matches expectations
         decoded = self.tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
         self.assertListEqual(decoded, EXPECTED_GENERATION)
+
+    @parameterized.expand([("quanto"), ("HQQ")])
+    def test_quantized_cache_generation(self, backend):
+        """Tests that QuantizedCache works as expected for both `quanto` and `hqq` backends."""
+        if backend == "quanto":
+            if not is_optimum_quanto_available():
+                self.skipTest("Quanto is not available")
+            axis_key, axis_value = 0, 0
+            # This output is taken from a run with the same parameters, and is known to be correct
+            expected_generation = ["The cat's whiskers are also a sign of anxiety."]
+        elif backend == "HQQ":
+            if not is_hqq_available():
+                self.skipTest("HQQ is not available")
+            axis_key, axis_value = 1, 1
+            # HQQ has slightly different numerics
+            expected_generation = ["The cat's whiskers are also a sign of anxiety."]
+        else:
+            return
+
+        inputs = self.tokenizer(["The cat"], return_tensors="pt").to(self.model.device)
+
+        gen_out = self.model.generate(
+            **inputs,
+            do_sample=False,
+            max_new_tokens=10,
+            return_dict_in_generate=True,
+            cache_implementation="quantized",
+            cache_config={
+                "backend": backend,
+                "nbits": 4,
+                "q_group_size": 16,
+                "residual_length": 4,
+                "axis_key": axis_key,
+                "axis_value": axis_value,
+            },
+            disable_compile=True,
+        )
+
+        self.assertIsInstance(gen_out.past_key_values, QuantizedCache)
+        processor = gen_out.past_key_values.processors[0]
+        if backend == "quanto":
+            self.assertIsInstance(processor, QuantoQuantizedCacheProcessor)
+        elif backend == "hqq":
+            self.assertIsInstance(processor, HQQQuantizedCacheProcessor)
+
+        decoded = self.tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
+        self.assertListEqual(decoded, expected_generation)
+
+        self.assertTrue(len(processor._quantized_key_cache) > 0)
+
+        # Check that something is actually quantized
+        has_been_quantized = any(
+            (q[0] if isinstance(q, tuple) else q).numel() > 0 for q in processor._quantized_key_cache
+        )
+        self.assertTrue(has_been_quantized)
 
     @parameterized.expand(TEST_CACHE_IMPLEMENTATIONS)
     def test_cache_extra_left_padding(self, cache_implementation):

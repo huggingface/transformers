@@ -214,7 +214,9 @@ class CacheLayer:
             self.value_cache = self.value_cache.index_select(0, beam_idx.to(device))
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(K={self.key_cache}, V={self.value_cache})"
+        key_repr = "None" if self.key_cache is None else f"t({tuple(self.key_cache.shape)})"
+        value_repr = "None" if self.value_cache is None else f"t({tuple(self.value_cache.shape)})"
+        return f"{self.__class__.__name__}(K={key_repr}, V={value_repr})"
 
 
 class Cache:
@@ -860,7 +862,7 @@ class DynamicLayer(CacheLayer):
     def get_seq_length(self, cache_position: Optional[torch.LongTensor] = None) -> int:
         """Returns the sequence length of the cached states."""
         # TODO: deprecate this function in favor of `cache_position`
-        if self is None or self.key_cache is None:
+        if self is None or self.key_cache is None or self.key_cache.numel() == 0:
             return 0
         return self.key_cache.shape[-2]
 
@@ -1015,94 +1017,6 @@ class OffloadedCache(DynamicCache):
         # Create the underlying cache with offload processor
         processors = CacheProcessorList([OffloadedCacheProcessor()])
         super().__init__(processors=processors, config=config)
-
-
-class QuantoQuantizedCache(DynamicCache):
-    """
-    A quantizer cache similar to what is described in the [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://huggingface.co/papers/2402.02750).
-    It allows the model to generate longer sequence length without allocating too much memory for Key and Value cache by applying quantization.
-
-    The cache has two types of storage, one for original precision and one for the quantized cache. A `residual length` is set as a maximum capacity for the
-    original precision cache. When the length goes beyond maximum capacity, the original precision cache is discarded and moved into the quantized cache. The
-    quantization is done per-channel with a set `q_group_size` for both Keys and Values, in contrast to what was described in the paper.
-
-    It stores Keys and Values a list of quantized tensors (tuples in case we need to store metadata), one for each layer. Additionally, it stores the Key and
-    Value in original precision states as a list of tensors, one for each layer. The size of each tensor
-    is `[batch_size, num_heads, seq_len - residual_length, head_dim]`
-
-    Uses `quanto` as a backend to perform quantization. Current implementation supports `int2` and `int4` dtypes only.
-
-    Parameters:
-        cache_config (`QuantizedCacheConfig`):
-            A configuration containing all the arguments to be used by the quantizer, including axis, qtype and group size.
-
-    Example:
-
-        ```python
-        >>> # Run pip install quanto first if you don't have it yet
-        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, QuantoQuantizedCache, QuantizedCacheConfig
-
-        >>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
-        >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
-
-        >>> inputs = tokenizer(text="My name is Qwen2", return_tensors="pt")
-
-        >>> # Prepare a cache class and pass it to model's forward
-        >>> cache_config = QuantizedCacheConfig(nbits=4)
-        >>> past_key_values = QuantoQuantizedCache(cache_config=cache_config)
-        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> outputs.past_key_values # access cache filled with key/values from generation
-        QuantoQuantizedCache()
-        ```
-    """
-
-    def __init__(self, cache_config: QuantizedCacheConfig) -> None:
-        processors = CacheProcessorList([QuantoQuantizedCacheProcessor(cache_config)])
-        super(DynamicCache, self).__init__(processors=processors)
-
-
-class HQQQuantizedCache(DynamicCache):
-    """
-    A quantizer cache similar to what is described in the [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://arxiv.org/abs/2402.02750).
-    It allows the model to generate longer sequence length without allocating too much memory for Key and Value cache by applying quantization.
-
-    The cache has two types of storage, one for original precision and one for the quantized cache. A `residual length` is set as a maximum capacity for the
-    original precision cache. When the length goes beyond maximum capacity, the original precision cache is discarded and moved into the quantized cache. The
-    quantization is done per-channel with a set `q_group_size` for both Keys and Values, in contrast to what was described in the paper.
-
-    It stores Keys and Values a list of quantized tensors (tuples in case we need to store metadata), one for each layer. Additionally, it stores the Key and
-    Value in original precision states as a list of tensors, one for each layer. The size of each tensor
-    is `[batch_size, num_heads, seq_len - residual_length, head_dim]`
-
-    Uses `HQQ` as a backend to perform quantization. Current implementation supports `int2`, `int4`, `int8` dtypes.
-
-    Parameters:
-        cache_config (`QuantizedCacheConfig`):
-            A configuration containing all the arguments to be used by the quantizer, including axis, qtype and group size.
-
-    Example:
-
-        ```python
-        >>> # Run pip install hqq first if you don't have it yet
-        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, HQQQuantizedCache, QuantizedCacheConfig
-
-        >>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
-        >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
-
-        >>> inputs = tokenizer(text="My name is Qwen2", return_tensors="pt")
-
-        >>> # Prepare a cache class and pass it to model's forward
-        >>> cache_config = QuantizedCacheConfig(nbits=4, axis_key=1, axis_value=1)
-        >>> past_key_values = HQQQuantizedCache(cache_config=cache_config)
-        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> outputs.past_key_values # access cache filled with key/values from generation
-        HQQQuantizedCache()
-        ```
-    """
-
-    def __init__(self, cache_config: QuantizedCacheConfig) -> None:
-        processors = CacheProcessorList([HQQQuantizedCacheProcessor(cache_config)])
-        super(DynamicCache, self).__init__(processors=processors)
 
 
 class StaticLayer(CacheLayer):
@@ -2120,56 +2034,60 @@ class QuantizedCacheProcessor(CacheProcessor):
         if layer_idx == 0:
             self._seen_tokens += key_tensors.shape[-2]
 
-        # Extend quantized cache if needed
-        while len(self._quantized_key_cache) <= layer_idx:
-            self._quantized_key_cache.append(torch.empty(0))
-            self._quantized_value_cache.append(torch.empty(0))
+        if len(cache.key_cache) < layer_idx:
+            raise ValueError("QuantizedCache does not support model usage where layers are skipped. Use DynamicCache.")
 
-        # Check if we need to quantize
-        if layer_idx < len(cache.key_cache):
-            current_key = cache.key_cache[layer_idx]
-            current_value = cache.value_cache[layer_idx]
+        # `key_tensors` is the content of the residual cache, after having been updated by DynamicLayer
+        # On the first forward pass, we quantize the whole prompt.
+        # On subsequent passes, we accumulate the tokens in the residual cache and quantize when it is full.
+        is_prefill = self._get_quantized_length(layer_idx) == 0
 
-            if (
-                current_key.dim() == 4
-                and current_key.shape[-2] >= self.config.residual_length
-                and current_key.shape[-2] > self._get_quantized_length(layer_idx)
-            ):
-                # Quantize the older part, keep recent tokens in original precision
-                split_idx = current_key.shape[-2] - self.config.residual_length
+        if is_prefill:
+            self._quantized_key_cache.append(self._quantize(key_tensors.contiguous(), axis=self.config.axis_key))
+            self._quantized_value_cache.append(self._quantize(value_tensors.contiguous(), axis=self.config.axis_value))
 
-                # Get the part to quantize
-                key_to_quantize = current_key[:, :, :split_idx, :].contiguous()
-                value_to_quantize = current_value[:, :, :split_idx, :].contiguous()
-
-                # Quantize and store
-                self._quantized_key_cache[layer_idx] = self._quantize(key_to_quantize, axis=self.config.axis_key)
-                self._quantized_value_cache[layer_idx] = self._quantize(value_to_quantize, axis=self.config.axis_value)
-
-                # Keep only the recent tokens in original precision
-                cache.key_cache[layer_idx] = current_key[:, :, split_idx:, :]
-                cache.value_cache[layer_idx] = current_value[:, :, split_idx:, :]
-
-                # Return the full tensors for this update
-                if self._quantized_key_cache[layer_idx].numel() > 0:
-                    dequant_key = self._dequantize(self._quantized_key_cache[layer_idx])
-                    dequant_value = self._dequantize(self._quantized_value_cache[layer_idx])
-                    full_key = torch.cat([dequant_key, cache.key_cache[layer_idx]], dim=-2)
-                    full_value = torch.cat([dequant_value, cache.value_cache[layer_idx]], dim=-2)
-                    return full_key, full_value
-
-        return key_tensors, value_tensors
-
-    def _get_quantized_length(self, layer_idx: int) -> int:
-        """Get the length of quantized cache for a layer."""
-        if layer_idx < len(self._quantized_key_cache) and self._quantized_key_cache[layer_idx].numel() > 0:
-            # This would depend on the specific quantization implementation
-            return (
-                self._quantized_key_cache[layer_idx].shape[-2]
-                if hasattr(self._quantized_key_cache[layer_idx], "shape")
-                else 0
+            # Clear the residual cache
+            cache.key_cache[layer_idx] = torch.zeros(
+                0,
+                dtype=key_tensors.dtype,
+                device=key_tensors.device,
             )
-        return 0
+            cache.value_cache[layer_idx] = torch.zeros(
+                0,
+                dtype=value_tensors.dtype,
+                device=value_tensors.device,
+            )
+            # On prefill, we return the original prompt
+            keys_to_return, values_to_return = key_tensors, value_tensors
+
+        else:
+            # Prepend the previously quantized cache
+            dequant_key = self._dequantize(self._quantized_key_cache[layer_idx])
+            dequant_value = self._dequantize(self._quantized_value_cache[layer_idx])
+            keys_to_return = torch.cat([dequant_key, key_tensors], dim=-2)
+            values_to_return = torch.cat([dequant_value, value_tensors], dim=-2)
+            if key_tensors.shape[-2] >= self.config.residual_length:
+                # Quantize and store
+                self._quantized_key_cache[layer_idx] = self._quantize(
+                    keys_to_return.contiguous(), axis=self.config.axis_key
+                )
+                self._quantized_value_cache[layer_idx] = self._quantize(
+                    values_to_return.contiguous(), axis=self.config.axis_value
+                )
+
+                # Clear the residual cache
+                cache.key_cache[layer_idx] = torch.zeros(
+                    0,
+                    dtype=key_tensors.dtype,
+                    device=key_tensors.device,
+                )
+                cache.value_cache[layer_idx] = torch.zeros(
+                    0,
+                    dtype=value_tensors.dtype,
+                    device=value_tensors.device,
+                )
+
+        return keys_to_return, values_to_return
 
     def _quantize(self, tensor: torch.Tensor, axis: int) -> torch.Tensor:
         """Quantize a tensor - to be implemented by specific quantization backends."""
@@ -2227,6 +2145,12 @@ class QuantoQuantizedCacheProcessor(QuantizedCacheProcessor):
         """Dequantize tensor using quanto backend."""
         return qtensor.dequantize()
 
+    def _get_quantized_length(self, layer_idx: int) -> int:
+        """Get the length of quantized cache for a layer."""
+        if layer_idx < len(self._quantized_key_cache):
+            return self._quantized_key_cache[layer_idx].shape[-2]
+        return 0
+
 
 class HQQQuantizedCacheProcessor(QuantizedCacheProcessor):
     """
@@ -2277,6 +2201,12 @@ class HQQQuantizedCacheProcessor(QuantizedCacheProcessor):
         tensor = self.quantizer.dequantize(quant_tensor, meta)
         return tensor
 
+    def _get_quantized_length(self, layer_idx: int) -> int:
+        """Get the length of quantized cache for a layer."""
+        if layer_idx < len(self._quantized_key_cache):
+            return self._quantized_key_cache[layer_idx][0].shape[-2]
+        return 0
+
 
 class QuantizedCache(DynamicCache):
     """
@@ -2293,8 +2223,112 @@ class QuantizedCache(DynamicCache):
     """
 
     def __init__(self, cache_config: QuantizedCacheConfig) -> None:
-        processors = CacheProcessorList([QuantoQuantizedCacheProcessor(cache_config)])
+        if cache_config.backend == "quanto":
+            processor = QuantoQuantizedCacheProcessor(cache_config)
+        elif cache_config.backend == "hqq":
+            processor = HQQQuantizedCacheProcessor(cache_config)
+        else:
+            raise ValueError(f"Unknown quantization backend `{cache_config.backend}`")
+
+        processors = CacheProcessorList([processor])
         super().__init__(processors=processors)
+
+    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+        """Returns the sequence length of the cached states. A layer index can be optionally passed."""
+        if len(self.key_cache) <= layer_idx:
+            return 0
+        # since we cannot get the seq_length of each layer directly and rely on `_seen_tokens` which is
+        # updated every "layer_idx" == 0, this is a hack to get the actual seq_length for the given layer_idx
+        # this part of code otherwise fails when used to verify attn_weight shape in some models
+        return self.processors[0]._seen_tokens if layer_idx == 0 else self.processors[0]._seen_tokens - 1
+
+
+class QuantoQuantizedCache(QuantizedCache):
+    """
+    A quantizer cache similar to what is described in the [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://huggingface.co/papers/2402.02750).
+    It allows the model to generate longer sequence length without allocating too much memory for Key and Value cache by applying quantization.
+
+    The cache has two types of storage, one for original precision and one for the quantized cache. A `residual length` is set as a maximum capacity for the
+    original precision cache. When the length goes beyond maximum capacity, the original precision cache is discarded and moved into the quantized cache. The
+    quantization is done per-channel with a set `q_group_size` for both Keys and Values, in contrast to what was described in the paper.
+
+    It stores Keys and Values a list of quantized tensors (tuples in case we need to store metadata), one for each layer. Additionally, it stores the Key and
+    Value in original precision states as a list of tensors, one for each layer. The size of each tensor
+    is `[batch_size, num_heads, seq_len - residual_length, head_dim]`
+
+    Uses `quanto` as a backend to perform quantization. Current implementation supports `int2` and `int4` dtypes only.
+
+    Parameters:
+        cache_config (`QuantizedCacheConfig`):
+            A configuration containing all the arguments to be used by the quantizer, including axis, qtype and group size.
+
+    Example:
+
+        ```python
+        >>> # Run pip install quanto first if you don't have it yet
+        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, QuantoQuantizedCache, QuantizedCacheConfig
+
+        >>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
+        >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
+
+        >>> inputs = tokenizer(text="My name is Qwen2", return_tensors="pt")
+
+        >>> # Prepare a cache class and pass it to model's forward
+        >>> cache_config = QuantizedCacheConfig(nbits=4)
+        >>> past_key_values = QuantoQuantizedCache(cache_config=cache_config)
+        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
+        >>> outputs.past_key_values # access cache filled with key/values from generation
+        QuantoQuantizedCache()
+        ```
+    """
+
+    def __init__(self, cache_config: QuantizedCacheConfig) -> None:
+        processors = CacheProcessorList([QuantoQuantizedCacheProcessor(cache_config)])
+        Cache.__init__(self, processors=processors)
+
+
+class HQQQuantizedCache(QuantizedCache):
+    """
+    A quantizer cache similar to what is described in the [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://arxiv.org/abs/2402.02750).
+    It allows the model to generate longer sequence length without allocating too much memory for Key and Value cache by applying quantization.
+
+    The cache has two types of storage, one for original precision and one for the quantized cache. A `residual length` is set as a maximum capacity for the
+    original precision cache. When the length goes beyond maximum capacity, the original precision cache is discarded and moved into the quantized cache. The
+    quantization is done per-channel with a set `q_group_size` for both Keys and Values, in contrast to what was described in the paper.
+
+    It stores Keys and Values a list of quantized tensors (tuples in case we need to store metadata), one for each layer. Additionally, it stores the Key and
+    Value in original precision states as a list of tensors, one for each layer. The size of each tensor
+    is `[batch_size, num_heads, seq_len - residual_length, head_dim]`
+
+    Uses `HQQ` as a backend to perform quantization. Current implementation supports `int2`, `int4`, `int8` dtypes.
+
+    Parameters:
+        cache_config (`QuantizedCacheConfig`):
+            A configuration containing all the arguments to be used by the quantizer, including axis, qtype and group size.
+
+    Example:
+
+        ```python
+        >>> # Run pip install hqq first if you don't have it yet
+        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, HQQQuantizedCache, QuantizedCacheConfig
+
+        >>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
+        >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
+
+        >>> inputs = tokenizer(text="My name is Qwen2", return_tensors="pt")
+
+        >>> # Prepare a cache class and pass it to model's forward
+        >>> cache_config = QuantizedCacheConfig(nbits=4, axis_key=1, axis_value=1)
+        >>> past_key_values = HQQQuantizedCache(cache_config=cache_config)
+        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
+        >>> outputs.past_key_values # access cache filled with key/values from generation
+        HQQQuantizedCache()
+        ```
+    """
+
+    def __init__(self, cache_config: QuantizedCacheConfig) -> None:
+        processors = CacheProcessorList([HQQQuantizedCacheProcessor(cache_config)])
+        Cache.__init__(self, processors=processors)
 
 
 class SinkCache(Cache):
