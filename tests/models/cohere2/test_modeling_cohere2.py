@@ -24,6 +24,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, Cohere2Config, is_
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     Expectations,
+    cleanup,
     is_flash_attn_2_available,
     require_flash_attn,
     require_read_token,
@@ -135,6 +136,9 @@ class Cohere2ModelTest(CohereModelTest, unittest.TestCase):
 @require_torch_large_accelerator
 class Cohere2IntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
 
     def test_model_bf16(self):
         model_id = "CohereForAI/c4ai-command-r7b-12-2024"

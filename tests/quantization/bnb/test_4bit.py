@@ -520,14 +520,14 @@ class Pipeline4BitTest(Base4bitTest):
 
 @require_torch_multi_accelerator
 @apply_skip_if_not_implemented
-class Bnb4bitTestMultiGpu(Base4bitTest):
+class Bnb4bitTestMultiAccelerator(Base4bitTest):
     def setUp(self):
         super().setUp()
 
-    def test_multi_gpu_loading(self):
+    def test_multi_accelerator_loading(self):
         r"""
-        This tests that the model has been loaded and can be used correctly on a multi-GPU setup.
-        Let's just try to load a model on 2 GPUs and see if it works. The model we test has ~2GB of total, 3GB should suffice
+        This tests that the model has been loaded and can be used correctly on a multi-accelerator setup.
+        Let's just try to load a model on 2 accelerators and see if it works. The model we test has ~2GB of total, 3GB should suffice
         """
         device_map = {
             "transformer.word_embeddings": 0,
