@@ -120,7 +120,7 @@ viz("<image> What is shown in this image?")
 
 ## Notes
 
-* **Prompt format matters**: Different checkpoints (Mistral, Vicuna, LLaMA, LLaMA‑3 / OpenChat formats) require specific syntax. Always use `processor.apply_chat_template`.
+* Different checkpoints (Mistral, Vicuna, etc.) require a specific prompt format depending on the underlying LLM. Always use [`~ProcessorMixin.apply_chat_template`] to ensure correct formatting. Refer to the [Templates](../chat_templating) guide for more details.
 * **Multi-image support**: You can pass multiple images—just align `<image>` tokens with image order.
 * **Batching tip**: Set `processor.tokenizer.padding_side = "left"` for best batched generation results.
 * Check out the official [blog post](https://llava-vl.github.io/blog/2024-01-30-llava-next/) for detailed benchmarks showing LLaVA‑NeXT outperforming Gemini Pro on MM‑Vet, TextVQA, ScienceQA, and more.
