@@ -792,7 +792,6 @@ class BertModel(BertPreTrainedModel):
 
         self.pooler = BertPooler(config) if add_pooling_layer else None
 
-        self.attn_implementation = config._attn_implementation
         self.position_embedding_type = config.position_embedding_type
 
         # Initialize weights and apply final processing
