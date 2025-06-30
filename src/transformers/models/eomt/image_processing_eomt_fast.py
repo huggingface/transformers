@@ -516,6 +516,8 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
         outputs,
         target_sizes: list[tuple[int, int]],
         threshold: float = 0.8,
+        mask_threshold: float = 0.5,
+        overlap_mask_area_threshold: float = 0.8,
         size: Optional[dict[str, int]] = None,
     ):
         """Post-processes model outputs into Instance Segmentation Predictions."""
