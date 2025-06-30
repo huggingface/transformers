@@ -2930,6 +2930,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             "renormalize_logits": True,  # necessary to match OAI beam search implementation
         }
 
+        set_seed(0)
         result = model.generate(**inputs, **gen_kwargs)
         decoded_all = processor.batch_decode(result, skip_special_tokens=True)
 
