@@ -17,6 +17,7 @@ import unittest
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
+    cleanup,
     require_read_token,
     require_torch_large_accelerator,
     slow,
@@ -77,6 +78,9 @@ class Llama4IntegrationTest(unittest.TestCase):
                 ],
             },
         ]
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
 
     def test_model_17b_16e_fp16(self):
         EXPECTED_TEXT = [
