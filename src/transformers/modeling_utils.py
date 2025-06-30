@@ -2057,11 +2057,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         self._keep_in_fp32_modules_strict = copy.copy(self.__class__._keep_in_fp32_modules_strict)
 
         self._no_split_modules = self._no_split_modules or []
-        _param_to_record = {}
-        for module in self.modules():
-            if hasattr(module, "return_hooks"):
-                _param_to_record.update({module.return_hooks[0]: (module, module.return_hooks[1])})
-        self._can_record_outputs: Dict[str, Tuple[nn.Module, int]] = _param_to_record
 
     def post_init(self):
         """
