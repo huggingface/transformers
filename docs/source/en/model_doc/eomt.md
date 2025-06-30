@@ -74,9 +74,6 @@ inputs = processor(
     return_tensors="pt",
 )
 
-# Remove Patch Offsets from inputs — only used later for post-processing.
-patch_offsets = inputs.pop("patch_offsets")
-
 with torch.inference_mode():
     outputs = model(**inputs)
 
@@ -86,7 +83,6 @@ target_sizes = [(image.height, image.width)]
 # Post-process the model outputs to get final segmentation prediction
 preds = processor.post_process_semantic_segmentation(
     outputs,
-    patch_offsets=patch_offsets,
     target_sizes=target_sizes,
 )
 
