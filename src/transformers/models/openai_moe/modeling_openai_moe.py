@@ -118,7 +118,10 @@ class OpenAIMoeExperts(nn.Module):
             gate_up = torch.bmm(hidden_states, self.gate_up_proj) + self.gate_up_proj_bias[..., None, :]
             gate, up = gate_up.chunk(2, dim=-1)  # not supported for DTensors
             glu = gate * torch.sigmoid(gate * self.alpha)
-            next_states = torch.bmm(((up + 1) * glu), self.down_proj) + self.down_proj_bias[..., None, :]
+            next_states = torch.bmm(((up + 1) * glu), self.down_proj)
+            # add bias only on TP=0 so that we avoid adding it for all TPs
+            if torch.distributed.get_rank() == 0:
+                next_states = next_states + self.down_proj_bias[..., None, :]
             next_states = next_states.view(-1, self.hidden_size)
         return next_states
 
