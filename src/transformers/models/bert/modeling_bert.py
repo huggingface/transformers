@@ -388,7 +388,9 @@ class BertSelfOutput(nn.Module):
 class BertAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None, is_causal=False, layer_idx=None):
         super().__init__()
-        self.self = BertSelfAttention(config, position_embedding_type=position_embedding_type, is_causal=is_causal, layer_idx=layer_idx)
+        self.self = BertSelfAttention(
+            config, position_embedding_type=position_embedding_type, is_causal=is_causal, layer_idx=layer_idx
+        )
         self.output = BertSelfOutput(config)
         self.pruned_heads = set()
 
@@ -476,7 +478,9 @@ class BertLayer(GradientCheckpointingLayer):
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = BertAttention(config, position_embedding_type="absolute", is_causal=False, layer_idx=layer_idx)
+            self.crossattention = BertAttention(
+                config, position_embedding_type="absolute", is_causal=False, layer_idx=layer_idx
+            )
         self.intermediate = BertIntermediate(config)
         self.output = BertOutput(config)
 
@@ -872,9 +876,7 @@ class BertModel(BertPreTrainedModel):
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         if cache_position is None:
-            cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + seq_length, device=device
-            )
+            cache_position = torch.arange(past_key_values_length, past_key_values_length + seq_length, device=device)
 
         if token_type_ids is None:
             if hasattr(self.embeddings, "token_type_ids"):

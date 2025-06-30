@@ -441,7 +441,7 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             BertLMHeadModel,
             BertForMaskedLM,
             # TODO: fails with fa2
-            #BertForMultipleChoice,
+            # BertForMultipleChoice,
             BertForNextSentencePrediction,
             BertForPreTraining,
             BertForQuestionAnswering,
@@ -682,6 +682,7 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
         pass
 
+
 @require_torch
 class BertModelIntegrationTest(unittest.TestCase):
     @slow
@@ -738,8 +739,12 @@ class BertModelIntegrationTest(unittest.TestCase):
         config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-BertModel")
         config.is_decoder = True
 
-        model = BertModel.from_pretrained("hf-internal-testing/tiny-random-BertModel", config=config, attn_implementation="eager")
-        model_sdpa = BertModel.from_pretrained("hf-internal-testing/tiny-random-BertModel", config=config, attn_implementation="sdpa")
+        model = BertModel.from_pretrained(
+            "hf-internal-testing/tiny-random-BertModel", config=config, attn_implementation="eager"
+        )
+        model_sdpa = BertModel.from_pretrained(
+            "hf-internal-testing/tiny-random-BertModel", config=config, attn_implementation="sdpa"
+        )
 
         model = model.eval()
         model_sdpa = model_sdpa.eval()
