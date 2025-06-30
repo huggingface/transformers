@@ -440,8 +440,7 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             BertModel,
             BertLMHeadModel,
             BertForMaskedLM,
-            # TODO: fails with fa2
-            # BertForMultipleChoice,
+            BertForMultipleChoice,
             BertForNextSentencePrediction,
             BertForPreTraining,
             BertForQuestionAnswering,
