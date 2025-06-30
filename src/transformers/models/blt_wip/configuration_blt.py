@@ -28,15 +28,6 @@ class InitStdFactor(str, Enum):
     CURRENT_DEPTH = "current_depth"  # Init std is divided by sqrt(2*depth)
 
 
-class PatchingModeEnum(str, Enum):
-    entropy = "entropy"
-    bpe = "bpe"
-    bpe_patcher = "bpe_patcher"
-    space = "space"
-    static = "static"
-    byte = "byte"
-
-
 class BLTLocalEncoderConfig(PretrainedConfig):
     """
     Configuration class for the BLT Local Encoder component.
@@ -241,7 +232,6 @@ class BLTPatcherConfig(PretrainedConfig):
         ffn_dim_multiplier=None,
         multiple_of=256,
         rope_theta=10000.0,
-        rope_use_fp32_in_outer_product=False,
         attn_impl="sdpa",
         attn_bias_type="causal",
         bos_token_id=1,
@@ -269,13 +259,10 @@ class BLTPatcherConfig(PretrainedConfig):
             **kwargs,
         )
         
-        # Add attributes needed for compatibility with transformer models
         self.hidden_act = "silu"  # BLT uses silu activation
-        
-        # Calculate intermediate_size using BLTMLP logic based on actual hidden_size
+    
         self.intermediate_size = multiple_of * ((int(8 * self.hidden_size / 3) + multiple_of - 1) // multiple_of)
         
-        # Set simple rope scaling for patcher (no complex dynamic rope)
         self.rope_scaling = {"rope_type": "default"}
 
 
@@ -442,7 +429,6 @@ class BLTConfig(PretrainedConfig):
         # Positional encoding
         rope_theta=10000.0,
         # Attention configuration
-        attn_impl="sdpa",
         _attn_implementation="sdpa",
         # Patching configuration
         patch_in_forward=False,
@@ -503,7 +489,6 @@ class BLTConfig(PretrainedConfig):
         self.rope_theta = rope_theta
 
         # Attention configuration
-        self.attn_impl = attn_impl
         self._attn_implementation = _attn_implementation
 
         # Patching configuration
@@ -611,6 +596,5 @@ __all__ = [
     "BLTLocalDecoderConfig", 
     "BLTGlobalTransformerConfig", 
     "InitStdFactor", 
-    "PatchingModeEnum"
 ]
 

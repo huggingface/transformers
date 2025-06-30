@@ -243,7 +243,7 @@ class BLTSelfAttention(nn.Module):
         self.num_key_value_heads = config.num_key_value_heads
         self.head_dim = config.hidden_size // self.num_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = None
         self.rope_theta = config.rope_theta
         self.layer_idx = layer_idx
 
@@ -284,8 +284,8 @@ class BLTSelfAttention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         output_attentions = False
-        self.config._attn_implementation = "sdpa"
-        self.scaling = None
+        # self.config._attn_implementation = "sdpa"
+        # self.scaling = None
         if self.config._attn_implementation != "eager":
             if self.config._attn_implementation == "sdpa" and output_attentions:
                 logger.warning_once(
@@ -735,7 +735,7 @@ class BLTCrossAttention(nn.Module):
         self.num_key_value_heads = config.num_attention_heads  # Assuming same for cross attention
         self.head_dim = self.hidden_size // self.num_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.scaling = None #self.head_dim ** -0.5
+        self.scaling = None
         self.dropout = config.dropout
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
@@ -787,8 +787,8 @@ class BLTCrossAttention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
 
-        self.config._attn_implementation = "sdpa" 
-        attn = "sdpa"
+        # self.config._attn_implementation = "sdpa" 
+        # attn = "sdpa"
         if self.config._attn_implementation != "eager":
             if self.config._attn_implementation == "sdpa" and output_attentions:
                 logger.warning_once(
