@@ -27,7 +27,14 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, ModelOutput, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils import (
+    ModelOutput,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_torchdynamo_compiling,
+    logging,
+)
 from ..auto import AutoModel
 from .configuration_paligemma import PaliGemmaConfig
 

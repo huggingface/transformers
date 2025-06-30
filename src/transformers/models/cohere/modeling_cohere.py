@@ -134,7 +134,7 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: float,
     dropout: float = 0.0,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
@@ -414,7 +414,7 @@ class CohereModel(CoherePreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")

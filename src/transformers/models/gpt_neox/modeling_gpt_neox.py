@@ -328,7 +328,7 @@ class GPTNeoXDecoderLayer(GradientCheckpointingLayer):
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)

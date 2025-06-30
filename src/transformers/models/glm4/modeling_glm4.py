@@ -144,7 +144,7 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: float,
     dropout: float = 0.0,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
@@ -242,7 +242,7 @@ class Glm4Attention(nn.Module):
         attention_mask: Optional[torch.Tensor],
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
@@ -405,7 +405,7 @@ class Glm4Model(Glm4PreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -500,7 +500,7 @@ class Glm4ForCausalLM(Glm4PreTrainedModel, GenerationMixin):
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -594,7 +594,7 @@ class Glm4ForSequenceClassification(Glm4PreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> SequenceClassifierOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):

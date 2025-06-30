@@ -31,8 +31,6 @@ from typing import Any, Callable, ContextManager, Optional, TypedDict
 import numpy as np
 from packaging import version
 
-from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
-
 from ..utils import logging
 from .import_utils import (
     get_torch_version,

@@ -39,7 +39,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import check_model_inputs
 from .configuration_gemma import GemmaConfig
 
@@ -171,7 +171,7 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: float,
     dropout: float = 0.0,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
@@ -222,7 +222,7 @@ class GemmaAttention(nn.Module):
         attention_mask: Optional[torch.Tensor],
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
@@ -279,7 +279,7 @@ class GemmaDecoderLayer(GradientCheckpointingLayer):
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
@@ -512,7 +512,7 @@ class GemmaForCausalLM(GemmaPreTrainedModel, GenerationMixin):
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -606,7 +606,7 @@ class GemmaForSequenceClassification(GemmaPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> SequenceClassifierOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):

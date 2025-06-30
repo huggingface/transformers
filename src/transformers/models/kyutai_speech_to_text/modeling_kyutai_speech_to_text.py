@@ -30,17 +30,13 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
 from ...generation import GenerationConfig, GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
-from ...modeling_flash_attention_utils import (
-    FlashAttentionKwargs,
-    flash_attn_supports_top_left_mask,
-    is_flash_attn_available,
-)
+from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
 from ..auto import AutoModel
 from .configuration_kyutai_speech_to_text import KyutaiSpeechToTextConfig
 
@@ -1148,7 +1144,7 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

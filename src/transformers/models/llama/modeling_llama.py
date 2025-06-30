@@ -27,7 +27,6 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -39,7 +38,6 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import check_model_inputs
 from .configuration_llama import LlamaConfig
@@ -67,9 +65,6 @@ class LlamaRMSNorm(nn.Module):
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-ALL_LAYERNORM_LAYERS.append(LlamaRMSNorm)
 
 
 class LlamaRotaryEmbedding(nn.Module):
@@ -284,7 +279,7 @@ class LlamaDecoderLayer(GradientCheckpointingLayer):
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)

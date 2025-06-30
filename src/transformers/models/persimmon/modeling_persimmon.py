@@ -842,7 +842,7 @@ class PersimmonForSequenceClassification(PersimmonPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> SequenceClassifierOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):

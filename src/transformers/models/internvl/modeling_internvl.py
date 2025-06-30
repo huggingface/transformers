@@ -36,8 +36,8 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseMo
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
-    TransformersKwargs,
     ModelOutput,
+    TransformersKwargs,
     auto_docstring,
     can_return_tuple,
     is_torchdynamo_compiling,

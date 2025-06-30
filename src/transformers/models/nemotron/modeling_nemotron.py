@@ -1012,7 +1012,7 @@ class NemotronForSequenceClassification(NemotronPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> SequenceClassifierOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1100,7 +1100,7 @@ class NemotronForQuestionAnswering(NemotronPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> QuestionAnsweringModelOutput:
         outputs: BaseModelOutputWithPast = self.transformer(
             input_ids,

@@ -36,7 +36,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, ModelOutput, auto_docstring, can_return_tuple, logging
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import AutoModel
 from .configuration_csm import CsmConfig, CsmDepthDecoderConfig
 from .generation_csm import CsmGenerationMixin
@@ -259,7 +259,7 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: float,
     dropout: float = 0.0,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
@@ -310,7 +310,7 @@ class CsmAttention(nn.Module):
         attention_mask: Optional[torch.Tensor],
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
@@ -367,7 +367,7 @@ class CsmDecoderLayer(GradientCheckpointingLayer):
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
@@ -563,9 +563,6 @@ class CsmCodebooksHead(nn.Module):
         return hidden_states
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, TransformersKwargs): ...
-
-
 @auto_docstring(
     custom_intro="""
     The CsmDepthDecoder Model transformer, with a [`CsmCodebooksHead`] on top,
@@ -748,7 +745,7 @@ class CsmBackboneModel(CsmPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length, num_codebooks) or (batch_size, sequence_length)`):
