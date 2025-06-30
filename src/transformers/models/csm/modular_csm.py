@@ -467,6 +467,10 @@ class CsmBackboneModel(LlamaModel):
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
+        cos (Optional[torch.LongTensor]):
+            A tensor of cosine values for the rotary embeddings. If not provided, they will be computed on the fly.
+        sin (Optional[torch.LongTensor]):
+            A tensor of sin values for the rotary embeddings. If not provided, they will be computed on the fly.
         """
         return super().forward(**super_kwargs)
 

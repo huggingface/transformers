@@ -1222,8 +1222,16 @@ class Emu3TextModel(Emu3PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        cos: Optional[torch.LongTensor] = None,
+        sin: Optional[torch.LongTensor] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> BaseModelOutputWithPast:
+        r"""
+        cos (Optional[torch.LongTensor]):
+            A tensor of cosine values for the rotary embeddings. If not provided, they will be computed on the fly.
+        sin (Optional[torch.LongTensor]):
+            A tensor of sin values for the rotary embeddings. If not provided, they will be computed on the fly.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1269,7 +1277,10 @@ class Emu3TextModel(Emu3PreTrainedModel):
         hidden_states = inputs_embeds
 
         # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        if cos is None or sin is None:
+            cos, sin = self.rotary_emb(hidden_states, position_ids)
+
+        position_embeddings = (cos, sin)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None

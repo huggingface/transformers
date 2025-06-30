@@ -487,6 +487,12 @@ class Qwen3MoeModel(Qwen3MoePreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> MoeModelOutputWithPast:
+        r"""
+        cos (Optional[torch.LongTensor]):
+            A tensor of cosine values for the rotary embeddings. If not provided, they will be computed on the fly.
+        sin (Optional[torch.LongTensor]):
+            A tensor of sin values for the rotary embeddings. If not provided, they will be computed on the fly.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.output_router_logits

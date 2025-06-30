@@ -380,6 +380,12 @@ class GemmaModel(GemmaPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> BaseModelOutputWithPast:
+        r"""
+        cos (Optional[torch.LongTensor]):
+            A tensor of cosine values for the rotary embeddings. If not provided, they will be computed on the fly.
+        sin (Optional[torch.LongTensor]):
+            A tensor of sin values for the rotary embeddings. If not provided, they will be computed on the fly.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

@@ -451,6 +451,37 @@ class Mask4DTestHard(unittest.TestCase):
 
         self.assertEqual(decoded, decoded_shared_prefix)
 
+    def test_stacked_causal_mask_hoisted_rotary_embedding(self):
+        (
+            input_ids,
+            position_ids,
+            input_ids_shared_prefix,
+            mask_shared_prefix,
+            position_ids_shared_prefix,
+        ) = self.get_test_data()
+
+        # regular batch
+        logits = self.model.forward(input_ids, position_ids=position_ids).logits
+        logits_last = logits[:, -1, :]  # last tokens in each batch line
+        decoded = [self.tokenizer.decode(t) for t in logits_last.argmax(dim=-1)]
+
+        cos, sin = self.model.rotary_emb(position_ids.to(torch.float32), position_ids)
+
+        # single forward run with 4D custom mask and hoisted rotary embedding.
+        logits_shared_prefix = self.model.forward(
+            input_ids_shared_prefix,
+            attention_mask=mask_shared_prefix,
+            position_ids=position_ids_shared_prefix,
+            cos=cos,
+            sin=sin,
+        ).logits
+        logits_shared_prefix_last = logits_shared_prefix[
+            0, torch.where(position_ids_shared_prefix == position_ids_shared_prefix.max())[1], :
+        ]  # last three tokens
+        decoded_shared_prefix = [self.tokenizer.decode(t) for t in logits_shared_prefix_last.argmax(dim=-1)]
+
+        self.assertEqual(decoded, decoded_shared_prefix)
+
     def test_partial_stacked_causal_mask(self):
         # Same as the test above, but the input is passed in two groups. It tests that we can pass partial 4D attention masks
 
