@@ -854,7 +854,7 @@ def filter_out_non_signature_kwargs(extra: Optional[list] = None):
     return decorator
 
 
-class TransformersKwargs(FlashAttentionKwargs, TypedDict, total=False):
+class TransformersKwargs(TypedDict, total=False):
     """
     Keyword arguments to be passed to the loss function
 
@@ -868,12 +868,24 @@ class TransformersKwargs(FlashAttentionKwargs, TypedDict, total=False):
             Turn this on to return the intermediary attention scores.
         output_router_logits (`Optional[bool]`, *optional*):
             For MoE models, this allows returning the router logits to compute the loss.
+        cumulative_seqlens_q (`torch.LongTensor`, *optional*)
+            Gets cumulative sequence length for query state.
+        cumulative_seqlens_k (`torch.LongTensor`, *optional*)
+            Gets cumulative sequence length for key state.
+        max_length_q (`int`, *optional*):
+            Maximum sequence length for query state.
+        max_length_k (`int`, *optional*):
+            Maximum sequence length for key state.
     """
 
     num_items_in_batch: Optional["torch.Tensor"]
     output_hidden_states: Optional[bool]
     output_attentions: Optional[bool]
     output_router_logits: Optional[bool]
+    cumulative_seqlens_q: Optional["torch.LongTensor"]
+    cumulative_seqlens_k: Optional["torch.LongTensor"]
+    max_length_q: Optional[int]
+    max_length_k: Optional[int]
 
 
 def is_timm_config_dict(config_dict: dict[str, Any]) -> bool:
