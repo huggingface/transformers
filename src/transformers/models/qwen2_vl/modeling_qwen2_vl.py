@@ -324,6 +324,7 @@ class VisionAttention(nn.Module):
         self.proj = nn.Linear(self.dim, self.dim)
         self.scaling = self.head_dim**-0.5
         self.config = config
+        self.is_causal = False
 
     def forward(
         self,
@@ -381,7 +382,7 @@ class VisionAttention(nn.Module):
             cu_seqlens_k=cu_seqlens,
             max_seqlen_q=max_seqlen,
             max_seqlen_k=max_seqlen,
-            is_causal=False,
+            is_causal=self.is_causal,
             **kwargs,
         )
 

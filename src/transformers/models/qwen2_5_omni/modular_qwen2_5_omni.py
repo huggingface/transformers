@@ -1663,7 +1663,7 @@ class Qwen2_5OmniAudioAttention(nn.Module):
             cu_seqlens_k=cu_seqlens,
             max_seqlen_q=max_seqlen,
             max_seqlen_k=max_seqlen,
-            is_causal=False,
+            is_causal=self.is_causal,
             **kwargs,
         )
 
@@ -1906,6 +1906,7 @@ class Qwen2_5OmniVisionAttention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.num_key_value_groups = 1  # needed for eager attention
         self.config = config
+        self.is_causal = False
 
     def forward(
         self,
@@ -1951,7 +1952,7 @@ class Qwen2_5OmniVisionAttention(nn.Module):
             cu_seqlens_k=cu_seqlens,
             max_seqlen_q=max_seqlen,
             max_seqlen_k=max_seqlen,
-            is_causal=False,
+            is_causal=self.is_causal,
             **kwargs,
         )
 
