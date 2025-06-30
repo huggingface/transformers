@@ -108,7 +108,7 @@ class BioGptDecoderLayer(BartDecoderLayer):
         use_cache: Optional[bool] = True,
         position_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.Tensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
@@ -141,7 +141,7 @@ class BioGptDecoderLayer(BartDecoderLayer):
             output_attentions=output_attentions,
             position_ids=position_ids,
             cache_position=cache_position,
-            **flash_attn_kwargs,
+            **kwargs,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -371,7 +371,7 @@ class BioGptModel(BioGptPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -481,7 +481,7 @@ class BioGptModel(BioGptPreTrainedModel):
                 use_cache=use_cache,
                 position_ids=position_ids,
                 cache_position=cache_position,
-                **flash_attn_kwargs,
+                **kwargs,
             )
 
             hidden_states = layer_outputs[0]

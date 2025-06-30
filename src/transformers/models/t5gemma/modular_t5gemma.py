@@ -644,7 +644,7 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -720,7 +720,7 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
                 self_attn_mask_mapping[layer_module.attention_type],
                 position_ids,
                 output_attentions,
-                **flash_attn_kwargs,
+                **kwargs,
             )
 
             hidden_states = layer_outputs[0]
@@ -766,7 +766,7 @@ class T5GemmaDecoder(T5GemmaEncoder):
         cache_position: Optional[torch.LongTensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPastAndCrossAttentions:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -879,7 +879,7 @@ class T5GemmaDecoder(T5GemmaEncoder):
                 cache_position,
                 encoder_hidden_states,
                 cross_attn_mask_mapping["full_attention"],
-                **flash_attn_kwargs,
+                **kwargs,
             )
 
             hidden_states = layer_outputs[0]
@@ -949,7 +949,7 @@ class T5GemmaModel(T5GemmaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Seq2SeqModelOutput:
         r"""
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, decoder_sequence_length)`, *optional*):
@@ -967,7 +967,7 @@ class T5GemmaModel(T5GemmaPreTrainedModel):
                 inputs_embeds=inputs_embeds,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                **flash_attn_kwargs,
+                **kwargs,
             )
 
         encoder_hidden_states = encoder_outputs.last_hidden_state
@@ -985,7 +985,7 @@ class T5GemmaModel(T5GemmaPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             cache_position=cache_position,
-            **flash_attn_kwargs,
+            **kwargs,
         )
 
         return Seq2SeqModelOutput(
@@ -1027,7 +1027,7 @@ class T5GemmaEncoderModel(T5GemmaPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         encoder_outputs = self.encoder(
             input_ids=input_ids,
@@ -1036,7 +1036,7 @@ class T5GemmaEncoderModel(T5GemmaPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            **flash_attn_kwargs,
+            **kwargs,
         )
         return encoder_outputs
 
