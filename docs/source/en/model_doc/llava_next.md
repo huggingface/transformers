@@ -121,7 +121,11 @@ viz("<image> What is shown in this image?")
 ## Notes
 
 * Different checkpoints (Mistral, Vicuna, etc.) require a specific prompt format depending on the underlying LLM. Always use [`~ProcessorMixin.apply_chat_template`] to ensure correct formatting. Refer to the [Templates](../chat_templating) guide for more details.
-* **Multi-image support**: You can pass multiple images—just align `<image>` tokens with image order.
+- The example below demonstrates inference with multiple input images.
+
+   ```py
+   add code snippet here
+
 
 ## LlavaNextConfig
 
