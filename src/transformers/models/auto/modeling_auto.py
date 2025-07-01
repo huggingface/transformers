@@ -124,7 +124,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("fastspeech2_conformer_with_hifigan", "FastSpeech2ConformerWithHifiGan"),
         ("flaubert", "FlaubertModel"),
         ("flava", "FlavaModel"),
-        ("florence2", "Florence2ForConditionalGeneration"),
+        ("florence2", "Florence2Model"),
         ("fnet", "FNetModel"),
         ("focalnet", "FocalNetModel"),
         ("fsmt", "FSMTModel"),

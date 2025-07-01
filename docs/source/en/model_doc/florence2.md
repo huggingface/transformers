@@ -26,7 +26,7 @@ The abstract from the paper is the following:
 
 *We introduce Florence-2, a novel vision foundation model with a unified, prompt-based representation for a variety of computer vision and vision-language tasks. While existing large vision models excel in transfer learning, they struggle to perform a diversity of tasks with simple instructions, a capability that implies handling the complexity of various spatial hierarchy and semantic granularity. Florence-2 was designed to take text-prompt as task instructions and generate desirable results in text forms, whether it be captioning, object detection, grounding or segmentation. This multi-task learning setup demands large-scale, high-quality annotated data. To this end, we co-developed FLD-5B that consists of 5.4 billion comprehensive visual annotations on 126 million images, using an iterative strategy of automated image annotation and model refinement. We adopted a sequence-to-sequence structure to train Florence-2 to perform versatile and comprehensive vision tasks. Extensive evaluations on numerous tasks demonstrated Florence-2 to be a strong vision foundation model contender with unprecedented zero-shot and fine-tuning capabilities.*
 
-This model was contributed by [hlky](https://huggingface.co/hlky).
+This model was contributed by [ducviet00](https://huggingface.co/ducviet00).
 The original code can be found [here](https://huggingface.co/microsoft/Florence-2-base/tree/main).
 
 ## Florence2VisionConfig
@@ -40,6 +40,11 @@ The original code can be found [here](https://huggingface.co/microsoft/Florence-
 ## Florence2Processor
 
 [[autodoc]] Florence2Processor
+
+## Florence2Model
+
+[[autodoc]] Florence2Model
+    - forward
 
 ## Florence2ForConditionalGeneration
 

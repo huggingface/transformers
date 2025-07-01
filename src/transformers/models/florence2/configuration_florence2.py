@@ -5,7 +5,7 @@
 #                          modular_florence2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 # coding=utf-8
-# Copyright 2025 Microsoft and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 Microsoft and the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -115,14 +115,14 @@ class Florence2VisionConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         self.in_channels = in_channels
-        self.depths = depths
-        self.patch_size = patch_size
-        self.patch_stride = patch_stride
-        self.patch_padding = patch_padding
-        self.patch_prenorm = patch_prenorm
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.num_groups = num_groups
+        self.depths = list(depths)
+        self.patch_size = list(patch_size)
+        self.patch_stride = list(patch_stride)
+        self.patch_padding = list(patch_padding)
+        self.patch_prenorm = list(patch_prenorm)
+        self.embed_dim = list(embed_dim)
+        self.num_heads = list(num_heads)
+        self.num_groups = list(num_groups)
         self.window_size = window_size
         self.drop_path_rate = drop_path_rate
         self.mlp_ratio = mlp_ratio

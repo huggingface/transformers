@@ -22,6 +22,7 @@ from transformers import (
     AutoProcessor,
     Florence2Config,
     Florence2ForConditionalGeneration,
+    Florence2Model,
     is_torch_available,
     is_vision_available,
 )
@@ -212,18 +213,26 @@ class Florence2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     Model tester for `Florence2ForConditionalGeneration`.
     """
 
-    additional_model_inputs = ["pixel_values"]
-    all_model_classes = (Florence2ForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (Florence2ForConditionalGeneration,) if is_torch_available() else ()
-    pipeline_model_mapping = {"image-to-text": Florence2ForConditionalGeneration} if is_torch_available() else {}
+    all_model_classes = (Florence2ForConditionalGeneration, Florence2Model) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "image-to-text": Florence2ForConditionalGeneration,
+            "image-text-to-text": Florence2ForConditionalGeneration,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     test_head_masking = False
     test_attention_outputs = False
-    test_torchscript = False
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = Florence2VisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Florence2Config, has_text_modality=False)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
     def test_inputs_embeds(self):
@@ -285,12 +294,6 @@ class Florence2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
-
-    # @unittest.skip(
-    #     reason="This architecture has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
-    # )
-    # def test_contrastive_generate_low_memory(self):
-    #     pass
 
     @unittest.skip(
         reason="This architecture has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2025 Microsoft and The HuggingFace Inc. team.
+# Copyright 2025 Microsoft and the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,10 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""
-Processor class for FLORENCE2.
-"""
-
 import math
 import re
 from typing import Union
@@ -89,13 +85,6 @@ class Florence2Processor(ProcessorMixin):
         image_processor=None,
         tokenizer=None,
     ):
-        if image_processor is None:
-            raise ValueError("You need to specify an `image_processor`.")
-        if tokenizer is None:
-            raise ValueError("You need to specify a `tokenizer`.")
-        if not hasattr(image_processor, "image_seq_length"):
-            raise ValueError("Image processor is missing an `image_seq_length` attribute.")
-
         self.image_seq_length = image_processor.image_seq_length
 
         tokens_to_add = {
