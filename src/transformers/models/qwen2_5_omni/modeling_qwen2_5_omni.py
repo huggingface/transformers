@@ -607,6 +607,7 @@ class Qwen2_5OmniAudioAttention(nn.Module):
                 f" and `num_heads`: {self.num_heads})."
             )
         self.scaling = self.head_dim**-0.5
+        self.attention_dropout = 0.0
         self.is_decoder = False
         self.is_causal = False
 
@@ -645,7 +646,7 @@ class Qwen2_5OmniAudioAttention(nn.Module):
             key_states,
             value_states,
             attention_mask=attention_mask,
-            dropout=0.0,
+            dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             cu_seq_lens_q=cu_seqlens,  # pass cu seq lens for FA2
             cu_seq_lens_k=cu_seqlens,
@@ -947,6 +948,7 @@ class Qwen2_5OmniVisionAttention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.num_key_value_groups = 1  # needed for eager attention
         self.config = config
+        self.attention_dropout = 0.0
         self.is_causal = False
 
     def forward(
@@ -979,7 +981,7 @@ class Qwen2_5OmniVisionAttention(nn.Module):
             key_states,
             value_states,
             attention_mask=attention_mask,
-            dropout=0.0,
+            dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             cu_seq_lens_q=cu_seqlens,  # pass cu seq lens for FA2
             cu_seq_lens_k=cu_seqlens,

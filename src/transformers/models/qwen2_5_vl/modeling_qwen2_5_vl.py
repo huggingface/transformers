@@ -206,6 +206,7 @@ class Qwen2_5_VLVisionAttention(nn.Module):
         self.proj = nn.Linear(self.dim, self.dim)
         self.scaling = self.head_dim**-0.5
         self.config = config
+        self.attention_dropout = 0.0
         self.is_causal = False
 
     def forward(
@@ -250,7 +251,7 @@ class Qwen2_5_VLVisionAttention(nn.Module):
             key_states,
             value_states,
             attention_mask=attention_mask,
-            dropout=0.0,
+            dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             cu_seq_lens_q=cu_seqlens,  # pass cu seq lens for FA2
             cu_seq_lens_k=cu_seqlens,
