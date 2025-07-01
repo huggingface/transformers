@@ -351,6 +351,16 @@ class ProcessorTesterMixin:
                 return_tensors="pt",
             )
 
+    def test_args_overlap_kwargs(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        processor_first = self.get_processor()
+        image_processor = processor_first.image_processor
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor_first.save_pretrained(tmpdirname)
+            self.processor_class.from_pretrained(tmpdirname, image_processor=image_processor)
+
     def test_structured_kwargs_nested(self):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
