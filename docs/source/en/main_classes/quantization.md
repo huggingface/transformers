@@ -93,9 +93,9 @@ Learn how to quantize models in the [Quantization](../quantization) guide.
 
 [[autodoc]] QuarkConfig
 
-## QuartetConfig
+## FPQuantConfig
 
-[[autodoc]] QuartetConfig
+[[autodoc]] FPQuantConfig
 
 ## AutoRoundConfig
 

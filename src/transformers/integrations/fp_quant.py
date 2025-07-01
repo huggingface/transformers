@@ -11,10 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"Quartet integration file"
+"FPQuant integration file"
 
 from ..utils import (
-    is_quartet_qat_available,
+    is_fp_quant_available,
     is_torch_available,
 )
 
@@ -23,27 +23,27 @@ if is_torch_available():
     pass
 
 
-if is_quartet_qat_available():
-    from quartet_qat import QuartetConfig as QuartetLinearConfig
-    from quartet_qat import QuartetDtype
+if is_fp_quant_available():
+    from fp_quant import FPQuantConfig as FPQuantLinearConfig
+    from fp_quant import FPQuantDtype
 
-from transformers.utils.quantization_config import QuartetConfig
+from transformers.utils.quantization_config import FPQuantConfig
 
 
-def adapt_quartet_config(config: QuartetConfig):
+def adapt_fp_quant_config(config: FPQuantConfig):
     if config.forward_dtype == "mxfp4":
-        forward_dtype = QuartetDtype.MXFP4
+        forward_dtype = FPQuantDtype.MXFP4
     else:
         raise ValueError(f"Unsupported forward dtype: {config.forward_dtype}")
 
     if config.backward_dtype == "mxfp4":
-        backward_dtype = QuartetDtype.MXFP4
+        backward_dtype = FPQuantDtype.MXFP4
     elif config.backward_dtype == "bf16":
-        backward_dtype = QuartetDtype.BF16
+        backward_dtype = FPQuantDtype.BF16
     else:
         raise ValueError(f"Unsupported backward dtype: {config.backward_dtype}")
 
-    return QuartetLinearConfig(
+    return FPQuantLinearConfig(
         forward_dtype=forward_dtype,
         forward_method=config.forward_method,
         backward_dtype=backward_dtype,

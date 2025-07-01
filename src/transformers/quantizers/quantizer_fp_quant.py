@@ -21,7 +21,7 @@ from .quantizers_utils import get_module_from_name
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..utils import is_quartet_available, is_quartet_qat_available, is_qutlass_available, is_torch_available, logging
+from ..utils import is_fp_quant_available, is_fp_quant_available, is_qutlass_available, is_torch_available, logging
 from ..utils.quantization_config import QuantizationConfigMixin
 
 
@@ -31,7 +31,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-class QuartetHfQuantizer(HfQuantizer):
+class FPQuantHfQuantizer(HfQuantizer):
     """
     Quantizer of the HIGGS method. Enables the loading of prequantized models and in-flight quantization of full-precision models.
     """
@@ -39,7 +39,7 @@ class QuartetHfQuantizer(HfQuantizer):
     requires_calibration = False
     requires_parameters_quantization = True
     is_qat_trainable = True
-    required_packages = ["qutlass", "quartet_qat", "quartet"]
+    required_packages = ["qutlass", "fp_quant"]
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         super().__init__(quantization_config, **kwargs)
@@ -48,36 +48,33 @@ class QuartetHfQuantizer(HfQuantizer):
     def validate_environment(self, device_map, **kwargs):
         if not torch.cuda.is_available():
             raise NotImplementedError(
-                "Quartet quantization is only supported on GPU. Please use a different quantizer."
+                "FPQuant quantization is only supported on GPU. Please use a different quantizer."
             )
 
         if not is_qutlass_available():
-            raise ImportError("Using `quartet` quantization requires qutlass: `pip install qutlass`")
+            raise ImportError("Using `fp_quant` quantization requires qutlass: `pip install qutlass`")
 
-        if not is_quartet_qat_available():
-            raise ImportError("Using `quartet` quantization requires quartet_qat: `pip install quartet_qat`")
-
-        if not is_quartet_available():
-            raise ImportError("Using `quartet` quantization requires quartet: `pip install quartet`")
+        if not is_fp_quant_available():
+            raise ImportError("Using `fp_quant` quantization requires fp_quant: `pip install fp_quant`")
 
         if device_map is None:
             raise ValueError(
-                "You are attempting to load a Quartet model without setting device_map."
+                "You are attempting to load a FPQuant model without setting device_map."
                 " Please set device_map comprised of 'cuda' devices."
             )
         elif isinstance(device_map, dict) and ("cpu" in device_map.values() or "disk" in device_map.values()):
             raise ValueError(
-                "You are attempting to load a Quartet model with a device_map that contains a CPU or disk device."
+                "You are attempting to load a FPQuant model with a device_map that contains a CPU or disk device."
                 " This is not supported. Please remove the CPU or disk device from the device_map."
             )
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
-            logger.info("`torch_dtype` is None. Setting `torch_dtype=torch.float16` for FLUTE compatibility.")
-            torch_dtype = torch.float16
-        elif torch_dtype != torch.float16 and torch_dtype != torch.bfloat16:
+            logger.info("`torch_dtype` is None. Setting `torch_dtype=torch.bfloat16` for qutlass compatibility.")
+            torch_dtype = torch.bfloat16
+        elif torch_dtype != torch.bfloat16:
             raise ValueError(
-                f"Invalid `torch_dtype` {torch_dtype}. HIGGS quantization only supports `torch_dtype=torch.float16` or `torch_dtype=torch.bfloat16`."
+                f"Invalid `torch_dtype` {torch_dtype}. fp_quant quantization only supports `torch_dtype=torch.bfloat16`."
             )
 
         return torch_dtype
@@ -91,10 +88,10 @@ class QuartetHfQuantizer(HfQuantizer):
         state_dict: Dict[str, Any],
         unexpected_keys: Optional[List[str]] = None,
     ):
-        from quartet_qat import QuartetLinear
+        from fp_quant import FPQuantLinear
 
         module, _ = get_module_from_name(model, param_name)
-        assert isinstance(module, QuartetLinear), f"Module {param_name} is not a QuartetLinear somehow..."
+        assert isinstance(module, FPQuantLinear), f"Module {param_name} is not a FPQuantLinear somehow..."
 
         if param_name.endswith(".qweight"):
             module.qweight = torch.nn.Parameter(
@@ -116,34 +113,34 @@ class QuartetHfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         **kwargs,
     ):
-        from quartet_qat import replace_with_quartet_linear
+        from fp_quant import replace_with_fp_quant_linear
 
-        from ..integrations.quartet import adapt_quartet_config
+        from ..integrations.fp_quant import adapt_fp_quant_config
 
-        replace_with_quartet_linear(
+        replace_with_fp_quant_linear(
             model,
-            quartet_linear_config=adapt_quartet_config(self.quantization_config),
+            fp_quant_linear_config=adapt_fp_quant_config(self.quantization_config),
         )
         model.config.quantization_config = self.quantization_config
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        from quartet_qat import QuartetLinear
+        from fp_quant import FPQuantLinear
 
-        quartet_modules = {name: module for name, module in model.named_modules() if isinstance(module, QuartetLinear)}
-        for name, module in tqdm(quartet_modules.items(), desc="Pre-processing Quartet modules", leave=False):
+        fp_quant_modules = {name: module for name, module in model.named_modules() if isinstance(module, FPQuantLinear)}
+        for name, module in fp_quant_modules.items():
             if not self.quantization_config.store_master_weights and module.weight is not None:
                 module.weight = None
 
     def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
-        from quartet_qat import QuartetLinear
+        from fp_quant import FPQuantLinear
 
-        quartet_names = {name for name, module in model.named_modules() if isinstance(module, QuartetLinear)}
+        fp_quant_names = {name for name, module in model.named_modules() if isinstance(module, FPQuantLinear)}
 
         def should_exclude(key: str) -> bool:
             if key.endswith(".weight") or key.endswith(".bias"):
                 return False
             full_key = f"{prefix}.{key}"
-            return any(name in key or name in full_key for name in quartet_names)
+            return any(name in key or name in full_key for name in fp_quant_names)
 
         return [key for key in missing_keys if not should_exclude(key)]
 
@@ -162,11 +159,11 @@ class QuartetHfQuantizer(HfQuantizer):
         state_dict: Dict[str, Any],
         **kwargs,
     ) -> bool:
-        from quartet_qat import QuartetLinear
+        from fp_quant import FPQuantLinear
 
         module, tensor_name = get_module_from_name(model, param_name)
-        if isinstance(module, QuartetLinear) and tensor_name in ["weight", "qweight"]:
-            # Only quantize weights of QuartetLinear modules that are not already quantized
+        if isinstance(module, FPQuantLinear) and tensor_name in ["weight", "qweight"]:
+            # Only quantize weights of FPQuantLinear modules that are not already quantized
             return True
         else:
             return False

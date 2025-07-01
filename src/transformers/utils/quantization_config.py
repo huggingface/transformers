@@ -63,7 +63,7 @@ class QuantizationMethod(str, Enum):
     SPQR = "spqr"
     FP8 = "fp8"
     QUARK = "quark"
-    QUARTET = "quartet"
+    FPQUANT = "fp_quant"
     AUTOROUND = "auto-round"
 
 
@@ -1552,9 +1552,9 @@ class HiggsConfig(QuantizationConfigMixin):
 
 
 @dataclass
-class QuartetConfig(QuantizationConfigMixin):
+class FPQuantConfig(QuantizationConfigMixin):
     """
-    QuartetConfig is a configuration class for quantization using the Quartet method.
+    FPQuantConfig is a configuration class for quantization using the FPQuant method.
 
     Args:
         forward_dtype (`str`, *optional*, defaults to `"mxfp4"`):
@@ -1587,7 +1587,7 @@ class QuartetConfig(QuantizationConfigMixin):
         self.hadamard_group_size = hadamard_group_size
         self.modules_to_not_convert = modules_to_not_convert
 
-        self.quant_method = QuantizationMethod.QUARTET
+        self.quant_method = QuantizationMethod.FPQUANT
         self.post_init()
 
     def post_init(self):
