@@ -16,7 +16,7 @@
 """PyTorch XLM-RoBERTa model."""
 
 import math
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -28,6 +28,7 @@ from ...activations import ACT2FN, gelu
 from ...cache_utils import Cache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask_for_sdpa, _prepare_4d_causal_attention_mask_for_sdpa
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -180,7 +181,7 @@ class XLMRobertaSelfAttention(nn.Module):
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         mixed_query_layer = self.query(hidden_states)
 
         # If this is instantiated as a cross-attention module, the keys
@@ -291,7 +292,7 @@ class XLMRobertaSdpaSelfAttention(XLMRobertaSelfAttention):
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         if self.position_embedding_type != "absolute" or output_attentions or head_mask is not None:
             # TODO: Improve this warning with e.g. `model.config._attn_implementation = "manual"` once implemented.
             logger.warning_once(
@@ -445,7 +446,7 @@ class XLMRobertaAttention(nn.Module):
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         self_outputs = self.self(
             hidden_states,
             attention_mask=attention_mask,
@@ -492,7 +493,7 @@ class XLMRobertaOutput(nn.Module):
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaLayer with Roberta->XLMRoberta
-class XLMRobertaLayer(nn.Module):
+class XLMRobertaLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -517,7 +518,7 @@ class XLMRobertaLayer(nn.Module):
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask=attention_mask,
@@ -585,13 +586,13 @@ class XLMRobertaEncoder(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
         cache_position: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
@@ -620,29 +621,16 @@ class XLMRobertaEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    past_key_values,
-                    output_attentions,
-                    cache_position,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    past_key_values,
-                    output_attentions,
-                    cache_position,
-                )
+            layer_outputs = layer_module(
+                hidden_states,
+                attention_mask,
+                layer_head_mask,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                encoder_attention_mask=encoder_attention_mask,
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                cache_position=cache_position,
+            )
 
             hidden_states = layer_outputs[0]
             if use_cache:
@@ -774,13 +762,13 @@ class XLMRobertaModel(XLMRobertaPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
+    ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -953,13 +941,13 @@ class XLMRobertaForCausalLM(XLMRobertaPreTrainedModel, GenerationMixin):
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
+    ) -> Union[tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
         r"""
         token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,1]`:
@@ -1080,7 +1068,7 @@ class XLMRobertaForMaskedLM(XLMRobertaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], MaskedLMOutput]:
+    ) -> Union[tuple[torch.Tensor], MaskedLMOutput]:
         r"""
         token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,1]`:
@@ -1197,7 +1185,7 @@ class XLMRobertaForSequenceClassification(XLMRobertaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
+    ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
         token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,1]`:
@@ -1292,7 +1280,7 @@ class XLMRobertaForMultipleChoice(XLMRobertaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], MultipleChoiceModelOutput]:
+    ) -> Union[tuple[torch.Tensor], MultipleChoiceModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -1403,7 +1391,7 @@ class XLMRobertaForTokenClassification(XLMRobertaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], TokenClassifierOutput]:
+    ) -> Union[tuple[torch.Tensor], TokenClassifierOutput]:
         r"""
         token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,1]`:
@@ -1505,7 +1493,7 @@ class XLMRobertaForQuestionAnswering(XLMRobertaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], QuestionAnsweringModelOutput]:
+    ) -> Union[tuple[torch.Tensor], QuestionAnsweringModelOutput]:
         r"""
         token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,1]`:

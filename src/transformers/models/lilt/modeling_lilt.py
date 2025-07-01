@@ -15,7 +15,7 @@
 """PyTorch LiLT model."""
 
 import math
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -23,6 +23,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -375,7 +376,7 @@ class LiltAttention(nn.Module):
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         self_outputs = self.self(
             hidden_states,
             layout_inputs,
@@ -420,7 +421,7 @@ class LiltOutput(nn.Module):
         return hidden_states
 
 
-class LiltLayer(nn.Module):
+class LiltLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -445,7 +446,7 @@ class LiltLayer(nn.Module):
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         self_attention_outputs = self.attention(
             hidden_states,
             layout_inputs,
@@ -497,7 +498,7 @@ class LiltEncoder(nn.Module):
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutput]:
+    ) -> Union[tuple[torch.Tensor], BaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -507,23 +508,13 @@ class LiltEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    layout_inputs,
-                    attention_mask,
-                    layer_head_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    layout_inputs,
-                    attention_mask,
-                    layer_head_mask,
-                    output_attentions,
-                )
+            layer_outputs = layer_module(
+                hidden_states,
+                layout_inputs,
+                attention_mask,
+                layer_head_mask,
+                output_attentions,
+            )
 
             hidden_states = layer_outputs[0][0]
             layout_inputs = layer_outputs[0][1]
@@ -637,7 +628,7 @@ class LiltModel(LiltPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPooling]:
+    ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPooling]:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,
@@ -654,7 +645,7 @@ class LiltModel(LiltPreTrainedModel):
         >>> tokenizer = AutoTokenizer.from_pretrained("SCUT-DLVCLab/lilt-roberta-en-base")
         >>> model = AutoModel.from_pretrained("SCUT-DLVCLab/lilt-roberta-en-base")
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
         >>> example = dataset[0]
         >>> words = example["tokens"]
         >>> boxes = example["bboxes"]
@@ -773,7 +764,7 @@ class LiltForSequenceClassification(LiltPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
+    ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,
@@ -794,7 +785,7 @@ class LiltForSequenceClassification(LiltPreTrainedModel):
         >>> tokenizer = AutoTokenizer.from_pretrained("SCUT-DLVCLab/lilt-roberta-en-base")
         >>> model = AutoModelForSequenceClassification.from_pretrained("SCUT-DLVCLab/lilt-roberta-en-base")
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
         >>> example = dataset[0]
         >>> words = example["tokens"]
         >>> boxes = example["bboxes"]
@@ -890,7 +881,7 @@ class LiltForTokenClassification(LiltPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], TokenClassifierOutput]:
+    ) -> Union[tuple[torch.Tensor], TokenClassifierOutput]:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,
@@ -909,7 +900,7 @@ class LiltForTokenClassification(LiltPreTrainedModel):
         >>> tokenizer = AutoTokenizer.from_pretrained("SCUT-DLVCLab/lilt-roberta-en-base")
         >>> model = AutoModelForTokenClassification.from_pretrained("SCUT-DLVCLab/lilt-roberta-en-base")
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
         >>> example = dataset[0]
         >>> words = example["tokens"]
         >>> boxes = example["bboxes"]
@@ -1009,7 +1000,7 @@ class LiltForQuestionAnswering(LiltPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], QuestionAnsweringModelOutput]:
+    ) -> Union[tuple[torch.Tensor], QuestionAnsweringModelOutput]:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,
@@ -1026,7 +1017,7 @@ class LiltForQuestionAnswering(LiltPreTrainedModel):
         >>> tokenizer = AutoTokenizer.from_pretrained("SCUT-DLVCLab/lilt-roberta-en-base")
         >>> model = AutoModelForQuestionAnswering.from_pretrained("SCUT-DLVCLab/lilt-roberta-en-base")
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
         >>> example = dataset[0]
         >>> words = example["tokens"]
         >>> boxes = example["bboxes"]

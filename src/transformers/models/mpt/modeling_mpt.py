@@ -15,7 +15,7 @@
 """PyTorch MPT model."""
 
 import math
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -26,6 +26,7 @@ from torch.nn import functional as F
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -43,7 +44,7 @@ logger = logging.get_logger(__name__)
 
 def build_mpt_alibi_tensor(num_heads, sequence_length, alibi_bias_max=8, device=None):
     r"""
-    Link to paper: https://arxiv.org/abs/2108.12409 - Alibi tensor is not causal as the original paper mentions, it
+    Link to paper: https://huggingface.co/papers/2108.12409 - Alibi tensor is not causal as the original paper mentions, it
     relies on a translation invariance of softmax for quick implementation. This implementation has been copied from
     the alibi implementation of MPT source code that led to slightly different results than the Bloom alibi:
     https://huggingface.co/mosaicml/mpt-7b/blob/main/attention.py#L292
@@ -158,7 +159,7 @@ class MptMLP(nn.Module):
         return output
 
 
-class MptBlock(nn.Module):
+class MptBlock(GradientCheckpointingLayer):
     def __init__(self, config: MptConfig, layer_idx: Optional[int] = None):
         super().__init__()
         hidden_size = config.hidden_size
@@ -254,8 +255,8 @@ class MptPreTrainedModel(PreTrainedModel):
 
     @staticmethod
     def _convert_to_mpt_cache(
-        past_key_value: Tuple[Tuple[torch.Tensor, torch.Tensor]],
-    ) -> Tuple[Tuple[torch.Tensor, torch.Tensor]]:
+        past_key_value: tuple[tuple[torch.Tensor, torch.Tensor]],
+    ) -> tuple[tuple[torch.Tensor, torch.Tensor]]:
         """
         Converts the cache to the format expected by Mpt, i.e. to tuple(tuple([batch_size * num_heads, ...]))
         """
@@ -309,7 +310,7 @@ class MptModel(MptPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Tuple[Tuple[torch.Tensor, torch.Tensor], ...], Cache]] = None,
+        past_key_values: Optional[Union[tuple[Tuple[torch.Tensor, torch.Tensor], ...], Cache]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -318,7 +319,7 @@ class MptModel(MptPreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs,  # NOOP kwargs, for now
-    ) -> Union[Tuple[torch.Tensor, ...], BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> Union[tuple[torch.Tensor, ...], BaseModelOutputWithPastAndCrossAttentions]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else `past_key_values.get_seq_length()`
@@ -393,27 +394,15 @@ class MptModel(MptPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                outputs = self._gradient_checkpointing_func(
-                    block.__call__,
-                    hidden_states,
-                    alibi,
-                    causal_mask,
-                    past_key_values,
-                    use_cache,
-                    output_attentions,
-                    cache_position,
-                )
-            else:
-                outputs = block(
-                    hidden_states,
-                    layer_past=past_key_values,
-                    attention_mask=causal_mask,
-                    use_cache=use_cache,
-                    output_attentions=output_attentions,
-                    position_bias=alibi,
-                    cache_position=cache_position,
-                )
+            outputs = block(
+                hidden_states,
+                layer_past=past_key_values,
+                attention_mask=causal_mask,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                position_bias=alibi,
+                cache_position=cache_position,
+            )
 
             hidden_states = outputs[0]
             if use_cache is True:
@@ -472,7 +461,7 @@ class MptForCausalLM(MptPreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor, torch.Tensor], ...]] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor, torch.Tensor], ...]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
@@ -482,7 +471,7 @@ class MptForCausalLM(MptPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs,
-    ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
+    ) -> Union[tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else `past_key_values.get_seq_length()`
@@ -570,7 +559,7 @@ class MptForSequenceClassification(MptPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor, torch.Tensor], ...]] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor, torch.Tensor], ...]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
@@ -578,7 +567,7 @@ class MptForSequenceClassification(MptPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutputWithPast]:
+    ) -> Union[tuple[torch.Tensor], SequenceClassifierOutputWithPast]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else `past_key_values.get_seq_length()`
@@ -693,7 +682,7 @@ class MptForTokenClassification(MptPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor, torch.Tensor], ...]] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor, torch.Tensor], ...]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
@@ -702,7 +691,7 @@ class MptForTokenClassification(MptPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **deprecated_arguments,
-    ) -> Union[Tuple[torch.Tensor], TokenClassifierOutput]:
+    ) -> Union[tuple[torch.Tensor], TokenClassifierOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else `past_key_values.get_seq_length()`
@@ -780,7 +769,7 @@ class MptForQuestionAnswering(MptPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, QuestionAnsweringModelOutput]:
+    ) -> Union[tuple, QuestionAnsweringModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else `past_key_values.get_seq_length()`

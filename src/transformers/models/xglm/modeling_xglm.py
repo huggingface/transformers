@@ -15,7 +15,7 @@
 """PyTorch XGLM model."""
 
 import math
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -25,6 +25,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
@@ -141,7 +142,7 @@ class XGLMAttention(nn.Module):
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         cache_position: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -259,7 +260,7 @@ class XGLMAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-class XGLMDecoderLayer(nn.Module):
+class XGLMDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: XGLMConfig, layer_idx=None):
         super().__init__()
         self.embed_dim = config.d_model
@@ -443,14 +444,14 @@ class XGLMModel(XGLMPreTrainedModel):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
         r"""
         encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention of
@@ -550,7 +551,7 @@ class XGLMModel(XGLMPreTrainedModel):
                         f" {head_mask.size()[0]}."
                     )
         for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
             if self.training:
@@ -558,35 +559,18 @@ class XGLMModel(XGLMPreTrainedModel):
                 if dropout_probability < self.layerdrop:
                     continue
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    head_mask[idx] if head_mask is not None else None,
-                    cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
-                    None,
-                    output_attentions,
-                    use_cache,
-                    cache_position,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=attention_mask,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                    cross_attn_layer_head_mask=(
-                        cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
-                    ),
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                encoder_attention_mask=encoder_attention_mask,
+                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                cross_attn_layer_head_mask=(cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+            )
             hidden_states = layer_outputs[0]
 
             if use_cache:
@@ -663,7 +647,7 @@ class XGLMForCausalLM(XGLMPreTrainedModel, GenerationMixin):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
@@ -672,7 +656,7 @@ class XGLMForCausalLM(XGLMPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs,
-    ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
+    ) -> Union[tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
         r"""
         encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention of

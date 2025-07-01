@@ -16,24 +16,24 @@
 
 import math
 from dataclasses import dataclass
-from typing import Any, Callable, List, Optional, Tuple, Union
+from typing import Any, Callable, Optional, Union
 
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, EncoderDecoderCache
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
-    BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPooling,
     BaseModelOutputWithPoolingAndCrossAttentions,
     BaseModelOutputWithPoolingAndProjection,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import ModelOutput, auto_docstring, logging, torch_int
+from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging, torch_int
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_altclip import AltCLIPConfig, AltCLIPTextConfig, AltCLIPVisionConfig
 
 
@@ -53,26 +53,26 @@ def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
 
 
 @dataclass
+@auto_docstring
 # Copied from transformers.models.clip.modeling_clip.CLIPOutput with CLIP->AltCLIP
 class AltCLIPOutput(ModelOutput):
-    """
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-            Contrastive loss for image-text similarity.
-        logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
-            The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
-            similarity scores.
-        logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
-            The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
-            similarity scores.
-        text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`AltCLIPTextModel`].
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The image embeddings obtained by applying the projection layer to the pooled output of [`AltCLIPVisionModel`].
-        text_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`AltCLIPTextModel`].
-        vision_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`AltCLIPVisionModel`].
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+        Contrastive loss for image-text similarity.
+    logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
+        The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
+        similarity scores.
+    logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
+        The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
+        similarity scores.
+    text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        The text embeddings obtained by applying the projection layer to the pooled output of [`AltCLIPTextModel`].
+    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        The image embeddings obtained by applying the projection layer to the pooled output of [`AltCLIPVisionModel`].
+    text_model_output (`BaseModelOutputWithPooling`):
+        The output of the [`AltCLIPTextModel`].
+    vision_model_output (`BaseModelOutputWithPooling`):
+        The output of the [`AltCLIPVisionModel`].
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -83,7 +83,7 @@ class AltCLIPOutput(ModelOutput):
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
 
-    def to_tuple(self) -> Tuple[Any]:
+    def to_tuple(self) -> tuple[Any]:
         return tuple(
             self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
             for k in self.keys()
@@ -180,7 +180,6 @@ class AltRobertaEmbeddings(nn.Module):
         return position_ids.unsqueeze(0).expand(input_shape)
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaSelfAttention with Roberta->AltRoberta
 class AltRobertaSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None, layer_idx=None):
         super().__init__()
@@ -206,74 +205,32 @@ class AltRobertaSelfAttention(nn.Module):
             self.max_position_embeddings = config.max_position_embeddings
             self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
 
-        self.is_decoder = config.is_decoder
-        self.layer_idx = layer_idx
-
-    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
+    @deprecate_kwarg("encoder_hidden_states", version="4.54.0")
+    @deprecate_kwarg("encoder_attention_mask", version="4.54.0")
+    @deprecate_kwarg("past_key_value", version="4.54.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
-        cache_position: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor]:
-        mixed_query_layer = self.query(hidden_states)
+    ) -> tuple[torch.Tensor]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.attention_head_size)
 
-        # If this is instantiated as a cross-attention module, the keys
-        # and values come from an encoder; the attention mask needs to be
-        # such that the encoder's padding tokens are not attended to.
-        is_cross_attention = encoder_hidden_states is not None
-
-        if past_key_value is not None:
-            if isinstance(past_key_value, EncoderDecoderCache):
-                is_updated = past_key_value.is_updated.get(self.layer_idx)
-                if is_cross_attention:
-                    # after the first generated id, we can subsequently re-use all key/value_layer from cache
-                    curr_past_key_value = past_key_value.cross_attention_cache
-                else:
-                    curr_past_key_value = past_key_value.self_attention_cache
-            else:
-                curr_past_key_value = past_key_value
-
-        current_states = encoder_hidden_states if is_cross_attention else hidden_states
-        if is_cross_attention and past_key_value is not None and is_updated:
-            # reuse k,v, cross_attentions
-            key_layer = curr_past_key_value.key_cache[self.layer_idx]
-            value_layer = curr_past_key_value.value_cache[self.layer_idx]
-        else:
-            key_layer = self.transpose_for_scores(self.key(current_states))
-            value_layer = self.transpose_for_scores(self.value(current_states))
-
-            if past_key_value is not None:
-                # save all key/value_layer to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_layer, value_layer = curr_past_key_value.update(
-                    key_layer, value_layer, self.layer_idx, {"cache_position": cache_position}
-                )
-                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention:
-                    past_key_value.is_updated[self.layer_idx] = True
-
-        query_layer = self.transpose_for_scores(mixed_query_layer)
+        query_layer = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_layer = self.key(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_layer = self.value(hidden_states).view(hidden_shape).transpose(1, 2)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             query_length, key_length = query_layer.shape[2], key_layer.shape[2]
-            if past_key_value is not None:
-                position_ids_l = torch.tensor(key_length - 1, dtype=torch.long, device=hidden_states.device).view(
-                    -1, 1
-                )
-            else:
-                position_ids_l = torch.arange(query_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
+            position_ids_l = torch.arange(query_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
             position_ids_r = torch.arange(key_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
             distance = position_ids_l - position_ids_r
 
@@ -312,8 +269,6 @@ class AltRobertaSelfAttention(nn.Module):
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
-        if self.is_decoder:
-            outputs = outputs + (past_key_value,)
         return outputs
 
 
@@ -337,7 +292,6 @@ ALT_ROBERTA_SELF_ATTENTION_CLASSES = {
 }
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaAttention with Roberta->AltRoberta,ROBERTA->ALT_ROBERTA
 class AltRobertaAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None, layer_idx=None):
         super().__init__()
@@ -367,24 +321,24 @@ class AltRobertaAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
+    @deprecate_kwarg("encoder_hidden_states", version="4.54.0")
+    @deprecate_kwarg("encoder_attention_mask", version="4.54.0")
+    @deprecate_kwarg("past_key_value", version="4.54.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
-        cache_position: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         self_outputs = self.self(
             hidden_states,
             attention_mask=attention_mask,
             head_mask=head_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            past_key_value=past_key_value,
             output_attentions=output_attentions,
-            cache_position=cache_position,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -422,22 +376,19 @@ class AltRobertaOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaLayer with Roberta->AltRoberta
-class AltRobertaLayer(nn.Module):
-    def __init__(self, config, layer_idx=None):
+# Copied from transformers.models.align.modeling_align.AlignTextLayer with AlignText->AltRoberta
+class AltRobertaLayer(GradientCheckpointingLayer):
+    def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = AltRobertaAttention(config, layer_idx=layer_idx)
-        self.is_decoder = config.is_decoder
-        self.add_cross_attention = config.add_cross_attention
-        if self.add_cross_attention:
-            if not self.is_decoder:
-                raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = AltRobertaAttention(config, position_embedding_type="absolute", layer_idx=layer_idx)
+        self.attention = AltRobertaAttention(config)
         self.intermediate = AltRobertaIntermediate(config)
         self.output = AltRobertaOutput(config)
 
+    @deprecate_kwarg("encoder_hidden_states", version="4.54.0")
+    @deprecate_kwarg("encoder_attention_mask", version="4.54.0")
+    @deprecate_kwarg("past_key_value", version="4.54.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -445,53 +396,24 @@ class AltRobertaLayer(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
-        cache_position: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor]:
+        **kwargs,
+    ) -> tuple[torch.Tensor]:
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask=attention_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
-            past_key_value=past_key_value,
-            cache_position=cache_position,
+            **kwargs,
         )
         attention_output = self_attention_outputs[0]
 
-        # if decoder, the last output is tuple of self-attn cache
-        if self.is_decoder:
-            outputs = self_attention_outputs[1:-1]
-        else:
-            outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
-
-        if self.is_decoder and encoder_hidden_states is not None:
-            if not hasattr(self, "crossattention"):
-                raise ValueError(
-                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers"
-                    " by setting `config.add_cross_attention=True`"
-                )
-
-            cross_attention_outputs = self.crossattention(
-                attention_output,
-                attention_mask=encoder_attention_mask,
-                head_mask=head_mask,
-                encoder_hidden_states=encoder_hidden_states,
-                past_key_value=past_key_value,
-                output_attentions=output_attentions,
-                cache_position=cache_position,
-            )
-            attention_output = cross_attention_outputs[0]
-            outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
-
+        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
         )
         outputs = (layer_output,) + outputs
-
-        # if decoder, return the attn key/values as the last output
-        if self.is_decoder:
-            outputs = outputs + (past_key_value,)
 
         return outputs
 
@@ -501,14 +423,19 @@ class AltRobertaLayer(nn.Module):
         return layer_output
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaEncoder with Roberta->AltRoberta
+# Copied from transformers.models.align.modeling_align.AlignTextEncoder with AlignText->AltRoberta
 class AltRobertaEncoder(nn.Module):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([AltRobertaLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([AltRobertaLayer(config) for i in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
+    @deprecate_kwarg("encoder_hidden_states", version="4.54.0")
+    @deprecate_kwarg("encoder_attention_mask", version="4.54.0")
+    @deprecate_kwarg("past_key_values", version="4.54.0")
+    @deprecate_kwarg("use_cache", version="4.54.0")
+    @can_return_tuple
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -516,98 +443,41 @@ class AltRobertaEncoder(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
-        cache_position: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
+        **kwargs,
+    ) -> Union[tuple[torch.Tensor], BaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
-        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
-
-        return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
-            logger.warning_once(
-                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
-                "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
-            )
-            return_legacy_cache = True
-            past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
-
-        next_decoder_cache = None
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    past_key_values,
-                    output_attentions,
-                    cache_position,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    past_key_values,
-                    output_attentions,
-                    cache_position,
-                )
+            layer_outputs = layer_module(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                head_mask=layer_head_mask,
+                output_attentions=output_attentions,
+                **kwargs,
+            )
 
             hidden_states = layer_outputs[0]
-            if use_cache:
-                next_decoder_cache = layer_outputs[-1]
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
-                if self.config.add_cross_attention:
-                    all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
-        if return_legacy_cache:
-            next_cache = past_key_values.to_legacy_cache()
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    next_cache,
-                    all_hidden_states,
-                    all_self_attentions,
-                    all_cross_attentions,
-                ]
-                if v is not None
-            )
-        return BaseModelOutputWithPastAndCrossAttentions(
+        return BaseModelOutput(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
-            cross_attentions=all_cross_attentions,
         )
 
 
@@ -647,6 +517,7 @@ def eager_attention_forward(
 
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
+
     return attn_output, attn_weights
 
 
@@ -679,7 +550,7 @@ class AltCLIPAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         causal_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
         batch_size, seq_length, embed_dim = hidden_states.shape
@@ -745,7 +616,7 @@ class AltCLIPMLP(nn.Module):
         return hidden_states
 
 
-class AltCLIPEncoderLayer(nn.Module):
+class AltCLIPEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: AltCLIPConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -760,7 +631,7 @@ class AltCLIPEncoderLayer(nn.Module):
         attention_mask: torch.Tensor,
         causal_attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor]:
+    ) -> tuple[torch.FloatTensor]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -810,6 +681,7 @@ class AltCLIPEncoder(nn.Module):
         self.layers = nn.ModuleList([AltCLIPEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
+    @can_return_tuple
     def forward(
         self,
         inputs_embeds,
@@ -818,7 +690,7 @@ class AltCLIPEncoder(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -861,21 +733,12 @@ class AltCLIPEncoder(nn.Module):
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    encoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    causal_attention_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask,
-                    causal_attention_mask,
-                    output_attentions=output_attentions,
-                )
+            layer_outputs = encoder_layer(
+                hidden_states,
+                attention_mask,
+                causal_attention_mask,
+                output_attentions=output_attentions,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -885,8 +748,6 @@ class AltCLIPEncoder(nn.Module):
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
         return BaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
@@ -1040,6 +901,7 @@ class AltCLIPVisionTransformer(nn.Module):
         self.encoder = AltCLIPEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1048,7 +910,7 @@ class AltCLIPVisionTransformer(nn.Module):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = False,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1065,15 +927,12 @@ class AltCLIPVisionTransformer(nn.Module):
             inputs_embeds=hidden_states,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
         last_hidden_state = encoder_outputs[0]
         pooled_output = last_hidden_state[:, 0, :]
         pooled_output = self.post_layernorm(pooled_output)
-
-        if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
@@ -1104,7 +963,7 @@ class AltCLIPVisionModel(AltCLIPPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         Examples:
 
@@ -1138,14 +997,9 @@ class AltCLIPVisionModel(AltCLIPPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
-    cross-attention is added between the self-attention layers, following the architecture described in *Attention is
+    The model behaves as an encoder following the architecture described in *Attention is
     all you need*_ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz
     Kaiser and Illia Polosukhin.
-
-    To behave as an decoder the model needs to be initialized with the `is_decoder` argument of the configuration set
-    to `True`. To be used in a Seq2Seq model, the model needs to initialized with both `is_decoder` argument and
-    `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
 
     .. _*Attention is all you need*: https://arxiv.org/abs/1706.03762
     """
@@ -1184,6 +1038,10 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
+    @deprecate_kwarg("encoder_hidden_states", version="4.54.0")
+    @deprecate_kwarg("encoder_attention_mask", version="4.54.0")
+    @deprecate_kwarg("past_key_values", version="4.54.0")
+    @deprecate_kwarg("use_cache", version="4.54.0")
     @auto_docstring
     # Copied from transformers.models.clap.modeling_clap.ClapTextModel.forward
     def forward(
@@ -1196,23 +1054,17 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
+    ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if self.config.is_decoder:
-            use_cache = use_cache if use_cache is not None else self.config.use_cache
-        else:
-            use_cache = False
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -1227,16 +1079,8 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
         batch_size, seq_length = input_shape
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
-        past_key_values_length = 0
-        if past_key_values is not None:
-            past_key_values_length = (
-                past_key_values[0][0].shape[-2]
-                if not isinstance(past_key_values, Cache)
-                else past_key_values.get_seq_length()
-            )
-
         if attention_mask is None:
-            attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
+            attention_mask = torch.ones(((batch_size, seq_length)), device=device)
 
         if token_type_ids is None:
             if hasattr(self.embeddings, "token_type_ids"):
@@ -1250,21 +1094,6 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
         # ourselves in which case we just need to make it broadcastable to all heads.
         extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
 
-        # If a 2D or 3D attention mask is provided for the cross-attention
-        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
-        if self.config.is_decoder and encoder_hidden_states is not None:
-            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
-            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
-            if encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
-            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
-        else:
-            encoder_extended_attention_mask = None
-
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
@@ -1273,34 +1102,23 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
             position_ids=position_ids,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
-            past_key_values_length=past_key_values_length,
         )
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
             head_mask=head_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_extended_attention_mask,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            cache_position=cache_position,
+            return_dict=True,
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
-        if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
-
-        return BaseModelOutputWithPoolingAndCrossAttentions(
+        return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
-            past_key_values=encoder_outputs.past_key_values,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
-            cross_attentions=encoder_outputs.cross_attentions,
         )
 
 
@@ -1323,6 +1141,9 @@ class AltCLIPTextModel(AltCLIPPreTrainedModel):
     def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> nn.Embedding:
         return super().resize_token_embeddings(new_num_tokens)
 
+    @deprecate_kwarg("encoder_hidden_states", version="4.54.0")
+    @deprecate_kwarg("encoder_attention_mask", version="4.54.0")
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1337,7 +1158,7 @@ class AltCLIPTextModel(AltCLIPPreTrainedModel):
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPoolingAndProjection]:
+    ) -> Union[tuple, BaseModelOutputWithPoolingAndProjection]:
         r"""
         Examples:
 
@@ -1365,11 +1186,9 @@ class AltCLIPTextModel(AltCLIPPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
         # last module outputs
@@ -1381,9 +1200,6 @@ class AltCLIPTextModel(AltCLIPPreTrainedModel):
         # pooler
         projection_state = self.transformation(sequence_output)
         pooler_output = projection_state[:, 0]
-
-        if not return_dict:
-            return (projection_state, pooler_output) + outputs[2:4]
 
         return BaseModelOutputWithPoolingAndProjection(
             last_hidden_state=projection_state,
@@ -1535,7 +1351,7 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, AltCLIPOutput]:
+    ) -> Union[tuple, AltCLIPOutput]:
         r"""
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.

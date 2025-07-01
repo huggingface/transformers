@@ -17,17 +17,17 @@
 import math
 import os
 import warnings
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.cuda.amp import autocast
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, EncoderDecoderCache
 from ...generation import GenerationMixin
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -61,14 +61,14 @@ def load_tf_weights_in_imagegpt(model, config, imagegpt_checkpoint_path):
         )
         raise
     tf_path = os.path.abspath(imagegpt_checkpoint_path)
-    logger.info("Converting TensorFlow checkpoint from {}".format(tf_path))
+    logger.info(f"Converting TensorFlow checkpoint from {tf_path}")
     # Load weights from TF model
     init_vars = tf.train.list_variables(tf_path)
     names = []
     arrays = []
 
     for name, shape in init_vars:
-        logger.info("Loading TF weight {} with shape {}".format(name, shape))
+        logger.info(f"Loading TF weight {name} with shape {shape}")
         array = tf.train.load_variable(tf_path, name)
         names.append(name)
         arrays.append(array.squeeze())
@@ -130,7 +130,7 @@ def load_tf_weights_in_imagegpt(model, config, imagegpt_checkpoint_path):
                 e.args += (pointer.shape, array.shape)
                 raise
 
-        logger.info("Initialize PyTorch weight {}".format(name))
+        logger.info(f"Initialize PyTorch weight {name}")
 
         if name[-1] == "q_proj":
             pointer.data[:, : config.n_embd] = torch.from_numpy(array.reshape(config.n_embd, config.n_embd)).T
@@ -155,7 +155,7 @@ def load_tf_weights_in_imagegpt(model, config, imagegpt_checkpoint_path):
 
 
 class ImageGPTLayerNorm(nn.Module):
-    def __init__(self, hidden_size: Tuple[int], eps: float = 1e-5):
+    def __init__(self, hidden_size: tuple[int], eps: float = 1e-5):
         super().__init__()
         self.eps = eps
         self.weight = nn.Parameter(torch.Tensor(hidden_size))
@@ -281,7 +281,7 @@ class ImageGPTAttention(nn.Module):
             scale_factor /= float(self.layer_idx + 1)
 
         # Upcast (turn off autocast) and reorder (Scale K by 1 / root(dk))
-        with autocast(enabled=False):
+        with torch.autocast(query.device.type, enabled=False):
             q, k = query.reshape(-1, q_seq_len, dk), key.transpose(-1, -2).reshape(-1, dk, k_seq_len)
             attn_weights = torch.baddbmm(attn_weights, q.float(), k.float(), beta=0, alpha=scale_factor)
             attn_weights = attn_weights.reshape(bsz, num_heads, q_seq_len, k_seq_len)
@@ -424,7 +424,7 @@ class ImageGPTMLP(nn.Module):
         return hidden_states
 
 
-class ImageGPTBlock(nn.Module):
+class ImageGPTBlock(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         hidden_size = config.hidden_size
@@ -580,7 +580,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -594,7 +594,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs: Any,
-    ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
@@ -750,31 +750,17 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                outputs = self._gradient_checkpointing_func(
-                    block.__call__,
-                    hidden_states,
-                    None,
-                    attention_mask,
-                    head_mask[i],
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    use_cache,
-                    output_attentions,
-                    cache_position,
-                )
-            else:
-                outputs = block(
-                    hidden_states,
-                    layer_past=past_key_values,
-                    attention_mask=attention_mask,
-                    head_mask=head_mask[i],
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
-                    use_cache=use_cache,
-                    output_attentions=output_attentions,
-                    cache_position=cache_position,
-                )
+            outputs = block(
+                hidden_states,
+                past_key_values,
+                attention_mask,
+                head_mask[i],
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                encoder_attention_mask=encoder_attention_mask,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                cache_position=cache_position,
+            )
 
             hidden_states = outputs[0]
             if use_cache is True:
@@ -848,7 +834,7 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -863,7 +849,7 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs: Any,
-    ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
+    ) -> Union[tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
@@ -993,7 +979,7 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -1005,7 +991,7 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs: Any,
-    ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
+    ) -> Union[tuple, SequenceClassifierOutputWithPast]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else

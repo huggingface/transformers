@@ -16,7 +16,7 @@
 
 import math
 import os
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -26,6 +26,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...cache_utils import Cache, EncoderDecoderCache
 from ...generation import GenerationMixin
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -234,7 +235,7 @@ class RemBertSelfAttention(nn.Module):
         past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
         cache_position: Optional[torch.Tensor] = None,
-    ) -> Tuple:
+    ) -> tuple:
         mixed_query_layer = self.query(hidden_states)
 
         # If this is instantiated as a cross-attention module, the keys
@@ -357,7 +358,7 @@ class RemBertAttention(nn.Module):
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         self_outputs = self.self(
             hidden_states,
             attention_mask=attention_mask,
@@ -403,7 +404,7 @@ class RemBertOutput(nn.Module):
         return hidden_states
 
 
-class RemBertLayer(nn.Module):
+class RemBertLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -429,7 +430,7 @@ class RemBertLayer(nn.Module):
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask=attention_mask,
@@ -499,13 +500,13 @@ class RemBertEncoder(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
         cache_position: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
         if self.gradient_checkpointing and self.training:
             if use_cache:
                 logger.warning_once(
@@ -535,27 +536,15 @@ class RemBertEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    past_key_values,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    past_key_values,
-                    output_attentions,
-                )
+            layer_outputs = layer_module(
+                hidden_states,
+                attention_mask,
+                layer_head_mask,
+                encoder_hidden_states,
+                encoder_attention_mask,
+                past_key_values,
+                output_attentions,
+            )
 
             hidden_states = layer_outputs[0]
             if use_cache:
@@ -666,7 +655,7 @@ class RemBertPreTrainedModel(PreTrainedModel):
     custom_intro="""
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
     cross-attention is added between the self-attention layers, following the architecture described in [Attention is
-    all you need](https://arxiv.org/abs/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
+    all you need](https://huggingface.co/papers/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
     Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
 
     To behave as an decoder the model needs to be initialized with the `is_decoder` argument of the configuration set
@@ -716,13 +705,13 @@ class RemBertModel(RemBertPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPoolingAndCrossAttentions]:
+    ) -> Union[tuple, BaseModelOutputWithPoolingAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -858,7 +847,7 @@ class RemBertForMaskedLM(RemBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, MaskedLMOutput]:
+    ) -> Union[tuple, MaskedLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -960,14 +949,14 @@ class RemBertForCausalLM(RemBertPreTrainedModel, GenerationMixin):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
+    ) -> Union[tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
@@ -1064,7 +1053,7 @@ class RemBertForSequenceClassification(RemBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SequenceClassifierOutput]:
+    ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1149,7 +1138,7 @@ class RemBertForMultipleChoice(RemBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, MultipleChoiceModelOutput]:
+    ) -> Union[tuple, MultipleChoiceModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -1254,7 +1243,7 @@ class RemBertForTokenClassification(RemBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, TokenClassifierOutput]:
+    ) -> Union[tuple, TokenClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1322,7 +1311,7 @@ class RemBertForQuestionAnswering(RemBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, QuestionAnsweringModelOutput]:
+    ) -> Union[tuple, QuestionAnsweringModelOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.rembert(

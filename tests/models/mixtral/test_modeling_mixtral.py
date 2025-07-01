@@ -20,7 +20,6 @@ import pytest
 from transformers import MixtralConfig, is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    get_device_properties,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
@@ -142,23 +141,16 @@ class MistralModelTest(CausalLMModelTest, unittest.TestCase):
 
 @require_torch
 class MixtralIntegrationTest(unittest.TestCase):
-    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
-    # Depending on the hardware we get different logits / generations
-    device_properties = None
-
-    @classmethod
-    def setUpClass(cls):
-        cls.device_properties = get_device_properties()
-
     @slow
     @require_torch_accelerator
     def test_small_model_logits(self):
         model_id = "hf-internal-testing/Mixtral-tiny"
         dummy_input = torch.LongTensor([[0, 1, 0], [0, 1, 0]]).to(torch_device)
 
-        model = MixtralForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True).to(
-            torch_device
-        )
+        model = MixtralForCausalLM.from_pretrained(
+            model_id,
+            torch_dtype=torch.bfloat16,
+        ).to(torch_device)
         # TODO: might need to tweak it in case the logits do not match on our daily runners
         # these logits have been obtained with the original megablocks implementation.
         # ("cuda", 8) for A100/A10, and ("cuda", 7) for T4
@@ -189,9 +181,10 @@ class MixtralIntegrationTest(unittest.TestCase):
         dummy_input = torch.LongTensor([[0, 0, 0, 0, 0, 0, 1, 2, 3], [1, 1, 2, 3, 4, 5, 6, 7, 8]]).to(torch_device)
         attention_mask = dummy_input.ne(0).to(torch.long)
 
-        model = MixtralForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True).to(
-            torch_device
-        )
+        model = MixtralForCausalLM.from_pretrained(
+            model_id,
+            torch_dtype=torch.bfloat16,
+        ).to(torch_device)
 
         # TODO: might need to tweak it in case the logits do not match on our daily runners
         #
@@ -201,6 +194,7 @@ class MixtralIntegrationTest(unittest.TestCase):
         # fmt: off
         EXPECTED_LOGITS_LEFT_UNPADDED = Expectations(
             {
+                ("xpu", 3): torch.Tensor([[0.2236, 0.5195, -0.3828], [0.8203, -0.2295, 0.6055], [0.2676, -0.7070, 0.2461]]).to(torch_device),
                 ("cuda", 7): torch.Tensor([[0.2236, 0.5195, -0.3828], [0.8203, -0.2275, 0.6054], [0.2656, -0.7070, 0.2460]]).to(torch_device),
                 ("cuda", 8): torch.Tensor([[0.2207, 0.5234, -0.3828], [0.8203, -0.2285, 0.6055], [0.2656, -0.7109, 0.2451]]).to(torch_device),
                 ("rocm", 9): torch.Tensor([[0.2236, 0.5195, -0.3828], [0.8203, -0.2285, 0.6055], [0.2637, -0.7109, 0.2451]]).to(torch_device),
@@ -210,6 +204,7 @@ class MixtralIntegrationTest(unittest.TestCase):
 
         EXPECTED_LOGITS_RIGHT_UNPADDED = Expectations(
             {
+                ("xpu", 3): torch.Tensor([[0.2178, 0.1270, -0.1641], [-0.3496, 0.2988, -1.0312], [0.0693, 0.7930, 0.8008]]).to(torch_device),
                 ("cuda", 7): torch.Tensor([[0.2167, 0.1269, -0.1640], [-0.3496, 0.2988, -1.0312], [0.0688, 0.7929, 0.8007]]).to(torch_device),
                 ("cuda", 8): torch.Tensor([[0.2178, 0.1270, -0.1621], [-0.3496, 0.3008, -1.0312], [0.0693, 0.7930, 0.7969]]).to(torch_device),
                 ("rocm", 9): torch.Tensor([[0.2197, 0.1250, -0.1611], [-0.3516, 0.3008, -1.0312], [0.0684, 0.7930, 0.8008]]).to(torch_device),

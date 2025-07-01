@@ -24,8 +24,9 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...cache_utils import Cache, EncoderDecoderCache
 from ...generation import GenerationMixin
-from ...masking_utils import create_causal_mask
-from ...modeling_flash_attention_utils import is_flash_attn_available
+from ...masking_utils import AttentionMaskConverter, create_causal_mask
+from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -181,8 +182,8 @@ class GPTBigCodeAttention(nn.Module):
         cache_position: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Union[
-        Tuple[torch.Tensor, Optional[torch.Tensor]],
-        Tuple[torch.Tensor, Optional[torch.Tensor], Tuple[torch.Tensor, ...]],
+        tuple[torch.Tensor, Optional[torch.Tensor]],
+        tuple[torch.Tensor, Optional[torch.Tensor], tuple[torch.Tensor, ...]],
     ]:
         input_shape = hidden_states.shape[:-1]
 
@@ -264,7 +265,7 @@ class GPTBigCodeMLP(nn.Module):
         self.dropout = nn.Dropout(config.resid_pdrop)
 
     # Copied from transformers.models.gpt2.modeling_gpt2.GPT2MLP.forward
-    def forward(self, hidden_states: Optional[Tuple[torch.FloatTensor]]) -> torch.FloatTensor:
+    def forward(self, hidden_states: Optional[tuple[torch.FloatTensor]]) -> torch.FloatTensor:
         hidden_states = self.c_fc(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.c_proj(hidden_states)
@@ -296,7 +297,7 @@ class GPTBigCodeBlock(nn.Module):
 
     def forward(
         self,
-        hidden_states: Optional[Tuple[torch.Tensor]],
+        hidden_states: Optional[tuple[torch.Tensor]],
         layer_past: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
@@ -307,7 +308,7 @@ class GPTBigCodeBlock(nn.Module):
         cache_position: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Union[
-        Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+        tuple[torch.Tensor], tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor, torch.Tensor]
     ]:
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
@@ -443,7 +444,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.Tensor]] = None,
+        past_key_values: Optional[list[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -457,7 +458,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs,
-    ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
         r"""
         input_ids (`torch.Tensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
@@ -570,32 +571,18 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                outputs = self._gradient_checkpointing_func(
-                    block.__call__,
-                    hidden_states,
-                    None,
-                    causal_mask,
-                    head_mask[i],
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    use_cache,
-                    output_attentions,
-                    cache_position,
-                )
-            else:
-                outputs = block(
-                    hidden_states,
-                    layer_past=past_key_values,
-                    attention_mask=causal_mask,
-                    head_mask=head_mask[i],
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
-                    use_cache=use_cache,
-                    output_attentions=output_attentions,
-                    cache_position=cache_position,
-                    **kwargs,
-                )
+            outputs = block(
+                hidden_states,
+                past_key_values,
+                attention_mask,
+                head_mask[i],
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                encoder_attention_mask=encoder_attention_mask,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                cache_position=cache_position,
+                **kwargs,
+            )
 
             hidden_states = outputs[0]
             if use_cache:
@@ -653,7 +640,7 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -668,7 +655,7 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs,
-    ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
+    ) -> Union[tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         input_ids (`torch.Tensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
@@ -760,7 +747,7 @@ class GPTBigCodeForSequenceClassification(GPTBigCodePreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -772,7 +759,7 @@ class GPTBigCodeForSequenceClassification(GPTBigCodePreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
+    ) -> Union[tuple, SequenceClassifierOutputWithPast]:
         r"""
         input_ids (`torch.Tensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
@@ -893,7 +880,7 @@ class GPTBigCodeForTokenClassification(GPTBigCodePreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -904,7 +891,7 @@ class GPTBigCodeForTokenClassification(GPTBigCodePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, TokenClassifierOutput]:
+    ) -> Union[tuple, TokenClassifierOutput]:
         r"""
         input_ids (`torch.Tensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else

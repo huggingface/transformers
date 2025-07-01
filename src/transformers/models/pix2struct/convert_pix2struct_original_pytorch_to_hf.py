@@ -139,7 +139,7 @@ def convert_pix2struct_original_pytorch_checkpoint_to_hf(
     model.save_pretrained(pytorch_dump_folder_path)
     processor.save_pretrained(pytorch_dump_folder_path)
 
-    print("Model saved in {}".format(pytorch_dump_folder_path))
+    print(f"Model saved in {pytorch_dump_folder_path}")
 
 
 if __name__ == "__main__":

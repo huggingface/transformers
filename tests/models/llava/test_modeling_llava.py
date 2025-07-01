@@ -196,49 +196,6 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    # while some other models require pixel_values to be present
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            torch.testing.assert_close(out_embeds, out_ids)
-
     def test_mismatching_num_image_tokens(self):
         """
         Tests that VLMs through an error with explicit message saying what is wrong
@@ -341,7 +298,11 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=20)
-        EXPECTED_DECODED_TEXT = "\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. Firstly,"  # fmt: skip
+        expected_decoded_texts = Expectations({
+            ("cuda", None): "\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. Firstly,",
+            ("rocm", (9, 5)): "\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. First, the",
+        })  # fmt: skip
+        EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -397,12 +358,28 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=20)
 
-        EXPECTED_DECODED_TEXT = ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, you', 'USER:  \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat is located on']  # fmt: skip
-
-        self.assertEqual(
-            processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
+        expected_decoded_texts = Expectations(
+            {
+                ("cuda", None): [
+                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
+                    "with me? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, "
+                    "you",
+                    "USER:  \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat "
+                    "is located on",
+                ],
+                ("rocm", (9, 5)): [
+                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
+                    "with me? ASSISTANT: When visiting this serene location, which features a wooden pier overlooking a "
+                    "lake, you should",
+                    "USER:  \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat "
+                    "is located on",
+                ],
+            }
         )
+        EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
+
+        decoded_output = processor.batch_decode(output, skip_special_tokens=True)
+        self.assertEqual(decoded_output, EXPECTED_DECODED_TEXT)
 
     @slow
     @require_bitsandbytes
@@ -432,6 +409,10 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
                 ("cuda", 8): [
                     'USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, there are a few things to be cautious about and items to bring along',
                     'USER:  \nWhat is this?\nASSISTANT: Cats',
+                ],
+                ("rocm", (9, 5)): [
+                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this dock on a lake, there are several things to be cautious about and items to",
+                    "USER:  \nWhat is this?\nASSISTANT: This is a picture of two cats lying on a couch.",
                 ],
             }
         )  # fmt: skip
@@ -467,12 +448,28 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=20)
 
-        EXPECTED_DECODED_TEXT = ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, which appears to be a dock or pier extending over a body of water', 'USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat sleeping on a bed.']  # fmt: skip
-
-        self.assertEqual(
-            processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
+        expected_decoded_texts = Expectations(
+            {
+                ("cuda", None): [
+                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
+                    "with me?\nASSISTANT: When visiting this place, which appears to be a dock or pier extending over a "
+                    "body of water",
+                    "USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat "
+                    "sleeping on a bed.",
+                ],
+                ("rocm", (9, 5)): [
+                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
+                    "with me?\nASSISTANT: When visiting this place, which is a pier or dock overlooking a lake, you should "
+                    "be",
+                    "USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat "
+                    "sleeping on a bed.",
+                ],
+            }
         )
+        EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
+
+        decoded_output = processor.batch_decode(output, skip_special_tokens=True)
+        self.assertEqual(decoded_output, EXPECTED_DECODED_TEXT)
 
     @slow
     @require_torch
@@ -556,10 +553,6 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         model_id = "llava-hf/llava-interleave-qwen-0.5b-hf"
         model = LlavaForConditionalGeneration.from_pretrained(model_id, torch_dtype="float16", device_map=torch_device)
         processor = AutoProcessor.from_pretrained(model_id)
-
-        # check processing with expansion of inputs (w/o expansion should work with any backbone)
-        processor.vision_feature_select_strategy = "default"
-        processor.patch_size = 14
 
         image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
         raw_image = Image.open(requests.get(image_file, stream=True).raw)

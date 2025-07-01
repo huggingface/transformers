@@ -20,7 +20,7 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -35,75 +35,55 @@ from .configuration_vipllava import VipLlavaConfig
 
 
 @dataclass
-class VipLlavaModelOutputWithPast(BaseModelOutputWithPast):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for VipLlava outputs, with hidden states and attentions.
+    """
+)
+class VipLlavaModelOutputWithPast(BaseModelOutputWithPast):
+    r"""
+    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
 
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-            `past_key_values` input) to speed up sequential decoding.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        image_hidden_states (`torch.FloatTensor`, *optional*):
-            A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-            image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    image_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
     image_hidden_states: Optional[torch.FloatTensor] = None
 
 
 @dataclass
-class VipLlavaCausalLMOutputWithPast(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for VipLlava causal language model (or autoregressive) outputs.
+    """
+)
+class VipLlavaCausalLMOutputWithPast(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
 
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss (for next-token prediction).
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-            `past_key_values` input) to speed up sequential decoding.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        image_hidden_states (`torch.FloatTensor`, *optional*):
-            A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-            image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    image_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    past_key_values: Optional[list[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[torch.FloatTensor] = None
 
 
@@ -182,8 +162,14 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
+    def set_decoder(self, decoder):
+        self.language_model = decoder
+
+    def get_decoder(self):
+        return self.language_model
+
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, vision_feature_layers: Optional[Union[int, List[int]]] = None
+        self, pixel_values: torch.FloatTensor, vision_feature_layers: Optional[Union[int, list[int]]] = None
     ):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
@@ -191,7 +177,7 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
         Args:
             pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
                The tensors corresponding to the input images.
-            vision_feature_layers (`Union[int, List[int]]`):
+            vision_feature_layers (`Union[int, list[int]]`):
                 The vision feature layer, or the list of indexes of the layers to select
                 the vision feature.
         Returns:
@@ -220,18 +206,18 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
         pixel_values: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        vision_feature_layers: Optional[Union[int, List[int]]] = None,
+        vision_feature_layers: Optional[Union[int, list[int]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **lm_kwargs,
-    ) -> Union[Tuple, VipLlavaModelOutputWithPast]:
+    ) -> Union[tuple, VipLlavaModelOutputWithPast]:
         r"""
-        vision_feature_layers (`Union[int, List[int]]`, *optional*):
+        vision_feature_layers (`Union[int, list[int]]`, *optional*):
             The vision feature layer, or the list of indexes of the layers to select
             the vision feature.
         """
@@ -247,11 +233,6 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if pixel_values is not None and inputs_embeds is not None:
-            raise ValueError(
-                "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
-            )
-
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
@@ -260,10 +241,18 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
                 pixel_values=pixel_values, vision_feature_layers=vision_feature_layers
             )
 
-            special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
-            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+            if input_ids is None:
+                special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+                special_image_mask = special_image_mask.all(-1)
+            else:
+                special_image_mask = input_ids == self.config.image_token_id
+
+            n_image_tokens = (special_image_mask).sum()
+            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+
             if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
-                n_image_tokens = (input_ids == self.config.image_token_id).sum()
                 n_image_features = image_features.shape[0] * image_features.shape[1]
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
@@ -327,10 +316,15 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
         self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
-        self.model = decoder
+        self.model.set_decoder(decoder)
 
     def get_decoder(self):
-        return self.model
+        return self.model.get_decoder
+
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, vision_feature_layers: Optional[Union[int, list[int]]] = None
+    ):
+        return self.model.get_image_features(pixel_values=pixel_values, vision_feature_layers=vision_feature_layers)
 
     # Make modules available throught conditional class for BC
     @property
@@ -353,9 +347,9 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
         pixel_values: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        vision_feature_layers: Optional[Union[int, List[int]]] = None,
+        vision_feature_layers: Optional[Union[int, list[int]]] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -364,15 +358,15 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **lm_kwargs,
-    ) -> Union[Tuple, VipLlavaCausalLMOutputWithPast]:
+    ) -> Union[tuple, VipLlavaCausalLMOutputWithPast]:
         r"""
+        vision_feature_layers (`Union[int, list[int]]`, *optional*):
+            The vision feature layer, or the list of indexes of the layers to select
+            the vision feature.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        vision_feature_layers (`Union[int, List[int]]`, *optional*):
-            The vision feature layer, or the list of indexes of the layers to select
-            the vision feature.
 
         Example:
 

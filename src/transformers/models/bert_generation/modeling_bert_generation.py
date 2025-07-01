@@ -15,7 +15,7 @@
 """PyTorch BERT model specific for generation."""
 
 import math
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -24,6 +24,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, EncoderDecoderCache
 from ...generation import GenerationMixin
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
@@ -95,7 +96,7 @@ class BertGenerationSelfAttention(nn.Module):
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         mixed_query_layer = self.query(hidden_states)
 
         # If this is instantiated as a cross-attention module, the keys
@@ -233,7 +234,7 @@ class BertGenerationAttention(nn.Module):
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         self_outputs = self.self(
             hidden_states,
             attention_mask=attention_mask,
@@ -280,7 +281,7 @@ class BertGenerationOutput(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->BertGeneration
-class BertGenerationLayer(nn.Module):
+class BertGenerationLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -307,7 +308,7 @@ class BertGenerationLayer(nn.Module):
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask=attention_mask,
@@ -375,13 +376,13 @@ class BertEncoder(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
         cache_position: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
@@ -627,11 +628,11 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
 
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
     cross-attention is added between the self-attention layers, following the architecture described in [Attention is
-    all you need](https://arxiv.org/abs/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
+    all you need](https://huggingface.co/papers/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
     Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
 
     This model should be used when leveraging Bert or Roberta checkpoints for the [`EncoderDecoderModel`] class as
-    described in [Leveraging Pre-trained Checkpoints for Sequence Generation Tasks](https://arxiv.org/abs/1907.12461)
+    described in [Leveraging Pre-trained Checkpoints for Sequence Generation Tasks](https://huggingface.co/papers/1907.12461)
     by Sascha Rothe, Shashi Narayan, and Aliaksei Severyn.
 
     To behave as an decoder the model needs to be initialized with the `is_decoder` argument of the configuration set
@@ -673,13 +674,13 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,  # NOOP kwargs, for now
-    ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -828,13 +829,13 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel, GenerationMixin):
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
+    ) -> Union[tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in

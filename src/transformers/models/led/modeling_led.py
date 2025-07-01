@@ -17,7 +17,7 @@
 import math
 import warnings
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -28,6 +28,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
@@ -739,7 +740,7 @@ class LEDEncoderAttention(nn.Module):
         is_index_global_attn: Optional[torch.Tensor] = None,
         is_global_attn: Optional[bool] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         self_outputs = self.longformer_self_attn(
@@ -798,7 +799,7 @@ class LEDDecoderAttention(nn.Module):
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         cache_position: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Cache]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[Cache]]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -905,7 +906,7 @@ class LEDDecoderAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-class LEDEncoderLayer(nn.Module):
+class LEDEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: LEDConfig, layer_id: int):
         super().__init__()
         self.embed_dim = config.d_model
@@ -967,7 +968,7 @@ class LEDEncoderLayer(nn.Module):
         return (hidden_states,) + attn_outputs[1:]
 
 
-class LEDDecoderLayer(nn.Module):
+class LEDDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: LEDConfig, layer_idx=None):
         super().__init__()
         self.embed_dim = config.d_model
@@ -1133,319 +1134,198 @@ class LEDPreTrainedModel(PreTrainedModel):
 
 
 @dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for LEDEncoder's outputs, with potential hidden states, local and global attentions.
+    """
+)
 # Copied from transformers.models.longformer.modeling_longformer.LongformerBaseModelOutput with Longformer->LEDEncoder
 class LEDEncoderBaseModelOutput(ModelOutput):
-    """
-    Base class for LEDEncoder's outputs, with potential hidden states, local and global attentions.
+    r"""
+    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x +
+        attention_window + 1)`, where `x` is the number of tokens with global attention mask.
 
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
+        Local attentions weights after the attention softmax, used to compute the weighted average in the
+        self-attention heads. Those are the attention weights from every token in the sequence to every token with
+        global attention (first `x` values) and to every token in the attention window (remaining `attention_window
+        + 1` values). Note that the first `x` values refer to tokens with fixed positions in the text, but the
+        remaining `attention_window + 1` values refer to tokens with relative positions: the attention weight of a
+        token to itself is located at index `x + attention_window / 2` and the `attention_window / 2` preceding
+        (succeeding) values are the attention weights to the `attention_window / 2` preceding (succeeding) tokens.
+        If the attention window contains a token with global attention, the attention weight at the corresponding
+        index is set to 0; the value should be accessed from the first `x` attention weights. If a token has global
+        attention, the attention weights to all other tokens in `attentions` is set to 0, the values should be
+        accessed from `global_attentions`.
+    global_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`,
+        where `x` is the number of tokens with global attention mask.
 
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x +
-            attention_window + 1)`, where `x` is the number of tokens with global attention mask.
-
-            Local attentions weights after the attention softmax, used to compute the weighted average in the
-            self-attention heads. Those are the attention weights from every token in the sequence to every token with
-            global attention (first `x` values) and to every token in the attention window (remaining `attention_window
-            + 1` values). Note that the first `x` values refer to tokens with fixed positions in the text, but the
-            remaining `attention_window + 1` values refer to tokens with relative positions: the attention weight of a
-            token to itself is located at index `x + attention_window / 2` and the `attention_window / 2` preceding
-            (succeeding) values are the attention weights to the `attention_window / 2` preceding (succeeding) tokens.
-            If the attention window contains a token with global attention, the attention weight at the corresponding
-            index is set to 0; the value should be accessed from the first `x` attention weights. If a token has global
-            attention, the attention weights to all other tokens in `attentions` is set to 0, the values should be
-            accessed from `global_attentions`.
-        global_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`,
-            where `x` is the number of tokens with global attention mask.
-
-            Global attentions weights after the attention softmax, used to compute the weighted average in the
-            self-attention heads. Those are the attention weights from every token with global attention to every token
-            in the sequence.
+        Global attentions weights after the attention softmax, used to compute the weighted average in the
+        self-attention heads. Those are the attention weights from every token with global attention to every token
+        in the sequence.
     """
 
     last_hidden_state: torch.FloatTensor
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    global_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
-class LEDSeq2SeqModelOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for model encoder's outputs that also contains : pre-computed hidden states that can speed up sequential
     decoding.
+    """
+)
+class LEDSeq2SeqModelOutput(ModelOutput):
+    r"""
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the decoder of the model.
 
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the decoder of the model.
+        If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
+        hidden_size)` is output.
+    past_key_values (`list[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
+        num_heads, sequence_length, embed_size_per_head)`).
 
-            If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
-            hidden_size)` is output.
-        past_key_values (`List[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
-            num_heads, sequence_length, embed_size_per_head)`).
+        Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
+        used (see `past_key_values` input) to speed up sequential decoding.
+    encoder_global_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`,
+        where `x` is the number of tokens with global attention mask.
 
-            Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
-            used (see `past_key_values` input) to speed up sequential decoding.
-        decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the decoder at the output of each layer plus the initial embedding outputs.
-        decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
-            self-attention heads.
-        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
-            weighted average in the cross-attention heads.
-        encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder of the model.
-        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the encoder at the output of each layer plus the initial embedding outputs.
-        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
-            self-attention heads.
-        encoder_global_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`,
-            where `x` is the number of tokens with global attention mask.
-
-            Global attentions weights after the attention softmax, used to compute the weighted average in the
-            self-attention heads. Those are the attention weights from every token with global attention to every token
-            in the sequence.
+        Global attentions weights after the attention softmax, used to compute the weighted average in the
+        self-attention heads. Those are the attention weights from every token with global attention to every token
+        in the sequence.
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[List[torch.FloatTensor]] = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    past_key_values: Optional[list[torch.FloatTensor]] = None
+    decoder_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    cross_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    encoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    encoder_global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    encoder_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    encoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    encoder_global_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
-class LEDSeq2SeqLMOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for sequence-to-sequence language models outputs.
+    """
+)
+class LEDSeq2SeqLMOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss.
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    past_key_values (`list[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
+        num_heads, sequence_length, embed_size_per_head)`).
 
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (`List[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
-            num_heads, sequence_length, embed_size_per_head)`).
+        Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
+        used (see `past_key_values` input) to speed up sequential decoding.
+    encoder_global_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`,
+        where `x` is the number of tokens with global attention mask.
 
-            Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
-            used (see `past_key_values` input) to speed up sequential decoding.
-        decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the decoder at the output of each layer plus the initial embedding outputs.
-        decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
-            self-attention heads.
-        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
-            weighted average in the cross-attention heads.
-        encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder of the model.
-        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the encoder at the output of each layer plus the initial embedding outputs.
-        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
-            self-attention heads.
-        encoder_global_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`,
-            where `x` is the number of tokens with global attention mask.
-
-            Global attentions weights after the attention softmax, used to compute the weighted average in the
-            self-attention heads. Those are the attention weights from every token with global attention to every token
-            in the sequence.
+        Global attentions weights after the attention softmax, used to compute the weighted average in the
+        self-attention heads. Those are the attention weights from every token with global attention to every token
+        in the sequence.
     """
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[List[torch.FloatTensor]] = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    past_key_values: Optional[list[torch.FloatTensor]] = None
+    decoder_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    cross_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    encoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    encoder_global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    encoder_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    encoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    encoder_global_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
-class LEDSeq2SeqSequenceClassifierOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for outputs of sequence-to-sequence sentence classification models.
+    """
+)
+class LEDSeq2SeqSequenceClassifierOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `label` is provided):
+        Classification (or regression if config.num_labels==1) loss.
+    logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+        Classification (or regression if config.num_labels==1) scores (before SoftMax).
+    past_key_values (`list[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
+        num_heads, sequence_length, embed_size_per_head)`).
 
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `label` is provided):
-            Classification (or regression if config.num_labels==1) loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
-            Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        past_key_values (`List[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
-            num_heads, sequence_length, embed_size_per_head)`).
+        Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
+        used (see `past_key_values` input) to speed up sequential decoding.
+    encoder_global_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`,
+        where `x` is the number of tokens with global attention mask.
 
-            Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
-            used (see `past_key_values` input) to speed up sequential decoding.
-        decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the decoder at the output of each layer plus the initial embedding outputs.
-        decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
-            self-attention heads.
-        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
-            weighted average in the cross-attention heads.
-        encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder of the model.
-        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the encoder at the output of each layer plus the initial embedding outputs.
-        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
-            self-attention heads.
-        encoder_global_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`,
-            where `x` is the number of tokens with global attention mask.
-
-            Global attentions weights after the attention softmax, used to compute the weighted average in the
-            self-attention heads. Those are the attention weights from every token with global attention to every token
-            in the sequence.
+        Global attentions weights after the attention softmax, used to compute the weighted average in the
+        self-attention heads. Those are the attention weights from every token with global attention to every token
+        in the sequence.
     """
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[List[torch.FloatTensor]] = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    past_key_values: Optional[list[torch.FloatTensor]] = None
+    decoder_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    cross_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    encoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    encoder_global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    encoder_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    encoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    encoder_global_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
-class LEDSeq2SeqQuestionAnsweringModelOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for outputs of sequence-to-sequence question answering models.
+    """
+)
+class LEDSeq2SeqQuestionAnsweringModelOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Total span extraction loss is the sum of a Cross-Entropy for the start and end positions.
+    past_key_values (`list[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
+        num_heads, sequence_length, embed_size_per_head)`).
 
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Total span extraction loss is the sum of a Cross-Entropy for the start and end positions.
-        start_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Span-start scores (before SoftMax).
-        end_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Span-end scores (before SoftMax).
-        past_key_values (`List[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
-            num_heads, sequence_length, embed_size_per_head)`).
+        Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
+        used (see `past_key_values` input) to speed up sequential decoding.
+    encoder_global_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`,
+        where `x` is the number of tokens with global attention mask.
 
-            Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
-            used (see `past_key_values` input) to speed up sequential decoding.
-        decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the decoder at the output of each layer plus the initial embedding outputs.
-        decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
-            self-attention heads.
-        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
-            weighted average in the cross-attention heads.
-        encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder of the model.
-        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the encoder at the output of each layer plus the initial embedding outputs.
-        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
-            self-attention heads.
-        encoder_global_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`,
-            where `x` is the number of tokens with global attention mask.
-
-            Global attentions weights after the attention softmax, used to compute the weighted average in the
-            self-attention heads. Those are the attention weights from every token with global attention to every token
-            in the sequence.
+        Global attentions weights after the attention softmax, used to compute the weighted average in the
+        self-attention heads. Those are the attention weights from every token with global attention to every token
+        in the sequence.
     """
 
     loss: Optional[torch.FloatTensor] = None
     start_logits: Optional[torch.FloatTensor] = None
     end_logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[List[torch.FloatTensor]] = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    past_key_values: Optional[list[torch.FloatTensor]] = None
+    decoder_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    cross_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    encoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    encoder_global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    encoder_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    encoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    encoder_global_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 class LEDEncoder(LEDPreTrainedModel):
@@ -1586,7 +1466,7 @@ class LEDEncoder(LEDPreTrainedModel):
                 important for task-specific finetuning because it makes the model more flexible at representing the
                 task. For example, for classification, the <s> token should be given global attention. For QA, all
                 question tokens should also have global attention. Please refer to the [Longformer
-                paper](https://arxiv.org/abs/2004.05150) for more details. Mask values selected in `[0, 1]`:
+                paper](https://huggingface.co/papers/2004.05150) for more details. Mask values selected in `[0, 1]`:
 
                 - 0 for local attention (a sliding window attention),
                 - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
@@ -1676,33 +1556,21 @@ class LEDEncoder(LEDPreTrainedModel):
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
                 layer_outputs = (None, None, None)
             else:
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        encoder_layer.__call__,
-                        hidden_states,
-                        attention_mask,
-                        head_mask[idx] if head_mask is not None else None,
-                        is_index_masked,
-                        is_index_global_attn,
-                        is_global_attn,
-                        output_attentions,
-                    )
-                else:
-                    layer_outputs = encoder_layer(
-                        hidden_states,
-                        attention_mask=attention_mask,
-                        layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                        is_index_masked=is_index_masked,
-                        is_index_global_attn=is_index_global_attn,
-                        is_global_attn=is_global_attn,
-                        output_attentions=output_attentions,
-                    )
+                layer_outputs = encoder_layer(
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                    is_index_masked=is_index_masked,
+                    is_index_global_attn=is_index_global_attn,
+                    is_global_attn=is_global_attn,
+                    output_attentions=output_attentions,
+                )
                 hidden_states = layer_outputs[0]
 
             if output_attentions:
@@ -1810,7 +1678,7 @@ class LEDDecoder(LEDPreTrainedModel):
                 for task-specific finetuning because it makes the model more flexible at representing the task. For
                 example, for classification, the <s> token should be given global attention. For QA, all question
                 tokens should also have global attention. Please refer to the [Longformer
-                paper](https://arxiv.org/abs/2004.05150) for more details. Mask values selected in `[0, 1]`:
+                paper](https://huggingface.co/papers/2004.05150) for more details. Mask values selected in `[0, 1]`:
 
                 - 0 for local attention (a sliding window attention),
                 - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
@@ -1944,7 +1812,7 @@ class LEDDecoder(LEDPreTrainedModel):
                         f" {head_mask.size()[0]}."
                     )
         for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
             if self.training:
@@ -1952,35 +1820,18 @@ class LEDDecoder(LEDPreTrainedModel):
                 if dropout_probability < self.layerdrop:
                     continue
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    combined_attention_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    head_mask[idx] if head_mask is not None else None,
-                    cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
-                    None,
-                    output_attentions,
-                    use_cache,
-                    cache_position,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=combined_attention_mask,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                    cross_attn_layer_head_mask=(
-                        cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
-                    ),
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                combined_attention_mask,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                encoder_attention_mask=encoder_attention_mask,
+                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                cross_attn_layer_head_mask=(cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -2054,9 +1905,9 @@ class LEDModel(LEDPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         global_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
@@ -2064,7 +1915,7 @@ class LEDModel(LEDPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple[torch.Tensor], LEDSeq2SeqModelOutput]:
+    ) -> Union[tuple[torch.Tensor], LEDSeq2SeqModelOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -2081,7 +1932,7 @@ class LEDModel(LEDPreTrainedModel):
             be used by default.
 
             If you want to change padding behavior, you should read [`modeling_led._prepare_decoder_inputs`] and modify
-            to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more information on the
+            to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more information on the
             default strategy.
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
@@ -2095,7 +1946,7 @@ class LEDModel(LEDPreTrainedModel):
             important for task-specific finetuning because it makes the model more flexible at representing the task.
             For example, for classification, the <s> token should be given global attention. For QA, all question
             tokens should also have global attention. Please refer to the [Longformer
-            paper](https://arxiv.org/abs/2004.05150) for more details. Mask values selected in `[0, 1]`:
+            paper](https://huggingface.co/papers/2004.05150) for more details. Mask values selected in `[0, 1]`:
 
             - 0 for local attention (a sliding window attention),
             - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
@@ -2225,9 +2076,9 @@ class LEDForConditionalGeneration(LEDPreTrainedModel, GenerationMixin):
         head_mask: Optional[torch.Tensor] = None,
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         global_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -2236,7 +2087,7 @@ class LEDForConditionalGeneration(LEDPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple[torch.Tensor], LEDSeq2SeqLMOutput]:
+    ) -> Union[tuple[torch.Tensor], LEDSeq2SeqLMOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -2253,7 +2104,7 @@ class LEDForConditionalGeneration(LEDPreTrainedModel, GenerationMixin):
             be used by default.
 
             If you want to change padding behavior, you should read [`modeling_led._prepare_decoder_inputs`] and modify
-            to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more information on the
+            to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more information on the
             default strategy.
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
@@ -2267,7 +2118,7 @@ class LEDForConditionalGeneration(LEDPreTrainedModel, GenerationMixin):
             important for task-specific finetuning because it makes the model more flexible at representing the task.
             For example, for classification, the <s> token should be given global attention. For QA, all question
             tokens should also have global attention. Please refer to the [Longformer
-            paper](https://arxiv.org/abs/2004.05150) for more details. Mask values selected in `[0, 1]`:
+            paper](https://huggingface.co/papers/2004.05150) for more details. Mask values selected in `[0, 1]`:
 
             - 0 for local attention (a sliding window attention),
             - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
@@ -2423,7 +2274,7 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         global_attention_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -2432,7 +2283,7 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], LEDSeq2SeqSequenceClassifierOutput]:
+    ) -> Union[tuple[torch.Tensor], LEDSeq2SeqSequenceClassifierOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -2449,7 +2300,7 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
             be used by default.
 
             If you want to change padding behavior, you should read [`modeling_led._prepare_decoder_inputs`] and modify
-            to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more information on the
+            to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more information on the
             default strategy.
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
@@ -2463,7 +2314,7 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
             important for task-specific finetuning because it makes the model more flexible at representing the task.
             For example, for classification, the <s> token should be given global attention. For QA, all question
             tokens should also have global attention. Please refer to the [Longformer
-            paper](https://arxiv.org/abs/2004.05150) for more details. Mask values selected in `[0, 1]`:
+            paper](https://huggingface.co/papers/2004.05150) for more details. Mask values selected in `[0, 1]`:
 
             - 0 for local attention (a sliding window attention),
             - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
@@ -2574,7 +2425,7 @@ class LEDForQuestionAnswering(LEDPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         global_attention_mask: Optional[torch.FloatTensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
@@ -2584,7 +2435,7 @@ class LEDForQuestionAnswering(LEDPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], LEDSeq2SeqQuestionAnsweringModelOutput]:
+    ) -> Union[tuple[torch.Tensor], LEDSeq2SeqQuestionAnsweringModelOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -2601,7 +2452,7 @@ class LEDForQuestionAnswering(LEDPreTrainedModel):
             be used by default.
 
             If you want to change padding behavior, you should read [`modeling_led._prepare_decoder_inputs`] and modify
-            to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more information on the
+            to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more information on the
             default strategy.
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
@@ -2615,7 +2466,7 @@ class LEDForQuestionAnswering(LEDPreTrainedModel):
             important for task-specific finetuning because it makes the model more flexible at representing the task.
             For example, for classification, the <s> token should be given global attention. For QA, all question
             tokens should also have global attention. Please refer to the [Longformer
-            paper](https://arxiv.org/abs/2004.05150) for more details. Mask values selected in `[0, 1]`:
+            paper](https://huggingface.co/papers/2004.05150) for more details. Mask values selected in `[0, 1]`:
 
             - 0 for local attention (a sliding window attention),
             - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).

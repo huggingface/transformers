@@ -15,7 +15,7 @@
 """PyTorch GPT Neo model."""
 
 import os
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -27,6 +27,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter, _prepare_4d_causal_attention_mask
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -323,9 +324,14 @@ class GPTNeoFlashAttention2(GPTNeoSelfAttention):
         # This might slowdown training & inference so it is recommended to not cast the LayerNorms
         # in fp32. (LlamaRMSNorm handles it correctly)
 
+        device_type = query.device.type if query.device.type != "mps" else "cpu"
         if query.dtype == torch.float32:
             if torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_gpu_dtype()
+                target_dtype = (
+                    torch.get_autocast_dtype(device_type)
+                    if hasattr(torch, "get_autocast_dtype")
+                    else torch.get_autocast_gpu_dtype()
+                )
             # Handle the case where the model is quantized
             elif hasattr(self.config, "_pre_quantization_dtype"):
                 target_dtype = self.config._pre_quantization_dtype
@@ -426,7 +432,7 @@ class GPTNeoMLP(nn.Module):
         return hidden_states
 
 
-class GPTNeoBlock(nn.Module):
+class GPTNeoBlock(GradientCheckpointingLayer):
     def __init__(self, config, layer_id=None):
         super().__init__()
         hidden_size = config.hidden_size
@@ -534,7 +540,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Union[Cache, Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Union[Cache, tuple[torch.FloatTensor]]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -545,7 +551,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
@@ -629,27 +635,15 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                outputs = self._gradient_checkpointing_func(
-                    block.__call__,
-                    hidden_states,
-                    None,
-                    causal_mask,
-                    head_mask[i],
-                    use_cache,
-                    output_attentions,
-                    cache_position,
-                )
-            else:
-                outputs = block(
-                    hidden_states,
-                    layer_past=past_key_values,
-                    attention_mask=causal_mask,
-                    head_mask=head_mask[i],
-                    use_cache=use_cache,
-                    output_attentions=output_attentions,
-                    cache_position=cache_position,
-                )
+            outputs = block(
+                hidden_states,
+                layer_past=past_key_values,
+                attention_mask=causal_mask,
+                head_mask=head_mask[i],
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                cache_position=cache_position,
+            )
 
             hidden_states = outputs[0]
             if use_cache:
@@ -834,7 +828,7 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Union[Cache, Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Union[Cache, tuple[torch.FloatTensor]]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -847,7 +841,7 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
-    ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
+    ) -> Union[tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
@@ -946,7 +940,7 @@ class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Union[Cache, Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Union[Cache, tuple[torch.FloatTensor]]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -957,7 +951,7 @@ class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutputWithPast]:
+    ) -> Union[tuple[torch.Tensor], SequenceClassifierOutputWithPast]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
@@ -1069,7 +1063,7 @@ class GPTNeoForTokenClassification(GPTNeoPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, Tuple[Tuple[torch.Tensor]]]] = None,
+        past_key_values: Optional[Union[Cache, tuple[tuple[torch.Tensor]]]] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -1080,7 +1074,7 @@ class GPTNeoForTokenClassification(GPTNeoPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, TokenClassifierOutput]:
+    ) -> Union[tuple, TokenClassifierOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
@@ -1162,7 +1156,7 @@ class GPTNeoForQuestionAnswering(GPTNeoPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, QuestionAnsweringModelOutput]:
+    ) -> Union[tuple, QuestionAnsweringModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else

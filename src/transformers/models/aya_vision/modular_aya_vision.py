@@ -14,7 +14,7 @@
 # limitations under the License.
 """PyTorch AyaVision model."""
 
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -120,7 +120,7 @@ class AyaVisionModel(LlavaModel):
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        vision_feature_layer: Optional[Union[int, List[int]]] = None,
+        vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
         **kwargs,
     ):
@@ -130,7 +130,7 @@ class AyaVisionModel(LlavaModel):
         Args:
             pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
                The tensors corresponding to the input images.
-            vision_feature_layer (`Union[int, List[int]]`, *optional*):
+            vision_feature_layer (`Union[int, list[int]]`, *optional*):
                 The index of the layer to select the vision feature. If multiple indices are provided,
                 the vision feature of the corresponding indices will be concatenated to form the
                 vision features.
@@ -180,9 +180,9 @@ class AyaVisionModel(LlavaModel):
         pixel_values: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        vision_feature_layer: Optional[Union[int, List[int]]] = None,
+        vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -190,7 +190,7 @@ class AyaVisionModel(LlavaModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[Tuple, AyaVisionModelOutputWithPast]:
+    ) -> Union[tuple, AyaVisionModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -222,14 +222,14 @@ class AyaVisionModel(LlavaModel):
                 special_image_mask = inputs_embeds == self.get_input_embeddings()(
                     torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
-                n_image_tokens = (special_image_mask).sum(dim=1).sum(dim=0)[0]
+                special_image_mask = special_image_mask.all(-1)
             else:
-                special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
-                special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-                n_image_tokens = (input_ids == self.config.image_token_id).sum()
+                special_image_mask = input_ids == self.config.image_token_id
+
+            n_image_tokens = (special_image_mask).sum(dim=1).sum(dim=0)
+            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
 
             if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
-                n_image_tokens = (input_ids == self.config.image_token_id).sum()
                 n_image_features = image_features.shape[0] * image_features.shape[1]
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
@@ -266,9 +266,9 @@ class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
         pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        vision_feature_layer: Optional[Union[int, List[int]]] = None,
+        vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -279,7 +279,7 @@ class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
         logits_to_keep: Union[int, torch.Tensor] = 0,
         image_sizes: Optional[torch.Tensor] = None,
         **kwargs: Unpack[KwargsForCausalLM],
-    ) -> Union[Tuple, AyaVisionCausalLMOutputWithPast]:
+    ) -> Union[tuple, AyaVisionCausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,

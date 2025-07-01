@@ -16,7 +16,7 @@
 
 import copy
 import math
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -29,6 +29,7 @@ from ...modeling_attn_mask_utils import (
     _prepare_4d_attention_mask,
     _prepare_4d_causal_attention_mask,
 )
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
@@ -187,7 +188,7 @@ class TrOCRAttention(nn.Module):
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -293,7 +294,7 @@ class TrOCRAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-class TrOCRDecoderLayer(nn.Module):
+class TrOCRDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: TrOCRConfig, layer_idx=None):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -643,7 +644,7 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
                         f" {head_mask.size()[0]}."
                     )
         for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
             if self.training:
@@ -651,35 +652,18 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
                 if dropout_probability < self.layerdrop:
                     continue
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    head_mask[idx] if head_mask is not None else None,
-                    cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
-                    None,
-                    output_attentions,
-                    use_cache,
-                    cache_position,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=attention_mask,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                    cross_attn_layer_head_mask=(
-                        cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
-                    ),
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                encoder_attention_mask=encoder_attention_mask,
+                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                cross_attn_layer_head_mask=(cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+            )
             hidden_states = layer_outputs[0]
 
             if use_cache:
@@ -777,7 +761,7 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel, GenerationMixin):
         encoder_attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -785,7 +769,7 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
+    ) -> Union[tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:

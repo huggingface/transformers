@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Callable, Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -24,15 +24,17 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, EncoderDecoderCache
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
+    BaseModelOutput,
     BaseModelOutputWithNoAttention,
-    BaseModelOutputWithPastAndCrossAttentions,
-    BaseModelOutputWithPoolingAndCrossAttentions,
+    BaseModelOutputWithPooling,
     BaseModelOutputWithPoolingAndNoAttention,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import ModelOutput, auto_docstring, logging
+from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_align import AlignConfig, AlignTextConfig, AlignVisionConfig
 
 
@@ -40,76 +42,60 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class AlignVisionModelOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
-
-    Args:
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
-            The image embeddings obtained by applying the projection layer to the pooler_output.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+    """
+)
+class AlignVisionModelOutput(ModelOutput):
+    r"""
+    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+        The image embeddings obtained by applying the projection layer to the pooler_output.
     """
 
     image_embeds: Optional[torch.FloatTensor] = None
     last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
-class AlignTextModelOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for text model's outputs that also contains a pooling of the last hidden states.
-
-    Args:
-        text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
-            The text embeddings obtained by applying the projection layer to the pooler_output.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    """
+)
+class AlignTextModelOutput(ModelOutput):
+    r"""
+    text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+        The text embeddings obtained by applying the projection layer to the pooler_output.
     """
 
     text_embeds: Optional[torch.FloatTensor] = None
     last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
+@auto_docstring
 class AlignOutput(ModelOutput):
-    """
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-            Contrastive loss for image-text similarity.
-        logits_per_image:(`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
-            The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
-            similarity scores.
-        logits_per_text:(`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
-            The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
-            similarity scores.
-        text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`AlignTextModel`].
-        image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The output of [`AlignVisionModel`].
-        text_model_output(`BaseModelOutputWithPoolingAndCrossAttentions`):
-            The output of the [`AlignTextModel`].
-        vision_model_output(`BaseModelOutputWithPoolingAndNoAttention`):
-            The output of the [`AlignVisionModel`].
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+        Contrastive loss for image-text similarity.
+    logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
+        The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
+        similarity scores.
+    logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
+        The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
+        similarity scores.
+    text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        The text embeddings obtained by applying the projection layer to the pooled output of [`AlignTextModel`].
+    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        The output of [`AlignVisionModel`].
+    text_model_output (`BaseModelOutputWithPooling`):
+        The output of the [`AlignTextModel`].
+    vision_model_output (`BaseModelOutputWithPoolingAndNoAttention`):
+        The output of the [`AlignVisionModel`].
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -117,10 +103,10 @@ class AlignOutput(ModelOutput):
     logits_per_text: Optional[torch.FloatTensor] = None
     text_embeds: Optional[torch.FloatTensor] = None
     image_embeds: Optional[torch.FloatTensor] = None
-    text_model_output: BaseModelOutputWithPoolingAndCrossAttentions = None
+    text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPoolingAndNoAttention = None
 
-    def to_tuple(self) -> Tuple[Any]:
+    def to_tuple(self) -> tuple[Any]:
         return tuple(
             self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
             for k in self.keys()
@@ -156,7 +142,7 @@ def round_filters(config: AlignVisionConfig, num_channels: int):
 
 
 # Copied from transformers.models.efficientnet.modeling_efficientnet.correct_pad
-def correct_pad(kernel_size: Union[int, Tuple], adjust: bool = True):
+def correct_pad(kernel_size: Union[int, tuple], adjust: bool = True):
     r"""
     Utility function to get the tuple padding value for the depthwise convolution.
 
@@ -524,7 +510,6 @@ class AlignVisionEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertEmbeddings with Bert->AlignText
 class AlignTextEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
@@ -553,7 +538,6 @@ class AlignTextEmbeddings(nn.Module):
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        past_key_values_length: int = 0,
     ) -> torch.Tensor:
         if input_ids is not None:
             input_shape = input_ids.size()
@@ -563,7 +547,7 @@ class AlignTextEmbeddings(nn.Module):
         seq_length = input_shape[1]
 
         if position_ids is None:
-            position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
+            position_ids = self.position_ids[:, :seq_length]
 
         # Setting the token_type_ids to the registered buffer in constructor where it is all zeros, which usually occurs
         # when its auto-generated, registered buffer helps users when tracing the model without passing token_type_ids, solves
@@ -589,9 +573,35 @@ class AlignTextEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->AlignText
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    head_mask: Optional[torch.Tensor] = None,
+    **kwargs,
+):
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        causal_mask = attention_mask[:, :, :, : key.shape[-2]]
+        attn_weights = attn_weights + causal_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    if head_mask is not None:
+        attn_weights = attn_weights * head_mask.view(1, -1, 1, 1)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+    return attn_output, attn_weights
+
+
 class AlignTextSelfAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None, layer_idx=None):
+    def __init__(self, config):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -599,6 +609,7 @@ class AlignTextSelfAttention(nn.Module):
                 f"heads ({config.num_attention_heads})"
             )
 
+        self.config = config
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
@@ -608,121 +619,48 @@ class AlignTextSelfAttention(nn.Module):
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.position_embedding_type = position_embedding_type or getattr(
-            config, "position_embedding_type", "absolute"
-        )
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            self.max_position_embeddings = config.max_position_embeddings
-            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
+        self.attention_dropout = config.attention_probs_dropout_prob
+        self.scaling = self.attention_head_size**-0.5
 
-        self.is_decoder = config.is_decoder
-        self.layer_idx = layer_idx
-
-    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
+    @deprecate_kwarg("encoder_hidden_states", version="4.54.0")
+    @deprecate_kwarg("encoder_attention_mask", version="4.54.0")
+    @deprecate_kwarg("past_key_value", version="4.54.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
-        cache_position: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor]:
-        mixed_query_layer = self.query(hidden_states)
+        **kwargs,
+    ) -> tuple[torch.Tensor]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.attention_head_size)
 
-        # If this is instantiated as a cross-attention module, the keys
-        # and values come from an encoder; the attention mask needs to be
-        # such that the encoder's padding tokens are not attended to.
-        is_cross_attention = encoder_hidden_states is not None
+        query_states = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.key(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.value(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        if past_key_value is not None:
-            if isinstance(past_key_value, EncoderDecoderCache):
-                is_updated = past_key_value.is_updated.get(self.layer_idx)
-                if is_cross_attention:
-                    # after the first generated id, we can subsequently re-use all key/value_layer from cache
-                    curr_past_key_value = past_key_value.cross_attention_cache
-                else:
-                    curr_past_key_value = past_key_value.self_attention_cache
-            else:
-                curr_past_key_value = past_key_value
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        current_states = encoder_hidden_states if is_cross_attention else hidden_states
-        if is_cross_attention and past_key_value is not None and is_updated:
-            # reuse k,v, cross_attentions
-            key_layer = curr_past_key_value.key_cache[self.layer_idx]
-            value_layer = curr_past_key_value.value_cache[self.layer_idx]
-        else:
-            key_layer = self.transpose_for_scores(self.key(current_states))
-            value_layer = self.transpose_for_scores(self.value(current_states))
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            head_mask=head_mask,
+            **kwargs,
+        )
 
-            if past_key_value is not None:
-                # save all key/value_layer to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_layer, value_layer = curr_past_key_value.update(
-                    key_layer, value_layer, self.layer_idx, {"cache_position": cache_position}
-                )
-                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention:
-                    past_key_value.is_updated[self.layer_idx] = True
-
-        query_layer = self.transpose_for_scores(mixed_query_layer)
-
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            query_length, key_length = query_layer.shape[2], key_layer.shape[2]
-            if past_key_value is not None:
-                position_ids_l = torch.tensor(key_length - 1, dtype=torch.long, device=hidden_states.device).view(
-                    -1, 1
-                )
-            else:
-                position_ids_l = torch.arange(query_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
-            position_ids_r = torch.arange(key_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
-            distance = position_ids_l - position_ids_r
-
-            positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
-            positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
-
-            if self.position_embedding_type == "relative_key":
-                relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                attention_scores = attention_scores + relative_position_scores
-            elif self.position_embedding_type == "relative_key_query":
-                relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
-                attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
-
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-        if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in AlignTextModel forward() function)
-            attention_scores = attention_scores + attention_mask
-
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
-        context_layer = torch.matmul(attention_probs, value_layer)
-
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(new_context_layer_shape)
-
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-
-        if self.is_decoder:
-            outputs = outputs + (past_key_value,)
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        outputs = (attn_output, attn_weights) if output_attentions else (attn_output,)
         return outputs
 
 
@@ -741,20 +679,10 @@ class AlignTextSelfOutput(nn.Module):
         return hidden_states
 
 
-ALIGN_TEXT_SELF_ATTENTION_CLASSES = {
-    "eager": AlignTextSelfAttention,
-}
-
-
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->AlignText,BERT->ALIGN_TEXT
 class AlignTextAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None, layer_idx=None):
+    def __init__(self, config):
         super().__init__()
-        self.self = ALIGN_TEXT_SELF_ATTENTION_CLASSES[config._attn_implementation](
-            config,
-            position_embedding_type=position_embedding_type,
-            layer_idx=layer_idx,
-        )
+        self.self = AlignTextSelfAttention(config)
         self.output = AlignTextSelfOutput(config)
         self.pruned_heads = set()
 
@@ -776,24 +704,26 @@ class AlignTextAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
+    @deprecate_kwarg("encoder_hidden_states", version="4.54.0")
+    @deprecate_kwarg("encoder_attention_mask", version="4.54.0")
+    @deprecate_kwarg("past_key_value", version="4.54.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
-        cache_position: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor]:
+        **kwargs,
+    ) -> tuple[torch.Tensor]:
         self_outputs = self.self(
             hidden_states,
             attention_mask=attention_mask,
             head_mask=head_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            past_key_value=past_key_value,
             output_attentions=output_attentions,
-            cache_position=cache_position,
+            **kwargs,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -831,22 +761,18 @@ class AlignTextOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->AlignText
-class AlignTextLayer(nn.Module):
-    def __init__(self, config, layer_idx=None):
+class AlignTextLayer(GradientCheckpointingLayer):
+    def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = AlignTextAttention(config, layer_idx=layer_idx)
-        self.is_decoder = config.is_decoder
-        self.add_cross_attention = config.add_cross_attention
-        if self.add_cross_attention:
-            if not self.is_decoder:
-                raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = AlignTextAttention(config, position_embedding_type="absolute", layer_idx=layer_idx)
+        self.attention = AlignTextAttention(config)
         self.intermediate = AlignTextIntermediate(config)
         self.output = AlignTextOutput(config)
 
+    @deprecate_kwarg("encoder_hidden_states", version="4.54.0")
+    @deprecate_kwarg("encoder_attention_mask", version="4.54.0")
+    @deprecate_kwarg("past_key_value", version="4.54.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -854,53 +780,24 @@ class AlignTextLayer(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
-        cache_position: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor]:
+        **kwargs,
+    ) -> tuple[torch.Tensor]:
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask=attention_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
-            past_key_value=past_key_value,
-            cache_position=cache_position,
+            **kwargs,
         )
         attention_output = self_attention_outputs[0]
 
-        # if decoder, the last output is tuple of self-attn cache
-        if self.is_decoder:
-            outputs = self_attention_outputs[1:-1]
-        else:
-            outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
-
-        if self.is_decoder and encoder_hidden_states is not None:
-            if not hasattr(self, "crossattention"):
-                raise ValueError(
-                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers"
-                    " by setting `config.add_cross_attention=True`"
-                )
-
-            cross_attention_outputs = self.crossattention(
-                attention_output,
-                attention_mask=encoder_attention_mask,
-                head_mask=head_mask,
-                encoder_hidden_states=encoder_hidden_states,
-                past_key_value=past_key_value,
-                output_attentions=output_attentions,
-                cache_position=cache_position,
-            )
-            attention_output = cross_attention_outputs[0]
-            outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
-
+        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
         )
         outputs = (layer_output,) + outputs
-
-        # if decoder, return the attn key/values as the last output
-        if self.is_decoder:
-            outputs = outputs + (past_key_value,)
 
         return outputs
 
@@ -910,14 +807,18 @@ class AlignTextLayer(nn.Module):
         return layer_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->AlignText
 class AlignTextEncoder(nn.Module):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([AlignTextLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([AlignTextLayer(config) for i in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
+    @deprecate_kwarg("encoder_hidden_states", version="4.54.0")
+    @deprecate_kwarg("encoder_attention_mask", version="4.54.0")
+    @deprecate_kwarg("past_key_values", version="4.54.0")
+    @deprecate_kwarg("use_cache", version="4.54.0")
+    @can_return_tuple
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -925,98 +826,41 @@ class AlignTextEncoder(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
-        cache_position: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
+        **kwargs,
+    ) -> Union[tuple[torch.Tensor], BaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
-        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
-
-        return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
-            logger.warning_once(
-                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
-                "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
-            )
-            return_legacy_cache = True
-            past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
-
-        next_decoder_cache = None
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    past_key_values,
-                    output_attentions,
-                    cache_position,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    past_key_values,
-                    output_attentions,
-                    cache_position,
-                )
+            layer_outputs = layer_module(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                head_mask=layer_head_mask,
+                output_attentions=output_attentions,
+                **kwargs,
+            )
 
             hidden_states = layer_outputs[0]
-            if use_cache:
-                next_decoder_cache = layer_outputs[-1]
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
-                if self.config.add_cross_attention:
-                    all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
-        if return_legacy_cache:
-            next_cache = past_key_values.to_legacy_cache()
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    next_cache,
-                    all_hidden_states,
-                    all_self_attentions,
-                    all_cross_attentions,
-                ]
-                if v is not None
-            )
-        return BaseModelOutputWithPastAndCrossAttentions(
+        return BaseModelOutput(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
-            cross_attentions=all_cross_attentions,
         )
 
 
@@ -1092,6 +936,7 @@ class AlignTextModel(AlignPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1099,12 +944,13 @@ class AlignTextModel(AlignPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPoolingAndCrossAttentions]:
+        **kwargs,
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         Examples:
 
@@ -1173,20 +1019,17 @@ class AlignTextModel(AlignPreTrainedModel):
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
+            **kwargs,
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
-        if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
-
-        return BaseModelOutputWithPoolingAndCrossAttentions(
+        return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
-            cross_attentions=encoder_outputs.cross_attentions,
         )
 
 
@@ -1220,13 +1063,14 @@ class AlignVisionModel(AlignPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.convolution
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPoolingAndNoAttention]:
+    ) -> Union[tuple, BaseModelOutputWithPoolingAndNoAttention]:
         r"""
         Examples:
 
@@ -1259,16 +1103,13 @@ class AlignVisionModel(AlignPreTrainedModel):
         encoder_outputs = self.encoder(
             embedding_output,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
         # Apply pooling
         last_hidden_state = encoder_outputs[0]
         pooled_output = self.pooler(last_hidden_state)
         # Reshape (batch_size, projection_dim, 1 , 1) -> (batch_size, projection_dim)
         pooled_output = pooled_output.reshape(pooled_output.shape[:2])
-
-        if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPoolingAndNoAttention(
             last_hidden_state=last_hidden_state,
@@ -1409,6 +1250,7 @@ class AlignModel(AlignPreTrainedModel):
 
         return image_features
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1423,7 +1265,7 @@ class AlignModel(AlignPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, AlignOutput]:
+    ) -> Union[tuple, AlignOutput]:
         r"""
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
@@ -1459,7 +1301,7 @@ class AlignModel(AlignPreTrainedModel):
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
         text_outputs = self.text_model(
@@ -1471,7 +1313,7 @@ class AlignModel(AlignPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
         image_embeds = vision_outputs[1]
@@ -1489,10 +1331,6 @@ class AlignModel(AlignPreTrainedModel):
         loss = None
         if return_loss:
             loss = align_loss(logits_per_text)
-
-        if not return_dict:
-            output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
-            return ((loss,) + output) if loss is not None else output
 
         return AlignOutput(
             loss=loss,

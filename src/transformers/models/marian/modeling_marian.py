@@ -16,7 +16,7 @@
 
 import copy
 import math
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 import numpy as np
 import torch
@@ -33,6 +33,7 @@ from ...modeling_attn_mask_utils import (
     _prepare_4d_attention_mask_for_sdpa,
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -197,7 +198,7 @@ class MarianAttention(nn.Module):
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -270,7 +271,7 @@ class MarianAttention(nn.Module):
 
 
 # Copied from transformers.models.bart.modeling_bart.BartEncoderLayer with Bart->Marian, BART->MARIAN
-class MarianEncoderLayer(nn.Module):
+class MarianEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: MarianConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.embed_dim = config.d_model
@@ -296,7 +297,7 @@ class MarianEncoderLayer(nn.Module):
         attention_mask: torch.FloatTensor,
         layer_head_mask: torch.FloatTensor,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
+    ) -> tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -342,7 +343,7 @@ class MarianEncoderLayer(nn.Module):
 
 
 # Copied from transformers.models.bart.modeling_bart.BartDecoderLayer with Bart->Marian, BART->MARIAN
-class MarianDecoderLayer(nn.Module):
+class MarianDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: MarianConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.embed_dim = config.d_model
@@ -386,7 +387,7 @@ class MarianDecoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
         cache_position: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -742,7 +743,7 @@ class MarianEncoder(MarianPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutput]:
+    ) -> Union[tuple[torch.Tensor], BaseModelOutput]:
         r"""
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -821,7 +822,7 @@ class MarianEncoder(MarianPreTrainedModel):
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             to_drop = False
             if self.training:
                 dropout_probability = torch.rand([])
@@ -831,21 +832,12 @@ class MarianEncoder(MarianPreTrainedModel):
             if to_drop:
                 layer_outputs = (None, None)
             else:
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        encoder_layer.__call__,
-                        hidden_states,
-                        attention_mask,
-                        (head_mask[idx] if head_mask is not None else None),
-                        output_attentions,
-                    )
-                else:
-                    layer_outputs = encoder_layer(
-                        hidden_states,
-                        attention_mask,
-                        layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                        output_attentions=output_attentions,
-                    )
+                layer_outputs = encoder_layer(
+                    hidden_states,
+                    attention_mask,
+                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                    output_attentions=output_attentions,
+                )
 
                 hidden_states = layer_outputs[0]
 
@@ -907,14 +899,14 @@ class MarianDecoder(MarianPreTrainedModel):
         encoder_attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
         r"""
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -1079,7 +1071,7 @@ class MarianDecoder(MarianPreTrainedModel):
                     f" {head_mask.size()[0]}."
                 )
         for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
             if self.training:
@@ -1087,35 +1079,18 @@ class MarianDecoder(MarianPreTrainedModel):
                 if dropout_probability < self.layerdrop:
                     continue
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    causal_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    head_mask[idx] if head_mask is not None else None,
-                    cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
-                    None,
-                    output_attentions,
-                    use_cache,
-                    cache_position,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=causal_mask,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                    cross_attn_layer_head_mask=(
-                        cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
-                    ),
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                causal_mask,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                encoder_attention_mask=encoder_attention_mask,
+                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                cross_attn_layer_head_mask=(cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+            )
             hidden_states = layer_outputs[0]
 
             if use_cache:
@@ -1245,8 +1220,8 @@ class MarianModel(MarianPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Union[Tuple[torch.Tensor], BaseModelOutput]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        encoder_outputs: Optional[Union[tuple[torch.Tensor], BaseModelOutput]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
@@ -1502,8 +1477,8 @@ class MarianMTModel(MarianPreTrainedModel, GenerationMixin):
         head_mask: Optional[torch.Tensor] = None,
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Union[Tuple[torch.Tensor], BaseModelOutput]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        encoder_outputs: Optional[Union[tuple[torch.Tensor], BaseModelOutput]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -1673,7 +1648,7 @@ class MarianForCausalLM(MarianPreTrainedModel, GenerationMixin):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -1681,7 +1656,7 @@ class MarianForCausalLM(MarianPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
+    ) -> Union[tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:

@@ -24,6 +24,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, Cohere2Config, is_
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     Expectations,
+    cleanup,
     is_flash_attn_2_available,
     require_flash_attn,
     require_read_token,
@@ -136,6 +137,9 @@ class Cohere2ModelTest(CohereModelTest, unittest.TestCase):
 class Cohere2IntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
 
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
     def test_model_bf16(self):
         model_id = "CohereForAI/c4ai-command-r7b-12-2024"
         EXPECTED_TEXTS = [
@@ -144,7 +148,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="eager"
+            model_id, torch_dtype=torch.bfloat16, attn_implementation="eager"
         ).to(torch_device)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -168,7 +172,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
         # fmt: on
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16, attn_implementation="eager"
+            model_id, torch_dtype=torch.float16, attn_implementation="eager"
         ).to(torch_device)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -189,7 +193,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flex_attention"
+            model_id, torch_dtype=torch.bfloat16, attn_implementation="flex_attention"
         ).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)

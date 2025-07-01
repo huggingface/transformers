@@ -17,7 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Callable, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -40,7 +40,6 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import LossKwargs, auto_docstring, can_return_tuple, logging
 from .configuration_llama import LlamaConfig
 
@@ -67,9 +66,6 @@ class LlamaRMSNorm(nn.Module):
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-ALL_LAYERNORM_LAYERS.append(LlamaRMSNorm)
 
 
 class LlamaRotaryEmbedding(nn.Module):
@@ -223,12 +219,12 @@ class LlamaAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -284,9 +280,9 @@ class LlamaDecoderLayer(GradientCheckpointingLayer):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
 
@@ -324,6 +320,7 @@ class LlamaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlamaDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn_3 = True
     _supports_flash_attn_2 = True
     _supports_sdpa = True
     _supports_flex_attn = True
