@@ -1049,8 +1049,8 @@ def check_model_inputs(func):
             elif key == "attentions":
                 if isinstance(capture_flags[key], list) and len(capture_flags[key]) == 2:
                     # we have cross attention states
-                    outputs["cross_" + key] = collected_outputs[key][1::2]
                     outputs[key] = collected_outputs[key][0::2]
+                    outputs["cross_" + key] = collected_outputs[key][1::2]
                 else:
                     outputs[key] = collected_outputs[key]
             else:
