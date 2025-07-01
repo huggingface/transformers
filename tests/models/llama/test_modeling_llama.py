@@ -25,6 +25,7 @@ from transformers.testing_utils import (
     require_read_token,
     require_torch,
     require_torch_accelerator,
+    run_test_using_subprocess,
     slow,
     torch_device,
 )
@@ -241,6 +242,7 @@ class LlamaIntegrationTest(unittest.TestCase):
             )
         )
 
+    @run_test_using_subprocess
     @slow
     def test_model_7b_dola_generation(self):
         # ground truth text generated with dola_layers="low", repetition_penalty=1.2
