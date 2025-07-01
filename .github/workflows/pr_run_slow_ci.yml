@@ -16,6 +16,7 @@ jobs:
     with:
       pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
 
+  # We only need to verify the timestamp if the workflow is triggered by `issue_comment`.
   verity_pr_commit:
     name: Verity PR commit corresponds to a specific event by comparing timestamps
     if: ${{ github.event.comment.created_at != '' }}
