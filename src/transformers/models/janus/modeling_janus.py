@@ -359,7 +359,7 @@ class JanusVisionAttention(nn.Module):
 
         output = self.projection_layer(attn_output)
         output = self.projection_dropout(output)
-        return output
+        return output, attn_weights
 
 
 class JanusVisionMLP(nn.Module):
