@@ -148,7 +148,7 @@ _deps = [
     "protobuf",
     "psutil",
     "pyyaml>=5.1",
-    "pydantic",
+    "pydantic>=2",
     "pytest>=7.2.0",
     "pytest-asyncio",
     "pytest-rerunfailures",
@@ -457,7 +457,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.53.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.54.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",

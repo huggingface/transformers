@@ -1693,6 +1693,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
             scale=scale,
         )
 
+    @torch.no_grad()
     def generate(
         self,
         past_values: torch.Tensor,
@@ -1902,6 +1903,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
             attentions=model_output.attentions,
         )
 
+    @torch.no_grad()
     def generate(
         self,
         past_values: torch.Tensor,
