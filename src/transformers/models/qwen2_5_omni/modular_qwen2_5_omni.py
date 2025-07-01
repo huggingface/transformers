@@ -1772,7 +1772,7 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         if self.config._attn_implementation == "flash_attention_2":
             return None
 
-        seq_length = inputs_tensor.shape[1]
+        seq_length = inputs_tensor.shape[0]
         attention_mask = torch.full(
             [1, 1, seq_length, seq_length],
             torch.finfo(inputs_tensor.dtype).min,
@@ -2012,7 +2012,7 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
         if self.config._attn_implementation == "flash_attention_2":
             return None
 
-        seq_length = inputs_tensor.shape[1]
+        seq_length = inputs_tensor.shape[0]
         attention_mask = torch.full(
             [1, 1, seq_length, seq_length],
             torch.finfo(inputs_tensor.dtype).min,
