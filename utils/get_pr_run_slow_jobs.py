@@ -7,6 +7,9 @@ import re
 import string
 
 
+MAX_NUM_JOBS_TO_SUGGEST = 16
+
+
 def get_jobs_to_run():
     # The file `pr_files.txt` contains the information about the files changed in a pull request, and it is prepared by
     # the caller (using GitHub api).
@@ -124,6 +127,9 @@ if __name__ == '__main__':
         jobs_to_run = get_jobs_to_run()
         jobs_to_run = [x.replace("models/", "").replace("quantization/", "") for x in jobs_to_run]
         jobs_to_run = [job for job in jobs_to_run if check_name(job)]
+
+        if len(jobs_to_run) > MAX_NUM_JOBS_TO_SUGGEST:
+            jobs_to_run = jobs_to_run[:MAX_NUM_JOBS_TO_SUGGEST]
 
         suggestion = f"{', '.join(jobs_to_run)}"
 
