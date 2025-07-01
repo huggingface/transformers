@@ -133,15 +133,17 @@ def create_generation_config_from_req(req: "ChatCompletionInput") -> "Generation
         generation_config = GenerationConfig()
 
     if req.frequency_penalty is not None:
-        generation_config.repetition_penalty = req.frequency_penalty
+        generation_config.repetition_penalty = float(req.frequency_penalty)
     if req.logit_bias is not None:
         generation_config.sequence_bias = req.logit_bias
     if req.stop is not None:
         generation_config.stop_strings = req.stop
     if req.temperature is not None:
-        generation_config.temperature = req.temperature
+        generation_config.temperature = float(req.temperature)
+        if float(req.temperature) == 0.0:
+            generation_config.do_sample = False
     if req.top_p is not None:
-        generation_config.top_p = req.top_p
+        generation_config.top_p = float(req.top_p)
     if req.seed is not None:
         torch.manual_seed(req.seed)
 
@@ -256,6 +258,9 @@ class ServeCommand(BaseTransformersCLICommand):
         finish_reason: Optional[str] = None,
         tool_calls: Optional[list[ChatCompletionStreamOutputDeltaToolCall]] = None,
     ) -> str:
+        print("role", role)
+        print("content", content)
+        print("finish_reason", finish_reason)
         payload = {
             "object": "chat.completion.chunk",
             "id": request_id,
@@ -279,6 +284,16 @@ class ServeCommand(BaseTransformersCLICommand):
 
     def run(self):
         app = FastAPI()
+
+        from fastapi.middleware.cors import CORSMiddleware
+
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=['*'],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
         if self.use_continuous_batching:
             self.continuous_batching(app)
@@ -401,8 +416,8 @@ class ServeCommand(BaseTransformersCLICommand):
         # No cached messages: this is a new request
         if self.last_messages is None:
             req_continues_last_messages = False
-        # The new request has fewer rounds of conversation: this is a new request
-        elif len(self.last_messages) > len(req.messages):
+        # The new request no new rounds of conversation: this is a new request
+        elif len(self.last_messages) >= len(req.messages):
             req_continues_last_messages = False
         # Otherwise, check that the last messages are a subset of the new request
         else:

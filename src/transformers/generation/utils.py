@@ -1773,6 +1773,10 @@ class GenerationMixin(ContinuousMixin):
                     ):
                         modified_values[key] = model_gen_config_value
                         setattr(generation_config, key, model_gen_config_value)
+                # edge case: we may set `temperature=0.0` and `do_sample=False`, but the model defaults to
+                # `do_sample=True`
+                if generation_config.temperature == 0.0:
+                    generation_config.do_sample = False
                 if use_model_defaults is None and len(modified_values) > 0:
                     logger.warning_once(
                         f"`generation_config` default values have been modified to match model-specific defaults: "

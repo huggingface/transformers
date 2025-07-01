@@ -66,7 +66,7 @@ vllm serve Qwen/Qwen2.5-1.5B-Instruct \
 ## Serve CLI
 
 > [!WARNING]
-> This section is experimental and subject to changes in future versions
+> This section is experimental and subject to change in future versions
 
 <!-- TODO: LLMs -> models, after we add audio/image input/output support -->
 You can serve `transformers`-compatible LLMs with `transformers serve`. The server has a chat completion API compatible with the OpenAI SDK, so you can also quickly experiment with `transformers` models on existing aplications. To launch a server, use the `transformers serve` CLI:
@@ -78,12 +78,28 @@ transformers serve
 <!-- TODO: either fully align the two APIs, or link to the `transformers` version instead -->
 This server takes an extended version of the [`ChatCompletionInput`](https://huggingface.co/docs/huggingface_hub/v0.33.1/en/package_reference/inference_types#huggingface_hub.ChatCompletionInput), accepting a serialized `GenerationConfig` in its `extra_body` field for full `generate` parameterization. The CLI will dynamically load a new model as needed, following the `model` field in the request.
 
+The simplest way to interact with the server is by sending an HTTP request with `cURL`, e.g.
+
+```shell
+curl -X POST http://localhost:8000/v1/chat/completions -H "Content-Type: application/json" -d '{"messages": [{"role": "system", "content": "hello"}], "temperature": 0.9, "max_tokens": 1000, "stream": true, "model": "Qwen/Qwen2.5-0.5B-Instruct"}'
+```
+
+from which you'll receive multiple chunks
+
+```shell
+data: {"object": "chat.completion.chunk", "id": "req_0", "created": 1751377863, "model": "Qwen/Qwen2.5-0.5B-Instruct", "system_fingerprint": "", "choices": [{"delta": {"role": "assistant", "content": "", "tool_call_id": null, "tool_calls": null}, "index": 0, "finish_reason": null, "logprobs": null}]}
+
+data: {"object": "chat.completion.chunk", "id": "req_0", "created": 1751377863, "model": "Qwen/Qwen2.5-0.5B-Instruct", "system_fingerprint": "", "choices": [{"delta": {"role": "assistant", "content": "", "tool_call_id": null, "tool_calls": null}, "index": 0, "finish_reason": null, "logprobs": null}]}
+
+(...)
+```
+
 This server is also an MCP client, which can receive information available MCP servers (i.e. tools), massage their information into the model prompt, and prepare calls to these tools when the model commands to do so. Naturally, this requires a model that is trained to use tools.
 
 > [!TIP]
 > At the moment, MCP tool usage in `transformers` is limited to the `qwen` family of models.
 
-<!-- TODO: section with a minimal python example -->
+<!-- TODO: example with a minimal python example -->
 
 ### Example 1: `tiny-agents` and MCP Tools
 
