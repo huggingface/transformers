@@ -954,6 +954,7 @@ def can_return_tuple(func):
         return_dict = self.config.use_return_dict if hasattr(self, "config") else True
         if "return_dict" in kwargs:
             return_dict = kwargs.get("return_dict", self.config.use_return_dict)
+            kwargs["return_dict"] = True
         output = func(self, *args, **kwargs)
 
         if "return_dict" in kwargs and return_dict is False:
