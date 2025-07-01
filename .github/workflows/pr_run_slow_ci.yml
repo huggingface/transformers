@@ -74,6 +74,11 @@ jobs:
             core.setOutput('tests_models_dir', tests_models_dir);
             core.setOutput('tests_quantization_dir', tests_quantization_dir);
 
+      # This checkout to the main branch
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: "0"
+
       - name: Write pr_files file
         run: |
           cat > pr_files.txt << 'EOF'
@@ -97,11 +102,6 @@ jobs:
           cat > tests_quantization_dir.txt << 'EOF'
           ${{ steps.repo_content.outputs.tests_quantization_dir }}
           EOF
-
-      # This checkout to the main branch
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: "0"
 
       - name: Run script to get jobs to run
         id: get_jobs
