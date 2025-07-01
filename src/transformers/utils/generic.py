@@ -951,10 +951,12 @@ def can_return_tuple(func):
 
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        return_dict = self.config.use_return_dict if hasattr(self, "config") else True
-        return_dict = kwargs.pop("return_dict", self.config.use_return_dict)
+        return_dict = self.config.return_dict if hasattr(self, "config") else True
+        return_dict = kwargs.pop("return_dict", return_dict)
+        if return_dict is None:
+            return_dict = return_dict
         output = func(self, *args, **kwargs)
-        if return_dict is False:
+        if not return_dict:
             output = output.to_tuple()
         return output
 
@@ -979,7 +981,10 @@ def check_model_inputs(func):
     @wraps(func)
     def wrapper(self, *args, **kwargs):
         use_cache = kwargs.get("use_cache", self.config.use_cache)
-        return_dict = kwargs.pop("return_dict", self.config.use_return_dict)
+        return_dict = self.config.return_dict if hasattr(self, "config") else True
+        return_dict = kwargs.pop("return_dict", return_dict)
+        if return_dict is None:
+            return_dict = True
         kwargs.setdefault("use_cache", use_cache)
         sig = inspect.signature(func)
         bound = sig.bind_partial(self, *args, **kwargs)
@@ -1005,7 +1010,7 @@ def check_model_inputs(func):
             return capture_fn
 
         capture_flags = self._can_record_outputs
-        if "kwargs" in all_args:
+        if "kwargs" in all_args and not is_compiling():
             all_args.update(**all_args["kwargs"])
         recordable_keys = {
             f"output_{k}": all_args.get(f"output_{k}", getattr(self.config, f"output_{k}", False))
