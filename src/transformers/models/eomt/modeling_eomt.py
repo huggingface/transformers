@@ -1133,7 +1133,6 @@ class EomtForUniversalSegmentation(EomtPreTrainedModel):
 
             if idx == self.num_hidden_layers - self.config.num_blocks:
                 query = self.query.weight[None, :, :].expand(hidden_states.shape[0], -1, -1).to(hidden_states.device)
-                print(query.device, hidden_states.device)
                 hidden_states = torch.cat((query, hidden_states), dim=1)
 
             if idx >= self.num_hidden_layers - self.config.num_blocks and (
