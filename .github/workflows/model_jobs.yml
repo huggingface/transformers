@@ -97,6 +97,10 @@ jobs:
         run: |
           python3 utils/print_env.py
 
+      - name: Install datasets main
+        working-directory: /transformers
+        run: python3 -m pip install --no-cache-dir git+https://github.com/huggingface/datasets.git@main
+
       - name: Show installed libraries and their versions
         working-directory: /transformers
         run: pip freeze
