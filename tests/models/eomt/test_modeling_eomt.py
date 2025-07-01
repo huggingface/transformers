@@ -478,5 +478,5 @@ class EomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
 
         EXPECTED_OUTPUT_LABELS = ["LABEL_15", "LABEL_15", "LABEL_57", "LABEL_65", "LABEL_65"]
 
-        output_labels = [segment["label"] for segment in output["segments_info"]]
+        output_labels = [segment["label"] for segment in output]
         self.assertEqual(output_labels, EXPECTED_OUTPUT_LABELS)
