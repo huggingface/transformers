@@ -402,7 +402,6 @@ class T5GemmaEncoderLayer(GradientCheckpointingLayer):
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            use_cache=False,
             past_key_value=None,
             **kwargs,
         )
@@ -1062,7 +1061,7 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **loss_kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.FloatTensor], Seq2SeqLMOutput]:
         r"""
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, decoder_sequence_length)`, *optional*):
@@ -1100,7 +1099,7 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
             decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
             cache_position=cache_position,
-            **loss_kwargs,
+            **kwargs,
         )
 
         hidden_states = decoder_outputs.last_hidden_state
@@ -1116,7 +1115,7 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
         loss = None
         if labels is not None:
             # Input has right-shifted so we directly perform masked lm loss
-            loss = self.loss_function(logits, labels, self.vocab_size, **loss_kwargs)
+            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
 
         return Seq2SeqLMOutput(
             loss=loss,
@@ -1179,6 +1178,7 @@ class T5GemmaForSequenceClassification(T5GemmaPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> SequenceClassifierOutput:
         r"""
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, decoder_sequence_length)`, *optional*):
@@ -1216,6 +1216,7 @@ class T5GemmaForSequenceClassification(T5GemmaPreTrainedModel):
                 inputs_embeds=inputs_embeds,
                 decoder_inputs_embeds=decoder_inputs_embeds,
                 use_cache=False,
+                **kwargs,
             )
             last_hidden_state = outputs.last_hidden_state
             hidden_states = outputs.decoder_hidden_states
@@ -1226,6 +1227,7 @@ class T5GemmaForSequenceClassification(T5GemmaPreTrainedModel):
                 attention_mask=attention_mask,
                 position_ids=position_ids,
                 inputs_embeds=inputs_embeds,
+                **kwargs,
             )
             last_hidden_state = outputs.last_hidden_state
             hidden_states = outputs.hidden_states
@@ -1318,6 +1320,7 @@ class T5GemmaForTokenClassification(T5GemmaPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> TokenClassifierOutput:
         r"""
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, decoder_sequence_length)`, *optional*):
@@ -1355,6 +1358,7 @@ class T5GemmaForTokenClassification(T5GemmaPreTrainedModel):
                 inputs_embeds=inputs_embeds,
                 decoder_inputs_embeds=decoder_inputs_embeds,
                 use_cache=False,
+                **kwargs,
             )
             last_hidden_state = outputs.last_hidden_state
             hidden_states = outputs.decoder_hidden_states
@@ -1365,6 +1369,7 @@ class T5GemmaForTokenClassification(T5GemmaPreTrainedModel):
                 attention_mask=attention_mask,
                 position_ids=position_ids,
                 inputs_embeds=inputs_embeds,
+                **kwargs,
             )
             last_hidden_state = outputs.last_hidden_state
             hidden_states = outputs.hidden_states

@@ -3832,7 +3832,7 @@ class Trainer:
             loss_kwargs = {}
             if num_items_in_batch is not None:
                 loss_kwargs["num_items_in_batch"] = num_items_in_batch
-            inputs = {**inputs, **loss_kwargs}
+            inputs = {**inputs, **kwargs}
         outputs = model(**inputs)
         # Save past state if it exists
         # TODO: this needs to be fixed and made cleaner later.
