@@ -39,7 +39,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
 from .configuration_jamba import JambaConfig
-from ...utils import TransformersKwargs
+
 
 if is_flash_attn_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward

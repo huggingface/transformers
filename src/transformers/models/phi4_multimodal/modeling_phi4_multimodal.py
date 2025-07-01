@@ -28,6 +28,8 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn.init import _calculate_fan_in_and_fan_out
 
+from transformers.utils.generic import check_model_inputs
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -1681,7 +1683,7 @@ class Phi4MultimodalModel(Phi4MultimodalPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    @can_return_tuple
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

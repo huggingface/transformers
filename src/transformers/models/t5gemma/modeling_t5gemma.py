@@ -782,7 +782,7 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
 
 class T5GemmaDecoder(T5GemmaEncoder):
     _can_record_outputs = {
-        "attentions": [(T5GemmaSelfAttention, 1), (T5GemmaCrossAttention, 1)],
+        "attention": [(T5GemmaSelfAttention, 1), (T5GemmaCrossAttention, 1)],
         "hidden_states": (T5GemmaDecoderLayer, 1),
     }
 

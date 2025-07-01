@@ -374,6 +374,10 @@ class CsmPreTrainedModel(PreTrainedModel):
     _supports_quantized_cache = True
     _supports_static_cache = True
     _supports_attention_backend = True
+    _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
+        "hidden_states": (CsmDecoderLayer, 0),
+        "attentions": (CsmAttention, 1),
+    }
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -396,10 +400,6 @@ class CsmPreTrainedModel(PreTrainedModel):
 @auto_docstring
 class CsmDepthDecoderModel(CsmPreTrainedModel):
     config_class = CsmDepthDecoderConfig
-    _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
-        "hidden_states": (CsmDecoderLayer, 0),
-        "attentions": (CsmAttention, 1),
-    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -543,10 +543,6 @@ class CsmDepthDecoderForCausalLM(CsmPreTrainedModel, GenerationMixin):
     _tied_weights_keys = None
     _tp_plan = None
     _pp_plan = None
-    _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
-        "hidden_states": (CsmDecoderLayer, 0),
-        "attentions": (CsmAttention, 1),
-    }
 
     def __init__(self, config):
         super().__init__(config)

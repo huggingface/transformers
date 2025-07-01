@@ -25,7 +25,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...processing_utils import Unpack
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
-from ...utils import logging, TransformersKwargs
+from ...utils import TransformersKwargs, logging
 from ..llama.modeling_llama import (
     LlamaForCausalLM,
     LlamaForSequenceClassification,
