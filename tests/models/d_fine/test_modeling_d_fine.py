@@ -758,6 +758,7 @@ def prepare_img():
 
 @require_torch
 @require_vision
+@slow
 class DFineModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
