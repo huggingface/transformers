@@ -57,9 +57,6 @@ class Mistral3VisionText2TextModelTester:
         image_seq_length=4,
         vision_feature_layer=-1,
         ignore_index=-100,
-        bos_token_id=0,
-        eos_token_id=0,
-        pad_token_id=0,
         image_token_index=1,
         num_channels=3,
         image_size=30,
@@ -80,9 +77,9 @@ class Mistral3VisionText2TextModelTester:
             "rms_norm_eps": 1e-05,
             "rope_theta": 1000000000.0,
             "sliding_window": None,
-            "bos_token_id": 0,
-            "eos_token_id": 0,
-            "pad_token_id": 0,
+            "bos_token_id": 2,
+            "eos_token_id": 3,
+            "pad_token_id": 4,
         },
         vision_config={
             "model_type": "pixtral",
@@ -98,9 +95,9 @@ class Mistral3VisionText2TextModelTester:
     ):
         self.parent = parent
         self.ignore_index = ignore_index
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
+        self.bos_token_id = text_config["bos_token_id"]
+        self.eos_token_id = text_config["eos_token_id"]
+        self.pad_token_id = text_config["pad_token_id"]
         self.image_token_index = image_token_index
         self.model_type = model_type
         self.text_config = text_config
@@ -208,49 +205,6 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
                         [0.0, 1.0],
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    # while some other models require pixel_values to be present
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            torch.testing.assert_close(out_embeds, out_ids)
 
     @unittest.skip(reason="Compile not yet supported because in LLava models")
     def test_sdpa_can_compile_dynamic(self):

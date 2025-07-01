@@ -3747,7 +3747,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                         module_map[name + f".{key}"] = module
             state_dict = model_to_save.state_dict()
 
-        if any(allowed_name in self.__class__.__name__.lower() for allowed_name in VLMS):
+        if any(
+            allowed_name in class_name.__name__.lower()
+            for class_name in self.__class__.__mro__[:-1]
+            for allowed_name in VLMS
+        ):
             reverse_key_mapping = {v: k for k, v in self._checkpoint_conversion_mapping.items()}
 
             original_state_dict = {}
@@ -4403,7 +4407,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         key_mapping = kwargs.pop("key_mapping", None)
         # Load models with hardcoded key mapping on class for VLMs only, to keep BC and standardize model
-        if key_mapping is None and any(allowed_name in cls.__name__.lower() for allowed_name in VLMS):
+        if key_mapping is None and any(
+            allowed_name in class_name.__name__.lower() for class_name in cls.__mro__[:-1] for allowed_name in VLMS
+        ):
             key_mapping = cls._checkpoint_conversion_mapping
 
         # Not used anymore -- remove them from the kwargs
@@ -5838,7 +5844,12 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
         else None
     )
     total_byte_count = defaultdict(lambda: 0)
+    tied_param_names = _get_tied_weight_keys(model)
     for param_name, device in accelerator_device_map.items():
+        # Skip if the parameter has already been accounted for (tied weights)
+        if param_name in tied_param_names:
+            continue
+
         param = model.get_parameter_or_buffer(param_name)
         # The dtype of different parameters may be different with composite models or `keep_in_fp32_modules`
         param_byte_count = param.numel() * param.element_size()

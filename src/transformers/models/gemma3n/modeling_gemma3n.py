@@ -1136,9 +1136,17 @@ class Gemma3nTextAltUp(nn.Module):
         corrected += predictions  # add the original input
         return corrected.contiguous().type_as(activated)
 
+    def forward(self, corrected: torch.Tensor) -> torch.Tensor:
+        """
+        This is only defined as the `forward` so that accelerate hooks can move correctly `correct_output_scale`
+        (which is a nn.Parameter, not a Module) between devices when offloading. It is otherwise only used in
+        `scale_corrected_output`
+        """
+        return (corrected.type_as(self.correct_output_scale) * self.correct_output_scale).type_as(corrected)
+
     def scale_corrected_output(self, corrected: torch.Tensor) -> torch.Tensor:
         """Scales the provided 3D tensor of shape [batch_size, num_tokens, hidden_size]."""
-        return (corrected.type_as(self.correct_output_scale) * self.correct_output_scale).type_as(corrected)
+        return self.forward(corrected)
 
 
 class Gemma3nTextRotaryEmbedding(nn.Module):
@@ -1291,7 +1299,7 @@ class Gemma3nTextAttention(nn.Module):
         self.v_norm = Gemma3nRMSNorm(dim=config.head_dim, eps=config.rms_norm_eps, with_scale=False)
 
         first_kv_shared_layer_idx = self.config.num_hidden_layers - self.config.num_kv_shared_layers
-        self.is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx
+        self.is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx > 0
         # Find the index of the last sliding or full layer before sharing starts (or None if no sharing)
         layer_type = config.layer_types[layer_idx]
         self.kv_shared_layer_index = (
@@ -1320,21 +1328,22 @@ class Gemma3nTextAttention(nn.Module):
         query_states = query_states.transpose(1, 2)
 
         if self.is_kv_shared_layer and self.kv_shared_layer_index is not None and past_key_value is not None:
-            # HybridCache has complex slicing when layer_type == "sliding_attention" that impact Shared KV Cache.
+            # Device of past layer may be different from current one
+            indices = cache_position.to(past_key_value.key_cache[self.kv_shared_layer_index].device)
+            # In this case we need special handling of the slice as the layer is of fixed small size (for full layers, we never go beyond)
             if isinstance(past_key_value, HybridCache) and self.is_sliding:
                 max_length = past_key_value.sliding_window
-                if cache_position.shape[0] > max_length:
-                    # If in the prefill phase for a "sliding_attention" layer and the prefill is larger than the cache,
-                    # slice into the entire cache.
-                    indices = slice(0, max_length)
-                else:
-                    # If prefill fits or generating for a "sliding_attention" layer, clamp to max_cache_len - 1
-                    indices = cache_position.clamp(min=0, max=max_length - 1)
-            else:
-                indices = cache_position
+                indices = (
+                    slice(0, max_length)
+                    if cache_position.shape[0] > max_length
+                    else cache_position.clamp(min=0, max=max_length - 1)
+                )
 
-            key_states = past_key_value.key_cache[self.kv_shared_layer_index][:, :, indices]
-            value_states = past_key_value.value_cache[self.kv_shared_layer_index][:, :, indices]
+            # Device of past layer may be different from current one
+            key_states = past_key_value.key_cache[self.kv_shared_layer_index][:, :, indices].to(query_states.device)
+            value_states = past_key_value.value_cache[self.kv_shared_layer_index][:, :, indices].to(
+                query_states.device
+            )
         else:
             key_states = self.k_proj(hidden_states).view(hidden_shape)
             key_states = self.k_norm(key_states)
@@ -1448,10 +1457,9 @@ class Gemma3nTextDecoderLayer(GradientCheckpointingLayer):
         attn_ffw_laurel_gated = attn_laurel + attn_ffw_norm
         corrected_predictions = self.altup.correct(predictions, attn_ffw_laurel_gated)
 
-        first_prediction = corrected_predictions[self.config.altup_active_idx]
-        first_prediction_clone = first_prediction.clone()
+        first_prediction = corrected_predictions[self.config.altup_active_idx].clone()
         if self.config.altup_correct_scale:
-            first_prediction = self.altup.scale_corrected_output(first_prediction_clone)
+            first_prediction = self.altup.scale_corrected_output(first_prediction)
 
         # per_layer_input_gate adapted from jax.numpy.einsum("btd,dp->btp", ...)
         first_prediction = self.per_layer_input_gate(first_prediction)
@@ -1476,7 +1484,7 @@ class Gemma3nPreTrainedModel(PreTrainedModel):
     config_class = Gemma3nConfig
     base_model_prefix = ""
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Gemma3nDecoderLayer"]
+    _no_split_modules = ["Gemma3nTextDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
@@ -1660,18 +1668,17 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
         position_embeddings_local = self.rotary_emb_local(hidden_states_0, position_ids)
 
         # Expand hidden_states to support per-layer inputs
-        target_magnitude: torch.Tensor = torch.mean(hidden_states_0**2, dim=-1, keepdim=True) ** 0.5
-        epsilon_tensor = torch.tensor(torch.finfo().min)
+        target_magnitude = torch.mean(hidden_states_0**2, dim=-1, keepdim=True) ** 0.5
+        epsilon_tensor = torch.tensor(1e-5)
 
         temp_hidden_states = [hidden_states_0]
         for i in range(1, self.config.altup_num_inputs):
             # altup_proj adapted from jax.numpy.einsum("btp,pd->btd", ...)
-            altup_proj: torch.Tensor = self.altup_projections[i - 1](hidden_states_0)
-            current_hidden_state = altup_proj.type(hidden_states_0.dtype)
-            new_magnitude = torch.mean(current_hidden_state**2, dim=-1, keepdim=True) ** 0.5
-            current_hidden_state = current_hidden_state * (
-                target_magnitude / torch.maximum(new_magnitude, epsilon_tensor)
-            )
+            altup_proj = self.altup_projections[i - 1](hidden_states_0)
+            current_hidden_state = altup_proj.to(dtype=hidden_states_0.dtype, device=target_magnitude.device)
+            new_magnitude = torch.mean(current_hidden_state**2, dim=-1, keepdim=True)
+            new_magnitude = torch.sqrt(torch.maximum(new_magnitude, epsilon_tensor.to(target_magnitude.device)))
+            current_hidden_state = current_hidden_state * target_magnitude / new_magnitude
             temp_hidden_states.append(current_hidden_state)
 
         hidden_states = torch.stack(temp_hidden_states, dim=0)  # [num_altup_inputs, batch, seq_len, hidden_size]
@@ -1689,9 +1696,9 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
 
             layer_outputs = decoder_layer(
                 hidden_states,
-                position_embeddings_global=position_embeddings_global,
-                position_embeddings_local=position_embeddings_local,
-                per_layer_input=per_layer_input,
+                position_embeddings_global,
+                position_embeddings_local,
+                per_layer_input,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
                 past_key_value=past_key_values,
@@ -1716,11 +1723,10 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
         for i in range(1, self.config.altup_num_inputs):
             # altup_unembed_projections adapted from jax.numpy.einsum("btp,pd->btd", ...)
             altup_unemb_proj: torch.Tensor = self.altup_unembed_projections[i - 1](hidden_states[i])
-            current_hidden_state = altup_unemb_proj.type(hidden_states_0.dtype)
-            new_magnitude = torch.mean(current_hidden_state**2, dim=-1, keepdim=True) ** 0.5
-            current_hidden_state = current_hidden_state * (
-                target_magnitude / torch.maximum(new_magnitude, epsilon_tensor)
-            )
+            current_hidden_state = altup_unemb_proj.to(dtype=hidden_states_0.dtype, device=target_magnitude.device)
+            new_magnitude = torch.mean(current_hidden_state**2, dim=-1, keepdim=True)
+            new_magnitude = torch.sqrt(torch.maximum(new_magnitude, epsilon_tensor.to(target_magnitude.device)))
+            current_hidden_state = current_hidden_state * target_magnitude / new_magnitude
             temp_hidden_states.append(current_hidden_state)
 
         hidden_states = torch.stack(temp_hidden_states)
@@ -1747,7 +1753,9 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
         per_layer_inputs: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         per_layer_projection: torch.Tensor = self.per_layer_model_projection(inputs_embeds)
-        per_layer_projection *= self.per_layer_projection_scale.type(inputs_embeds.dtype)
+        per_layer_projection *= self.per_layer_projection_scale.to(
+            dtype=inputs_embeds.dtype, device=per_layer_projection.device
+        )
         per_layer_projection = per_layer_projection.reshape(
             *inputs_embeds.shape[:-1],
             self.config.num_hidden_layers,
@@ -1762,7 +1770,9 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
             # per-layer inputs are sometimes padded with zeros, slice the relevant embeddings.
             per_layer_inputs = per_layer_inputs[..., : self.config.num_hidden_layers, :]
 
-        return (per_layer_projection + per_layer_inputs) * self.per_layer_input_scale.type(inputs_embeds.dtype)
+        return (per_layer_projection + per_layer_inputs) * self.per_layer_input_scale.to(
+            dtype=inputs_embeds.dtype, device=per_layer_projection.device
+        )
 
 
 @auto_docstring(custom_intro="The base Gemma 3n language model with a language modeling head.")
