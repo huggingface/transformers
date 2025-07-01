@@ -687,7 +687,7 @@ def make_default_2d_attention_mask(
 
 class T5GemmaEncoder(T5GemmaPreTrainedModel):
     _can_record_outputs = {
-        "attention": (T5GemmaSelfAttention, 1),
+        "attentions": (T5GemmaSelfAttention, 1),
         "hidden_states": (T5GemmaEncoderLayer, 1),
     }
 
@@ -782,7 +782,7 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
 
 class T5GemmaDecoder(T5GemmaEncoder):
     _can_record_outputs = {
-        "attention": [(T5GemmaSelfAttention, 1), (T5GemmaCrossAttention, 1)],
+        "attentions": [(T5GemmaSelfAttention, 1), (T5GemmaCrossAttention, 1)],
         "hidden_states": (T5GemmaDecoderLayer, 1),
     }
 
