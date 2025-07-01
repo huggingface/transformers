@@ -513,7 +513,8 @@ def _flash_attention_forward(
     # Case 1. If position_ids is provided and check all examples do not contain only 1 sequence, If tensor in increasing
     # then we probably have one sequence, otherwise it is packed. Additionally check we are in pre-fill/training stage.
     # Case 2. Some models pass directly pre-computed `cu_seqlens` so we don't need to infer it from position ids. It is safe to
-    # use `flash_attn_varlen_func` knowing we already have all necessary the kwargs
+    # use `flash_attn_varlen_func` knowing we already have all necessary the kwargs. NOTE: it is user's responsibility
+    # to take care of flattenning `position_ids` if that's needed by the model. See #39121 for more information
     is_fa2_with_position_ids = (
         position_ids is not None
         and query_states.shape[0] == 1
