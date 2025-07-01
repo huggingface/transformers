@@ -120,6 +120,7 @@ class SmolVLMProcessorKwargs(ProcessingKwargs, total=False):
         "images_kwargs": {
             "return_row_col_info": True,
         },
+        "videos_kwargs": {"do_sample_frames": True},
     }
 
 
