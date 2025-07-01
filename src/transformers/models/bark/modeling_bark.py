@@ -31,6 +31,7 @@ from ...generation.logits_process import (
 )
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel, get_parameter_device
 from ...utils import (
@@ -281,18 +282,6 @@ BARK_ATTENTION_CLASSES = {
 }
 
 
-class BarkLayerNorm(nn.Module):
-    """LayerNorm but with an optional bias. PyTorch doesn't support simply bias=False."""
-
-    def __init__(self, hidden_size, bias=True):
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.bias = nn.Parameter(torch.zeros(hidden_size)) if bias else None
-
-    def forward(self, input):
-        return F.layer_norm(input, self.weight.shape, self.weight, self.bias, eps=1e-5)
-
-
 class BarkMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -309,16 +298,15 @@ class BarkMLP(nn.Module):
         return hidden_states
 
 
-class BarkBlock(nn.Module):
+class BarkBlock(GradientCheckpointingLayer):
     def __init__(self, config, is_causal=False):
         super().__init__()
 
         if is_causal:
-            # if causal, uses handmade LayerNorm, so that the layerNorm bias is optional
-            # this handmade layerNorm is used to stick with Bark choice of leaving optional bias in
-            # AutoRegressive models (corresponding to the "Text" and the "Coarse" modules)
-            self.layernorm_1 = BarkLayerNorm(config.hidden_size, bias=config.bias)
-            self.layernorm_2 = BarkLayerNorm(config.hidden_size, bias=config.bias)
+            # if causal, the layerNorm bias is optional to stick with Bark choice of leaving optional bias
+            # in AutoRegressive models (corresponding to the "Text" and the "Coarse" modules)
+            self.layernorm_1 = nn.LayerNorm(config.hidden_size, bias=config.bias)
+            self.layernorm_2 = nn.LayerNorm(config.hidden_size, bias=config.bias)
         else:
             self.layernorm_1 = nn.LayerNorm(config.hidden_size)
             self.layernorm_2 = nn.LayerNorm(config.hidden_size)
@@ -426,7 +414,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
         self.layers = nn.ModuleList([BarkBlock(config, is_causal=True) for _ in range(config.num_layers)])
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
-        self.layernorm_final = BarkLayerNorm(config.hidden_size, bias=config.bias)
+        self.layernorm_final = nn.LayerNorm(config.hidden_size, bias=config.bias)
 
         self.lm_head = nn.Linear(config.hidden_size, config.output_vocab_size, bias=False)
         self.gradient_checkpointing = False
@@ -606,25 +594,14 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                outputs = self._gradient_checkpointing_func(
-                    block.__call__,
-                    hidden_states,
-                    None,
-                    attention_mask,
-                    head_mask[i],
-                    use_cache,
-                    output_attentions,
-                )
-            else:
-                outputs = block(
-                    hidden_states,
-                    past_key_values=past_layer_key_values,
-                    attention_mask=attention_mask,
-                    head_mask=head_mask[i],
-                    use_cache=use_cache,
-                    output_attentions=output_attentions,
-                )
+            outputs = block(
+                hidden_states,
+                past_key_values=past_layer_key_values,
+                attention_mask=attention_mask,
+                head_mask=head_mask[i],
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+            )
 
             hidden_states = outputs[0]
 
@@ -1288,6 +1265,7 @@ class BarkFineModel(BarkPreTrainedModel):
             attentions=all_self_attentions,
         )
 
+    @torch.no_grad()
     def generate(
         self,
         coarse_output: torch.Tensor,

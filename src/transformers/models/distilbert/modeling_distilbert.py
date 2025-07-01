@@ -31,6 +31,7 @@ from ...configuration_utils import PretrainedConfig
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask_for_sdpa
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
@@ -441,7 +442,7 @@ DISTILBERT_ATTENTION_CLASSES = {
 }
 
 
-class TransformerBlock(nn.Module):
+class TransformerBlock(GradientCheckpointingLayer):
     def __init__(self, config: PretrainedConfig):
         super().__init__()
 
@@ -537,21 +538,12 @@ class Transformer(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_state,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_state,
-                    attn_mask,
-                    head_mask[i],
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_state,
-                    attn_mask,
-                    head_mask[i],
-                    output_attentions,
-                )
+            layer_outputs = layer_module(
+                hidden_state,
+                attn_mask,
+                head_mask[i],
+                output_attentions,
+            )
 
             hidden_state = layer_outputs[-1]
 

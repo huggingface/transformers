@@ -49,6 +49,7 @@ from .tokenization_utils_base import (
     TruncationStrategy,
 )
 from .utils import (
+    AUDIO_TOKENIZER_NAME,
     CHAT_TEMPLATE_DIR,
     CHAT_TEMPLATE_FILE,
     LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE,
@@ -61,10 +62,15 @@ from .utils import (
     download_url,
     is_offline_mode,
     is_remote_url,
+    is_torch_available,
     list_repo_templates,
     logging,
 )
 from .utils.deprecation import deprecate_kwarg
+
+
+if is_torch_available():
+    from .modeling_utils import PreTrainedAudioTokenizerBase
 
 
 logger = logging.get_logger(__name__)
@@ -499,7 +505,7 @@ class ProcessorMixin(PushToHubMixin):
     """
 
     attributes = ["feature_extractor", "tokenizer"]
-    optional_attributes = ["chat_template"]
+    optional_attributes = ["chat_template", "audio_tokenizer"]
     optional_call_args: list[str] = []
     # Names need to be attr_class for attr in attributes
     feature_extractor_class = None
@@ -511,7 +517,19 @@ class ProcessorMixin(PushToHubMixin):
         # First, extract optional attributes from kwargs if present
         # Optional attributes can never be positional arguments
         for optional_attribute in self.optional_attributes:
-            setattr(self, optional_attribute, kwargs.pop(optional_attribute, None))
+            optional_attribute_value = kwargs.pop(optional_attribute, None)
+            setattr(self, optional_attribute, optional_attribute_value)
+
+            # Check audio tokenizer for its class but do not treat it as attr to avoid saving weights
+            if optional_attribute == "audio_tokenizer" and optional_attribute_value is not None:
+                proper_class = self.check_argument_for_proper_class(optional_attribute, optional_attribute_value)
+
+                if not (is_torch_available() and isinstance(optional_attribute_value, PreTrainedAudioTokenizerBase)):
+                    raise ValueError(
+                        f"Tried to use `{proper_class}` for audio tokenization. However, this class is not"
+                        " registered for audio tokenization."
+                    )
+
         # Sanitize args and kwargs
         for key in kwargs:
             if key not in self.attributes:
@@ -530,20 +548,29 @@ class ProcessorMixin(PushToHubMixin):
 
         # Check each arg is of the proper class (this will also catch a user initializing in the wrong order)
         for attribute_name, arg in kwargs.items():
-            class_name = getattr(self, f"{attribute_name}_class")
-            # Nothing is ever going to be an instance of "AutoXxx", in that case we check the base class.
-            class_name = AUTO_TO_BASE_CLASS_MAPPING.get(class_name, class_name)
-            if isinstance(class_name, tuple):
-                proper_class = tuple(self.get_possibly_dynamic_module(n) for n in class_name if n is not None)
-            else:
-                proper_class = self.get_possibly_dynamic_module(class_name)
-
-            if not isinstance(arg, proper_class):
-                raise TypeError(
-                    f"Received a {type(arg).__name__} for argument {attribute_name}, but a {class_name} was expected."
-                )
-
+            self.check_argument_for_proper_class(attribute_name, arg)
             setattr(self, attribute_name, arg)
+
+    def check_argument_for_proper_class(self, argument_name, argument):
+        """
+        Checks the passed argument's class against the expected transformers class. In case of an unexpected
+        mismatch between expected and actual class, an error is raise. Otherwise, the proper retrieved class
+        is returned.
+        """
+        class_name = getattr(self, f"{argument_name}_class")
+        # Nothing is ever going to be an instance of "AutoXxx", in that case we check the base class.
+        class_name = AUTO_TO_BASE_CLASS_MAPPING.get(class_name, class_name)
+        if isinstance(class_name, tuple):
+            proper_class = tuple(self.get_possibly_dynamic_module(n) for n in class_name if n is not None)
+        else:
+            proper_class = self.get_possibly_dynamic_module(class_name)
+
+        if not isinstance(argument, proper_class):
+            raise TypeError(
+                f"Received a {type(argument).__name__} for argument {argument_name}, but a {class_name} was expected."
+            )
+
+        return proper_class
 
     def to_dict(self) -> dict[str, Any]:
         """
@@ -577,6 +604,8 @@ class ProcessorMixin(PushToHubMixin):
             del output["feature_extractor"]
         if "chat_template" in output:
             del output["chat_template"]
+        if "audio_tokenizer" in output:
+            del output["audio_tokenizer"]
 
         # Some attributes have different names but containing objects that are not simple strings
         output = {
@@ -695,6 +724,7 @@ class ProcessorMixin(PushToHubMixin):
             save_directory, LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE
         )  # Legacy filename
         chat_template_dir = os.path.join(save_directory, CHAT_TEMPLATE_DIR)
+        output_audio_tokenizer_file = os.path.join(save_directory, AUDIO_TOKENIZER_NAME)
 
         processor_dict = self.to_dict()
         # Save `chat_template` in its own file. We can't get it from `processor_dict` as we popped it in `to_dict`
@@ -737,6 +767,19 @@ class ProcessorMixin(PushToHubMixin):
                     "separate files using the `save_jinja_files` argument."
                 )
 
+        if self.audio_tokenizer is not None:
+            audio_tokenizer_class = self.audio_tokenizer.__class__.__name__
+            audio_tokenizer_name_or_path = self.audio_tokenizer.name_or_path
+
+            audio_tokenizer_dict = {
+                "audio_tokenizer_class": audio_tokenizer_class,
+                "audio_tokenizer_name_or_path": audio_tokenizer_name_or_path,
+            }
+            audio_tokenizer_json = json.dumps(audio_tokenizer_dict, indent=2, sort_keys=True) + "\n"
+
+            with open(output_audio_tokenizer_file, "w", encoding="utf-8") as writer:
+                writer.write(audio_tokenizer_json)
+
         # For now, let's not save to `processor_config.json` if the processor doesn't have extra attributes and
         # `auto_map` is not specified.
         if set(processor_dict.keys()) != {"processor_class"}:
@@ -774,6 +817,9 @@ class ProcessorMixin(PushToHubMixin):
         Returns:
             `tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the processor object.
         """
+        # holding a copy for optionally loading the audio tokenizer (if available)
+        audio_tokenizer_kwargs = copy.deepcopy(kwargs)
+
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", None)
@@ -803,16 +849,18 @@ class ProcessorMixin(PushToHubMixin):
         resolved_additional_chat_template_files = {}
         if os.path.isfile(pretrained_model_name_or_path):
             resolved_processor_file = pretrained_model_name_or_path
-            # can't load chat-template when given a file as pretrained_model_name_or_path
+            # can't load chat-template and audio tokenizer when given a file as pretrained_model_name_or_path
             resolved_chat_template_file = None
             resolved_raw_chat_template_file = None
+            resolved_audio_tokenizer_file = None
             is_local = True
         elif is_remote_url(pretrained_model_name_or_path):
             processor_file = pretrained_model_name_or_path
             resolved_processor_file = download_url(pretrained_model_name_or_path)
-            # can't load chat-template when given a file url as pretrained_model_name_or_path
+            # can't load chat-template and audio tokenizer when given a file url as pretrained_model_name_or_path
             resolved_chat_template_file = None
             resolved_raw_chat_template_file = None
+            resolved_audio_tokenizer_file = None
         else:
             if is_local:
                 template_dir = Path(pretrained_model_name_or_path, CHAT_TEMPLATE_DIR)
@@ -899,6 +947,21 @@ class ProcessorMixin(PushToHubMixin):
                     )
                     for template_name, template_file in additional_chat_template_files.items()
                 }
+
+                resolved_audio_tokenizer_file = cached_file(
+                    pretrained_model_name_or_path,
+                    AUDIO_TOKENIZER_NAME,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    proxies=proxies,
+                    resume_download=resume_download,
+                    local_files_only=local_files_only,
+                    token=token,
+                    user_agent=user_agent,
+                    revision=revision,
+                    subfolder=subfolder,
+                    _raise_exceptions_for_missing_entries=False,
+                )
             except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
@@ -939,6 +1002,22 @@ class ProcessorMixin(PushToHubMixin):
         if chat_templates:
             kwargs["chat_template"] = chat_templates
 
+        # Same as chat template, adding as kwarg after loading the model
+        audio_tokenizer = None
+        if resolved_audio_tokenizer_file is not None:
+            with open(resolved_audio_tokenizer_file, "r", encoding="utf-8") as reader:
+                # The json contains the references we need to init the correct model
+                audio_tokenizer_references = json.load(reader)
+                audio_tokenizer_class = cls.get_possibly_dynamic_module(
+                    audio_tokenizer_references["audio_tokenizer_class"]
+                )
+                audio_tokenizer_path = audio_tokenizer_references["audio_tokenizer_name_or_path"]
+
+            audio_tokenizer = audio_tokenizer_class.from_pretrained(audio_tokenizer_path, **audio_tokenizer_kwargs)
+
+        if audio_tokenizer is not None:
+            kwargs["audio_tokenizer"] = audio_tokenizer
+
         # Existing processors on the Hub created before #27761 being merged don't have `processor_config.json` (if not
         # updated afterward), and we need to keep `from_pretrained` work. So here it fallbacks to the empty dict.
         # (`cached_file` called using `_raise_exceptions_for_missing_entries=False` to avoid exception)
@@ -947,7 +1026,9 @@ class ProcessorMixin(PushToHubMixin):
             # In any case we need to pass `chat_template` if it is available
             processor_dict = {}
             if "chat_template" in kwargs:
-                processor_dict = {"chat_template": kwargs.pop("chat_template")}
+                processor_dict["chat_template"] = kwargs.pop("chat_template")
+            if "audio_tokenizer" in kwargs:
+                processor_dict["audio_tokenizer"] = kwargs.pop("audio_tokenizer")
             return processor_dict, kwargs
 
         try:
@@ -972,6 +1053,8 @@ class ProcessorMixin(PushToHubMixin):
 
         if "chat_template" in kwargs:
             processor_dict["chat_template"] = kwargs.pop("chat_template")
+        if "audio_tokenizer" in kwargs:
+            processor_dict["audio_tokenizer"] = kwargs.pop("audio_tokenizer")
 
         return processor_dict, kwargs
 
@@ -1276,6 +1359,7 @@ class ProcessorMixin(PushToHubMixin):
                 attribute_class = cls.get_possibly_dynamic_module(class_name)
 
             args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
+
         return args
 
     @staticmethod
@@ -1287,6 +1371,7 @@ class ProcessorMixin(PushToHubMixin):
             transformers_module.VIDEO_PROCESSOR_MAPPING,
             transformers_module.TOKENIZER_MAPPING,
             transformers_module.FEATURE_EXTRACTOR_MAPPING,
+            transformers_module.MODEL_FOR_AUDIO_TOKENIZATION_MAPPING,
         ]
         for lookup_location in lookup_locations:
             for custom_class in lookup_location._extra_content.values():
