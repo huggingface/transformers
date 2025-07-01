@@ -1,6 +1,6 @@
 name: Dummy
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened]
 
 jobs:
