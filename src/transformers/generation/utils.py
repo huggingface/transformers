@@ -3573,6 +3573,8 @@ class GenerationMixin(ContinuousMixin):
         else:
             is_prefill = True
 
+        from transformers import AutoTokenizer
+        tokenizer = AutoTokenizer.from_pretrained("pytorch-os-mini-final-quantized-moe-sharded_hf")
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
@@ -3630,6 +3632,9 @@ class GenerationMixin(ContinuousMixin):
                 next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
             else:
                 next_tokens = torch.argmax(next_token_scores, dim=-1)
+
+            if torch.distributed.get_rank() == 0:
+                print(f"Generated token: {repr(tokenizer.decode(next_tokens))}, logprob: {next_token_logits.max()}")
 
             # finished sentences should have their next token be a padding token
             if has_eos_stopping_criteria:
