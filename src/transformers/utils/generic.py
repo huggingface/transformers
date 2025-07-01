@@ -1021,15 +1021,22 @@ def check_model_inputs(func):
             f"output_{k}": all_args.get(f"output_{k}", getattr(self.config, f"output_{k}", False))
             for k in capture_flags
         }
+
         if any(recordable_keys.values()):
-            for (
-                _,
-                layer,
-            ) in self.named_modules():  # pretty sure we gotta attache the hooks to an instance and not a class
-                for key, (cls, idx) in capture_flags.items():
-                    if capture_flags.get(key, getattr(self.config, key, False)) and isinstance(layer, cls):
+            capture_tasks = []
+            for key, layer_specs in capture_flags.items():
+                if not recordable_keys.get(f"output_{key}", False):
+                    continue
+                if not isinstance(layer_specs, list):
+                    layer_specs = [layer_specs]
+                for cls, idx in layer_specs:
+                    capture_tasks.append((key, cls, idx))
+
+            for name, module in self.named_modules():
+                for key, cls, idx in capture_tasks:
+                    if isinstance(module, cls):
                         hook_fn = make_capture_fn(key, idx)
-                        hooks.append(register_hook_if_needed(layer, hook_fn))
+                        hooks.append(register_hook_if_needed(module, hook_fn))
 
         outputs = func(self, *args, **kwargs)
         for h in hooks:
@@ -1038,7 +1045,17 @@ def check_model_inputs(func):
         for key in collected_outputs:
             if key == "hidden_states":
                 collected_outputs[key] += (outputs.last_hidden_state,)
-            outputs[key] = collected_outputs[key]
+                outputs[key] = collected_outputs[key]
+            elif key == "attentions":
+                if isinstance(capture_flags[key], list) and len(capture_flags[key]) == 2:
+                    # we have cross attention states
+                    outputs["cross_" + key] = collected_outputs[key][1::2]
+                    outputs[key] = collected_outputs[key][0::2]
+                else:
+                    outputs[key] = collected_outputs[key]
+            else:
+                outputs[key] = collected_outputs[key]
+
         if return_dict is False:
             outputs = outputs.to_tuple()
         return outputs
