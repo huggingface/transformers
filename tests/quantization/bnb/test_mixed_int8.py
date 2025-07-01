@@ -27,6 +27,7 @@ from transformers import (
     AutoTokenizer,
     BitsAndBytesConfig,
     pipeline,
+    set_seed,
 )
 from transformers.models.opt.modeling_opt import OPTAttention
 from transformers.testing_utils import (
@@ -113,6 +114,8 @@ class BaseMixedInt8Test(unittest.TestCase):
     MAX_NEW_TOKENS = 10
     # Expected values with offload
     EXPECTED_OUTPUTS.add("Hello my name is John and I am a professional photographer based in")
+    # Expected values on Intel XPU and NV A100
+    EXPECTED_OUTPUTS.add("Hello my name is Alina. I have been working as a professional")
 
     def setUp(self):
         # Models and tokenizer
@@ -649,6 +652,8 @@ class MixedInt8TestPipeline(BaseMixedInt8Test):
             max_new_tokens=self.MAX_NEW_TOKENS,
         )
 
+        # Avoid sampling different outputs
+        set_seed(42)
         # Real second forward pass
         pipeline_output = self.pipe(self.input_text)
         self.assertIn(pipeline_output[0]["generated_text"], self.EXPECTED_OUTPUTS)
