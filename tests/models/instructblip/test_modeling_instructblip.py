@@ -20,7 +20,6 @@ import unittest
 import numpy as np
 import pytest
 import requests
-from parameterized import parameterized
 
 from transformers import (
     CONFIG_MAPPING,
@@ -30,6 +29,8 @@ from transformers import (
     InstructBlipVisionConfig,
 )
 from transformers.testing_utils import (
+    Expectations,
+    cleanup,
     require_accelerate,
     require_bitsandbytes,
     require_torch,
@@ -520,12 +521,6 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(
-        "InstructBLIP cannot generate only from input ids, and requires pixel values in all cases to be present"
-    )
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -654,13 +649,6 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
             # They should result in very similar logits
             torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
 
-    @unittest.skip(
-        "InstructBLIP cannot generate only from input ids, and requires pixel values in all cases to be present"
-    )
-    @parameterized.expand([("greedy", 1), ("beam search", 2)])
-    def test_generate_from_inputs_embeds(self, _, num_beams):
-        pass
-
     @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         """
@@ -722,6 +710,9 @@ def prepare_img():
 @require_torch
 @slow
 class InstructBlipModelIntegrationTest(unittest.TestCase):
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=False)
+
     @require_bitsandbytes
     @require_accelerate
     def test_inference_vicuna_7b(self):
@@ -739,13 +730,24 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
         outputs = model.generate(**inputs, max_new_tokens=30)
         generated_text = processor.batch_decode(outputs, skip_special_tokens=True)[0].strip()
 
-        expected_outputs = [32001] * 32 + [2, 1724, 338, 22910, 1048, 445, 1967, 29973, 450, 22910, 9565, 310, 445, 1967, 338, 393, 263, 767, 338, 13977, 292, 22095, 373, 278, 1250, 310, 263, 13328, 20134, 29963, 1550, 19500, 373, 263, 19587, 4272, 11952, 29889]  # fmt: off
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): [32001] * 32 + [2, 1724, 338, 22910, 1048, 445, 1967, 29973, 450, 22910, 9565, 310, 445, 1967, 338, 393, 263, 767, 338, 13977, 292, 22095, 373, 278, 1250, 310, 263, 13328, 20134, 29963, 1550, 19500, 1623, 263, 19587, 4272, 11952, 29889],
+                ("cuda", None): [32001] * 32 + [2, 1724, 338, 22910, 1048, 445, 1967, 29973, 450, 22910, 9565, 310, 445, 1967, 338, 393, 263, 767, 338, 13977, 292, 22095, 373, 278, 1250, 310, 263, 13328, 20134, 29963, 1550, 19500, 373, 263, 19587, 4272, 11952, 29889],
+            }
+        )  # fmt: off
+        expected_output = expected_outputs.get_expectation()
 
-        self.assertEqual(outputs[0].tolist(), expected_outputs)
-        self.assertEqual(
-            generated_text,
-            "What is unusual about this image? The unusual aspect of this image is that a man is ironing clothes on the back of a yellow SUV while driving on a busy city street.",
-        )
+        expected_texts = Expectations(
+            {
+                ("xpu", 3): "What is unusual about this image? The unusual aspect of this image is that a man is ironing clothes on the back of a yellow SUV while driving down a busy city street.",
+                ("cuda", None): "What is unusual about this image? The unusual aspect of this image is that a man is ironing clothes on the back of a yellow SUV while driving on a busy city street.",
+            }
+        )  # fmt: off
+        expected_text = expected_texts.get_expectation()
+
+        self.assertEqual(outputs[0].tolist(), expected_output)
+        self.assertEqual(generated_text, expected_text)
 
     def test_inference_flant5_xl(self):
         processor = InstructBlipProcessor.from_pretrained("Salesforce/instructblip-flan-t5-xl")

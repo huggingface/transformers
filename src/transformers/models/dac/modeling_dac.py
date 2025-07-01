@@ -23,7 +23,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedAudioTokenizerBase
 from ...utils import ModelOutput, auto_docstring
 from .configuration_dac import DacConfig
 
@@ -471,7 +471,7 @@ class DacEncoder(nn.Module):
 
 
 @auto_docstring
-class DacPreTrainedModel(PreTrainedModel):
+class DacPreTrainedModel(PreTrainedAudioTokenizerBase):
     config_class = DacConfig
     base_model_prefix = "dac"
     main_input_name = "input_values"

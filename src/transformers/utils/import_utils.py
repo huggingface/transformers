@@ -292,6 +292,30 @@ except importlib.metadata.PackageNotFoundError:
     _essentia_version = False
 
 
+_pydantic_available = importlib.util.find_spec("pydantic") is not None
+try:
+    _pydantic_version = importlib.metadata.version("pydantic")
+    logger.debug(f"Successfully imported pydantic version {_pydantic_version}")
+except importlib.metadata.PackageNotFoundError:
+    _pydantic_available = False
+
+
+_fastapi_available = importlib.util.find_spec("fastapi") is not None
+try:
+    _fastapi_version = importlib.metadata.version("fastapi")
+    logger.debug(f"Successfully imported pydantic version {_fastapi_version}")
+except importlib.metadata.PackageNotFoundError:
+    _fastapi_available = False
+
+
+_uvicorn_available = importlib.util.find_spec("uvicorn") is not None
+try:
+    _uvicorn_version = importlib.metadata.version("uvicorn")
+    logger.debug(f"Successfully imported pydantic version {_uvicorn_version}")
+except importlib.metadata.PackageNotFoundError:
+    _uvicorn_available = False
+
+
 _pretty_midi_available = importlib.util.find_spec("pretty_midi") is not None
 try:
     _pretty_midi_version = importlib.metadata.version("pretty_midi")
@@ -471,6 +495,18 @@ def is_librosa_available():
 
 def is_essentia_available():
     return _essentia_available
+
+
+def is_pydantic_available():
+    return _pydantic_available
+
+
+def is_fastapi_available():
+    return _fastapi_available
+
+
+def is_uvicorn_available():
+    return _uvicorn_available
 
 
 def is_pretty_midi_available():
@@ -1174,6 +1210,24 @@ def is_torch_greater_or_equal(library_version: str, accept_dev: bool = False):
 
 
 @lru_cache
+def is_torch_less_or_equal(library_version: str, accept_dev: bool = False):
+    """
+    Accepts a library version and returns True if the current version of the library is less than or equal to the
+    given version. If `accept_dev` is True, it will also accept development versions (e.g. 2.7.0.dev20250320 matches
+    2.7.0).
+    """
+    if not _is_package_available("torch"):
+        return False
+
+    if accept_dev:
+        return version.parse(version.parse(importlib.metadata.version("torch")).base_version) <= version.parse(
+            library_version
+        )
+    else:
+        return version.parse(importlib.metadata.version("torch")) <= version.parse(library_version)
+
+
+@lru_cache
 def is_huggingface_hub_greater_or_equal(library_version: str, accept_dev: bool = False):
     if not _is_package_available("huggingface_hub"):
         return False
@@ -1825,6 +1879,23 @@ VISION_IMPORT_ERROR = """
 `pip install pillow`. Please note that you may need to restart your runtime after installation.
 """
 
+# docstyle-ignore
+PYDANTIC_IMPORT_ERROR = """
+{0} requires the pydantic library but it was not found in your environment. You can install it with pip:
+`pip install pydantic`. Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
+FASTAPI_IMPORT_ERROR = """
+{0} requires the fastapi library but it was not found in your environment. You can install it with pip:
+`pip install fastapi`. Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
+UVICORN_IMPORT_ERROR = """
+{0} requires the uvicorn library but it was not found in your environment. You can install it with pip:
+`pip install uvicorn`. Please note that you may need to restart your runtime after installation.
+"""
 
 # docstyle-ignore
 PYTESSERACT_IMPORT_ERROR = """
@@ -1948,6 +2019,9 @@ BACKENDS_MAPPING = OrderedDict(
         ("yt_dlp", (is_yt_dlp_available, YT_DLP_IMPORT_ERROR)),
         ("rich", (is_rich_available, RICH_IMPORT_ERROR)),
         ("keras_nlp", (is_keras_nlp_available, KERAS_NLP_IMPORT_ERROR)),
+        ("pydantic", (is_pydantic_available, PYDANTIC_IMPORT_ERROR)),
+        ("fastapi", (is_fastapi_available, FASTAPI_IMPORT_ERROR)),
+        ("uvicorn", (is_uvicorn_available, UVICORN_IMPORT_ERROR)),
     ]
 )
 

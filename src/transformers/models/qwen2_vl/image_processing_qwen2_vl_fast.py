@@ -203,8 +203,10 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
                     min_pixels=size["shortest_edge"],
                     max_pixels=size["longest_edge"],
                 )
-                stacked_images = F.resize(
-                    stacked_images, size=(resized_height, resized_width), interpolation=interpolation
+                stacked_images = self.resize(
+                    image=stacked_images,
+                    size=SizeDict(height=resized_height, width=resized_width),
+                    interpolation=interpolation,
                 )
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
