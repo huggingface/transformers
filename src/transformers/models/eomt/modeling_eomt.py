@@ -999,7 +999,7 @@ class EomtPreTrainedModel(PreTrainedModel):
     base_model_prefix = "eomt"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
-    _no_split_modules = ["EomtMLP", "EomtLayer"]
+    _no_split_modules = ["EomtLayer"]
     _supports_sdpa = True
     _supports_flash_attn_2 = True
 
