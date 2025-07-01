@@ -96,6 +96,7 @@ class LlamaModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 @require_torch_accelerator
+@require_read_token
 class LlamaIntegrationTest(unittest.TestCase):
     def setup(self):
         cleanup(torch_device, gc_collect=True)
@@ -108,7 +109,6 @@ class LlamaIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     @slow
-    @require_read_token
     def test_llama_3_1_hard(self):
         """
         An integration test for llama 3.1. It tests against a long output to ensure the subtle numerical differences
@@ -145,7 +145,6 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.assertEqual(generated_text, EXPECTED_TEXT)
 
     @slow
-    @require_read_token
     def test_model_7b_logits_bf16(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
@@ -194,7 +193,6 @@ class LlamaIntegrationTest(unittest.TestCase):
         )
 
     @slow
-    @require_read_token
     def test_model_7b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
@@ -268,7 +266,6 @@ class LlamaIntegrationTest(unittest.TestCase):
 
     @slow
     @require_torch_accelerator
-    @require_read_token
     def test_compile_static_cache(self):
         # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
         # work as intended. See https://github.com/pytorch/pytorch/issues/121943
@@ -309,7 +306,6 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
 
     @slow
-    @require_read_token
     def test_export_static_cache(self):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
             self.skipTest(reason="This test requires torch >= 2.4 to run.")
