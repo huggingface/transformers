@@ -5209,7 +5209,12 @@ class Trainer:
         }
         if "mixed_precision" in accelerator_config:
             args["mixed_precision"] = accelerator_config["mixed_precision"]
-        if "fp8_config" in accelerator_config:
+        if "fp8_config" in accelerator_config and accelerator_config["fp8_config"] is not None:
+            import torch.distributed as dist
+            if dist.get_rank() == 0:
+                import ipdb; ipdb.set_trace()
+            dist.barrier()
+
             if "backend" in accelerator_config["fp8_config"]:
                 recipe_kwargs = BACKEND_TO_KWARGS[accelerator_config["fp8_config"]["backend"]]
                 fp8_config = accelerator_config["fp8_config"].copy()
