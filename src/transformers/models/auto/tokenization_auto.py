@@ -65,6 +65,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
             ),
         ),
         ("align", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+        ("arcee", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
         ("aria", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
         ("aya_vision", (None, "CohereTokenizerFast" if is_tokenizers_available() else None)),
         ("bark", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
@@ -177,6 +178,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
                 "LlamaTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
+        ("dia", ("DiaTokenizer", None)),
         (
             "diffllama",
             (
@@ -235,9 +237,24 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
                 "GemmaTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
+        (
+            "gemma3n",
+            (
+                "GemmaTokenizer" if is_sentencepiece_available() else None,
+                "GemmaTokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
+        (
+            "gemma3n_text",
+            (
+                "GemmaTokenizer" if is_sentencepiece_available() else None,
+                "GemmaTokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
         ("git", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
         ("glm", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("glm4", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
+        ("glm4v", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("gpt-sw3", ("GPTSw3Tokenizer" if is_sentencepiece_available() else None, None)),
         ("gpt2", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
         ("gpt_bigcode", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
@@ -246,6 +263,10 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("gpt_neox_japanese", ("GPTNeoXJapaneseTokenizer", None)),
         ("gptj", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
         ("gptsan-japanese", ("GPTSanJapaneseTokenizer", None)),
+        ("granite", ("GPT2Tokenizer", None)),
+        ("granitemoe", ("GPT2Tokenizer", None)),
+        ("granitemoehybrid", ("GPT2Tokenizer", None)),
+        ("granitemoeshared", ("GPT2Tokenizer", None)),
         ("grounding-dino", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
         ("groupvit", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
         ("helium", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
@@ -575,6 +596,13 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
             (
                 "T5Tokenizer" if is_sentencepiece_available() else None,
                 "T5TokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
+        (
+            "t5gemma",
+            (
+                "GemmaTokenizer" if is_sentencepiece_available() else None,
+                "GemmaTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
         ("tapas", ("TapasTokenizer", None)),

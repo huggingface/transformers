@@ -108,6 +108,7 @@ class Idefics2VisionText2TextModelTester:
         image_token_id=99,
     ):
         self.parent = parent
+        self.pad_token_id = text_config["pad_token_id"]
         self.is_training = is_training
         self.batch_size = batch_size
         self.num_images = num_images
@@ -158,6 +159,7 @@ class Idefics2VisionText2TextModelTester:
 
         # For simplicity just set the last n tokens to the image token
         n_image_tokens_per_batch = self.num_images * self.perceiver_config["resampler_n_latents"]
+        input_ids[input_ids == self.image_token_id] = self.pad_token_id
         input_ids[:, -n_image_tokens_per_batch:] = self.image_token_id
         attention_mask = input_ids.ne(1).to(torch_device)
         inputs_dict = {
@@ -624,6 +626,7 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_generated_texts = Expectations(
             {
+                ("xpu", 3): "In this image, we see the Statue of Liberty, the Hudson River,",
                 ("cuda", None): "In this image, we see the Statue of Liberty, the Hudson River,",
                 ("rocm", (9, 5)): "In this image, we see the Statue of Liberty, the New York City",
             }
