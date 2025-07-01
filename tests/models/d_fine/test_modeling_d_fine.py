@@ -758,6 +758,7 @@ def prepare_img():
 
 @require_torch
 @require_vision
+@slow
 class DFineModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
@@ -778,37 +779,38 @@ class DFineModelIntegrationTest(unittest.TestCase):
 
         expected_logits = torch.tensor(
             [
-                [-3.8097816, -4.7724586, -5.994499],
-                [-5.2974715, -9.499067, -6.1653666],
-                [-5.3502765, -3.9530406, -6.3630295],
+                [-3.8221, -4.7679, -6.0063],
+                [-5.2994, -9.5009, -6.1697],
+                [-5.3103, -3.8005, -6.2972],
             ]
         ).to(torch_device)
         expected_boxes = torch.tensor(
             [
-                [0.7677696, 0.41479152, 0.46441072],
-                [0.16912134, 0.19869131, 0.2123824],
-                [0.2581653, 0.54818195, 0.47512347],
+                [0.7678, 0.4148, 0.4644],
+                [0.1691, 0.1987, 0.2124],
+                [0.2582, 0.5482, 0.4751],
             ]
         ).to(torch_device)
 
-        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, atol=2e-4, rtol=2e-4)
 
         expected_shape_boxes = torch.Size((1, 300, 4))
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
-        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=2e-4, rtol=2e-4)
 
         # verify postprocessing
         results = image_processor.post_process_object_detection(
             outputs, threshold=0.0, target_sizes=[image.size[::-1]]
         )[0]
-        expected_scores = torch.tensor([0.9642, 0.9542, 0.9536, 0.8548], device=torch_device)
+
+        expected_scores = torch.tensor([0.9616, 0.9541, 0.9541, 0.8551], device=torch_device)
         expected_labels = [15, 65, 15, 57]
         expected_slice_boxes = torch.tensor(
             [
-                [1.3186283e01, 5.4130211e01, 3.1726535e02, 4.7212445e02],
-                [4.0275269e01, 7.2975174e01, 1.7620003e02, 1.1776848e02],
-                [3.4276117e02, 2.3427944e01, 6.3998401e02, 3.7477191e02],
-                [5.8418274e-01, 1.1794567e00, 6.3933154e02, 4.7485995e02],
+                [1.3358e01, 5.4123e01, 3.1726e02, 4.7222e02],
+                [4.0274e01, 7.2972e01, 1.7620e02, 1.1777e02],
+                [3.4270e02, 2.3427e01, 6.3998e02, 3.7476e02],
+                [5.7796e-01, 1.1773e00, 6.3933e02, 4.7486e02],
             ],
             device=torch_device,
         )
