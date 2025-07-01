@@ -14,7 +14,6 @@
 
 
 import unittest
-from typing import Dict, List, Tuple
 
 from parameterized import parameterized
 
@@ -233,10 +232,10 @@ class xLSTMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 def recursive_check(tuple_object, dict_object):
                     if isinstance(tuple_object, xLSTMCache):
                         recursive_check(tuple_object.rnn_state, dict_object.rnn_state)
-                    elif isinstance(tuple_object, (List, Tuple)):
+                    elif isinstance(tuple_object, (list, tuple)):
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif isinstance(tuple_object, Dict):
+                    elif isinstance(tuple_object, dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
                             tuple_object.values(), dict_object.values()
                         ):
