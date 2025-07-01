@@ -184,7 +184,7 @@ class Qwen2_5_VLVisionText2TextModelTester:
         input_ids[:, self.num_image_tokens - 1] = self.vision_start_token_id
         inputs_dict = {
             "pixel_values": pixel_values,
-            "image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size),
+            "image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size, device=torch_device),
             "input_ids": input_ids,
             "attention_mask": attention_mask,
         }
