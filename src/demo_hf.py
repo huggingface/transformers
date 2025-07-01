@@ -21,26 +21,6 @@ def get_generation_range(prompt_tokens: list[list[int]] | None, max_gen_len: int
     return batch_min_prompt_length, batch_max_prompt_length + max_gen_len
 
 
-def sample_top_k(probs, k):
-    topk_value, _ = torch.topk(probs, k)  # batch_sz x topk
-    min_value_top_k = topk_value[:, [-1]]
-    probs[probs < min_value_top_k] = 0.0
-    probs.div_(probs.sum(dim=-1, keepdim=True))
-    next_token = torch.multinomial(probs, num_samples=1)
-    return next_token
-
-
-def sample_top_p(probs, p):
-    probs_sort, probs_idx = torch.sort(probs, dim=-1, descending=True)
-    probs_sum = torch.cumsum(probs_sort, dim=-1)
-    mask = probs_sum - probs_sort > p
-    probs_sort[mask] = 0.0
-    probs_sort.div_(probs_sort.sum(dim=-1, keepdim=True))
-    next_token = torch.multinomial(probs_sort, num_samples=1)
-    next_token = torch.gather(probs_idx, -1, next_token)
-    return next_token
-
-
 @torch.inference_mode()
 def generate(
     prompts: list[str] | None,
@@ -49,11 +29,6 @@ def generate(
     tokenizer: BLTTokenizer,
     max_prompt_len: int = 256,
     max_gen_len: int = 256,
-    use_sampling: bool = False,
-    temp: float = 1.0,
-    top_k: int = 0,
-    top_p: float = 0.0,
-    remove_prompts: bool = True,
     device: torch.device = torch.device("cpu"),
 ) -> list[list[int]]:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -75,26 +50,12 @@ def generate(
         current_tokens = tokens[:, :curr_pos]
         logits = model(current_tokens)[:, -1]
 
-        if use_sampling:
-            probs = torch.softmax(logits / temp, dim=-1)
-            if top_p > 0.0:
-                next_token = sample_top_p(probs, top_p)
-            elif top_k > 0:
-                next_token = sample_top_k(probs, top_k)
-            else:
-                next_token = torch.multinomial(probs, num_samples=1)
-        else:
-            next_token = torch.argmax(logits, dim=-1)
+        next_token = torch.argmax(logits, dim=-1)
 
         next_token = torch.where(input_text_mask[:, curr_pos], tokens[:, curr_pos], next_token)
         tokens[:, curr_pos] = next_token
 
-    if remove_prompts:
-        generated_tokens = [
-            t[len(prompt_tokens[i]) : len(prompt_tokens[i]) + max_gen_len].tolist() for i, t in enumerate(tokens)
-        ]
-    else:
-        generated_tokens = [t[: len(prompt_tokens[i]) + max_gen_len].tolist() for i, t in enumerate(tokens)]
+    generated_tokens = [t[: len(prompt_tokens[i]) + max_gen_len].tolist() for i, t in enumerate(tokens)]
     return generated_tokens
 
 
