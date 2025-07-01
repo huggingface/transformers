@@ -532,7 +532,7 @@ class AriaTextAttention(nn.Module):
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -1113,11 +1113,12 @@ class AriaModel(AriaPreTrainedModel):
                 special_image_mask = inputs_embeds == self.get_input_embeddings()(
                     torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
-                n_image_tokens = (special_image_mask).sum(dim=1).sum(dim=0)[0]
+                special_image_mask = special_image_mask.all(-1)
             else:
-                image_embeds = input_ids == self.config.image_token_id
-                special_image_mask = image_embeds.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-                n_image_tokens = (image_embeds).sum(dim=1).sum(dim=0)
+                special_image_mask = input_ids == self.config.image_token_id
+
+            n_image_tokens = (special_image_mask).sum(dim=1).sum(dim=0)
+            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
             image_features = self.get_image_features(
                 pixel_values=pixel_values,
                 pixel_mask=pixel_mask,

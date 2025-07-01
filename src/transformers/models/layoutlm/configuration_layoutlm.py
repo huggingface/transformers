@@ -14,6 +14,7 @@
 # limitations under the License.
 """LayoutLM model configuration"""
 
+import warnings
 from collections import OrderedDict
 from collections.abc import Mapping
 from typing import Any, Optional
@@ -130,9 +131,21 @@ class LayoutLMConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        self.position_embedding_type = position_embedding_type
+        self._position_embedding_type = position_embedding_type
         self.use_cache = use_cache
         self.max_2d_position_embeddings = max_2d_position_embeddings
+
+    @property
+    def position_embedding_type(self):
+        warnings.warn(
+            "The `position_embedding_type` attribute is deprecated and will be removed in v4.55.",
+            FutureWarning,
+        )
+        return self._position_embedding_type
+
+    @position_embedding_type.setter
+    def position_embedding_type(self, value):
+        self._position_embedding_type = value
 
 
 class LayoutLMOnnxConfig(OnnxConfig):
