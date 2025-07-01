@@ -24,6 +24,7 @@ from torch.nn import LayerNorm
 
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...pytorch_utils import softmax_backward_data
 from ...utils import (
@@ -589,7 +590,7 @@ class SEWDOutput(nn.Module):
         return hidden_states
 
 
-class SEWDLayer(nn.Module):
+class SEWDLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.attention = SEWDAttention(config)
@@ -746,25 +747,14 @@ class SEWDTransformerEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (output_states,)
 
-            if self.gradient_checkpointing and self.training:
-                output_states = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    next_kv,
-                    attention_mask,
-                    query_states,
-                    relative_pos,
-                    rel_embeddings,
-                    output_attentions,
-                )
-            else:
-                output_states = layer_module(
-                    next_kv,
-                    attention_mask,
-                    query_states=query_states,
-                    relative_pos=relative_pos,
-                    rel_embeddings=rel_embeddings,
-                    output_attentions=output_attentions,
-                )
+            output_states = layer_module(
+                next_kv,
+                attention_mask,
+                query_states=query_states,
+                relative_pos=relative_pos,
+                rel_embeddings=rel_embeddings,
+                output_attentions=output_attentions,
+            )
 
             if output_attentions:
                 output_states, att_m = output_states
