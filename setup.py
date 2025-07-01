@@ -362,7 +362,6 @@ extras["testing"] = (
         "pydantic",
         "sentencepiece",
         "sacrebleu",  # needed in trainer tests, see references to `run_translation.py`
-        "mistral-common[open-cv]",
     )
     + extras["retrieval"]
     + extras["modelcreation"]
