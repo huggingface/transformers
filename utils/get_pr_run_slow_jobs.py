@@ -1,8 +1,5 @@
 import argparse
 import json
-import requests
-import sys
-import os
 import re
 import string
 
@@ -86,7 +83,7 @@ def check_name(model_name: str):
     return not (model_name.startswith("_") or model_name.endswith("_")) and all(c in allowed for c in model_name)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--message", type=str, default="", help="The content of a comment.")
     parser.add_argument("--quantization", action="store_true", help="If we collect quantization tests")
@@ -100,7 +97,7 @@ if __name__ == '__main__':
     for filename in ["tests_dir.txt", "tests_models_dir.txt", "tests_quantization_dir.txt"]:
         with open(filename) as fp:
             data = json.load(fp)
-            data = [item["path"][len("tests/"):] for item in data if item["type"] == "dir"]
+            data = [item["path"][len("tests/") :] for item in data if item["type"] == "dir"]
             repo_content.extend(data)
 
     # These don't have the prefix `models/` or `quantization/`, so we need to add them.

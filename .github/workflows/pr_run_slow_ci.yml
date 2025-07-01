@@ -1,4 +1,4 @@
-name: Dummy
+name: PR slow CI
 on:
   pull_request_target:
     types: [opened, synchronize, reopened]
@@ -8,12 +8,6 @@ jobs:
     name: Get PR number
     uses: ./.github/workflows/get-pr-number.yml
 
-  show-pr-number:
-    runs-on: ubuntu-22.04
-    needs: get-pr-number
-    steps:
-      - run: echo ${{ needs.get-pr-number.outputs.PR_NUMBER }}
-
   get-pr-info:
     name: Get PR commit SHA
     needs: get-pr-number
@@ -22,35 +16,13 @@ jobs:
     with:
       pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
 
-  # TODO: remove part of these for security reason (or use `env`)
-  show-pr-sha:
-    runs-on: ubuntu-22.04
-    needs: get-pr-info
-    steps:
-      - shell: bash
-        run: |
-          echo ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_FULL_NAME }}
-          echo ${{ needs.get-pr-info.outputs.PR_BASE_REPO_FULL_NAME }}
-          echo ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_OWNER }}
-          echo ${{ needs.get-pr-info.outputs.PR_BASE_REPO_OWNER }}
-          echo ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_NAME }}
-          echo ${{ needs.get-pr-info.outputs.PR_BASE_REPO_NAME }}
-          echo ${{ needs.get-pr-info.outputs.PR_HEAD_REF }}
-          echo ${{ needs.get-pr-info.outputs.PR_BASE_REF }}
-          echo ${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}
-          echo ${{ needs.get-pr-info.outputs.PR_BASE_SHA }}
-          echo ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_SHA }}
-          echo ${{ needs.get-pr-info.outputs.PR_HEAD_COMMIT_DATE }}
-          echo ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_DATE }}
-          echo ${{ needs.get-pr-info.outputs.PR_HEAD_COMMIT_TIMESTAMP }}
-          echo ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_TIMESTAMP }}
-
   verity_pr_commit:
     name: Verity PR commit corresponds to a specific event by comparing timestamps
+    if: ${{ github.event.comment.created_at != '' }}
     runs-on: ubuntu-22.04
     needs: get-pr-info
     env:
-      COMMENT_DATE: 2025-06-28T21:02:16Z
+      COMMENT_DATE: ${{ github.event.comment.created_at }}
       PR_MERGE_COMMIT_DATE: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_DATE }}
       PR_MERGE_COMMIT_TIMESTAMP: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_TIMESTAMP }}
     steps:
@@ -65,7 +37,6 @@ jobs:
             exit -1;
           fi
 
-  # Run on PR review, and issue comment (both on main branch)
   get-jobs:
     name: Get test files to run
     runs-on: ubuntu-22.04
@@ -102,15 +73,6 @@ jobs:
             core.setOutput('tests_dir', tests_dir);
             core.setOutput('tests_models_dir', tests_models_dir);
             core.setOutput('tests_quantization_dir', tests_quantization_dir);
-
-#      # TODO: remove this
-      # could we avoid checkout?
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: "0"
-          # TODO: remove this
-          # We don't want to checkout to PR branch!
-          ref: "refs/pull/${{ needs.get-pr-number.outputs.PR_NUMBER }}/merge"
 
       - name: Write pr_files file
         run: |
