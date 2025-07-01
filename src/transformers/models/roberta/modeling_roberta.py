@@ -234,59 +234,35 @@ class RobertaSelfAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
-        output_attentions: Optional[bool] = False,  # Only kept to be BC
+        past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor]:
-        # If this is instantiated as a cross-attention module, the keys
-        # and values come from an encoder; the attention mask needs to be
-        # such that the encoder's padding tokens are not attended to.
-        is_cross_attention = encoder_hidden_states is not None
-
-        current_states = encoder_hidden_states if is_cross_attention else hidden_states
-        attention_mask = encoder_attention_mask if is_cross_attention else attention_mask
-
         # determine input shapes
         bsz, tgt_len = hidden_states.shape[:-1]
-        src_len = encoder_hidden_states.shape[1] if is_cross_attention else tgt_len
+        src_len = tgt_len
 
         q_input_shape = (bsz, tgt_len, -1, self.attention_head_size)
         kv_input_shape = (bsz, src_len, -1, self.attention_head_size)
 
-        # get query proj
+        # get all proj
         query_layer = self.query(hidden_states).view(*q_input_shape).transpose(1, 2)
+        key_layer = self.key(hidden_states).view(*kv_input_shape).transpose(1, 2)
+        value_layer = self.value(hidden_states).view(*kv_input_shape).transpose(1, 2)
 
         if past_key_value is not None:
+            # decoder-only bert can have a simple dynamic cache for example
+            current_past_key_value = past_key_value
             if isinstance(past_key_value, EncoderDecoderCache):
-                is_updated = past_key_value.is_updated.get(self.layer_idx)
-                if is_cross_attention:
-                    # after the first generated id, we can subsequently re-use all key/value_layer from cache
-                    curr_past_key_value = past_key_value.cross_attention_cache
-                else:
-                    curr_past_key_value = past_key_value.self_attention_cache
-            else:
-                curr_past_key_value = past_key_value
+                current_past_key_value = past_key_value.self_attention_cache
 
-        if is_cross_attention and past_key_value is not None and is_updated:
-            # reuse k,v, cross_attentions
-            key_layer = curr_past_key_value.key_cache[self.layer_idx]
-            value_layer = curr_past_key_value.value_cache[self.layer_idx]
-        else:
-            key_layer = self.key(current_states).view(*kv_input_shape).transpose(1, 2)
-            value_layer = self.value(current_states).view(*kv_input_shape).transpose(1, 2)
-
-            if past_key_value is not None:
-                # save all key/value_layer to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_layer, value_layer = curr_past_key_value.update(
-                    key_layer, value_layer, self.layer_idx, {"cache_position": cache_position}
-                )
-                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention:
-                    past_key_value.is_updated[self.layer_idx] = True
+            # save all key/value_layer to cache to be re-used for fast auto-regressive generation
+            key_layer, value_layer = current_past_key_value.update(
+                key_layer,
+                value_layer,
+                self.layer_idx,
+                {"cache_position": cache_position},
+            )
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -318,6 +294,107 @@ class RobertaSelfAttention(nn.Module):
         )
         if self.is_decoder:
             outputs = outputs + (past_key_value,)
+        return outputs
+
+
+# Copied from transformers.models.bert.modeling_bert.BertCrossAttention with Bert->Roberta
+class RobertaCrossAttention(nn.Module):
+    def __init__(self, config, position_embedding_type=None, layer_idx=None):
+        super().__init__()
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+            raise ValueError(
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({config.num_attention_heads})"
+            )
+        self.config = config
+
+        self.num_attention_heads = config.num_attention_heads
+        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.scaling = self.attention_head_size**-0.5
+
+        self.query = nn.Linear(config.hidden_size, self.all_head_size)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size)
+
+        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        self.position_embedding_type = position_embedding_type or getattr(
+            config, "position_embedding_type", "absolute"
+        )
+        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
+            self.max_position_embeddings = config.max_position_embeddings
+            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
+
+        self.is_causal = False
+        self.layer_idx = layer_idx
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_value: Optional[EncoderDecoderCache] = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor]:
+        # determine input shapes
+        bsz, tgt_len = hidden_states.shape[:-1]
+        src_len = encoder_hidden_states.shape[1]
+
+        q_input_shape = (bsz, tgt_len, -1, self.attention_head_size)
+        kv_input_shape = (bsz, src_len, -1, self.attention_head_size)
+
+        # get query proj
+        query_layer = self.query(hidden_states).view(*q_input_shape).transpose(1, 2)
+
+        is_updated = past_key_value.is_updated.get(self.layer_idx) if past_key_value is not None else False
+        if past_key_value is not None and is_updated:
+            # reuse k,v, cross_attentions
+            key_layer = past_key_value.cross_attention_cache.key_cache[self.layer_idx]
+            value_layer = past_key_value.cross_attention_cache.value_cache[self.layer_idx]
+        else:
+            key_layer = self.key(encoder_hidden_states).view(*kv_input_shape).transpose(1, 2)
+            value_layer = self.value(encoder_hidden_states).view(*kv_input_shape).transpose(1, 2)
+
+            if past_key_value is not None:
+                # save all states to cache
+                key_layer, value_layer = past_key_value.cross_attention_cache.update(
+                    key_layer,
+                    value_layer,
+                    self.layer_idx,
+                )
+                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
+                past_key_value.is_updated[self.layer_idx] = True
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            if self.position_embedding_type != "absolute":
+                raise ValueError(
+                    f"You are using {self.config._attn_implementation} as attention type. However, non-absolute "
+                    'positional embeddings can not work with them. Please load the model with `attn_implementation="eager"`.'
+                )
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_layer,
+            key_layer,
+            value_layer,
+            encoder_attention_mask,
+            dropout=0.0 if not self.training else self.dropout.p,
+            scaling=self.scaling,
+            head_mask=head_mask,
+            # only for relevant for non-absolute positional embeddings
+            use_cache=past_key_value is not None,
+            **kwargs,
+        )
+        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
+
+        outputs = (
+            attn_output,
+            attn_weights,
+        )
+        outputs = outputs + (past_key_value,)
         return outputs
 
 
@@ -369,21 +446,17 @@ class RobertaAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
-        output_attentions: Optional[bool] = False,
+        past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> tuple[torch.Tensor]:
         self_outputs = self.self(
             hidden_states,
             attention_mask,
             head_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
             past_key_value,
-            output_attentions,
             cache_position,
+            **kwargs,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -433,8 +506,8 @@ class RobertaLayer(GradientCheckpointingLayer):
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = RobertaAttention(
-                config, position_embedding_type="absolute", is_causal=False, layer_idx=layer_idx
+            self.crossattention = RobertaCrossAttention(
+                config, position_embedding_type="absolute", layer_idx=layer_idx
             )
         self.intermediate = RobertaIntermediate(config)
         self.output = RobertaOutput(config)
@@ -446,21 +519,20 @@ class RobertaLayer(GradientCheckpointingLayer):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
-        output_attentions: Optional[bool] = False,
+        past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> tuple[torch.Tensor]:
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
             head_mask,
-            output_attentions=output_attentions,
             past_key_value=past_key_value,
             cache_position=cache_position,
+            **kwargs,
         )
         attention_output = self_attention_outputs[0]
 
-        # if decoder, the last output is tuple of self-attn cache
         if self.is_decoder:
             outputs = self_attention_outputs[1:-1]
         else:
@@ -475,13 +547,11 @@ class RobertaLayer(GradientCheckpointingLayer):
 
             cross_attention_outputs = self.crossattention(
                 attention_output,
-                attention_mask,
                 head_mask,
                 encoder_hidden_states,
                 encoder_attention_mask,
                 past_key_value,
-                output_attentions,
-                cache_position,
+                **kwargs,
             )
             attention_output = cross_attention_outputs[0]
             outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
@@ -517,7 +587,7 @@ class RobertaEncoder(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
@@ -542,7 +612,6 @@ class RobertaEncoder(nn.Module):
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
                 past_key_value=past_key_values,
-                output_attentions=output_attentions,
                 cache_position=cache_position,
             )
 
@@ -601,7 +670,7 @@ class RobertaPreTrainedModel(PreTrainedModel):
     config_class = RobertaConfig
     base_model_prefix = "roberta"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["RobertaEmbeddings", "RobertaSelfAttention"]
+    _no_split_modules = ["RobertaEmbeddings", "RobertaSelfAttention", "RobertaCrossAttention"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -689,7 +758,7 @@ class RobertaModel(RobertaPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
