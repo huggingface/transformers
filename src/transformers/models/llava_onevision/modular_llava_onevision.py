@@ -169,7 +169,9 @@ class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
         image_std: Optional[Union[float, list[float]]],
         do_pad: bool,
         batch_num_images: list[int],
+        disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
+        **kwargs,
     ) -> BatchFeature:
         processed_images = []
         image_sizes = []
@@ -208,7 +210,9 @@ class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
 
             # Group images by size for batched processing
             processed_image_patches_grouped = {}
-            grouped_image_patches, grouped_image_patches_index = group_images_by_shape(image_patches)
+            grouped_image_patches, grouped_image_patches_index = group_images_by_shape(
+                image_patches, disable_grouping=disable_grouping
+            )
             for shape, stacked_image_patches in grouped_image_patches.items():
                 if do_resize:
                     stacked_image_patches = self.resize(

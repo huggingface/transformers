@@ -28,6 +28,7 @@ from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import _flash_attention_forward, flash_attn_supports_top_left_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -37,7 +38,6 @@ from ...modeling_outputs import (
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
 from .configuration_nemotron import NemotronConfig
 
@@ -51,11 +51,17 @@ if is_torch_flex_attn_available():
 logger = logging.get_logger(__name__)
 
 
-def _cast_if_autocast_enabled(*args):
+def _cast_if_autocast_enabled(device_type, *args):
     if not torch.is_autocast_enabled():
         return args
     else:
-        return torch.cuda.amp.autocast_mode._cast(args, torch.get_autocast_gpu_dtype())
+        # NOTE: `torch.get_autocast_dtype` is there starting from PyTorch 2.4
+        target_dtype = (
+            torch.get_autocast_dtype(device_type)
+            if hasattr(torch, "get_autocast_dtype")
+            else torch.get_autocast_gpu_dtype()
+        )
+        return torch.amp.autocast_mode._cast(args, device_type, target_dtype)
 
 
 class NemotronLayerNorm1P(nn.LayerNorm):
@@ -71,12 +77,12 @@ class NemotronLayerNorm1P(nn.LayerNorm):
         super().__init__(normalized_shape, eps, elementwise_affine, bias, device, dtype)
 
     def forward(self, input: Tensor) -> Tensor:
-        args = _cast_if_autocast_enabled(input, self.normalized_shape, self.weight + 1, self.bias, self.eps)
-        with torch.amp.autocast(input.device.type, enabled=False):
+        device_type = input.device.type if input.device.type != "mps" else "cpu"
+        args = _cast_if_autocast_enabled(
+            device_type, input, self.normalized_shape, self.weight + 1, self.bias, self.eps
+        )
+        with torch.autocast(device_type=input.device.type, enabled=False):
             return F.layer_norm(*args)
-
-
-ALL_LAYERNORM_LAYERS.append(NemotronLayerNorm1P)
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
@@ -344,9 +350,15 @@ class NemotronFlashAttention2(NemotronAttention):
         # in fp32. (NemotronRMSNorm handles it correctly)
 
         input_dtype = query_states.dtype
+        device_type = query_states.device.type if query_states.device.type != "mps" else "cpu"
         if input_dtype == torch.float32:
             if torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_gpu_dtype()
+                # NOTE: `torch.get_autocast_dtype` is there starting from PyTorch 2.4
+                target_dtype = (
+                    torch.get_autocast_dtype(device_type)
+                    if hasattr(torch, "get_autocast_dtype")
+                    else torch.get_autocast_gpu_dtype()
+                )
             # Handle the case where the model is quantized
             elif hasattr(self.config, "_pre_quantization_dtype"):
                 target_dtype = self.config._pre_quantization_dtype
@@ -487,7 +499,7 @@ NEMOTRON_ATTENTION_CLASSES = {
 
 # copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 # no longer copied after attention refactors
-class NemotronDecoderLayer(nn.Module):
+class NemotronDecoderLayer(GradientCheckpointingLayer):
     # Ignore copy
     def __init__(self, config: NemotronConfig, layer_idx: int):
         super().__init__()
@@ -692,29 +704,16 @@ class NemotronModel(NemotronPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    causal_mask,
-                    position_ids,
-                    past_key_values,
-                    output_attentions,
-                    use_cache,
-                    cache_position,
-                    position_embeddings,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=causal_mask,
-                    position_ids=position_ids,
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                    position_embeddings=position_embeddings,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                position_ids=position_ids,
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                position_embeddings=position_embeddings,
+            )
 
             hidden_states = layer_outputs[0]
 

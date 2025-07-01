@@ -23,7 +23,6 @@ from transformers import (
     PaliGemmaConfig,
     PaliGemmaForConditionalGeneration,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
     is_flaky,
@@ -38,10 +37,6 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
-
-
-if is_vision_available():
-    pass
 
 
 class PaliGemma2VisionText2TextModelTester:

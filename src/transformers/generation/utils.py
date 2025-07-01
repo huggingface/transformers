@@ -558,7 +558,7 @@ class GenerationMixin(ContinuousMixin):
         **kwargs,
     ):
         """
-        Prepare the model inputs for generation. In includes operations like computing the 4D attention mask or
+        Prepare the model inputs for generation. It includes operations like computing the 4D attention mask or
         slicing inputs given the existing cache.
 
         See the forward pass in the model documentation for expected arguments (different models might have different

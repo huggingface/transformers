@@ -1793,6 +1793,25 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertTrue(isinstance(tiny_llama.model.norm, LigerRMSNorm))
 
     @require_liger_kernel
+    def test_use_liger_kernel_custom_config_patching(self):
+        # Ensure any monkey patching is cleaned up for subsequent tests
+        with patch("transformers.models.llama.modeling_llama"):
+            from liger_kernel.transformers import LigerRMSNorm
+
+            config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+            tiny_llama = LlamaForCausalLM(config)
+
+            args = TrainingArguments(
+                self.get_auto_remove_tmp_dir(),
+                use_liger_kernel=True,
+                liger_kernel_config={"rms_norm": False},  # Don't apply Liger's RMSNorm
+            )
+            Trainer(tiny_llama, args)
+
+            # Check that the RMSNorm kernel is not applied as specified in the config
+            self.assertFalse(isinstance(tiny_llama.model.norm, LigerRMSNorm))
+
+    @require_liger_kernel
     @require_torch_accelerator
     def test_use_liger_kernel_trainer(self):
         # Check that trainer still works with liger kernel applied
@@ -1804,6 +1823,29 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         args = TrainingArguments(
             self.get_auto_remove_tmp_dir(), learning_rate=1e-2, logging_steps=5, max_steps=20, use_liger_kernel=True
+        )
+        trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+
+        # Check this works
+        _ = trainer.train()
+
+    @require_liger_kernel
+    @require_torch_accelerator
+    def test_use_liger_kernel_custom_config_trainer(self):
+        # Check that trainer still works with liger kernel applied when using a custom config
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        args = TrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            learning_rate=1e-2,
+            logging_steps=5,
+            max_steps=20,
+            use_liger_kernel=True,
+            liger_kernel_config={"rms_norm": False, "cross_entropy": True, "fused_linear_cross_entropy": False},
         )
         trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
 
@@ -3020,6 +3062,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     # the test slower.
     @require_torch_non_multi_accelerator
     @run_test_using_subprocess
+    @run_first
     @slow
     def test_can_resume_training_lm(self):
         # Check if it works for a simple language modeling example
@@ -3475,7 +3518,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 )
 
     @slow
-    @run_first
     def test_trainer_eval_mrpc(self):
         MODEL_ID = "google-bert/bert-base-cased-finetuned-mrpc"
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
@@ -3492,7 +3534,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertLess(result["eval_loss"], 0.2)
 
     @slow
-    @run_first
     def test_trainer_eval_multiple(self):
         MODEL_ID = "openai-community/gpt2"
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
@@ -4083,6 +4124,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertListEqual(trainer.optimizer.param_groups[1]["params"], no_wd_params)
 
     @slow
+    @run_first
     @require_non_hpu
     @require_torch_multi_accelerator
     def test_end_to_end_example(self):
