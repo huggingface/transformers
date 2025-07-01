@@ -115,7 +115,7 @@ class BaseMixedInt8Test(unittest.TestCase):
     # Expected values with offload
     EXPECTED_OUTPUTS.add("Hello my name is John and I am a professional photographer based in")
     # Expected values on Intel XPU
-    EXPECTED_OUTPUTS.add("Hello my name is Alina. I have been working as a professiona")
+    EXPECTED_OUTPUTS.add("Hello my name is Alina. I have been working as a professional")
 
     def setUp(self):
         # Models and tokenizer
