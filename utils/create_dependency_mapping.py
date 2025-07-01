@@ -63,7 +63,16 @@ def find_priority_list(py_files):
         py_files: List of paths to the modular files
 
     Returns:
-        A tuple with the ordered files (list) and their dependencies (dict)
+        Ordered list of lists of files and their dependencies (dict)
+
+        For example, ordered_files might be:
+        [
+            ["../modular_llama.py", "../modular_gemma.py"],    # level 0
+            ["../modular_llama4.py", "../modular_gemma2.py"],  # level 1
+            ["../modular_glm4.py"],                            # level 2
+        ]
+        which means llama and gemma do not depend on any other modular models, while llama4 and gemma2
+        depend on the models in the first list, and glm4 depends on the models in the first and(or) second list.
     """
     dependencies = map_dependencies(py_files)
     ordered_files = topological_sort(dependencies)
