@@ -162,7 +162,7 @@ class CsmPreTrainedModel(PreTrainedModel):
 
 
 @auto_docstring
-class CsmDepthDecoderModel(LlamaModel):
+class CsmDepthDecoderModel(LlamaModel, CsmPreTrainedModel):
     config_class = CsmDepthDecoderConfig
 
     def __init__(self, config):
@@ -325,7 +325,7 @@ class CsmDepthDecoderForCausalLM(LlamaForCausalLM, GenerationMixin):
 
         return model_inputs
 
-    @can_return_tuple
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -337,8 +337,6 @@ class CsmDepthDecoderForCausalLM(LlamaForCausalLM, GenerationMixin):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
@@ -352,12 +350,6 @@ class CsmDepthDecoderForCausalLM(LlamaForCausalLM, GenerationMixin):
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
             input_ids=input_ids,
             backbone_last_hidden_state=backbone_last_hidden_state,
@@ -366,8 +358,6 @@ class CsmDepthDecoderForCausalLM(LlamaForCausalLM, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             cache_position=cache_position,
             **kwargs,
         )
@@ -461,8 +451,6 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
         self.backbone_model = CsmBackboneModel._from_config(config)
         self.depth_decoder = CsmDepthDecoderForCausalLM._from_config(config.depth_decoder_config)
         self.codec_model = AutoModel.from_config(config.codec_config)
-
-        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -647,8 +635,6 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
@@ -719,12 +705,6 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
         >>> output = model(**inputs)
         >>> output.loss.backward()
         ```"""
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         if input_ids is not None and input_ids.ndim == 2:
             merged_inputs = self._merge_input_ids_with_input_values(
                 input_ids, input_values, input_values_cutoffs, labels
@@ -740,8 +720,6 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             cache_position=cache_position,
             **kwargs,
         )
@@ -777,10 +755,9 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
                 input_ids=depth_decoder_input_ids,
                 backbone_last_hidden_state=backbone_last_hidden_states,
                 use_cache=use_cache,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
                 return_dict=True,
                 labels=depth_decoder_labels,
+                **kwargs,
             )
 
             depth_decoder_loss = depth_decoder_outputs.loss
