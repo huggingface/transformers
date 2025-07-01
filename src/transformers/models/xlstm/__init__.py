@@ -11,8 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-
 from typing import TYPE_CHECKING
 
 from ...utils import (
@@ -20,40 +18,14 @@ from ...utils import (
     _LazyModule,
     is_torch_available,
 )
-
-
-_import_structure = {
-    "configuration_xlstm": ["xLSTMConfig", "xLSTMOnnxConfig"],
-}
-
-try:
-    if not is_torch_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_xlstm"] = [
-        "xLSTMForCausalLM",
-        "xLSTMModel",
-        "xLSTMPreTrainedModel",
-    ]
+from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_xlstm import xLSTMConfig, xLSTMOnnxConfig
-
-    try:
-        if not is_torch_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_xlstm import (
-            xLSTMForCausalLM,
-            xLSTMModel,
-            xLSTMPreTrainedModel,
-        )
+    from configuration_xlstm import *
+    from modeling_xlstm import *
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    _file = globals()["__file__"]
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
