@@ -98,6 +98,11 @@ jobs:
           ${{ steps.repo_content.outputs.tests_quantization_dir }}
           EOF
 
+      # This checkout to the main branch
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: "0"
+
       - name: Run script to get jobs to run
         id: get_jobs
         run: |
