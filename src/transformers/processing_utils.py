@@ -248,7 +248,7 @@ class VideosKwargs(TypedDict, total=False):
             Metadata of the video containing information about total duration, fps and total number of frames.
         num_frames (`int`, *optional*):
             Maximum number of frames to sample when `do_sample_frames=True`.
-        fps (`float`, *optional*):
+        fps (`int` or `float`, *optional*):
             Target frames to sample per second when `do_sample_frames=True`.
         crop_size (`dict[str, int]`, *optional*):
             Desired output size when applying center-cropping.
@@ -277,7 +277,7 @@ class VideosKwargs(TypedDict, total=False):
     device: Optional[str]
     do_sample_frames: Optional[bool]
     video_metadata: Optional[Union[VideoMetadata, dict]]
-    fps: Optional[float]
+    fps: Optional[Union[int, float]]
     num_frames: Optional[int]
 
 
