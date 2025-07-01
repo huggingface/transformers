@@ -30,13 +30,21 @@ from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging
-from ..chameleon.modeling_chameleon import ChameleonPreTrainedModel, ChameleonVQVAEEncoderConvDownsample
-from ..llama.modeling_llama import LlamaDecoderLayer, LlamaForCausalLM, LlamaModel, TransformersKwargs
+from ..chameleon.modeling_chameleon import (
+    ChameleonDecoderLayer,
+    ChameleonPreTrainedModel,
+    ChameleonVQVAEEncoderConvDownsample,
+)
+from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaForCausalLM, LlamaModel, TransformersKwargs
 from ..siglip.modeling_siglip import SiglipAttention
 from .configuration_emu3 import Emu3Config, Emu3TextConfig, Emu3VQVAEConfig
 
 
 logger = logging.get_logger(__name__)
+
+
+class Emu3Attention(LlamaAttention):
+    pass
 
 
 # Has extra dropout which no other model in the library has
@@ -838,6 +846,10 @@ class Emu3PreTrainedModel(ChameleonPreTrainedModel, Emu3VQVAE):
     ]
     _supports_flex_attn = True
     _supports_attention_backend = True
+    _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
+        "hidden_states": (Emu3DecoderLayer, 0),
+        "attentions": (Emu3Attention, 1),
+    }
 
     def _init_weights(self, module):
         std = self.config.get_text_config().initializer_range
