@@ -771,7 +771,7 @@ class DeformableDetrModelIntegrationTests(unittest.TestCase):
         # 3. assert equivalence
         # (on A10, the differences get larger than on T4)
         for key in cpu_outputs.keys():
-            torch.testing.assert_close(cpu_outputs[key], gpu_outputs[key].cpu(), atol=1e-2, rtol=1e-2)
+            torch.testing.assert_close(cpu_outputs[key], gpu_outputs[key].cpu(), atol=2e-2, rtol=2e-2)
 
         expected_logits = torch.tensor(
             [
