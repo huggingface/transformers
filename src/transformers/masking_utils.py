@@ -203,6 +203,14 @@ def _ignore_causal_mask_sdpa(
         mask_indices += kv_offset
         padding_mask = padding_mask[:, mask_indices]
 
+    # Check if all tokens are non-padding, handling both boolean and non-boolean masks
+    all_tokens_valid = True
+    if padding_mask is not None:
+        if padding_mask.dtype == torch.bool:
+            all_tokens_valid = padding_mask.all()
+        else:
+            all_tokens_valid = not (padding_mask == 0).any()
+
     # When using `torch.export` or `torch.onnx.dynamo_export`, we must pass an example input, and `is_causal` behavior is
     # hard-coded to the forward. If a user exports a model with query_length > 1, the exported model will hard-code `is_causal=True`
     # which is in general wrong (see https://github.com/pytorch/pytorch/issues/108108). Thus, we only set
@@ -214,7 +222,7 @@ def _ignore_causal_mask_sdpa(
         # in this case we need to add special patterns to the mask so cannot be skipped otherwise
         and (local_attention_size is None or kv_length < local_attention_size)
         # In this case, we need to add padding to the mask, so cannot be skipped otherwise
-        and (padding_mask is None or padding_mask.all())
+        and (padding_mask is None or all_tokens_valid)
     ):
         return True
 
@@ -513,9 +521,14 @@ def flash_attention_mask(
         # Here we need to slice from the right if using sliding or chunked (for full attention, this is equivalent to doing nothing)
         attention_mask = attention_mask[:, -kv_length:]
         # We only return an actual mask if there is at least 1 padding token, otherwise we return `None` and use `is_causal` in FA2
-        # (note that the attention_mask is a boolean dtype here)
-        if attention_mask.all():
-            attention_mask = None
+        # For boolean masks, check if all values are True
+        # For non-boolean masks, check if there are any zero values (indicating padding)
+        if attention_mask.dtype == torch.bool:
+            if attention_mask.all():
+                attention_mask = None
+        else:
+            if not (attention_mask == 0).any():
+                attention_mask = None
 
     return attention_mask
 
@@ -645,7 +658,14 @@ def _preprocess_mask_arguments(
 
     # Move the mask to correct device, and potentially switch dtype for efficiency
     if attention_mask is not None and attention_mask.ndim == 2:
-        attention_mask = attention_mask.to(device=cache_position.device, dtype=torch.bool)
+        unique_values = torch.unique(attention_mask)
+        is_binary_mask = len(unique_values) <= 2 and all(
+            torch.isclose(val, torch.tensor(0.0)) or torch.isclose(val, torch.tensor(1.0)) for val in unique_values
+        )
+        if is_binary_mask:
+            attention_mask = attention_mask.to(device=cache_position.device, dtype=torch.bool)
+        else:
+            attention_mask = attention_mask.to(device=cache_position.device)
 
     # If using a cache, it can give all informations about mask sizes based on seen tokens
     if past_key_values is not None:
