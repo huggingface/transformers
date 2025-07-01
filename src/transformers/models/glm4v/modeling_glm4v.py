@@ -279,14 +279,15 @@ def eager_attention_forward(
 class Glm4vVisionAttention(nn.Module):
     def __init__(self, config: Glm4vVisionConfig) -> None:
         super().__init__()
-        self.config = config
+        self.dim = config.hidden_size
         self.num_heads = config.num_heads
-        self.head_dim = config.hidden_size // self.num_heads
-        self.num_key_value_groups = 1
-        self.scale = self.head_dim**-0.5
-        self.attention_dropout = config.attention_dropout
+        self.head_dim = self.dim // self.num_heads
+        self.num_key_value_groups = 1  # needed for eager attention
         self.qkv = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=config.attention_bias)
         self.proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
+        self.scaling = self.head_dim**-0.5
+        self.config = config
+        self.attention_dropout = config.attention_dropout
         self.is_causal = False
 
     def forward(
@@ -295,23 +296,31 @@ class Glm4vVisionAttention(nn.Module):
         cu_seqlens: torch.Tensor,
         rotary_pos_emb: Optional[torch.Tensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        attention_mask: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
         query_states, key_states, value_states = (
             self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
         )
-
-        cos, sin = position_embeddings
+        if position_embeddings is None:
+            logger.warning_once(
+                "The attention layers in this model are transitioning from computing the RoPE embeddings internally "
+                "through `rotary_pos_emb` (2D tensor of RoPE theta values), to using externally computed "
+                "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.54 `rotary_pos_emb` will be "
+                "removed and `position_embeddings` will be mandatory."
+            )
+            emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
+            cos = emb.cos()
+            sin = emb.sin()
+        else:
+            cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
 
         query_states = query_states.transpose(0, 1).unsqueeze(0)
         key_states = key_states.transpose(0, 1).unsqueeze(0)
         value_states = value_states.transpose(0, 1).unsqueeze(0)
-
-        attention_mask = torch.zeros([1, 1, seq_length, seq_length], device=query_states.device, dtype=torch.bool)
-        for i in range(1, len(cu_seqlens)):
-            attention_mask[..., cu_seqlens[i - 1] : cu_seqlens[i], cu_seqlens[i - 1] : cu_seqlens[i]] = True
+        max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -322,13 +331,17 @@ class Glm4vVisionAttention(nn.Module):
             query_states,
             key_states,
             value_states,
-            attention_mask,
+            attention_mask=attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scale,
-            is_causal=self.is_causal,
+            scaling=self.scaling,
+            cu_seq_lens_q=cu_seqlens,  # pass cu seq lens for FA2
+            cu_seq_lens_k=cu_seqlens,
+            max_length_q=max_seqlen,
+            max_length_k=max_seqlen,
+            is_causal=False,
             **kwargs,
         )
-        attn_output = attn_output.squeeze(0)
+
         attn_output = attn_output.reshape(seq_length, -1).contiguous()
         attn_output = self.proj(attn_output)
         return attn_output
@@ -348,6 +361,7 @@ class Glm4vVisionBlock(GradientCheckpointingLayer):
         cu_seqlens: torch.Tensor,
         rotary_pos_emb: Optional[torch.Tensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> torch.Tensor:
         hidden_states = hidden_states + self.attn(
@@ -355,6 +369,7 @@ class Glm4vVisionBlock(GradientCheckpointingLayer):
             cu_seqlens=cu_seqlens,
             rotary_pos_emb=rotary_pos_emb,
             position_embeddings=position_embeddings,
+            attention_mask=attention_mask,
             **kwargs,
         )
         hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
@@ -452,6 +467,25 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
         return rotary_pos_emb, pos_ids
 
+    def _prepare_attention_mask(self, inputs_tensor: torch.Tensor, cu_seqlens: torch.Tensor) -> torch.Tensor:
+        # Flash Attention 2 doesn't need a 4D mask and relies on `cu_seqlens/max_seqlen`
+        # NOTE: the created attention masl only approximates the ragged FA2 attention by
+        # allowing bidirectional attention within `cu_seqlens` blocks, and not attending between
+        # blocks. Though it will not be a 100% match for FA2's `varlen` path
+        if self.config._attn_implementation == "flash_attention_2":
+            return None
+
+        seq_length = inputs_tensor.shape[0]
+        attention_mask = torch.full(
+            [1, 1, seq_length, seq_length],
+            torch.finfo(inputs_tensor.dtype).min,
+            device=inputs_tensor.device,
+            dtype=inputs_tensor.dtype,
+        )
+        for i in range(1, len(cu_seqlens)):
+            attention_mask[..., cu_seqlens[i - 1] : cu_seqlens[i], cu_seqlens[i - 1] : cu_seqlens[i]] = 0
+        return attention_mask
+
     def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
         """
         Args:
@@ -481,14 +515,15 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
         seqlens = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
         hidden_states = self.embeddings(hidden_states, seqlens, grid_thw, image_type_ids[:, 0], image_type_ids[:, 1])
+        attention_mask = self._prepare_attention_mask(hidden_states, cu_seqlens=cu_seqlens)
 
         for blk in self.blocks:
-            if self.gradient_checkpointing and self.training:
-                hidden_states = self._gradient_checkpointing_func(
-                    blk.__call__, hidden_states, cu_seqlens, None, position_embeddings
-                )
-            else:
-                hidden_states = blk(hidden_states, cu_seqlens=cu_seqlens, position_embeddings=position_embeddings)
+            hidden_states = blk(
+                hidden_states,
+                cu_seqlens=cu_seqlens,
+                position_embeddings=position_embeddings,
+                attention_mask=attention_mask,
+            )
 
         hidden_states = self.post_layernorm(hidden_states)
 
