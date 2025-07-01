@@ -185,6 +185,10 @@ class CvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model_get_set_embeddings(self):
         pass
 
+    # Larger differences on A10 than T4
+    def test_batching_equivalence(self, atol=2e-4, rtol=2e-4):
+        super().test_batching_equivalence(atol=atol, rtol=rtol)
+
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
