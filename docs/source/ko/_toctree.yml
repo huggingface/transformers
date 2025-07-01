@@ -77,6 +77,8 @@
         title: 이미지 특징 추출
       - local: tasks/mask_generation
         title: 마스크 생성
+      - local: tasks/keypoint_detection
+        title: 키포인트 탐지
       - local: tasks/knowledge_distillation_for_image_classification
         title: 컴퓨터 비전(이미지 분류)를 위한 지식 증류(knowledge distillation)
     title: 컴퓨터 비전
@@ -95,6 +97,8 @@
     sections:
     - local: generation_strategies
       title: 텍스트 생성 전략 사용자 정의
+    - local: serving
+      title: 모델 서빙하기
     title: 생성
   - isExpanded: false
     sections:
@@ -121,6 +125,8 @@
     title: Amazon SageMaker에서 학습 실행하기
   - local: serialization
     title: ONNX로 내보내기
+  - local: gpu_selection
+    title: GPU 선택하기
   - local: tflite
     title: TFLite로 내보내기
   - local: torchscript
@@ -352,8 +358,8 @@
         title: (번역중) DistilBERT
       - local: in_translation
         title: (번역중) DPR
-      - local: in_translation
-        title: (번역중) ELECTRA
+      - local: model_doc/electra
+        title: ELECTRA
       - local: model_doc/encoder-decoder
         title: 인코더 디코더 모델
       - local: in_translation
@@ -480,8 +486,8 @@
         title: (번역중) RemBERT
       - local: in_translation
         title: (번역중) RetriBERT
-      - local: in_translation
-        title: (번역중) RoBERTa
+      - local: model_doc/roberta
+        title: RoBERTa
       - local: in_translation
         title: (번역중) RoBERTa-PreLayerNorm
       - local: in_translation
@@ -720,6 +726,8 @@
         title: Qwen2VL
       - local: in_translation
         title: (번역중) Segment Anything
+      - local: model_doc/siglip
+        title: SigLIP
       - local: in_translation
         title: (번역중) Speech Encoder Decoder Models
       - local: in_translation

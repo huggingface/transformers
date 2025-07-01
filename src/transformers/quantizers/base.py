@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 from ..utils import is_torch_available
 from ..utils.quantization_config import QuantizationConfigMixin, QuantizationMethod
@@ -38,9 +38,9 @@ class HfQuantizer(ABC):
     Attributes
         quantization_config (`transformers.utils.quantization_config.QuantizationConfigMixin`):
             The quantization config that defines the quantization parameters of your model that you want to quantize.
-        modules_to_not_convert (`List[str]`, *optional*):
+        modules_to_not_convert (`list[str]`, *optional*):
             The list of module names to not convert when quantizing the model.
-        required_packages (`List[str]`, *optional*):
+        required_packages (`list[str]`, *optional*):
             The list of required pip packages to install prior to using the quantizer
         requires_calibration (`bool`):
             Whether the quantization method requires to calibrate the model before using it.
@@ -79,7 +79,7 @@ class HfQuantizer(ABC):
         """
         return torch_dtype
 
-    def update_device_map(self, device_map: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    def update_device_map(self, device_map: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
         """
         Override this method if you want to pass a override the existing device map with a new
         one. E.g. for bitsandbytes, since `accelerate` is a hard requirement, if no device_map is
@@ -103,50 +103,50 @@ class HfQuantizer(ABC):
         """
         return torch_dtype
 
-    def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
+    def update_missing_keys(self, model, missing_keys: list[str], prefix: str) -> list[str]:
         """
         Override this method if you want to adjust the `missing_keys`.
 
         Args:
-            missing_keys (`List[str]`, *optional*):
+            missing_keys (`list[str]`, *optional*):
                 The list of missing keys in the checkpoint compared to the state dict of the model
         """
         return missing_keys
 
-    def update_unexpected_keys(self, model, unexpected_keys: List[str], prefix: str) -> List[str]:
+    def update_unexpected_keys(self, model, unexpected_keys: list[str], prefix: str) -> list[str]:
         """
         Override this method if you want to adjust the `unexpected_keys`.
 
         Args:
-            unexpected_keys (`List[str]`, *optional*):
+            unexpected_keys (`list[str]`, *optional*):
                 The list of unexpected keys in the checkpoint compared to the state dict of the model
         """
         return unexpected_keys
 
-    def update_missing_keys_after_loading(self, model, missing_keys: List[str], prefix: str) -> List[str]:
+    def update_missing_keys_after_loading(self, model, missing_keys: list[str], prefix: str) -> list[str]:
         """
         Override this method if you want to adjust the `missing_keys` after loading the model params,
         but before the model is post-processed.
 
         Args:
-            missing_keys (`List[str]`, *optional*):
+            missing_keys (`list[str]`, *optional*):
                 The list of missing keys in the checkpoint compared to the state dict of the model
         """
         return missing_keys
 
-    def update_expected_keys(self, model, expected_keys: List[str], loaded_keys: List[str]) -> List[str]:
+    def update_expected_keys(self, model, expected_keys: list[str], loaded_keys: list[str]) -> list[str]:
         """
         Override this method if you want to adjust the `update_expected_keys`.
 
         Args:
-            expected_keys (`List[str]`, *optional*):
+            expected_keys (`list[str]`, *optional*):
                 The list of the expected keys in the initialized model.
-            loaded_keys (`List[str]`, *optional*):
+            loaded_keys (`list[str]`, *optional*):
                 The list of the loaded keys in the checkpoint.
         """
         return expected_keys
 
-    def get_special_dtypes_update(self, model, torch_dtype: "torch.dtype") -> Dict[str, "torch.dtype"]:
+    def get_special_dtypes_update(self, model, torch_dtype: "torch.dtype") -> dict[str, "torch.dtype"]:
         """
         returns dtypes for modules that are not quantized - used for the computation of the device_map in case
         one passes a str as a device_map. The method will use the `modules_to_not_convert` that is modified
@@ -165,7 +165,7 @@ class HfQuantizer(ABC):
             if any(m in name for m in self.modules_to_not_convert)
         }
 
-    def adjust_max_memory(self, max_memory: Dict[str, Union[int, str]]) -> Dict[str, Union[int, str]]:
+    def adjust_max_memory(self, max_memory: dict[str, Union[int, str]]) -> dict[str, Union[int, str]]:
         """adjust max_memory argument for infer_auto_device_map() if extra memory is needed for quantization"""
         return max_memory
 
@@ -174,7 +174,7 @@ class HfQuantizer(ABC):
         model: "PreTrainedModel",
         param_value: "torch.Tensor",
         param_name: str,
-        state_dict: Dict[str, Any],
+        state_dict: dict[str, Any],
         **kwargs,
     ) -> bool:
         """
@@ -239,7 +239,7 @@ class HfQuantizer(ABC):
 
     def dequantize(self, model):
         """
-        Potentially dequantize the model to retrive the original model, with some loss in accuracy / performance.
+        Potentially dequantize the model to retrieve the original model, with some loss in accuracy / performance.
         Note not all quantization schemes support this.
         """
         model = self._dequantize(model)
@@ -252,6 +252,17 @@ class HfQuantizer(ABC):
 
         return model
 
+    def get_cuda_warm_up_factor(self):
+        """
+        The factor to be used in `caching_allocator_warmup` to get the number of bytes to pre-allocate to warm up cuda.
+        A factor of 2 means we allocate all bytes in the empty model (since we allocate in fp16), a factor of 4 means
+        we allocate half the memory of the weights residing in the empty model, etc...
+        """
+        # By default we return 4, i.e. half the model size (this corresponds to the case where the model is not
+        # really pre-processed, i.e. we do not have the info that weights are going to be 8 bits before actual
+        # weight loading)
+        return 4
+
     def _dequantize(self, model):
         raise NotImplementedError(
             f"{self.quantization_config.quant_method} has no implementation of `dequantize`, please raise an issue on GitHub."
@@ -260,8 +271,8 @@ class HfQuantizer(ABC):
     @staticmethod
     def get_modules_to_not_convert(
         model: "PreTrainedModel",
-        skip_modules: Optional[List[str]] = None,
-        keep_in_fp32_modules: Optional[List[str]] = None,
+        skip_modules: Optional[list[str]] = None,
+        keep_in_fp32_modules: Optional[list[str]] = None,
         add_default_skips: bool = False,
     ):
         from ..integrations import get_keys_to_not_convert

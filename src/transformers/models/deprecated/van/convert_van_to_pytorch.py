@@ -22,7 +22,7 @@ import sys
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -41,7 +41,7 @@ logger = logging.get_logger(__name__)
 @dataclass
 class Tracker:
     module: nn.Module
-    traced: List[nn.Module] = field(default_factory=list)
+    traced: list[nn.Module] = field(default_factory=list)
     handles: list = field(default_factory=list)
 
     def _forward_hook(self, m, inputs: Tensor, outputs: Tensor):
@@ -68,8 +68,8 @@ class ModuleTransfer:
     src: nn.Module
     dest: nn.Module
     verbose: int = 0
-    src_skip: List = field(default_factory=list)
-    dest_skip: List = field(default_factory=list)
+    src_skip: list = field(default_factory=list)
+    dest_skip: list = field(default_factory=list)
 
     def __call__(self, x: Tensor):
         """
@@ -91,7 +91,7 @@ class ModuleTransfer:
         for dest_m, src_m in zip(dest_traced, src_traced):
             dest_m.load_state_dict(src_m.state_dict())
             if self.verbose == 1:
-                print(f"Transfered from={src_m} to={dest_m}")
+                print(f"Transferred from={src_m} to={dest_m}")
 
 
 def copy_parameters(from_model: nn.Module, our_model: nn.Module) -> nn.Module:

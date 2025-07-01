@@ -91,6 +91,8 @@ Tensor parallelism distributes large tensor computations across multiple GPUs. T
 
 Tensor parallelism is effective for training large models that don't fit into the memory of a single GPU. It is also faster and more efficient because each GPU can process its tensor slice in parallel, and it can be combined with other parallelism methods. Like other parallelism methods though, tensor parallelism adds communication overhead between GPUs.
 
+Refer to the [Tensor parallelism](./perf_infer_gpu_multi) guide to learn how to use it for inference.
+
 ## Hybrid parallelism
 
 Parallelism methods can be combined to achieve even greater memory savings and more efficiently train models with billions of parameters.
@@ -111,7 +113,7 @@ This approach optimizes parallel data processing by reducing idle GPU utilizatio
 
 Data, pipeline and model parallelism combine to form [3D parallelism](https://www.microsoft.com/en-us/research/blog/deepspeed-extreme-scale-model-training-for-everyone/) to optimize memory and compute efficiency.
 
-Memory effiiciency is achieved by splitting the model across GPUs and also dividing it into stages to create a pipeline. This allows GPUs to work in parallel on micro-batches of data, reducing the memory usage of the model, optimizer, and activations.
+Memory efficiency is achieved by splitting the model across GPUs and also dividing it into stages to create a pipeline. This allows GPUs to work in parallel on micro-batches of data, reducing the memory usage of the model, optimizer, and activations.
 
 Compute efficiency is enabled by ZeRO data parallelism where each GPU only stores a slice of the model, optimizer, and activations. This allows higher communication bandwidth between data parallel nodes because communication can occur independently or in parallel with the other pipeline stages.
 

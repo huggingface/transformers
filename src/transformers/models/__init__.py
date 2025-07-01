@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from .albert import *
     from .align import *
     from .altclip import *
+    from .arcee import *
     from .aria import *
     from .audio_spectrogram_transformer import *
     from .auto import *
@@ -40,6 +41,7 @@ if TYPE_CHECKING:
     from .bigbird_pegasus import *
     from .biogpt import *
     from .bit import *
+    from .bitnet import *
     from .blenderbot import *
     from .blenderbot_small import *
     from .blip import *
@@ -61,14 +63,17 @@ if TYPE_CHECKING:
     from .cohere import *
     from .cohere2 import *
     from .colpali import *
+    from .colqwen2 import *
     from .conditional_detr import *
     from .convbert import *
     from .convnext import *
     from .convnextv2 import *
     from .cpm import *
     from .cpmant import *
+    from .csm import *
     from .ctrl import *
     from .cvt import *
+    from .d_fine import *
     from .dab_detr import *
     from .dac import *
     from .data2vec import *
@@ -76,12 +81,14 @@ if TYPE_CHECKING:
     from .deberta import *
     from .deberta_v2 import *
     from .decision_transformer import *
+    from .deepseek_v3 import *
     from .deformable_detr import *
     from .deit import *
     from .deprecated import *
     from .depth_anything import *
     from .depth_pro import *
     from .detr import *
+    from .dia import *
     from .dialogpt import *
     from .diffllama import *
     from .dinat import *
@@ -90,6 +97,7 @@ if TYPE_CHECKING:
     from .distilbert import *
     from .dit import *
     from .donut import *
+    from .dots1 import *
     from .dpr import *
     from .dpt import *
     from .efficientnet import *
@@ -100,6 +108,7 @@ if TYPE_CHECKING:
     from .ernie import *
     from .esm import *
     from .falcon import *
+    from .falcon_h1 import *
     from .falcon_mamba import *
     from .fastspeech2_conformer import *
     from .flaubert import *
@@ -127,11 +136,13 @@ if TYPE_CHECKING:
     from .granite import *
     from .granite_speech import *
     from .granitemoe import *
+    from .granitemoehybrid import *
     from .granitemoeshared import *
     from .grounding_dino import *
     from .groupvit import *
     from .helium import *
     from .herbert import *
+    from .hgnet_v2 import *
     from .hiera import *
     from .hubert import *
     from .ibert import *
@@ -143,15 +154,19 @@ if TYPE_CHECKING:
     from .informer import *
     from .instructblip import *
     from .instructblipvideo import *
+    from .internvl import *
     from .jamba import *
+    from .janus import *
     from .jetmoe import *
     from .kosmos2 import *
+    from .kyutai_speech_to_text import *
     from .layoutlm import *
     from .layoutlmv2 import *
     from .layoutlmv3 import *
     from .layoutxlm import *
     from .led import *
     from .levit import *
+    from .lightglue import *
     from .lilt import *
     from .llama import *
     from .llama4 import *
@@ -176,9 +191,11 @@ if TYPE_CHECKING:
     from .megatron_gpt2 import *
     from .mgp_str import *
     from .mimi import *
+    from .minimax import *
     from .mistral import *
     from .mistral3 import *
     from .mixtral import *
+    from .mlcd import *
     from .mllama import *
     from .mluke import *
     from .mobilebert import *
@@ -228,6 +245,7 @@ if TYPE_CHECKING:
     from .plbart import *
     from .poolformer import *
     from .pop2piano import *
+    from .prompt_depth_anything import *
     from .prophetnet import *
     from .pvt import *
     from .pvt_v2 import *
@@ -236,6 +254,8 @@ if TYPE_CHECKING:
     from .qwen2_audio import *
     from .qwen2_moe import *
     from .qwen2_vl import *
+    from .qwen3 import *
+    from .qwen3_moe import *
     from .rag import *
     from .recurrent_gemma import *
     from .reformer import *
@@ -250,12 +270,14 @@ if TYPE_CHECKING:
     from .rt_detr_v2 import *
     from .rwkv import *
     from .sam import *
+    from .sam_hq import *
     from .seamless_m4t import *
     from .seamless_m4t_v2 import *
     from .segformer import *
     from .seggpt import *
     from .sew import *
     from .sew_d import *
+    from .shieldgemma2 import *
     from .siglip import *
     from .siglip2 import *
     from .smolvlm import *
@@ -274,10 +296,12 @@ if TYPE_CHECKING:
     from .swinv2 import *
     from .switch_transformers import *
     from .t5 import *
+    from .t5gemma import *
     from .table_transformer import *
     from .tapas import *
     from .textnet import *
     from .time_series_transformer import *
+    from .timesfm import *
     from .timesformer import *
     from .timm_backbone import *
     from .timm_wrapper import *
@@ -305,6 +329,7 @@ if TYPE_CHECKING:
     from .vitpose_backbone import *
     from .vits import *
     from .vivit import *
+    from .vjepa2 import *
     from .wav2vec2 import *
     from .wav2vec2_bert import *
     from .wav2vec2_conformer import *

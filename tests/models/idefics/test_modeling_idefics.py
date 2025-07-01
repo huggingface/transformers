@@ -315,19 +315,10 @@ class IdeficsModelTester:
     def prepare_pixel_values(self):
         return floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
-    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @unittest.skip(reason="Idefics has a hard requirement on SDPA, skipping this test")
-    def test_eager_matches_sdpa_inference(
-        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
-    ):
-        pass
-
 
 @require_torch
-class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (IdeficsModel, IdeficsForVisionText2Text) if is_torch_available() else ()
-    # Doesn't run generation tests here -- idefics has a dedicated tester for generation tests below
-    all_generative_model_classes = ()
     pipeline_model_mapping = (
         {"feature-extraction": IdeficsModel, "image-text-to-text": IdeficsForVisionText2Text}
         if is_torch_available()
@@ -336,6 +327,7 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
+    has_attentions = False  # only supports SDOA and thus no attention probs returned
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
@@ -494,6 +486,31 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_retain_grad_hidden_states_attentions(self):
         return
 
+    @pytest.mark.generate
+    @unittest.skip(reason="""IDEFICS cannot generate with no images provided!""")
+    def test_generate_without_input_ids(self):
+        pass
+
+    @pytest.mark.generate
+    @unittest.skip(reason="""IDEFICS cannot generate with no images provided!""")
+    def test_generate_continue_from_inputs_embeds(self):
+        pass
+
+    @pytest.mark.generate
+    @unittest.skip(reason="""IDEFICS cannot do contrastive generation yet and it is not worth fixing""")
+    def test_contrastive_generate(self):
+        pass
+
+    @pytest.mark.generate
+    @unittest.skip(reason="""IDEFICS cannot do contrastive generation yet and it is not worth fixing""")
+    def test_contrastive_generate_low_memory(self):
+        pass
+
+    @pytest.mark.generate
+    @unittest.skip(reason="""IDEFICS cannot do contrastive generation yet and it is not worth fixing""")
+    def test_contrastive_generate_dict_outputs_use_cache(self):
+        pass
+
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
@@ -502,7 +519,8 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -584,6 +602,12 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @unittest.skip("Idefics has a hard requirement on SDPA")
     def test_sdpa_can_dispatch_non_composite_models(self):
+        pass
+
+    @unittest.skip(reason="Idefics can't do text-only inference")
+    def test_generate_from_random_inputs_embeds(
+        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
         pass
 
 
@@ -840,10 +864,6 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
     def test_generate_with_static_cache(self):
         pass
 
-    @unittest.skip(reason="IDEFICS cannot compile due to dynamic control flow when checking inputs")
-    def test_generate_compile_model_forward(self):
-        pass
-
     @unittest.skip(reason="We only test the model that takes in multiple images")
     def test_model(self):
         pass
@@ -876,6 +896,12 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
         "Idefics has a separate test runner for generation tests with complex inheritance, causing this check to fail"
     )
     def test_generation_tester_mixin_inheritance(self):
+        pass
+
+    @unittest.skip(reason="Idefics can't do text-only inference")
+    def test_generate_from_random_inputs_embeds(
+        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
         pass
 
 

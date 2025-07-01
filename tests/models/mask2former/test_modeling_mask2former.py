@@ -18,7 +18,7 @@ import unittest
 import numpy as np
 
 from tests.test_modeling_common import floats_tensor
-from transformers import Mask2FormerConfig, is_torch_available, is_vision_available
+from transformers import AutoModelForImageClassification, Mask2FormerConfig, is_torch_available, is_vision_available
 from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
 from transformers.testing_utils import (
     require_timm,
@@ -33,7 +33,7 @@ from transformers.testing_utils import (
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -349,6 +349,58 @@ class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
                 self.assertEqual(model.pixel_level_module.encoder.out_indices, [1, 2, 3])
             elif model.__class__.__name__ == "Mask2FormerForUniversalSegmentation":
                 self.assertEqual(model.model.pixel_level_module.encoder.out_indices, [1, 2, 3])
+
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    if (
+                        "self_attn.sampling_offsets.bias" in name
+                        or "self_attn.value_proj.weight" in name
+                        or "self_attn.output_proj.weight" in name
+                    ):
+                        continue
+                    self.assertIn(
+                        ((param.data.mean() * 1e9).round() / 1e9).item(),
+                        [0.0, 1.0],
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
+
+    def test_initialization_pretrained_backbone(self):
+        backbone_name = "microsoft/resnet-18"
+
+        # load Mask2Former config with a pretrained backbone
+        config = Mask2FormerConfig(
+            backbone=backbone_name,
+            use_pretrained_backbone=True,
+        )
+
+        # load pretrained backbone
+        backbone_model = AutoModelForImageClassification.from_pretrained(backbone_name, device_map=torch_device)
+
+        def params_match(params1, params2):
+            return all((p1 == p2).all() for p1, p2 in zip(params1, params2))
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device).eval()
+            if model.__class__.__name__ == "Mask2FormerModel":
+                self.assertTrue(
+                    params_match(
+                        backbone_model.base_model.encoder.parameters(),
+                        model.pixel_level_module.encoder.encoder.parameters(),
+                    )
+                )
+            elif model.__class__.__name__ == "Mask2FormerForUniversalSegmentation":
+                self.assertTrue(
+                    params_match(
+                        backbone_model.base_model.encoder.parameters(),
+                        model.model.pixel_level_module.encoder.encoder.parameters(),
+                    )
+                )
 
 
 TOLERANCE = 1e-4

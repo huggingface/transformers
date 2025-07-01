@@ -14,35 +14,27 @@
 # limitations under the License.
 """Image processor class for Pixtral."""
 
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
-from ...image_utils import (
-    ImageInput,
-    PILImageResampling,
-    SizeDict,
-)
+from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    add_start_docstrings,
+    auto_docstring,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
     is_vision_available,
     logging,
 )
-from .image_processing_pixtral import (
-    get_resize_output_image_size,
-)
+from .image_processing_pixtral import get_resize_output_image_size
 
 
 logger = logging.get_logger(__name__)
@@ -61,17 +53,15 @@ if is_torchvision_available():
 
 
 class PixtralFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    patch_size: Optional[Dict[str, int]]
-
-
-@add_start_docstrings(
-    r"Constructs a fast ConvNeXT image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     """
-        patch_size (`Dict[str, int]` *optional*, defaults to `{"height": 16, "width": 16}`):
-            Size of the patches in the model, used to calculate the output image size. Can be overridden by `patch_size` in the `preprocess` method.
-    """,
-)
+    patch_size (`dict[str, int]` *optional*, defaults to `{"height": 16, "width": 16}`):
+        Size of the patches in the model, used to calculate the output image size. Can be overridden by `patch_size` in the `preprocess` method.
+    """
+
+    patch_size: Optional[dict[str, int]]
+
+
+@auto_docstring
 class PixtralImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
     image_mean = [0.48145466, 0.4578275, 0.40821073]
@@ -88,13 +78,7 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[PixtralFastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-    @add_start_docstrings(
-        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-        """
-        patch_size (`Dict[str, int]` *optional*, defaults to `{"height": 16, "width": 16}`):
-            Size of the patches in the model, used to calculate the output image size. Can be overridden by `patch_size` in the `preprocess` method.
-        """,
-    )
+    @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[PixtralFastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
@@ -139,18 +123,18 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
     # Adapted from transformers.models.pixtral.image_processing_pixtral.PixtralImageProcessor._pad_for_batching
     def _pad_for_batching(
         self,
-        pixel_values: List[torch.Tensor],
-        image_sizes: List[List[int]],
+        pixel_values: list[torch.Tensor],
+        image_sizes: list[list[int]],
     ):
         """
         Pads images on the `num_of_patches` dimension with zeros to form a batch of same number of patches.
         Args:
-            pixel_values (`List[torch.Tensor]`):
+            pixel_values (`list[torch.Tensor]`):
                 An array of pixel values of each images of shape (`batch_size`, `channels`, `height`, `width`)
-            image_sizes (`List[List[int]]`):
+            image_sizes (`list[list[int]]`):
                 A list of sizes for each image in `pixel_values` in (height, width) format.
         Returns:
-            List[`torch.Tensor`]: The padded images.
+            list[`torch.Tensor`]: The padded images.
         """
 
         max_shape = (max([size[0] for size in image_sizes]), max([size[1] for size in image_sizes]))
@@ -162,24 +146,25 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: List["torch.Tensor"],
+        images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        patch_size: Dict[str, int],
+        patch_size: dict[str, int],
         interpolation: Optional["F.InterpolationMode"],
         do_center_crop: bool,
-        crop_size: Dict[str, int],
+        crop_size: dict[str, int],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
+        disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
     ) -> BatchFeature:
         patch_size = get_size_dict(patch_size, default_to_square=True)
         patch_size = SizeDict(**patch_size)
         # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
@@ -191,7 +176,7 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
 
         # Group images by size for further processing
         # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         batch_image_sizes = [grouped_images_index[i][0] for i in range(len(grouped_images_index))]
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():

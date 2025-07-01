@@ -122,18 +122,10 @@ class AutoConfigTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             config.save_pretrained(tmp_dir)
             reloaded_config = AutoConfig.from_pretrained(tmp_dir, trust_remote_code=True)
+            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "configuration.py")))  # Assert we saved config code
+            # Assert we're pointing at local code and not another remote repo
+            self.assertEqual(reloaded_config.auto_map["AutoConfig"], "configuration.NewModelConfig")
         self.assertEqual(reloaded_config.__class__.__name__, "NewModelConfig")
-
-        # The configuration file is cached in the snapshot directory. So the module file is not changed after dumping
-        # to a temp dir. Because the revision of the configuration file is not changed.
-        # Test the dynamic module is loaded only once if the configuration file is not changed.
-        self.assertIs(config.__class__, reloaded_config.__class__)
-
-        # Test the dynamic module is reloaded if we force it.
-        reloaded_config = AutoConfig.from_pretrained(
-            "hf-internal-testing/test_dynamic_model", trust_remote_code=True, force_download=True
-        )
-        self.assertIsNot(config.__class__, reloaded_config.__class__)
 
     def test_from_pretrained_dynamic_config_conflict(self):
         class NewModelConfigLocal(BertConfig):

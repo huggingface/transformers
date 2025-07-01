@@ -52,7 +52,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.52.0.dev0")
+check_min_version("4.54.0.dev0")
 
 require_version("datasets>=1.18.0", "To fix: pip install -r examples/pytorch/speech-recognition/requirements.txt")
 
@@ -804,7 +804,7 @@ def main():
     if "common_voice" in data_args.dataset_name:
         kwargs["language"] = config_name
 
-    # make sure that adapter weights are saved seperately
+    # make sure that adapter weights are saved separately
     adapter_file = WAV2VEC2_ADAPTER_SAFE_FILE.format(data_args.target_language)
     adapter_file = os.path.join(training_args.output_dir, adapter_file)
     logger.info(f"Saving adapter weights under {adapter_file}...")

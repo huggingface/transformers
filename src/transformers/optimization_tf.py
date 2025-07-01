@@ -14,7 +14,6 @@
 # ==============================================================================
 """Functions and classes related to optimization (weight updates)."""
 
-import re
 from typing import Callable, Optional, Union
 
 import tensorflow as tf
@@ -134,7 +133,7 @@ def create_optimizer(
             The weight decay to use.
         power (`float`, *optional*, defaults to 1.0):
             The power to use for PolynomialDecay.
-        include_in_weight_decay (`List[str]`, *optional*):
+        include_in_weight_decay (`list[str]`, *optional*):
             List of the parameter names (or re patterns) to apply weight decay to. If none is passed, weight decay is
             applied to all parameters except bias and layer norm parameters.
     """
@@ -182,7 +181,7 @@ class AdamWeightDecay(Adam):
     Adam enables L2 weight decay and clip_by_global_norm on gradients. Just adding the square of the weights to the
     loss function is *not* the correct way of using L2 regularization/weight decay with Adam, since that will interact
     with the m and v parameters in strange ways as shown in [Decoupled Weight Decay
-    Regularization](https://arxiv.org/abs/1711.05101).
+    Regularization](https://huggingface.co/papers/1711.05101).
 
     Instead we want to decay the weights in a manner that doesn't interact with the m/v parameters. This is equivalent
     to adding the square of the weights to the loss with plain (non-momentum) SGD.
@@ -198,18 +197,18 @@ class AdamWeightDecay(Adam):
             The epsilon parameter in Adam, which is a small constant for numerical stability.
         amsgrad (`bool`, *optional*, defaults to `False`):
             Whether to apply AMSGrad variant of this algorithm or not, see [On the Convergence of Adam and
-            Beyond](https://arxiv.org/abs/1904.09237).
+            Beyond](https://huggingface.co/papers/1904.09237).
         weight_decay_rate (`float`, *optional*, defaults to 0.0):
             The weight decay to apply.
-        include_in_weight_decay (`List[str]`, *optional*):
+        include_in_weight_decay (`list[str]`, *optional*):
             List of the parameter names (or re patterns) to apply weight decay to. If none is passed, weight decay is
             applied to all parameters by default (unless they are in `exclude_from_weight_decay`).
-        exclude_from_weight_decay (`List[str]`, *optional*):
+        exclude_from_weight_decay (`list[str]`, *optional*):
             List of the parameter names (or re patterns) to exclude from applying weight decay to. If a
             `include_in_weight_decay` is passed, the names in it will supersede this list.
         name (`str`, *optional*, defaults to `"AdamWeightDecay"`):
             Optional name for the operations created when applying gradients.
-        kwargs (`Dict[str, Any]`, *optional*):
+        kwargs (`dict[str, Any]`, *optional*):
             Keyword arguments. Allowed to be {`clipnorm`, `clipvalue`, `lr`, `decay`}. `clipnorm` is clip gradients by
             norm; `clipvalue` is clip gradients by value, `decay` is included for backward compatibility to allow time
             inverse decay of learning rate. `lr` is included for backward compatibility, recommended to use
@@ -296,12 +295,12 @@ class AdamWeightDecay(Adam):
 
         if self._include_in_weight_decay:
             for r in self._include_in_weight_decay:
-                if re.search(r, param_name) is not None:
+                if r in param_name:
                     return True
 
         if self._exclude_from_weight_decay:
             for r in self._exclude_from_weight_decay:
-                if re.search(r, param_name) is not None:
+                if r in param_name:
                     return False
         return True
 

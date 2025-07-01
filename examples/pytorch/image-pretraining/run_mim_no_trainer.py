@@ -52,7 +52,7 @@ Any model supported by the AutoModelForMaskedImageModeling API can be used.
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.52.0.dev0")
+check_min_version("4.54.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/image-pretraining/requirements.txt")
 
@@ -778,9 +778,6 @@ def main():
                 output_dir = os.path.join(args.output_dir, output_dir)
             accelerator.save_state(output_dir)
 
-    if args.with_tracking:
-        accelerator.end_training()
-
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
         unwrapped_model = accelerator.unwrap_model(model)
@@ -797,6 +794,9 @@ def main():
                     repo_type="model",
                     token=args.hub_token,
                 )
+
+    accelerator.wait_for_everyone()
+    accelerator.end_training()
 
 
 if __name__ == "__main__":

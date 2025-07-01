@@ -43,7 +43,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING
 
     def get_test_pipeline(self, model, tokenizer, processor, image_processor, torch_dtype="float32"):
-        pipe = ImageTextToTextPipeline(model=model, processor=processor, torch_dtype=torch_dtype)
+        pipe = ImageTextToTextPipeline(model=model, processor=processor, torch_dtype=torch_dtype, max_new_tokens=10)
         image_token = getattr(processor.tokenizer, "image_token", "")
         examples = [
             {
@@ -63,6 +63,78 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
             outputs,
             [
                 {"input_text": ANY(str), "generated_text": ANY(str)},
+            ],
+        )
+
+    @require_torch
+    def test_small_model_pt_token_text_only(self):
+        pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
+        text = "What is the capital of France? Assistant:"
+
+        outputs = pipe(text=text)
+        self.assertEqual(
+            outputs,
+            [
+                {
+                    "input_text": "What is the capital of France? Assistant:",
+                    "generated_text": "What is the capital of France? Assistant: The capital of France is Paris.",
+                }
+            ],
+        )
+
+        messages = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Write a poem on Hugging Face, the company"},
+                    ],
+                },
+            ],
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "What is the capital of France?"},
+                    ],
+                },
+            ],
+        ]
+        outputs = pipe(text=messages)
+        self.assertEqual(
+            outputs,
+            [
+                [
+                    {
+                        "input_text": [
+                            {
+                                "role": "user",
+                                "content": [{"type": "text", "text": "Write a poem on Hugging Face, the company"}],
+                            }
+                        ],
+                        "generated_text": [
+                            {
+                                "role": "user",
+                                "content": [{"type": "text", "text": "Write a poem on Hugging Face, the company"}],
+                            },
+                            {
+                                "role": "assistant",
+                                "content": "Hugging Face, a company of minds\nWith tools and services that make our lives easier\nFrom",
+                            },
+                        ],
+                    }
+                ],
+                [
+                    {
+                        "input_text": [
+                            {"role": "user", "content": [{"type": "text", "text": "What is the capital of France?"}]}
+                        ],
+                        "generated_text": [
+                            {"role": "user", "content": [{"type": "text", "text": "What is the capital of France?"}]},
+                            {"role": "assistant", "content": "Paris"},
+                        ],
+                    }
+                ],
             ],
         )
 
@@ -89,11 +161,11 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
             [
                 {
                     "input_text": "<image> What this is? Assistant: This is",
-                    "generated_text": "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are sleeping and appear to be comfortable",
+                    "generated_text": "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are facing the camera, and they",
                 },
                 {
                     "input_text": "<image> What this is? Assistant: This is",
-                    "generated_text": "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are sleeping and appear to be comfortable",
+                    "generated_text": "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are facing the camera, and they",
                 },
             ],
         )
@@ -104,8 +176,8 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
         prompt = "a photo of"
 
-        outputs = pipe([image, image], text=[prompt, prompt])
-        outputs_batched = pipe([image, image], text=[prompt, prompt], batch_size=2)
+        outputs = pipe([image, image], text=[prompt, prompt], max_new_tokens=10)
+        outputs_batched = pipe([image, image], text=[prompt, prompt], batch_size=2, max_new_tokens=10)
         self.assertEqual(outputs, outputs_batched)
 
     @slow
@@ -124,7 +196,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                 ],
             }
         ]
-        outputs = pipe([image_ny, image_chicago], text=messages, return_full_text=False, max_new_tokens=10)
+        outputs = pipe([image_ny, image_chicago], text=messages, return_full_text=True, max_new_tokens=10)
         self.assertEqual(
             outputs,
             [
@@ -134,12 +206,37 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                             "role": "user",
                             "content": [
                                 {"type": "text", "text": "What’s the difference between these two images?"},
-                                {"type": "image"},
-                                {"type": "image"},
+                                {
+                                    "type": "image",
+                                    "image": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                                },
+                                {
+                                    "type": "image",
+                                    "image": "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg",
+                                },
                             ],
                         }
                     ],
-                    "generated_text": "The first image shows a statue of Liberty in the",
+                    "generated_text": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": "What’s the difference between these two images?"},
+                                {
+                                    "type": "image",
+                                    "image": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                                },
+                                {
+                                    "type": "image",
+                                    "image": "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg",
+                                },
+                            ],
+                        },
+                        {
+                            "role": "assistant",
+                            "content": "The first image shows a statue of Liberty in the",
+                        },
+                    ],
                 }
             ],
         )

@@ -51,7 +51,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.52.0.dev0")
+check_min_version("4.54.0.dev0")
 
 logging.basicConfig(level=logging.INFO)
 logger = get_logger(__name__)
@@ -67,9 +67,9 @@ def format_image_annotations_as_coco(
 
     Args:
         image_id (str): image id. e.g. "0001"
-        categories (List[int]): list of categories/class labels corresponding to provided bounding boxes
-        areas (List[float]): list of corresponding areas to provided bounding boxes
-        bboxes (List[Tuple[float]]): list of bounding boxes provided in COCO format
+        categories (list[int]): list of categories/class labels corresponding to provided bounding boxes
+        areas (list[float]): list of corresponding areas to provided bounding boxes
+        bboxes (list[tuple[float]]): list of bounding boxes provided in COCO format
             ([center_x, center_y, width, height] in absolute coordinates)
 
     Returns:
@@ -103,7 +103,7 @@ def convert_bbox_yolo_to_pascal(boxes: torch.Tensor, image_size: tuple[int, int]
 
     Args:
         boxes (torch.Tensor): Bounding boxes in YOLO format
-        image_size (Tuple[int, int]): Image size in format (height, width)
+        image_size (tuple[int, int]): Image size in format (height, width)
 
     Returns:
         torch.Tensor: Bounding boxes in Pascal VOC format (x_min, y_min, x_max, y_max)
@@ -759,9 +759,6 @@ def main():
 
     logger.info(f"Test metrics: {metrics}")
 
-    if args.with_tracking:
-        accelerator.end_training()
-
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
         unwrapped_model = accelerator.unwrap_model(model)
@@ -783,6 +780,9 @@ def main():
                     token=args.hub_token,
                     ignore_patterns=["epoch_*"],
                 )
+
+    accelerator.wait_for_everyone()
+    accelerator.end_training()
 
 
 if __name__ == "__main__":

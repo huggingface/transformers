@@ -33,7 +33,6 @@ from transformers.models.tapas.tokenization_tapas import (
 )
 from transformers.testing_utils import (
     require_pandas,
-    require_tensorflow_probability,
     require_tokenizers,
     require_torch,
     slow,
@@ -139,41 +138,6 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         input_text = "UNwant\u00e9d,running"
         output_text = "unwanted, running"
         return input_text, output_text
-
-    @require_tensorflow_probability
-    @slow
-    def test_tf_encode_plus_sent_to_model(self):
-        from transformers import TF_MODEL_MAPPING, TOKENIZER_MAPPING
-
-        MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(TF_MODEL_MAPPING, TOKENIZER_MAPPING)
-
-        tokenizers = self.get_tokenizers(do_lower_case=False)
-        for tokenizer in tokenizers:
-            with self.subTest(f"{tokenizer.__class__.__name__}"):
-                if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
-                    self.skipTest(f"{tokenizer.__class__} is not in the MODEL_TOKENIZER_MAPPING")
-
-                config_class, model_class = MODEL_TOKENIZER_MAPPING[tokenizer.__class__]
-                config = config_class()
-
-                if config.is_encoder_decoder or config.pad_token_id is None:
-                    self.skipTest(reason="Model is an encoder-decoder or does not have a pad token id set")
-
-                model = model_class(config)
-
-                # Make sure the model contains at least the full vocabulary size in its embedding matrix
-                self.assertGreaterEqual(model.config.vocab_size, len(tokenizer))
-
-                # Build sequence
-                first_ten_tokens = list(tokenizer.get_vocab().keys())[:10]
-                sequence = " ".join(first_ten_tokens)
-                table = self.get_table(tokenizer, length=0)
-                encoded_sequence = tokenizer.encode_plus(table, sequence, return_tensors="tf")
-                batch_encoded_sequence = tokenizer.batch_encode_plus(table, [sequence, sequence], return_tensors="tf")
-
-                # This should not fail
-                model(encoded_sequence)
-                model(batch_encoded_sequence)
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
@@ -656,42 +620,6 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     self.assertEqual(
                         tokenizer.num_special_tokens_to_add(pair=True), len(attached_sequences) - len(sequences)
                     )
-
-    def test_padding_to_max_length(self):
-        """We keep this test for backward compatibility but it should be removed when `pad_to_max_length` will be deprecated"""
-        tokenizers = self.get_tokenizers(do_lower_case=False)
-        for tokenizer in tokenizers:
-            with self.subTest(f"{tokenizer.__class__.__name__}"):
-                table = self.get_table(tokenizer)
-                sequence = "Sequence"
-                padding_size = 10
-
-                # check correct behaviour if no pad_token_id exists and add it eventually
-                self._check_no_pad_token_padding(tokenizer, sequence)
-
-                padding_idx = tokenizer.pad_token_id
-
-                # Check that it correctly pads when a maximum length is specified along with the padding flag set to True
-                tokenizer.padding_side = "right"
-                encoded_sequence = tokenizer.encode(table, sequence)
-                sequence_length = len(encoded_sequence)
-                # FIXME: the next line should be padding(max_length) to avoid warning
-                padded_sequence = tokenizer.encode(
-                    table, sequence, max_length=sequence_length + padding_size, padding=True
-                )
-                padded_sequence_length = len(padded_sequence)
-                assert sequence_length + padding_size == padded_sequence_length
-                assert encoded_sequence + [padding_idx] * padding_size == padded_sequence
-
-                # Check that nothing is done when a maximum length is not specified
-                encoded_sequence = tokenizer.encode(table, sequence)
-                sequence_length = len(encoded_sequence)
-
-                tokenizer.padding_side = "right"
-                padded_sequence_right = tokenizer.encode(table, sequence, pad_to_max_length=True)
-                padded_sequence_right_length = len(padded_sequence_right)
-                assert sequence_length == padded_sequence_right_length
-                assert encoded_sequence == padded_sequence_right
 
     def test_call(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus

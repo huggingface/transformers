@@ -14,7 +14,7 @@
 # limitations under the License.
 """Informer model configuration"""
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -141,14 +141,14 @@ class InformerConfig(PretrainedConfig):
         distribution_output: str = "student_t",
         loss: str = "nll",
         input_size: int = 1,
-        lags_sequence: List[int] = None,
+        lags_sequence: Optional[list[int]] = None,
         scaling: Optional[Union[str, bool]] = "mean",
         num_dynamic_real_features: int = 0,
         num_static_real_features: int = 0,
         num_static_categorical_features: int = 0,
         num_time_features: int = 0,
-        cardinality: Optional[List[int]] = None,
-        embedding_dimension: Optional[List[int]] = None,
+        cardinality: Optional[list[int]] = None,
+        embedding_dimension: Optional[list[int]] = None,
         d_model: int = 64,
         encoder_ffn_dim: int = 32,
         decoder_ffn_dim: int = 32,
