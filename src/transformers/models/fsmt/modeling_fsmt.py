@@ -28,7 +28,7 @@
 """PyTorch Fairseq model, ported from https://github.com/pytorch/fairseq/tree/master/examples/wmt19"""
 
 import math
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import torch
 from torch import Tensor, nn

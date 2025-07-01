@@ -357,7 +357,6 @@ class BrosAttention(nn.Module):
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             output_attentions=output_attentions,
-            cache_position=cache_position,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -399,13 +398,13 @@ class BrosLayer(GradientCheckpointingLayer):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = BrosAttention(config, layer_idx)
+        self.attention = BrosAttention(config)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise Exception(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = BrosAttention(config, layer_idx)
+            self.crossattention = BrosAttention(config)
         self.intermediate = BrosIntermediate(config)
         self.output = BrosOutput(config)
 

@@ -1489,13 +1489,6 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
 
-        # Kosmos2 has offset for position ids, so we need to create them correctly
-        position_ids = create_position_ids_from_input_ids(
-            input_ids,
-            padding_idx=self.config.pad_token_id,
-            past_key_values_length=0,
-        )
-
         # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
         if cache_position[0] != 0:
             image_embeds = None

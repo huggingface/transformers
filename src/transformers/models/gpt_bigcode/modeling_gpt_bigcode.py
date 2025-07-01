@@ -14,7 +14,7 @@
 """PyTorch GPTBigCode model."""
 
 import math
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -24,9 +24,8 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...cache_utils import Cache, EncoderDecoderCache
 from ...generation import GenerationMixin
-from ...masking_utils import AttentionMaskConverter, create_causal_mask
-from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
-from ...modeling_layers import GradientCheckpointingLayer
+from ...masking_utils import create_causal_mask
+from ...modeling_flash_attention_utils import is_flash_attn_available
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -574,7 +573,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
             outputs = block(
                 hidden_states,
                 past_key_values,
-                attention_mask,
+                causal_mask,
                 head_mask[i],
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,

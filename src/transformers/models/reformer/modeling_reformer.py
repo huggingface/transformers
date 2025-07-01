@@ -20,7 +20,7 @@ from collections import namedtuple
 from dataclasses import dataclass
 from functools import reduce
 from operator import mul
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Iterable, Optional, Union
 
 import numpy as np
 import torch
@@ -69,15 +69,15 @@ class ReformerDynamicCache(DynamicCache):
     def __init__(self, _distributed_cache_data: Optional[Iterable] = None) -> None:
         super().__init__()
         self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
-        self.buckets_cache: List[torch.Tensor] = []
-        self.states_cache: List[torch.Tensor] = []
+        self.buckets_cache: list[torch.Tensor] = []
+        self.states_cache: list[torch.Tensor] = []
 
         if _distributed_cache_data is not None:
             for buckets, states in _distributed_cache_data:
                 self.buckets_cache.append(buckets)
                 self.states_cache.append(states)
 
-    def __getitem__(self, layer_idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+    def __getitem__(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Support for backwards-compatible `past_key_value` indexing, e.g. `past_key_value[0][0].shape[2]` to get the
         sequence length.
@@ -107,8 +107,8 @@ class ReformerDynamicCache(DynamicCache):
         buckets: torch.Tensor,
         states: torch.Tensor,
         layer_idx: int,
-        cache_kwargs: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        cache_kwargs: Optional[dict[str, Any]] = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
 
@@ -150,7 +150,7 @@ class ReformerDynamicCache(DynamicCache):
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         return None
 
-    def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor, torch.Tensor]]:
+    def to_legacy_cache(self) -> tuple[tuple[torch.Tensor, torch.Tensor]]:
         """Converts the `ReformerDynamicCache` instance into the its equivalent in the legacy cache format. Used for
         backward compatibility."""
         legacy_cache = ()
@@ -162,7 +162,7 @@ class ReformerDynamicCache(DynamicCache):
 
     @classmethod
     def from_legacy_cache(
-        cls, past_buckets_states: Optional[Tuple[Tuple[torch.FloatTensor, torch.FloatTensor]]] = None
+        cls, past_buckets_states: Optional[tuple[tuple[torch.FloatTensor, torch.FloatTensor]]] = None
     ) -> "ReformerDynamicCache":
         """Converts a cache in the legacy cache format into an equivalent `ReformerDynamicCache`. Used for
         backward compatibility."""
