@@ -246,6 +246,7 @@ class SmolLM3DecoderLayer(GradientCheckpointingLayer):
         self.mlp = SmolLM3MLP(config)
         self.input_layernorm = SmolLM3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = SmolLM3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.attention_type = config.layer_types[layer_idx]
 
     def forward(
         self,

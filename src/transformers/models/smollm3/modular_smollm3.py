@@ -26,6 +26,7 @@ from ...processing_utils import Unpack
 from ...utils import logging
 from ..llama.modeling_llama import (
     LlamaAttention,
+    LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
@@ -199,6 +200,7 @@ class SmolLM3Config(PretrainedConfig):
         layer_types=None,
         attention_bias=False,
         attention_dropout=0.0,
+        mlp_bias=False,
         **kwargs,
     ):
         super().__init__(
@@ -209,6 +211,7 @@ class SmolLM3Config(PretrainedConfig):
         )
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
+        self.mlp_bias = mlp_bias
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
@@ -313,6 +316,12 @@ class SmolLM3Attention(LlamaAttention):
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
+
+
+class SmolLM3DecoderLayer(LlamaDecoderLayer):
+    def __init__(self, config: SmolLM3Config, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.attention_type = config.layer_types[layer_idx]
 
 
 class SmolLM3PreTrainedModel(LlamaPreTrainedModel):
