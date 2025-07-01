@@ -1296,7 +1296,7 @@ class Glm4vModel(Qwen2_5_VLModel):
         if pixel_values_videos is not None:
             video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw)
             video_embeds = torch.cat(video_embeds, dim=0)
-            
+
             if input_ids is None:
                 video_mask = inputs_embeds == self.get_input_embeddings()(
                     torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)

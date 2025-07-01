@@ -13,12 +13,10 @@
 # limitations under the License.
 """Testing suite for the PyTorch GLM-4.1V model."""
 
-import copy
 import gc
 import unittest
 
 import requests
-from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
