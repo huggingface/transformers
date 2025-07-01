@@ -170,6 +170,14 @@ if __name__ == "__main__":
     ordered_files, dependencies = find_priority_list(args.files)
     flat_ordered_files = [item for sublist in ordered_files for item in sublist]
 
+    # ordered_files is a *sorted* list of lists of filepaths
+    #  - files from the first list do NOT depend on other files
+    #  - files in the second list depend on files from the first list
+    #  - files in the third list depend on files from the second and (optionally) the first list
+    #  - ... and so on
+    # files (models) within the same list are *independent* of each other;
+    # we start applying modular conversion to each list in parallel, starting from the first list
+
     console.print(f"[bold yellow]Number of dependency levels: {len(ordered_files)}[/bold yellow]")
     console.print(f"[bold yellow]Files per level: {tuple([len(x) for x in ordered_files])}[/bold yellow]")
 

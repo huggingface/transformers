@@ -5,7 +5,7 @@ from collections import defaultdict
 # Function to perform topological sorting
 def topological_sort(dependencies: dict) -> list[list[str]]:
     """Given the dependencies graph construct sorted list of list of modular files
-    
+
     For example, returned list of lists might be:
         [
             ["../modular_llama.py", "../modular_gemma.py"],    # level 0
