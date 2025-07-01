@@ -18,7 +18,7 @@ import warnings
 from collections.abc import Mapping, Sized
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Set, Tuple, Union, overload
+from typing import TYPE_CHECKING, Callable, Optional, Union, overload
 
 from mistral_common.protocol.instruct.request import ChatCompletionRequest
 from mistral_common.protocol.instruct.validator import ValidationMode
@@ -189,7 +189,7 @@ class MistralCommonTokenizer(PushToHubMixin):
     If you have suggestions to improve this class, please open an issue on the [mistral-common GitHub repository](https://github.com/mistralai/mistral-common/issues) if it is related to the tokenizer or on the [Transformers GitHub repository](https://github.com/huggingface/transformers/issues) if it is related to the Hugging Face interface.
     """
 
-    model_input_names: List[str] = ["input_ids", "attention_mask"]
+    model_input_names: list[str] = ["input_ids", "attention_mask"]
     padding_side: str = "left"
     truncation_side: str = "right"
 
@@ -200,7 +200,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         model_max_length: int = VERY_LARGE_INTEGER,
         padding_side: str = "left",
         truncation_side: str = "right",
-        model_input_names: Optional[List[str]] = None,
+        model_input_names: Optional[list[str]] = None,
         clean_up_tokenization_spaces: bool = False,
         **kwargs,
     ):
@@ -263,7 +263,7 @@ class MistralCommonTokenizer(PushToHubMixin):
                 )
             self.model_input_names = model_input_names
 
-        self._cache_get_vocab: Optional[Dict[str, int]] = None
+        self._cache_get_vocab: Optional[dict[str, int]] = None
 
     @property
     def bos_token_id(self) -> int:
@@ -330,7 +330,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         """
         return self.tokenizer.instruct_tokenizer.tokenizer.n_words
 
-    def get_vocab(self) -> Dict[str, int]:
+    def get_vocab(self) -> dict[str, int]:
         """
         Returns the vocabulary as a dictionary of token to index.
 
@@ -377,7 +377,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         return_tensors: Optional[Union[str, TensorType]] = None,
         verbose: bool = True,
         **kwargs,
-    ) -> List[int]:
+    ) -> list[int]:
         """
         Converts a string to a sequence of ids (integer), using the tokenizer and vocabulary.
 
@@ -421,7 +421,7 @@ class MistralCommonTokenizer(PushToHubMixin):
 
     def decode(
         self,
-        token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor"],
+        token_ids: Union[int, list[int], "np.ndarray", "torch.Tensor"],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: Optional[bool] = None,
         **kwargs,
@@ -463,11 +463,11 @@ class MistralCommonTokenizer(PushToHubMixin):
 
     def batch_decode(
         self,
-        sequences: Union[List[int], List[List[int]], "np.ndarray", "torch.Tensor"],
+        sequences: Union[list[int], list[list[int]], "np.ndarray", "torch.Tensor"],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: Optional[bool] = None,
         **kwargs,
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Convert a list of lists of token ids into a list of strings by calling decode.
 
@@ -723,7 +723,7 @@ class MistralCommonTokenizer(PushToHubMixin):
 
         return BatchEncoding(batch_outputs)
 
-    def _all_special_ids(self) -> Set[int]:
+    def _all_special_ids(self) -> set[int]:
         if self._tokenizer_type == MistralTokenizerType.tekken:
             return {t["rank"] for t in self.tokenizer.instruct_tokenizer.tokenizer._all_special_tokens}
         elif self._tokenizer_type == MistralTokenizerType.spm:
@@ -830,7 +830,7 @@ class MistralCommonTokenizer(PushToHubMixin):
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def prepare_for_model(
         self,
-        ids: List[int],
+        ids: list[int],
         pair_ids: None = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
@@ -1043,7 +1043,7 @@ class MistralCommonTokenizer(PushToHubMixin):
 
     def _pad(
         self,
-        encoded_inputs: Union[Dict[str, EncodedInput], BatchEncoding],
+        encoded_inputs: Union[dict[str, EncodedInput], BatchEncoding],
         max_length: Optional[int] = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         pad_to_multiple_of: Optional[int] = None,
@@ -1119,10 +1119,10 @@ class MistralCommonTokenizer(PushToHubMixin):
         self,
         encoded_inputs: Union[
             BatchEncoding,
-            List[BatchEncoding],
-            Dict[str, EncodedInput],
-            Dict[str, List[EncodedInput]],
-            List[Dict[str, EncodedInput]],
+            list[BatchEncoding],
+            dict[str, EncodedInput],
+            dict[str, list[EncodedInput]],
+            list[dict[str, EncodedInput]],
         ],
         padding: Union[bool, str, PaddingStrategy] = True,
         max_length: Optional[int] = None,
@@ -1280,13 +1280,13 @@ class MistralCommonTokenizer(PushToHubMixin):
 
     def truncate_sequences(
         self,
-        ids: List[int],
+        ids: list[int],
         pair_ids: None = None,
         num_tokens_to_remove: int = 0,
         truncation_strategy: Union[str, TruncationStrategy] = "longest_first",
         stride: int = 0,
         **kwargs,
-    ) -> Tuple[List[int], None, List[int]]:
+    ) -> tuple[list[int], None, list[int]]:
         """
         Truncates a sequence pair in-place following the strategy.
 
@@ -1355,8 +1355,8 @@ class MistralCommonTokenizer(PushToHubMixin):
 
     def apply_chat_template(
         self,
-        conversation: Union[List[Dict[str, str]], List[List[Dict[str, str]]]],
-        tools: Optional[List[Union[Dict, Callable]]] = None,
+        conversation: Union[list[dict[str, str]], list[list[dict[str, str]]]],
+        tools: Optional[list[Union[dict, Callable]]] = None,
         continue_final_message: bool = False,
         tokenize: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
@@ -1365,7 +1365,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_dict: bool = False,
         **kwargs,
-    ) -> Union[str, List[int], List[str], List[List[int]]]:
+    ) -> Union[str, list[int], list[str], list[list[int]]]:
         """
         Converts a list of dictionaries with `"role"` and `"content"` keys to a list of token
         ids.
@@ -1467,7 +1467,7 @@ class MistralCommonTokenizer(PushToHubMixin):
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def __call__(
         self,
-        text: Union[TextInput, EncodedInput, List[TextInput], list[EncodedInput], None] = None,
+        text: Union[TextInput, EncodedInput, list[TextInput], list[EncodedInput], None] = None,
         text_pair: None = None,
         text_target: None = None,
         text_pair_target: None = None,
@@ -1602,7 +1602,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         model_max_length: int = VERY_LARGE_INTEGER,
         padding_side: str = "left",
         truncation_side: str = "right",
-        model_input_names: Optional[List[str]] = None,
+        model_input_names: Optional[list[str]] = None,
         clean_up_tokenization_spaces: bool = False,
         **kwargs,
     ):
@@ -1698,7 +1698,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         repo_url: Optional[str] = None,
         organization: Optional[str] = None,
         **kwargs,
-    ) -> Tuple[str]:
+    ) -> tuple[str]:
         """
         Save the full tokenizer state.
 

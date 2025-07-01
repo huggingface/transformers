@@ -66,6 +66,7 @@ NOT_DEVICE_TESTS = {
     "ModelTester::test_pipeline_",
     "/repo_utils/",
     "/utils/",
+    "test_tokenization_mistral_common"
 }
 
 # allow having multiple repository checkouts and not needing to remember to rerun
