@@ -1415,9 +1415,8 @@ class GroundingDinoPreTrainedModel(PreTrainedModel):
             nn.init.xavier_uniform_(module.out_text_proj.weight)
             module.out_text_proj.bias.data.fill_(0)
         elif isinstance(module, GroundingDinoFusionLayer):
-            init_values = 1e-4
-            module.vision_param.data.fill_(init_values * 1.0)
-            module.text_param.data.fill_(init_values * 1.0)
+            module.vision_param.data.fill_(1e-4)
+            module.text_param.data.fill_(1e-4)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
