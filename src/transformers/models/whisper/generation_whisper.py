@@ -336,6 +336,11 @@ class WhisperGenerationMixin(GenerationMixin):
         if num_input_ids is not None:
             weights = weights[:, :, num_input_ids:, :]
 
+        # Since we ignore `decoder_input_ids` in the DTW and in the case where we generated only one token (for which we don't have cross attentions, see below comments),
+        # the DTW sequence length is 0 and we should return only 0.0s for the token timestamps
+        if weights.shape[2] == 0:
+            return timestamps
+
         if num_frames is None or isinstance(num_frames, int):
             # Normalize and smoothen the weights.
             std = torch.std(weights, dim=-2, keepdim=True, unbiased=False)
@@ -366,9 +371,12 @@ class WhisperGenerationMixin(GenerationMixin):
             jumps = np.pad(np.diff(text_indices), (1, 0), constant_values=1).astype(bool)
             jump_times = time_indices[jumps] * time_precision
 
-            # each predicted token has a corresponding timestamp, expect the eos token for which we don't retrieve cross attentions
+            # each predicted token has a corresponding timestamp, expect the eos token (or last predicted token) for which we don't retrieve cross attentions
+            # (indeed contrary to OAI that re-run a full foward to retreive cross attentions for each token and therefore also the last one predicted, we retreive
+            # cross attentions directly from the auto-regressive generation, so we don't have cross attentiosn for the token at the end of the sequence. Nevertheless,
+            # that is not important since we expect this last token to be the eos token)
             # 1. for decoder_input_ids, we set the timestamps to 0.0
-            # 2. for the eos token, we simply duplicate the timestamp of the last non-eos token
+            # 2. for the eos token (or last predicted token), we simply duplicate the timestamp of the last non-eos token
             timestamps[batch_idx] = torch.cat(
                 [torch.zeros(num_input_ids), torch.tensor(jump_times), torch.tensor([jump_times[-1]])]
             )
