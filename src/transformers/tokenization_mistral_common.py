@@ -263,6 +263,8 @@ class MistralCommonTokenizer(PushToHubMixin):
                 )
             self.model_input_names = model_input_names
 
+        self._cache_get_vocab: Optional[Dict[str, int]] = None
+
     @property
     def bos_token_id(self) -> int:
         """
@@ -338,7 +340,11 @@ class MistralCommonTokenizer(PushToHubMixin):
         Returns:
             `Dict[str, int]`: The vocabulary.
         """
-        return {token: idx for idx, token in enumerate(self.tokenizer.instruct_tokenizer.tokenizer.vocab())}
+        if self._cache_get_vocab is None:
+            self._cache_get_vocab = {
+                token: idx for idx, token in enumerate(self.tokenizer.instruct_tokenizer.tokenizer.vocab())
+            }
+        return self._cache_get_vocab
 
     def __len__(self):
         """
@@ -576,7 +582,7 @@ class MistralCommonTokenizer(PushToHubMixin):
             return ids[0]
         return ids
 
-    def _tokenize_ids(self, text: TextInput, add_special_tokens: bool) -> list[int]:
+    def _text_to_ids(self, text: TextInput, add_special_tokens: bool) -> list[int]:
         """
         Converts a string into a sequence of tokens ids, using the tokenizer.
         """
@@ -604,9 +610,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         if kwargs:
             raise ValueError(f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonTokenizer.tokenize`.")
 
-        return self.convert_ids_to_tokens(
-            self._tokenize_ids(text, add_special_tokens=False), skip_special_tokens=False
-        )
+        return self.convert_ids_to_tokens(self._text_to_ids(text, add_special_tokens=False), skip_special_tokens=False)
 
     def _encode_plus(
         self,
@@ -633,7 +637,7 @@ class MistralCommonTokenizer(PushToHubMixin):
 
         def get_input_ids(text):
             if isinstance(text, str):
-                return self._tokenize_ids(text, add_special_tokens)
+                return self._text_to_ids(text, add_special_tokens)
             elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], int):
                 return text
             else:
@@ -683,7 +687,7 @@ class MistralCommonTokenizer(PushToHubMixin):
     ) -> BatchEncoding:
         def get_input_ids(text):
             if isinstance(text, str):
-                return self._tokenize_ids(text, add_special_tokens)
+                return self._text_to_ids(text, add_special_tokens)
             elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], int):
                 return text
             else:
