@@ -609,18 +609,20 @@ class ConditionalDetrModelIntegrationTests(unittest.TestCase):
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
         expected_slice_boxes = torch.tensor(
             [
-                 [0.7733, 0.6576, 0.4496],
-                 [0.5171, 0.1184, 0.9095],
-                 [0.8846, 0.5647, 0.2486],
+                [0.7733, 0.6576, 0.4496],
+                [0.5171, 0.1184, 0.9095],
+                [0.8846, 0.5647, 0.2486],
             ]
         ).to(torch_device)
         torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, rtol=2e-4, atol=2e-4)
 
         # verify postprocessing
-        results = image_processor.post_process_object_detection(outputs, threshold=0.3, target_sizes=[image.size[::-1]])[0]
+        results = image_processor.post_process_object_detection(
+            outputs, threshold=0.3, target_sizes=[image.size[::-1]]
+        )[0]
         expected_scores = torch.tensor([0.8330, 0.8315, 0.8039, 0.6829, 0.5354]).to(torch_device)
         expected_labels = [75, 17, 17, 75, 63]
-        expected_slice_boxes = torch.tensor([38.3109,  72.1002, 177.6301, 118.4511]).to(torch_device)
+        expected_slice_boxes = torch.tensor([38.3109, 72.1002, 177.6301, 118.4511]).to(torch_device)
 
         self.assertEqual(len(results["scores"]), 5)
         torch.testing.assert_close(results["scores"], expected_scores, rtol=2e-4, atol=2e-4)
