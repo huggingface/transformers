@@ -17,20 +17,12 @@
       title: Customizing model components
     - local: model_sharing
       title: Sharing
-    - local: add_new_model
-      title: Adding a new model to Transformers
     - local: modular_transformers
-      title: Modular Transformers
+      title: Contributing a new model to Transformers
+    - local: add_new_model
+      title: Legacy model contribution
     - local: auto_docstring
-      title: Document your models
-    - local: task_summary
-      title: What 🤗 Transformers can do
-    - local: tasks_explained
-      title: How 🤗 Transformers solve tasks
-    - local: model_summary
-      title: The Transformer model family
-    - local: attention
-      title: Attention mechanisms
+      title: Documenting a model
     - local: attention_interface
       title: Customizing attention function
     title: Models
@@ -105,7 +97,7 @@
     - local: perf_infer_gpu_one
       title: GPU
     - local: perf_infer_gpu_multi
-      title: Distributed GPU inference
+      title: Distributed inference
     - local: perf_infer_cpu
       title: CPU
     - local: tf_xla
@@ -371,6 +363,8 @@
     - sections:
       - local: model_doc/albert
         title: ALBERT
+      - local: model_doc/arcee
+        title: Arcee
       - local: model_doc/bamba
         title: Bamba
       - local: model_doc/bart
@@ -439,6 +433,8 @@
         title: DiffLlama
       - local: model_doc/distilbert
         title: DistilBERT
+      - local: model_doc/dots1
+        title: dots1
       - local: model_doc/dpr
         title: DPR
       - local: model_doc/electra
@@ -661,6 +657,8 @@
         title: SwitchTransformers
       - local: model_doc/t5
         title: T5
+      - local: model_doc/t5gemma
+        title: T5Gemma
       - local: model_doc/t5v1.1
         title: T5v1.1
       - local: model_doc/tapex
@@ -739,6 +737,8 @@
         title: EfficientFormer
       - local: model_doc/efficientnet
         title: EfficientNet
+      - local: model_doc/eomt
+        title: EoMT
       - local: model_doc/focalnet
         title: FocalNet
       - local: model_doc/glpn
@@ -751,6 +751,8 @@
         title: ImageGPT
       - local: model_doc/levit
         title: LeViT
+      - local: model_doc/lightglue
+        title: LightGlue
       - local: model_doc/mask2former
         title: Mask2Former
       - local: model_doc/maskformer
@@ -839,6 +841,8 @@
         title: CSM
       - local: model_doc/dac
         title: dac
+      - local: model_doc/dia
+        title: Dia
       - local: model_doc/encodec
         title: EnCodec
       - local: model_doc/fastspeech2_conformer
@@ -847,6 +851,8 @@
         title: GraniteSpeech
       - local: model_doc/hubert
         title: Hubert
+      - local: model_doc/kyutai_speech_to_text
+        title: Kyutai Speech-To-Text
       - local: model_doc/mctct
         title: MCTCT
       - local: model_doc/mimi
@@ -905,6 +911,8 @@
     - sections:
       - local: model_doc/timesformer
         title: TimeSformer
+      - local: model_doc/vjepa2
+        title: V-JEPA 2
       - local: model_doc/videomae
         title: VideoMAE
       - local: model_doc/vivit
@@ -953,8 +961,12 @@
         title: FLAVA
       - local: model_doc/gemma3
         title: Gemma3
+      - local: model_doc/gemma3n
+        title: Gemma3n
       - local: model_doc/git
         title: GIT
+      - local: model_doc/glm4v
+        title: glm4v
       - local: model_doc/got_ocr2
         title: GOT-OCR2
       - local: model_doc/granitevision
@@ -1047,6 +1059,8 @@
         title: SigLIP
       - local: model_doc/siglip2
         title: SigLIP2
+      - local: model_doc/smollm3
+        title: SmolLM3
       - local: model_doc/smolvlm
         title: SmolVLM
       - local: model_doc/speech-encoder-decoder
