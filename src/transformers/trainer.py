@@ -2357,7 +2357,7 @@ class Trainer:
                     model = self.accelerator.prepare(self.model)
                 else:
                     if delay_optimizer_creation:
-                        self.optimizer = self.accelerator.prepare(self.optimizer)
+                        model = self.accelerator.prepare(self.model)
                     else:
                         model, self.optimizer = self.accelerator.prepare(self.model, self.optimizer)
             else:
