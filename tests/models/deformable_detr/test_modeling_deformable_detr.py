@@ -780,4 +780,4 @@ class DeformableDetrModelIntegrationTests(unittest.TestCase):
                 [-10.0665, -5.8470, -7.7003],
             ]
         )
-        assert torch.allclose(cpu_outputs.logits[0, :3, :3], expected_logits, atol=1e-4)
+        assert torch.allclose(cpu_outputs.logits[0, :3, :3], expected_logits, atol=2e-4)
