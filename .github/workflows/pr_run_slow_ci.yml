@@ -1,0 +1,163 @@
+name: PR slow CI
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  get-pr-number:
+    name: Get PR number
+    uses: ./.github/workflows/get-pr-number.yml
+
+  get-pr-info:
+    name: Get PR commit SHA
+    needs: get-pr-number
+    if: ${{ needs.get-pr-number.outputs.PR_NUMBER != ''}}
+    uses: ./.github/workflows/get-pr-info.yml
+    with:
+      pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+
+  # We only need to verify the timestamp if the workflow is triggered by `issue_comment`.
+  verity_pr_commit:
+    name: Verity PR commit corresponds to a specific event by comparing timestamps
+    if: ${{ github.event.comment.created_at != '' }}
+    runs-on: ubuntu-22.04
+    needs: get-pr-info
+    env:
+      COMMENT_DATE: ${{ github.event.comment.created_at }}
+      PR_MERGE_COMMIT_DATE: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_DATE }}
+      PR_MERGE_COMMIT_TIMESTAMP: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_TIMESTAMP }}
+    steps:
+      - run: |
+          COMMENT_TIMESTAMP=$(date -d "${COMMENT_DATE}" +"%s")
+          echo "COMMENT_DATE: $COMMENT_DATE"
+          echo "PR_MERGE_COMMIT_DATE: $PR_MERGE_COMMIT_DATE"
+          echo "COMMENT_TIMESTAMP: $COMMENT_TIMESTAMP"
+          echo "PR_MERGE_COMMIT_TIMESTAMP: $PR_MERGE_COMMIT_TIMESTAMP"
+          if [ $COMMENT_TIMESTAMP -le $PR_MERGE_COMMIT_TIMESTAMP ]; then
+            echo "Last commit on the pull request is newer than the issue comment triggering this run! Abort!";
+            exit -1;
+          fi
+
+  get-jobs:
+    name: Get test files to run
+    runs-on: ubuntu-22.04
+    needs: [get-pr-number, get-pr-info]
+    outputs:
+      jobs: ${{ steps.get_jobs.outputs.jobs_to_run }}
+    steps:
+      - name: Get repository content
+        id: repo_content
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const { data: tests_dir } = await github.rest.repos.getContent({
+              owner: '${{ needs.get-pr-info.outputs.PR_HEAD_REPO_OWNER }}',
+              repo: '${{ needs.get-pr-info.outputs.PR_HEAD_REPO_NAME }}',
+              path: 'tests',
+              ref: '${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}',
+            });
+
+            const { data: tests_models_dir } = await github.rest.repos.getContent({
+              owner: '${{ needs.get-pr-info.outputs.PR_HEAD_REPO_OWNER }}',
+              repo: '${{ needs.get-pr-info.outputs.PR_HEAD_REPO_NAME }}',
+              path: 'tests/models',
+              ref: '${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}',
+            });
+
+            const { data: tests_quantization_dir } = await github.rest.repos.getContent({
+              owner: '${{ needs.get-pr-info.outputs.PR_HEAD_REPO_OWNER }}',
+              repo: '${{ needs.get-pr-info.outputs.PR_HEAD_REPO_NAME }}',
+              path: 'tests/quantization',
+              ref: '${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}',
+            });
+
+            core.setOutput('tests_dir', tests_dir);
+            core.setOutput('tests_models_dir', tests_models_dir);
+            core.setOutput('tests_quantization_dir', tests_quantization_dir);
+
+      # This checkout to the main branch
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: "0"
+
+      - name: Write pr_files file
+        run: |
+          cat > pr_files.txt << 'EOF'
+          ${{ needs.get-pr-info.outputs.PR_FILES }}
+          EOF
+
+      - name: Write tests_dir file
+        run: |
+          cat > tests_dir.txt << 'EOF'
+          ${{ steps.repo_content.outputs.tests_dir }}
+          EOF
+
+      - name: Write tests_models_dir file
+        run: |
+          cat > tests_models_dir.txt << 'EOF'
+          ${{ steps.repo_content.outputs.tests_models_dir }}
+          EOF
+
+      - name: Write tests_quantization_dir file
+        run: |
+          cat > tests_quantization_dir.txt << 'EOF'
+          ${{ steps.repo_content.outputs.tests_quantization_dir }}
+          EOF
+
+      - name: Run script to get jobs to run
+        id: get_jobs
+        run: |
+          python utils/get_pr_run_slow_jobs.py | tee output.txt
+          echo "jobs_to_run: $(tail -n 1 output.txt)"
+          echo "jobs_to_run=$(tail -n 1 output.txt)" >> $GITHUB_OUTPUT
+
+  send_comment:
+    name: Send a comment to suggest jobs to run
+    if: ${{ needs.get-jobs.outputs.jobs != '' }}
+    needs: [get-pr-number, get-jobs]
+    permissions:
+      pull-requests: write
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Delete existing comment and send new one
+        uses: actions/github-script@v7
+        env:
+          BODY: "\n\nrun-slow: ${{ needs.get-jobs.outputs.jobs }}"
+        with:
+          script: |
+            const prNumber = ${{ needs.get-pr-number.outputs.PR_NUMBER }};
+            const commentPrefix = "**[For maintainers]** Suggested jobs to run (before merge)";
+            
+            // Get all comments on the PR
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber
+            });
+            
+            // Find existing comment(s) that start with our prefix
+            const existingComments = comments.filter(comment => 
+              comment.user.login === 'github-actions[bot]' && 
+              comment.body.startsWith(commentPrefix)
+            );
+            
+            // Delete existing comment(s)
+            for (const comment of existingComments) {
+              console.log(`Deleting existing comment #${comment.id}`);
+              await github.rest.issues.deleteComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: comment.id
+              });
+            }
+            
+            // Create new comment
+            const newBody = `${commentPrefix}${process.env.BODY}`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: newBody
+            });
+            
+            console.log('✅ Comment updated successfully');
