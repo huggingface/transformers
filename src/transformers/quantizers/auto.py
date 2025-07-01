@@ -27,6 +27,7 @@ from ..utils.quantization_config import (
     EetqConfig,
     FbgemmFp8Config,
     FineGrainedFP8Config,
+    FPQuantConfig,
     GPTQConfig,
     HiggsConfig,
     HqqConfig,
@@ -34,7 +35,6 @@ from ..utils.quantization_config import (
     QuantizationMethod,
     QuantoConfig,
     QuarkConfig,
-    FPQuantConfig,
     SpQRConfig,
     TorchAoConfig,
     VptqConfig,
@@ -50,12 +50,12 @@ from .quantizer_compressed_tensors import CompressedTensorsHfQuantizer
 from .quantizer_eetq import EetqHfQuantizer
 from .quantizer_fbgemm_fp8 import FbgemmFp8HfQuantizer
 from .quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
+from .quantizer_fp_quant import FPQuantHfQuantizer
 from .quantizer_gptq import GptqHfQuantizer
 from .quantizer_higgs import HiggsHfQuantizer
 from .quantizer_hqq import HqqHfQuantizer
 from .quantizer_quanto import QuantoHfQuantizer
 from .quantizer_quark import QuarkHfQuantizer
-from .quantizer_fp_quant import FPQuantHfQuantizer
 from .quantizer_spqr import SpQRHfQuantizer
 from .quantizer_torchao import TorchAoHfQuantizer
 from .quantizer_vptq import VptqHfQuantizer

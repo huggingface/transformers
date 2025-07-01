@@ -13,7 +13,6 @@
 # limitations under the License.
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from ..utils.logging import tqdm
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
 
@@ -21,7 +20,7 @@ from .quantizers_utils import get_module_from_name
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..utils import is_fp_quant_available, is_fp_quant_available, is_qutlass_available, is_torch_available, logging
+from ..utils import is_fp_quant_available, is_qutlass_available, is_torch_available, logging
 from ..utils.quantization_config import QuantizationConfigMixin
 
 
@@ -126,7 +125,9 @@ class FPQuantHfQuantizer(HfQuantizer):
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         from fp_quant import FPQuantLinear
 
-        fp_quant_modules = {name: module for name, module in model.named_modules() if isinstance(module, FPQuantLinear)}
+        fp_quant_modules = {
+            name: module for name, module in model.named_modules() if isinstance(module, FPQuantLinear)
+        }
         for name, module in fp_quant_modules.items():
             if not self.quantization_config.store_master_weights and module.weight is not None:
                 module.weight = None
