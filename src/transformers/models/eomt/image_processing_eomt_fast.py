@@ -522,6 +522,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
     ):
         """Post-processes model outputs into Instance Segmentation Predictions."""
 
+        # `mask_threshold` and `overlap_mask_area_threshold` args are unused and only present for Pipeline compatability.
         size = size if size is not None else self.size
 
         masks_queries_logits = outputs.masks_queries_logits

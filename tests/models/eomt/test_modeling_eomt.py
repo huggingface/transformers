@@ -474,4 +474,9 @@ class EomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
         image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
         pipe = pipeline(model=self.model_id, subtask="panoptic", device=torch_device)
-        _ = pipe(image)
+        output = pipe(image)
+
+        EXPECTED_OUTPUT_LABELS = ["LABEL_15", "LABEL_15", "LABEL_57", "LABEL_65", "LABEL_65"]
+
+        output_labels = [segment["label"] for segment in output["segments_info"]]
+        self.assertEqual(output_labels, EXPECTED_OUTPUT_LABELS)
