@@ -131,10 +131,6 @@ class Gemma3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
-    @unittest.skip("Gemma3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
-    def test_generate_continue_from_inputs_embeds(self):
-        pass
-
     @unittest.skip("Gemma3 has HybridCache which auto-compiles. Compile and FA2 don't work together.")
     def test_eager_matches_fa2_generate(self):
         pass

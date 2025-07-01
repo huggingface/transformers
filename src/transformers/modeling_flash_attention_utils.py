@@ -508,6 +508,22 @@ def _flash_attention_forward(
         query_states, key_states, value_states, target_dtype
     )
 
+    # We will use `flash_attn_varlen_func` to prevent cross-example attention and also allow padding free approach
+    # under two cases:
+    # Case 1. If position_ids is provided and check all examples do not contain only 1 sequence, If tensor in increasing
+    # then we probably have one sequence, otherwise it is packed. Additionally check we are in pre-fill/training stage.
+    # Case 2. Some models pass directly pre-computed `cu_seqlens` so we don't need to infer it from position ids. It is safe to
+    # use `flash_attn_varlen_func` knowing we already have all necessary the kwargs. NOTE: it is user's responsibility
+    # to take care of flattenning `position_ids` if that's needed by the model. See #39121 for more information
+    is_fa2_with_position_ids = (
+        position_ids is not None
+        and query_states.shape[0] == 1
+        and (max_length_q is not None or (query_length != 1 and not (torch.diff(position_ids, dim=-1) >= 0).all()))
+    )
+    is_fa2_with_varlen_kwargs = all(
+        kwarg is not None for kwarg in (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k)
+    )
+
     # Contains at least one padding token in the sequence
     if attention_mask is not None:
         batch_size = query_states.shape[0]
@@ -531,14 +547,7 @@ def _flash_attention_forward(
         )
         attn_output = _pad_input(attn_output_unpad, indices_q, batch_size, query_length)
 
-    # If position_ids is provided and check all examples do not contain only 1 sequence, If tensor in increasing
-    # then we probably have one sequence, otherwise it is packed. Additionally check we are in pre-fill/training stage.
-    # Use `flash_attn_varlen_func` to prevent cross-example attention and also allow padding free approach
-    elif (
-        position_ids is not None
-        and query_states.shape[0] == 1
-        and (max_length_q is not None or (query_length != 1 and not (torch.diff(position_ids, dim=-1) >= 0).all()))
-    ):
+    elif is_fa2_with_varlen_kwargs or is_fa2_with_position_ids:
         batch_size = query_states.size(0)
 
         if cu_seq_lens_q is None or cu_seq_lens_k is None:
