@@ -436,7 +436,7 @@ class SmolVLMProcessor(ProcessorMixin):
         if chat_template is None and has_video:
             # re-assign to the correct default template for BC, if user is not requesting their own template
             chat_template = DEFAULT_CHAT_TEMPLATE
-        
+
         num_frames = self.video_processor.num_frames if num_frames is None else num_frames
         fps = self.video_processor.fps if fps is None else fps
 
