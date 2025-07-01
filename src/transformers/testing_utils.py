@@ -130,7 +130,6 @@ from .utils import (
     is_scipy_available,
     is_sentencepiece_available,
     is_seqio_available,
-    is_soundfile_available,
     is_spacy_available,
     is_speech_available,
     is_spqr_available,
@@ -652,7 +651,7 @@ def require_torchcodec(test_case):
     These tests are skipped when Torchcodec isn't installed.
 
     """
-    return unittest.skipUnless(is_torchcodec_available(), "test requires Torchvision")(test_case)
+    return unittest.skipUnless(is_torchcodec_available(), "test requires Torchcodec")(test_case)
 
 
 def require_torch_or_tf(test_case):
@@ -1251,16 +1250,6 @@ def require_clearml(test_case):
 
     """
     return unittest.skipUnless(is_clearml_available(), "test requires clearml")(test_case)
-
-
-def require_soundfile(test_case):
-    """
-    Decorator marking a test that requires soundfile
-
-    These tests are skipped when soundfile isn't installed.
-
-    """
-    return unittest.skipUnless(is_soundfile_available(), "test requires soundfile")(test_case)
 
 
 def require_deepspeed(test_case):

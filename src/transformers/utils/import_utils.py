@@ -216,6 +216,7 @@ _torchaudio_available = _is_package_available("torchaudio")
 _torchao_available, _torchao_version = _is_package_available("torchao", return_version=True)
 _torchdistx_available = _is_package_available("torchdistx")
 _torchvision_available, _torchvision_version = _is_package_available("torchvision", return_version=True)
+_torchcodec_available, _torchcodec_version = _is_package_available("torchcodec", return_version=True)
 _mlx_available = _is_package_available("mlx")
 _num2words_available = _is_package_available("num2words")
 _hqq_available, _hqq_version = _is_package_available("hqq", return_version=True)
@@ -431,6 +432,10 @@ def is_torch_flex_attn_available():
 
 def is_torchvision_available():
     return _torchvision_available
+
+
+def is_torchcodec_available():
+    return _torchcodec_available
 
 
 def is_torchvision_v2_available():
