@@ -313,35 +313,6 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
     def test_model_is_small(self):
         pass
 
-    @unittest.skip(
-        reason="VLMs can't generate from inputs embeds and pixels. This can be tested as part of bacbone LM, no need to run the test for VLMs"
-    )
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    # The multimodal base model embeds will not match ids, due to pixel values. We can't change base test
-    # because in some models `pixel_values` are required. Will be fixed when we add support for merging `embeds+pixels`
-    # TODO: @raushan
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            torch.testing.assert_close(out_embeds, out_ids)
-
 
 @require_torch
 class Qwen2VLIntegrationTest(unittest.TestCase):

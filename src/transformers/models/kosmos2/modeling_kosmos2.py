@@ -1467,25 +1467,19 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
         image_embeds_position_mask=None,
         past_key_values=None,
         attention_mask=None,
+        inputs_embeds=None,
         use_cache=None,
         cache_position=None,
         **model_kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
 
-        # Kosmos2 has offset for position ids, so we need to create them correctly
-        position_ids = create_position_ids_from_input_ids(
-            input_ids,
-            padding_idx=self.config.pad_token_id,
-            past_key_values_length=0,
-        )
-
         if past_key_values is not None:
             image_embeds = None
             image_embeds_position_mask = None
         # appending `False` to `image_embeds_position_mask` (because `input_ids` grows during generation)
         elif image_embeds_position_mask is not None:
-            batch_size, seq_len = input_ids.size()
+            batch_size, seq_len = inputs_embeds.size()[:-1] if inputs_embeds is not None else input_ids.size()
             mask_len = image_embeds_position_mask.size()[-1]
             image_embeds_position_mask = torch.cat(
                 (
@@ -1501,11 +1495,13 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
             attention_mask=attention_mask,
             image_embeds=image_embeds,
             image_embeds_position_mask=image_embeds_position_mask,
+            inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            position_ids=position_ids,
             cache_position=cache_position,
             **model_kwargs,
         )
+        # Kosmos2 has offset for position ids, so we need to create them correctly in PositionEmbedding layer
+        model_inputs.pop("position_ids", None)
 
         return model_inputs
 
@@ -1875,6 +1871,7 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         image_embeds: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         **kwargs,
     ):
         # in order to allow `inputs` argument (as in `GenerationMixin`)
@@ -1900,6 +1897,7 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
             attention_mask=attention_mask,
             image_embeds=image_embeds,
             image_embeds_position_mask=image_embeds_position_mask,
+            inputs_embeds=inputs_embeds,
             **kwargs,
         )
 
