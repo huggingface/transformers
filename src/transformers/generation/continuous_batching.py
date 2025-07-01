@@ -1257,6 +1257,7 @@ class ContinuousBatchingManager:
 
     @traced(span_name="logit_processing")
     def _process_logit(self, batch_data, logits):
+        print(self.logit_processor)
         return self.logit_processor(batch_data["input_ids"], logits)
 
     @traced(span_name="sampling")

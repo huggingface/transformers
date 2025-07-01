@@ -88,9 +88,9 @@ class LogitsProcessorList(list):
                         f"Make sure that all the required parameters: {list(function_args.keys())} for "
                         f"{processor.__class__} are passed to the logits processor."
                     )
-                scores = processor(input_ids, scores, **kwargs)
+                scores = processor(input_ids, scores.to(input_ids.dtype), **kwargs)
             else:
-                scores = processor(input_ids, scores)
+                scores = processor(input_ids, scores.to(input_ids.dtype))
 
         return scores
 
