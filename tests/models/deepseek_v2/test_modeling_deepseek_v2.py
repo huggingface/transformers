@@ -194,6 +194,10 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
     @unittest.skip("Deepseek-V2 uses MLA so it is not compatible with the standard cache format")
+    def test_generate_compile_model_forward(self):
+        pass
+
+    @unittest.skip("Deepseek-V2 uses MLA so it is not compatible with the standard cache format")
     def test_beam_search_generate_dict_outputs_use_cache(self):
         pass
 
