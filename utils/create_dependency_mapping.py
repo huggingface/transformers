@@ -4,6 +4,18 @@ from collections import defaultdict
 
 # Function to perform topological sorting
 def topological_sort(dependencies: dict) -> list[list[str]]:
+    """Given the dependencies graph construct sorted list of list of modular files
+    
+    For example, returned list of lists might be:
+        [
+            ["../modular_llama.py", "../modular_gemma.py"],    # level 0
+            ["../modular_llama4.py", "../modular_gemma2.py"],  # level 1
+            ["../modular_glm4.py"],                            # level 2
+        ]
+        which means llama and gemma do not depend on any other modular models, while llama4 and gemma2
+        depend on the models in the first list, and glm4 depends on the models in the second and (optionally) in the first list.
+    """
+
     # Nodes are the name of the models to convert (we only add those to the graph)
     nodes = {node.rsplit("modular_", 1)[1].replace(".py", "") for node in dependencies.keys()}
     # This will be a graph from models to convert, to models to convert that should be converted before (as they are a dependency)
@@ -72,7 +84,7 @@ def find_priority_list(py_files):
             ["../modular_glm4.py"],                            # level 2
         ]
         which means llama and gemma do not depend on any other modular models, while llama4 and gemma2
-        depend on the models in the first list, and glm4 depends on the models in the first and(or) second list.
+        depend on the models in the first list, and glm4 depends on the models in the second and (optionally) in the first list.
     """
     dependencies = map_dependencies(py_files)
     ordered_files = topological_sort(dependencies)
