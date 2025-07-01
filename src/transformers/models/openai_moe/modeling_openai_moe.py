@@ -119,6 +119,7 @@ class OpenAIMoeExperts(nn.Module):
             gate, up = gate_up.chunk(2, dim=-1)  # not supported for DTensors
             glu = gate * torch.sigmoid(gate * self.alpha)
             next_states = torch.bmm(((up + 1) * glu), self.down_proj)
+            torch.distributed.all_reduce(next_states, op=torch.distributed.ReduceOp.SUM) # TODO: if we can attach hook to `down_proj` we can move this to hook
             # add bias only on TP=0 so that we avoid adding it for all TPs
             if torch.distributed.get_rank() == 0:
                 next_states = next_states + self.down_proj_bias[..., None, :]

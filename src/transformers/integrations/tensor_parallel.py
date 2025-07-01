@@ -391,7 +391,7 @@ class GatherParallel(TensorParallelLayer):
     @staticmethod
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
         # this op cannot be async, otherwise it completely breaks the outputs of models
-        torch.distributed.all_reduce(outputs[0], op=torch.distributed.ReduceOp.SUM, async_op=False)
+        # torch.distributed.all_reduce(outputs[0], op=torch.distributed.ReduceOp.SUM, async_op=False) # TODO: need to create a new class for backward compatibility
         return outputs
 
 
@@ -877,7 +877,7 @@ def shard_and_distribute_module(
 
     # Add hooks to the module if not done yet
     # add_tensor_parallel_hooks_to_module(model, module_to_tp, tp_plan, param_name, current_module_plan, device_mesh)
-    if not getattr(module_to_tp, "_is_hooked", False):
+    if not getattr(module_to_tp, "_is_hooked", False): # this adds gather hook to layers.*.mlp.experts and skips the rest
         add_tensor_parallel_hooks_to_module(
             model, module_to_tp, tp_plan, param_name, current_shard_plan, device_mesh, parameter_name
         )
