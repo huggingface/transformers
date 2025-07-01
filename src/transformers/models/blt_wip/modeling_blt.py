@@ -85,8 +85,8 @@ def eager_attention_forward(
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = F.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
@@ -538,30 +538,25 @@ class BLTLocalEncoder(nn.Module):
     def __init__(self, config: BLTLocalEncoderConfig):
         super().__init__()
     
-        self.hidden_size = config.hidden_size
-        self.vocab_size=config.vocab_size
-        self.num_hidden_layers = config.num_hidden_layers
-        self.dropout = config.dropout
-        self.cross_attn_all_layers = config.cross_attn_all_layers
-        self.cross_attn_k = config.cross_attn_k
+        self.config = config
         
-        self.layers = nn.ModuleList([BLTTransformerLayer(config, layer_idx) for layer_idx in range(self.num_hidden_layers)])
+        self.layers = nn.ModuleList([BLTTransformerLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)])
 
         self.rotary_emb = BLTRotaryEmbedding(config=config)
 
         self.patch_embedding_projection = nn.Linear(
-            in_features=self.hidden_size,
-            out_features=self.hidden_size * config.cross_attn_k,
+            in_features=config.hidden_size,
+            out_features=config.hidden_size * config.cross_attn_k,
             bias=False,
         )
 
-        self.embed_tokens = nn.Embedding(self.vocab_size, self.hidden_size)
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
 
         self.cross_attn_layers = torch.nn.ModuleList()
-        layers_to_add = self.num_hidden_layers if self.cross_attn_all_layers else 1
+        layers_to_add = config.num_hidden_layers if config.cross_attn_all_layers else 1
         for layer_idx in range(layers_to_add):
             self.cross_attn_layers.append(
-                BLTCrossAttention(config=config, layer_idx=layer_idx, hidden_size=self.hidden_size)
+                BLTCrossAttention(config=config, layer_idx=layer_idx, hidden_size=config.hidden_size)
             )
 
     def forward(
@@ -582,23 +577,23 @@ class BLTLocalEncoder(nn.Module):
 
         batch_size, _, _ = input_embeds.shape
 
-        hidden_states = nn.functional.dropout(input_embeds, p=self.dropout, training=self.training) 
+        hidden_states = F.dropout(input_embeds, p=self.config.dropout, training=self.training) 
 
         position_ids = torch.arange(input_ids.shape[1], device=input_embeds.device).unsqueeze(0).expand(batch_size, -1)
         position_embeddings = self.rotary_emb(hidden_states, position_ids)  
 
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = F.dropout(hidden_states, p=self.config.dropout, training=self.training)
 
         for idx, layer in enumerate(self.layers):
             layer_outputs = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None)
             hidden_states = layer_outputs[0]
 
-            if idx == len(self.layers) - 1 or self.cross_attn_all_layers:
+            if idx == len(self.layers) - 1 or self.config.cross_attn_all_layers:
                 patch_embeds = self.patch_reduce(hidden_states, num_patches, "amax", patch_ids)
                 patch_embeds = self.patch_embedding_projection(patch_embeds)
-                patch_embeds = patch_embeds.reshape(batch_size, patch_embeds.shape[1] * self.cross_attn_k, self.hidden_size)
+                patch_embeds = patch_embeds.reshape(batch_size, patch_embeds.shape[1] * self.config.cross_attn_k, self.config.hidden_size)
 
-                layer_idx = idx if self.cross_attn_all_layers else 0
+                layer_idx = idx if self.config.cross_attn_all_layers else 0
                 cross_attention_output, _, _ = self.cross_attn_layers[layer_idx](
                     hidden_states=patch_embeds,
                     cross_attention_states=hidden_states,
@@ -646,36 +641,31 @@ class BLTLocalDecoder(nn.Module):
         super().__init__()
 
         # Extract config values to instance attributes
-        self.hidden_size = config.hidden_size
-        self.vocab_size=config.vocab_size
-        self.num_hidden_layers = config.num_hidden_layers
-        self.dropout = config.dropout
+        self.config = config
         self.cross_attn_decoder = True #config.cross_attn_decoder #TODO: maybe remove
-        self.cross_attn_all_layers = config.cross_attn_all_layers
-        self.cross_attn_k = config.cross_attn_k
 
-        self.layers = nn.ModuleList([BLTTransformerLayer(config, layer_idx) for layer_idx in range(self.num_hidden_layers)])
+        self.layers = nn.ModuleList([BLTTransformerLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)])
 
         self.rotary_emb = BLTRotaryEmbedding(config=config)
 
         self.patch_embedding_projection = nn.Linear(
             in_features=config.hidden_size_global,
-            out_features=self.hidden_size * config.cross_attn_k,
+            out_features=config.hidden_size * config.cross_attn_k,
             bias=False,
         )
 
-        self.norm = BLTRMSNorm(self.hidden_size, eps=config.norm_eps)
+        self.norm = BLTRMSNorm(config.hidden_size, eps=config.norm_eps)
 
         self.cross_attn_layers = torch.nn.ModuleList()
-        layers_to_add = self.num_hidden_layers if self.cross_attn_all_layers else 1
+        layers_to_add = config.num_hidden_layers if config.cross_attn_all_layers else 1
         for layer_idx in range(layers_to_add):
             self.cross_attn_layers.append(
-                BLTCrossAttention(config=config, layer_idx=layer_idx, hidden_size=self.hidden_size)
+                BLTCrossAttention(config=config, layer_idx=layer_idx, hidden_size=config.hidden_size)
             )
 
         self.lm_head = nn.Linear(
-            self.hidden_size,
-            self.vocab_size,
+            config.hidden_size,
+            config.vocab_size,
             bias=False,
         )
 
@@ -695,7 +685,7 @@ class BLTLocalDecoder(nn.Module):
         hidden_states = embeds
 
         patch_embeds = self.patch_embedding_projection(patch_embeds)
-        patch_embeds = patch_embeds.reshape(batch_size, patch_embeds.shape[1] * self.cross_attn_k, self.hidden_size)
+        patch_embeds = patch_embeds.reshape(batch_size, patch_embeds.shape[1] * self.config.cross_attn_k, self.config.hidden_size)
 
         if patch_embeds is not None and not self.cross_attn_decoder:
             hidden_states = hidden_states + patch_embeds
@@ -703,9 +693,9 @@ class BLTLocalDecoder(nn.Module):
         position_ids = torch.arange(tokens.shape[1], device=embeds.device).unsqueeze(0).expand(batch_size, -1)
         position_embeddings = self.rotary_emb(hidden_states, position_ids)  
 
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = F.dropout(hidden_states, p=self.config.dropout, training=self.training)
         for i, layer in enumerate(self.layers):
-            if i == 0 or self.cross_attn_all_layers:
+            if i == 0 or self.config.cross_attn_all_layers:
                 # Use cross attention to extract info from patch_embeds into hidden_states
                 cross_attention_output, _, _ = self.cross_attn_layers[i](
                     hidden_states=hidden_states,
@@ -833,12 +823,10 @@ class BLTGlobalTransformer(nn.Module):
     def __init__(self, config: BLTGlobalTransformerConfig):
         super().__init__()
 
-        self.hidden_size = config.hidden_size
-        self.num_hidden_layers = config.num_hidden_layers
-        self.dropout = config.dropout
+        self.config = config
 
         self.layers = nn.ModuleList()
-        for layer_idx in range(self.num_hidden_layers):
+        for layer_idx in range(config.num_hidden_layers):
             self.layers.append(BLTTransformerLayer(config, layer_idx))
 
         self.rotary_emb = BLTRotaryEmbedding(config=config)
@@ -854,7 +842,7 @@ class BLTGlobalTransformer(nn.Module):
 
         hidden_states = input_embeds
 
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = F.dropout(hidden_states, p=self.config.dropout, training=self.training)
 
         position_ids = torch.arange(seq_len, device=input_embeds.device).unsqueeze(0).expand(batch_size, -1)
         position_embeddings = self.rotary_emb(hidden_states, position_ids)  
@@ -1029,6 +1017,7 @@ class BLTPatcher(BLTPreTrainedModel):
         self.rotary_emb = BLTRotaryEmbedding(config=self.config)
 
         self.layers = nn.ModuleList()
+        
         for layer_idx in range(self.config.num_hidden_layers):
             self.layers.append(BLTTransformerLayer(self.config, layer_idx))
 
