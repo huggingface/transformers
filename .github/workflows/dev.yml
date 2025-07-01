@@ -145,7 +145,7 @@ jobs:
 
   send_comment:
     name: Send a comment to suggest jobs to run
-    # if: ${{ needs.get-tests.outputs.models != '[]'  || needs.get-tests.outputs.quantizations != '[]' }}
+    if: ${{ needs.get-jobs.outputs.jobs != '' }}
     needs: [get-pr-number, get-jobs]
     permissions:
       pull-requests: write
@@ -154,7 +154,7 @@ jobs:
       - name: Delete existing comment and send new one
         uses: actions/github-script@v7
         env:
-          BODY: "\n\n${{ needs.get-jobs.outputs.jobs }}"
+          BODY: "\n\nrun-slow: ${{ needs.get-jobs.outputs.jobs }}"
         with:
           script: |
             const prNumber = ${{ needs.get-pr-number.outputs.PR_NUMBER }};

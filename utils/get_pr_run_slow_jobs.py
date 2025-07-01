@@ -125,6 +125,6 @@ if __name__ == '__main__':
         jobs_to_run = [x.replace("models/", "").replace("quantization/", "") for x in jobs_to_run]
         jobs_to_run = [job for job in jobs_to_run if check_name(job)]
 
-        suggestion = f"run-slow: {', '.join(jobs_to_run)}"
+        suggestion = f"{', '.join(jobs_to_run)}"
 
         print(suggestion)
