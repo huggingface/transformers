@@ -107,6 +107,7 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         # using num_classes=0 to avoid creating classification head
         extra_init_kwargs = config.model_args or {}
         self.timm_model = timm.create_model(config.architecture, pretrained=False, num_classes=0, **extra_init_kwargs)
+        self.post_init()
 
     @auto_docstring
     def forward(
@@ -225,6 +226,7 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
             config.architecture, pretrained=False, num_classes=config.num_labels, **extra_init_kwargs
         )
         self.num_labels = config.num_labels
+        self.post_init()
 
     @auto_docstring
     def forward(

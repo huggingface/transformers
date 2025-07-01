@@ -739,8 +739,7 @@ class Mamba2PreTrainedModel(PreTrainedModel):
 
             # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
             inv_dt = dt + torch.log(-torch.expm1(-dt))
-            with torch.no_grad():
-                module.dt_bias.copy_(inv_dt)
+            module.dt_bias.copy_(inv_dt)
             module.dt_bias._no_reinit = True
 
             nn.init.kaiming_uniform_(module.conv1d.weight, a=math.sqrt(5))
@@ -761,8 +760,7 @@ class Mamba2PreTrainedModel(PreTrainedModel):
                 # We need to reinit p since this code could be called multiple times
                 # Having just p *= scale would repeatedly scale it down
                 p = module.out_proj.weight
-                with torch.no_grad():
-                    p /= math.sqrt(self.config.num_hidden_layers)
+                p /= math.sqrt(self.config.num_hidden_layers)
 
         if isinstance(module, nn.Linear):
             if not getattr(module.weight, "_no_reinit", False):
