@@ -1642,7 +1642,6 @@ def set_model_tester_for_less_flaky_test(test_case):
         "AriaVisionText2TextModelTester",
         "GPTNeoModelTester",
         "DPTModelTester",
-        "Gemma3nTextModelTester",  # cannot have a single layer combined with the cache sharing config attrs in the tester
     ]
     if test_case.model_tester.__class__.__name__ in exceptional_classes:
         target_num_hidden_layers = None
