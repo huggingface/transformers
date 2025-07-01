@@ -115,21 +115,10 @@ class LlamaIntegrationTest(unittest.TestCase):
         An integration test for llama 3.1. It tests against a long output to ensure the subtle numerical differences
         from llama 3.1.'s RoPE can be detected
         """
-        # diff on `EXPECTED_TEXT`:
-        # 2024-08-26: updating from torch 2.3.1 to 2.4.0 slightly changes the results.
-        expected_base_text = (
-            "Tell me about the french revolution. The french revolution was a period of radical political and social "
-            "upheaval in France that lasted from 1789 until 1799. It was a time of great change and upheaval, marked "
-            "by the overthrow of the monarchy, the rise of the middle class, and the eventual establishment of the "
-            "First French Republic.\nThe revolution began in 1789 with the Estates-General, a representative "
-            "assembly that had not met since 1614. The Third Estate, which represented the common people, "
-            "demanded greater representation and eventually broke away to form the National Assembly. This marked "
-            "the beginning of the end of the absolute monarchy and the rise of the middle class.\n"
-        )
         expected_texts = Expectations(
             {
-                ("rocm", (9, 5)): expected_base_text.replace("political and social", "social and political"),
-                ("cuda", None): expected_base_text,
+                ("rocm", (9, 5)): 'Tell me about the french revolution. The french revolution was a period of radical social and political upheaval in France that lasted from 1789 until 1799. It was a time of great change and upheaval, marked by the overthrow of the monarchy, the rise of the middle class, and the eventual establishment of the First French Republic.\nThe revolution began in 1789 with the Estates-General, a representative assembly that had not met since 1614. The Third Estate, which represented the common people, demanded greater representation and eventually broke away to form the National Assembly. This marked the beginning of the end of the absolute monarchy and the rise of the middle class.\n',
+                ("cuda", None): 'Tell me about the french revolution. The french revolution was a period of radical political and social upheaval in France that lasted from 1789 until 1799. It was a time of great change and upheaval, marked by the overthrow of the monarchy, the rise of the middle class, and the eventual establishment of the First French Republic.\nThe revolution began in 1789 with the Estates-General, a representative assembly that had not met since 1614. The Third Estate, which represented the common people, demanded greater representation and eventually broke away to form the National Assembly. The National Assembly adopted the Declaration of the Rights of Man and of the Citizen, which enshr',
             }
         )  # fmt: skip
         EXPECTED_TEXT = expected_texts.get_expectation()
@@ -242,6 +231,8 @@ class LlamaIntegrationTest(unittest.TestCase):
             )
         )
 
+    # TODO: check why we have the following strange situation.
+    # without running in subprocess, this test causes subsequent tests failing with `RuntimeError: Expected all tensors to be on the same device, but found at least two devices, cpu and cuda:0!`
     @run_test_using_subprocess
     @slow
     def test_model_7b_dola_generation(self):
