@@ -348,7 +348,7 @@ class BertSelfAttention(nn.Module):
 
 
 class BertCrossAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None, layer_idx=None):
+    def __init__(self, config, position_embedding_type=None, is_causal=False, layer_idx=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -374,7 +374,7 @@ class BertCrossAttention(nn.Module):
             self.max_position_embeddings = config.max_position_embeddings
             self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
 
-        self.is_causal = False
+        self.is_causal = is_causal
         self.layer_idx = layer_idx
 
     def forward(
@@ -406,7 +406,7 @@ class BertCrossAttention(nn.Module):
             value_layer = self.value(encoder_hidden_states).view(*kv_input_shape).transpose(1, 2)
 
             if past_key_value is not None:
-                # save all states to cache
+                # save all states to the cache
                 key_layer, value_layer = past_key_value.cross_attention_cache.update(
                     key_layer,
                     value_layer,
@@ -462,9 +462,13 @@ class BertSelfOutput(nn.Module):
 
 
 class BertAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None, is_causal=False, layer_idx=None):
+    def __init__(
+        self, config, position_embedding_type=None, is_causal=False, layer_idx=None, is_cross_attention=False
+    ):
         super().__init__()
-        self.self = BertSelfAttention(
+        self.is_cross_attention = is_cross_attention
+        attention_class = BertCrossAttention if is_cross_attention else BertSelfAttention
+        self.self = attention_class(
             config, position_embedding_type=position_embedding_type, is_causal=is_causal, layer_idx=layer_idx
         )
         self.output = BertSelfOutput(config)
@@ -493,18 +497,30 @@ class BertAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor]:
-        self_outputs = self.self(
-            hidden_states,
-            attention_mask,
-            head_mask,
-            past_key_value,
-            cache_position,
-            **kwargs,
-        )
+        if self.is_cross_attention:
+            self_outputs = self.self(
+                hidden_states,
+                head_mask,
+                encoder_hidden_states,
+                encoder_attention_mask,
+                past_key_value,
+                **kwargs,
+            )
+        else:
+            self_outputs = self.self(
+                hidden_states,
+                attention_mask,
+                head_mask,
+                past_key_value,
+                cache_position,
+                **kwargs,
+            )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
@@ -550,8 +566,12 @@ class BertLayer(GradientCheckpointingLayer):
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = BertCrossAttention(
-                config, position_embedding_type="absolute", layer_idx=layer_idx
+            self.crossattention = BertAttention(
+                config,
+                position_embedding_type="absolute",
+                is_causal=False,
+                layer_idx=layer_idx,
+                is_cross_attention=True,
             )
         self.intermediate = BertIntermediate(config)
         self.output = BertOutput(config)
@@ -591,10 +611,11 @@ class BertLayer(GradientCheckpointingLayer):
 
             cross_attention_outputs = self.crossattention(
                 attention_output,
+                None,  # attention_mask
                 head_mask,
                 encoder_hidden_states,
                 encoder_attention_mask,
-                past_key_value,
+                past_key_value=past_key_value,
                 **kwargs,
             )
             attention_output = cross_attention_outputs[0]
