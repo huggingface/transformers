@@ -858,7 +858,6 @@ class EomtImageProcessor(BaseImageProcessor):
     ):
         """Post-processes model outputs into final panoptic segmentation prediction."""
 
-        # `mask_threshold` and `overlap_mask_area_threshold` args are unused and only present for Pipeline compatability.
         size = size if size is not None else self.size
 
         masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
@@ -904,13 +903,12 @@ class EomtImageProcessor(BaseImageProcessor):
             results.append({"segmentation": segmentation, "segments_info": segments})
         return results
 
+    @filter_out_non_signature_kwargs()
     def post_process_instance_segmentation(
         self,
         outputs,
         target_sizes: list[tuple[int, int]],
         threshold: float = 0.5,
-        mask_threshold: float = 0.5,
-        overlap_mask_area_threshold: float = 0.8,
         size: Optional[dict[str, int]] = None,
     ):
         """Post-processes model outputs into Instance Segmentation Predictions."""
