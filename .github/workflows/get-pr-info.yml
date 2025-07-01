@@ -7,55 +7,55 @@ on:
         type: string
     outputs:
       PR_HEAD_REPO_FULL_NAME:
-        description: "The extracted PR commit SHA"
+        description: "The full name of the repository from which the pull request is created"
         value: ${{ jobs.get-pr-info.outputs.PR_HEAD_REPO_FULL_NAME }}
       PR_BASE_REPO_FULL_NAME:
-        description: "The extracted PR commit SHA"
+        description: "The full name of the repository to which the pull request is created"
         value: ${{ jobs.get-pr-info.outputs.PR_BASE_REPO_FULL_NAME }}
       PR_HEAD_REPO_OWNER:
-        description: "The extracted PR commit SHA"
+        description: "The owner of the repository from which the pull request is created"
         value: ${{ jobs.get-pr-info.outputs.PR_HEAD_REPO_OWNER }}
       PR_BASE_REPO_OWNER:
-        description: "The extracted PR commit SHA"
+        description: "The owner of the repository to which the pull request is created"
         value: ${{ jobs.get-pr-info.outputs.PR_BASE_REPO_OWNER }}
       PR_HEAD_REPO_NAME:
-        description: "The extracted PR commit SHA"
+        description: "The name of the repository from which the pull request is created"
         value: ${{ jobs.get-pr-info.outputs.PR_HEAD_REPO_NAME }}
       PR_BASE_REPO_NAME:
-        description: "The extracted PR commit SHA"
+        description: "The name of the repository to which the pull request is created"
         value: ${{ jobs.get-pr-info.outputs.PR_BASE_REPO_NAME }}
       PR_HEAD_REF:
-        description: "The extracted PR commit SHA"
+        description: "The branch name of the pull request in the head repository"
         value: ${{ jobs.get-pr-info.outputs.PR_HEAD_REF }}
       PR_BASE_REF:
-        description: "The extracted PR commit SHA"
+        description: "The branch name in the base repository (to merge into)"
         value: ${{ jobs.get-pr-info.outputs.PR_BASE_REF }}
       PR_HEAD_SHA:
-        description: "The extracted PR commit SHA"
+        description: "The head sha of the pull request branch in the head repository"
         value: ${{ jobs.get-pr-info.outputs.PR_HEAD_SHA }}
       PR_BASE_SHA:
-        description: "The extracted PR commit SHA"
+        description: "The head sha of the target branch in the base repository"
         value: ${{ jobs.get-pr-info.outputs.PR_BASE_SHA }}
       PR_MERGE_COMMIT_SHA:
-        description: "The extracted PR commit SHA"
+        description: "The sha of the merge commit for the pull request (created by GitHub) in the base repository"
         value: ${{ jobs.get-pr-info.outputs.PR_MERGE_COMMIT_SHA }}
       PR_HEAD_COMMIT_DATE:
-        description: "The extracted PR commit SHA"
+        description: "The date of the head sha of the pull request branch in the head repository"
         value: ${{ jobs.get-pr-info.outputs.PR_HEAD_COMMIT_DATE }}
       PR_MERGE_COMMIT_DATE:
-        description: "The extracted PR commit SHA"
+        description: "The date of the merge commit for the pull request (created by GitHub) in the base repository"
         value: ${{ jobs.get-pr-info.outputs.PR_MERGE_COMMIT_DATE }}
       PR_HEAD_COMMIT_TIMESTAMP:
-        description: "The extracted PR commit SHA"
+        description: "The timestamp of the head sha of the pull request branch in the head repository"
         value: ${{ jobs.get-pr-info.outputs.PR_HEAD_COMMIT_TIMESTAMP }}
       PR_MERGE_COMMIT_TIMESTAMP:
-        description: "The extracted PR commit SHA"
+        description: "The timestamp of the merge commit for the pull request (created by GitHub) in the base repository"
         value: ${{ jobs.get-pr-info.outputs.PR_MERGE_COMMIT_TIMESTAMP }}
       PR:
-        description: "The extracted PR commit SHA"
+        description: "The PR"
         value: ${{ jobs.get-pr-info.outputs.PR }}
       PR_FILES:
-        description: "The extracted PR commit SHA"
+        description: "The files touched in the PR"
         value: ${{ jobs.get-pr-info.outputs.PR_FILES }}
 
 
