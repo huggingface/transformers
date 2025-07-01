@@ -150,7 +150,6 @@ class MistralModel(LlamaModel):
         )
 
         hidden_states = inputs_embeds
-
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
@@ -165,7 +164,6 @@ class MistralModel(LlamaModel):
                 **kwargs,
             )
         hidden_states = self.norm(hidden_states)
-
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
@@ -207,8 +205,6 @@ class MistralForQuestionAnswering(LlamaForQuestionAnswering):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         **kwargs,
     ) -> QuestionAnsweringModelOutput:
         outputs: BaseModelOutputWithPast = self.model(
@@ -217,8 +213,7 @@ class MistralForQuestionAnswering(LlamaForQuestionAnswering):
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            **kwargs,
         )
 
         sequence_output = outputs.last_hidden_state
