@@ -109,9 +109,54 @@ visualizer("Hello, how are you?")
 
 [[autodoc]] MarianConfig
 
+## MarianTokenizer
 
+[[autodoc]] MarianTokenizer
+    - build_inputs_with_special_tokens
 
+<frameworkcontent>
+<pt>
 
+## MarianModel
+
+[[autodoc]] MarianModel
+    - forward
+
+## MarianMTModel
+
+[[autodoc]] MarianMTModel
+    - forward
+
+## MarianForCausalLM
+
+[[autodoc]] MarianForCausalLM
+    - forward
+
+</pt>
+<tf>
+
+## TFMarianModel
+
+[[autodoc]] TFMarianModel
+    - call
+
+## TFMarianMTModel
+
+[[autodoc]] TFMarianMTModel
+    - call
+
+</tf>
+<jax>
+
+## FlaxMarianModel
+
+[[autodoc]] FlaxMarianModel
+    - __call__
+
+## FlaxMarianMTModel
+
+[[autodoc]] FlaxMarianMTModel
+    - __call__
 
 </jax>
 </frameworkcontent>
