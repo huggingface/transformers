@@ -47,6 +47,7 @@ from ..llama.modeling_llama import (
     LlamaPreTrainedModel,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
+    apply_rotary_pos_emb,
     eager_attention_forward,
 )
 
@@ -146,8 +147,6 @@ class Exaone4Config(PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        reorder_qk_norm (`bool`, *optional*, defaults to `False`):
-            Whether to use post-layer normalization and additional layer normalization in query/key projections.
         sliding_window (`int`, *optional*):
             The size of the sliding window for the sliding window attention.
         sliding_window_pattern (`str`, *optional*):
@@ -216,7 +215,6 @@ class Exaone4Config(PretrainedConfig):
         rope_theta=10000.0,
         rope_scaling=None,
         attention_dropout=0.0,
-        reorder_qk_norm=False,
         sliding_window=None,
         sliding_window_pattern=None,
         layer_types=None,
@@ -241,7 +239,6 @@ class Exaone4Config(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
-        self.reorder_qk_norm = reorder_qk_norm
         self.sliding_window = sliding_window
         self.sliding_window_pattern = sliding_window_pattern
 
@@ -256,51 +253,6 @@ class Exaone4Config(PretrainedConfig):
         super().__init__(
             bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
         )
-
-
-@torch.jit.script
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
-
-
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
 
 
 def check_is_sliding(config, layer_idx):
@@ -353,7 +305,6 @@ class Exaone4Attention(nn.Module):
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
         self.scaling = self.head_dim**-0.5
-        self.reorder_qk_norm = config.reorder_qk_norm
         self.sliding_window = config.sliding_window
         self.sliding_window_pattern = config.sliding_window_pattern
         self.is_sliding = check_is_sliding(config, layer_idx)
@@ -368,9 +319,8 @@ class Exaone4Attention(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
 
-        if self.reorder_qk_norm:
-            self.q_norm = Exaone4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
-            self.k_norm = Exaone4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.q_norm = Exaone4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = Exaone4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -388,9 +338,9 @@ class Exaone4Attention(nn.Module):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        if self.reorder_qk_norm:
-            query_states = self.q_norm(query_states)
-            key_states = self.k_norm(key_states)
+        # We use QK-norm
+        query_states = self.q_norm(query_states)
+        key_states = self.k_norm(key_states)
 
         cos, sin = position_embeddings
         # We use global NoPE for hybrid attention model
@@ -455,17 +405,12 @@ class Exaone4DecoderLayer(nn.Module):
         self.layer_idx = layer_idx
         self.attention_type = config.layer_types[layer_idx]
         self.hidden_size = config.hidden_size
-        self.reorder_qk_norm = config.reorder_qk_norm
 
         self.self_attn = Exaone4Attention(config, layer_idx)
         self.mlp = Exaone4MLP(config)
 
-        if self.reorder_qk_norm:
-            self.post_attention_layernorm = Exaone4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-            self.post_feedforward_layernorm = Exaone4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        else:
-            self.input_layernorm = Exaone4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-            self.pre_feedforward_layernorm = Exaone4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Exaone4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_feedforward_layernorm = Exaone4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.is_sliding = check_is_sliding(config, layer_idx)
         self.sliding_window = config.sliding_window
@@ -489,12 +434,6 @@ class Exaone4DecoderLayer(nn.Module):
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         residual = hidden_states
 
-        # We use one of LN options:
-        #   1. Use pre-LN, or
-        #   2. Use post-LN with QK-norm
-        if not self.reorder_qk_norm:  # Use pre-LN
-            hidden_states = self.input_layernorm(hidden_states)
-
         # Self Attention
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
@@ -507,20 +446,18 @@ class Exaone4DecoderLayer(nn.Module):
             cache_position=cache_position,
         )
 
-        if self.reorder_qk_norm:  # Use post-LN with QK-norm
-            hidden_states = self.post_attention_layernorm(hidden_states)
+        # Use post-LN
+        hidden_states = self.post_attention_layernorm(hidden_states)
 
         hidden_states = residual + hidden_states
 
         residual = hidden_states
-        if not self.reorder_qk_norm:  # Use pre-LN
-            hidden_states = self.pre_feedforward_layernorm(hidden_states)
 
         # Fully Connected
         hidden_states = self.mlp(hidden_states)
 
-        if self.reorder_qk_norm:  # Use post-LN with QK-norm
-            hidden_states = self.post_feedforward_layernorm(hidden_states)
+        # Use post-LN
+        hidden_states = self.post_feedforward_layernorm(hidden_states)
 
         hidden_states = residual + hidden_states
 

@@ -141,8 +141,6 @@ class Exaone4Config(PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        reorder_qk_norm (`bool`, *optional*, defaults to `False`):
-            Whether to use post-layer normalization and additional layer normalization in query/key projections.
         sliding_window (`int`, *optional*):
             The size of the sliding window for the sliding window attention.
         sliding_window_pattern (`str`, *optional*):
@@ -211,7 +209,6 @@ class Exaone4Config(PretrainedConfig):
         rope_theta=10000.0,
         rope_scaling=None,
         attention_dropout=0.0,
-        reorder_qk_norm=False,
         sliding_window=None,
         sliding_window_pattern=None,
         layer_types=None,
@@ -236,7 +233,6 @@ class Exaone4Config(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
-        self.reorder_qk_norm = reorder_qk_norm
         self.sliding_window = sliding_window
         self.sliding_window_pattern = sliding_window_pattern
 
