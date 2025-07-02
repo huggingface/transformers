@@ -722,9 +722,6 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
         )
         expected_slice_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
 
-        expected_scores = torch.tensor([0.4524, 0.4074]).to(torch_device)
-        expected_slice_boxes = torch.tensor([344.8210, 23.1831, 637.3943, 373.8227]).to(torch_device)
-
         self.assertEqual(len(results["scores"]), 2)
         torch.testing.assert_close(results["scores"], expected_scores, rtol=1e-3, atol=1e-3)
         torch.testing.assert_close(results["boxes"][0, :], expected_slice_boxes, rtol=1e-2, atol=1e-2)

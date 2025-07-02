@@ -467,12 +467,7 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
             }
         )
         expected_slice_hidden_state = torch.tensor(expectations.get_expectation()).to(torch_device)
-        torch.testing.assert_close(
-            outputs.pixel_decoder_last_hidden_state[0, 0, :3, :3],
-            expected_slice_hidden_state,
-            atol=TOLERANCE,
-            rtol=TOLERANCE,
-        )
+        torch.testing.assert_close(outputs.pixel_decoder_last_hidden_state[0, 0, :3, :3], expected_slice_hidden_state, atol=TOLERANCE,rtol=TOLERANCE)  # fmt: skip
 
         expectations = Expectations(
             {
@@ -489,12 +484,7 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
             }
         )
         expected_slice_hidden_state = torch.tensor(expectations.get_expectation()).to(torch_device)
-        torch.testing.assert_close(
-            outputs.transformer_decoder_last_hidden_state[0, :3, :3],
-            expected_slice_hidden_state,
-            atol=TOLERANCE,
-            rtol=TOLERANCE,
-        )
+        torch.testing.assert_close(outputs.transformer_decoder_last_hidden_state[0, :3, :3], expected_slice_hidden_state, atol=TOLERANCE, rtol=TOLERANCE)  # fmt: skip
 
     def test_inference_universal_segmentation_head(self):
         model = Mask2FormerForUniversalSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()

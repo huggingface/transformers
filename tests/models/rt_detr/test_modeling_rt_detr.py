@@ -767,7 +767,6 @@ class RTDetrModelIntegrationTest(unittest.TestCase):
         results = image_processor.post_process_object_detection(
             outputs, threshold=0.0, target_sizes=[image.size[::-1]]
         )[0]
-        expected_scores = torch.tensor([0.9704, 0.9599, 0.9576, 0.9507], device=torch_device)
 
         expectations = Expectations(
             {

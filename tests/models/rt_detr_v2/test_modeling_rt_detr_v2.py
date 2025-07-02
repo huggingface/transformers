@@ -791,6 +791,6 @@ class RTDetrV2ModelIntegrationTest(unittest.TestCase):
         )
         expected_slice_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
 
-        self.assertTrue(torch.allclose(results["scores"][:4], expected_scores, atol=1e-3, rtol=2e-4))
+        torch.testing.assert_close(results["scores"][:4], expected_scores, atol=1e-3, rtol=2e-4)
         self.assertSequenceEqual(results["labels"][:4].tolist(), expected_labels)
         torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, atol=1e-3, rtol=2e-4)
