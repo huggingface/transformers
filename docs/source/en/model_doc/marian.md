@@ -40,7 +40,6 @@ You can find all the original MarianMT checkpoints under the [Language Technolog
 > [!TIP]
 > Click on the MarianMT models in the right sidebar to see more examples of how to apply MarianMT to different translation tasks.
 
----
 
 The example below demonstrates how to translate text using [`Pipeline`] or the [`AutoModelForSeq2SeqLM`] class.
 
