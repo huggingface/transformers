@@ -29,6 +29,7 @@ from transformers import (
 )
 from transformers.file_utils import cached_property
 from transformers.testing_utils import (
+    Expectations,
     is_flaky,
     require_timm,
     require_torch,
@@ -804,34 +805,62 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**text_inputs, **image_inputs)
 
-        # Loss differs by CPU and GPU, also this can be changed in future.
-        expected_loss_dict = {
-            "loss_ce": torch.tensor(1.1147),
-            "loss_bbox": torch.tensor(0.2031),
-            "loss_giou": torch.tensor(0.5819),
-            "loss_ce_0": torch.tensor(1.1941),
-            "loss_bbox_0": torch.tensor(0.1978),
-            "loss_giou_0": torch.tensor(0.5524),
-            "loss_ce_1": torch.tensor(1.1621),
-            "loss_bbox_1": torch.tensor(0.1909),
-            "loss_giou_1": torch.tensor(0.5892),
-            "loss_ce_2": torch.tensor(1.1641),
-            "loss_bbox_2": torch.tensor(0.1892),
-            "loss_giou_2": torch.tensor(0.5626),
-            "loss_ce_3": torch.tensor(1.1943),
-            "loss_bbox_3": torch.tensor(0.1941),
-            "loss_giou_3": torch.tensor(0.5607),
-            "loss_ce_4": torch.tensor(1.0956),
-            "loss_bbox_4": torch.tensor(0.2008),
-            "loss_giou_4": torch.tensor(0.5836),
-            "loss_ce_enc": torch.tensor(16226.3164),
-            "loss_bbox_enc": torch.tensor(0.3063),
-            "loss_giou_enc": torch.tensor(0.7380),
-        }
+        # Loss differs by CPU and accelerator, also this can be changed in future.
+        expected_loss_dicts = Expectations(
+            {
+                 ("xpu", 3): {
+                                    "loss_ce": torch.tensor(1.1147),
+                                    "loss_bbox": torch.tensor(0.2031),
+                                    "loss_giou": torch.tensor(0.5819),
+                                    "loss_ce_0": torch.tensor(1.1941),
+                                    "loss_bbox_0": torch.tensor(0.1978),
+                                    "loss_giou_0": torch.tensor(0.5524),
+                                    "loss_ce_1": torch.tensor(1.1621),
+                                    "loss_bbox_1": torch.tensor(0.1909),
+                                    "loss_giou_1": torch.tensor(0.5892),
+                                    "loss_ce_2": torch.tensor(1.1641),
+                                    "loss_bbox_2": torch.tensor(0.1892),
+                                    "loss_giou_2": torch.tensor(0.5626),
+                                    "loss_ce_3": torch.tensor(1.1943),
+                                    "loss_bbox_3": torch.tensor(0.1941),
+                                    "loss_giou_3": torch.tensor(0.5592),
+                                    "loss_ce_4": torch.tensor(1.0956),
+                                    "loss_bbox_4": torch.tensor(0.2037),
+                                    "loss_giou_4": torch.tensor(0.5813),
+                                    "loss_ce_enc": torch.tensor(16226.3164),
+                                    "loss_bbox_enc": torch.tensor(0.3063),
+                                    "loss_giou_enc": torch.tensor(0.7380),
+                },
+                ("cuda", None): {
+                                    "loss_ce": torch.tensor(1.1147),
+                                    "loss_bbox": torch.tensor(0.2031),
+                                    "loss_giou": torch.tensor(0.5819),
+                                    "loss_ce_0": torch.tensor(1.1941),
+                                    "loss_bbox_0": torch.tensor(0.1978),
+                                    "loss_giou_0": torch.tensor(0.5524),
+                                    "loss_ce_1": torch.tensor(1.1621),
+                                    "loss_bbox_1": torch.tensor(0.1909),
+                                    "loss_giou_1": torch.tensor(0.5892),
+                                    "loss_ce_2": torch.tensor(1.1641),
+                                    "loss_bbox_2": torch.tensor(0.1892),
+                                    "loss_giou_2": torch.tensor(0.5626),
+                                    "loss_ce_3": torch.tensor(1.1943),
+                                    "loss_bbox_3": torch.tensor(0.1941),
+                                    "loss_giou_3": torch.tensor(0.5607),
+                                    "loss_ce_4": torch.tensor(1.0956),
+                                    "loss_bbox_4": torch.tensor(0.2008),
+                                    "loss_giou_4": torch.tensor(0.5836),
+                                    "loss_ce_enc": torch.tensor(16226.3164),
+                                    "loss_bbox_enc": torch.tensor(0.3063),
+                                    "loss_giou_enc": torch.tensor(0.7380),
+                },
+            }
+        )  # fmt: skip
+        expected_loss_dict = expected_loss_dicts.get_expectation()
 
         expected_loss = torch.tensor(32482.2305)
 
         for key in expected_loss_dict:
-            self.assertTrue(torch.allclose(outputs.loss_dict[key], expected_loss_dict[key], atol=1e-3))
+            torch.testing.assert_close(outputs.loss_dict[key], expected_loss_dict[key], rtol=1e-5, atol=1e-3)
 
         self.assertTrue(torch.allclose(outputs.loss, expected_loss, atol=1e-3))
