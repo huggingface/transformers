@@ -307,17 +307,55 @@ class PagedAttentionCache:
         layer_idx: int,
         read_index,
         write_index,
+        reshaping_function,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         # Reshape cache for easier indexing
         total_slots = self.num_blocks * self.block_size
+        # print(self.key_cache[layer_idx].shape)
+        # print(self.value_cache[layer_idx].shape)
         k_cache_flat = self.key_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
         v_cache_flat = self.value_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
-        k_cache_flat[:, write_index, :] = key_states[0]
-        v_cache_flat[:, write_index, :] = value_states[0]
+        self.reshape_and_cache_tensors(key_states, value_states, self.block_size, 16, layer_idx, write_index=write_index, reshaping_function=reshaping_function)
+        # k_cache_flat[:, write_index, :] = key_states[0]
+        # v_cache_flat[:, write_index, :] = value_states[0]
         return k_cache_flat[None, :, read_index, :], v_cache_flat[None, :, read_index, :]
 
+    def reshape_and_cache_tensors(
+        self,
+        key: torch.Tensor,  
+        value: torch.Tensor,  
+        block_size: int,
+        x: int,
+        layer_idx: int,
+        write_index: torch.Tensor,
+        reshaping_function,
+        **kwargs
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Reshape and cache key/value tensors following the same logic as the Metal kernel.
+        """
+        key_cache = self.key_cache[layer_idx]
+        value_cache = self.value_cache[layer_idx]
+        key_cache = key_cache.view(self.num_blocks, self.num_key_value_heads, self.head_dim // x, self.block_size, x)
+        value_cache = value_cache.view(self.num_blocks, self.num_key_value_heads, self.head_dim, self.block_size)
+        # Create slot mapping (which tokens go to which cache slots)
+        # Convert write_index to int64 as expected by Metal kernel
+        slot_mapping = write_index.to(torch.int64)
 
+        # Populate the caches using reshape_and_cache
+        torch.mps.synchronize()
+        reshaping_function(
+            key,
+            value,
+            key_cache,
+            value_cache,
+            slot_mapping,
+            "auto",  # kv_cache_dtype
+            torch.tensor(1.0, device="mps"),  # k_scale
+            torch.tensor(1.0, device="mps"),  # v_scale
+        )
+        torch.mps.synchronize()
 class Scheduler(ABC):
     """
     Abstract base class for scheduling requests in the continuous batch processor.
