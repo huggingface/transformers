@@ -39,6 +39,9 @@ from .configuration_blt import (
     BLTPatcherConfig,
 )
 
+from ...generation.utils import GenerationMixin
+from ...modeling_outputs import CausalLMOutputWithPast
+
 if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import BlockMask
     from ...integrations.flex_attention import make_flex_block_causal_mask
@@ -669,6 +672,9 @@ class BLTLocalDecoder(nn.Module):
             bias=False,
         )
 
+        z = 5
+        z = 5+1
+
 
     def forward(
         self,
@@ -711,7 +717,8 @@ class BLTLocalDecoder(nn.Module):
             layer_outputs = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None)
             hidden_states = layer_outputs[0]
 
-        logits = self.lm_head(self.norm(hidden_states))
+        logits = self.norm(hidden_states)
+        logits = self.lm_head(logits)
         return logits, cache
 
 
@@ -1158,6 +1165,53 @@ class BLTPatcher(BLTPreTrainedModel):
 
         return patch_lengths
 
+
+class BLTForCausalLM(BLTPreTrainedModel, GenerationMixin):
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = BLTModel(config)
+        self.vocab_size = config.vocab_size
+
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        position_ids=None,
+        past_key_values=None,
+        inputs_embeds=None,
+        labels=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        cache_position=None,
+        **kwargs,
+    ):
+        logits = self.model(input_ids)
+        
+        return CausalLMOutputWithPast(
+            logits=logits,
+            past_key_values=None,
+            hidden_states=None,
+            attentions=None,
+        )
+
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, **kwargs):
+        if past_key_values is not None:
+            input_ids = input_ids[:, -1:]
+        return {"input_ids": input_ids, "past_key_values": past_key_values}
+
+    def get_input_embeddings(self):
+        return self.model.local_encoder.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.model.local_encoder.embed_tokens = value
+
+    def get_output_embeddings(self):
+        return self.model.local_decoder.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.model.local_decoder.lm_head = new_embeddings
+
 __all__ = [
     "BLTPreTrainedModel",
     "BLTModel",
@@ -1166,4 +1220,5 @@ __all__ = [
     "BLTLocalDecoder", 
     "BLTGlobalTransformer",
     "BLTTransformerLayer",
+    "BLTForCausalLM",
 ]
