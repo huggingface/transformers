@@ -321,12 +321,22 @@ class BLTConfig(PretrainedConfig):
         encoder_config=None,
         decoder_config=None,
         global_config=None,
+        # Generation configuration
+        bos_token_id=1,
+        eos_token_id=2,
+        pad_token_id=-1,
         **kwargs,
     ):
         
         # Basic model configuration
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
+
+        # Generation configuration
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
+        self.return_dict = True
 
         # Patching configuration
         self.patch_in_forward = patch_in_forward
