@@ -18,7 +18,7 @@ import copy
 import json
 import os
 import warnings
-from typing import Any, Optional, Union
+from typing import Any, Optional, TypeVar, Union
 
 from packaging import version
 
@@ -40,6 +40,10 @@ from .utils.generic import is_timm_config_dict
 
 
 logger = logging.get_logger(__name__)
+
+
+# type hinting: specifying the type of config class that inherits from PretrainedConfig
+SpecificPretrainedConfigType = TypeVar("SpecificPretrainedConfigType", bound="PretrainedConfig")
 
 
 class PretrainedConfig(PushToHubMixin):
@@ -474,7 +478,7 @@ class PretrainedConfig(PushToHubMixin):
 
     @classmethod
     def from_pretrained(
-        cls,
+        cls: type[SpecificPretrainedConfigType],
         pretrained_model_name_or_path: Union[str, os.PathLike],
         cache_dir: Optional[Union[str, os.PathLike]] = None,
         force_download: bool = False,
@@ -482,7 +486,7 @@ class PretrainedConfig(PushToHubMixin):
         token: Optional[Union[str, bool]] = None,
         revision: str = "main",
         **kwargs,
-    ) -> "PretrainedConfig":
+    ) -> SpecificPretrainedConfigType:
         r"""
         Instantiate a [`PretrainedConfig`] (or a derived class) from a pretrained model configuration.
 
