@@ -351,8 +351,8 @@ class PretrainedConfig(PushToHubMixin):
         self.label2id = dict(zip(self.id2label.values(), self.id2label.keys()))
 
     @property
-    def name_or_path(self) -> str:
-        return self._name_or_path
+    def name_or_path(self) -> Optional[str]:
+        return getattr(self, "_name_or_path", None)
 
     @name_or_path.setter
     def name_or_path(self, value):
