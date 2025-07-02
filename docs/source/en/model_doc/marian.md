@@ -150,7 +150,19 @@ print(result)
 
 ## Notes
 
-- MarianMT models are smaller than many other translation models, enabling faster inference, low memory usage, and suitability for CPU environments.
+- MarianMT models are ~298MB on disk and there are more than 1000 models. Check this [list](https://huggingface.co/Helsinki-NLP) for supported language pairs. The language codes may be inconsistent. Two digit codes can be found [here](https://developers.google.com/admin-sdk/directory/v1/languages) while three digit codes may require further searching.
+- Models that require BPE preprocessing are not supported.
+- All model names use the following format: `Helsinki-NLP/opus-mt-{src}-{tgt}`. Language codes formatted like `es_AR` usually refer to the `code_{region}`. For example, `es_AR` refers to Spanish from Argentina.
+- If a model can output multiple languages, prepend the desired output language to `src_txt` as shown below. New multilingual models from the [Tatoeba-Challenge](https://github.com/Helsinki-NLP/Tatoeba-Challenge) require 3 character language codes.
+
+   ```py
+   add code snippet here
+   
+- Older multilingual models use 2 character language codes.
+
+   ```py
+   add code snippet here
+   
 
 
 
