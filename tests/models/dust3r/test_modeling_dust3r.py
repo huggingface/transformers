@@ -196,6 +196,11 @@ class Dust3RModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    pipeline_model_mapping = (
+        {"image-feature-extraction": Dust3RModel, "image-classification": Dust3RForImageClassification}
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = False
 
     test_pruning = False
