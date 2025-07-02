@@ -123,7 +123,7 @@ class KyutaiSpeechToTextPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["KyutaiSpeechToTextDecoderLayer", "MimiTransformerLayer"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
-    _supports_cache_class = True
+
     main_input_name = "input_ids"
 
     def _init_weights(self, module):

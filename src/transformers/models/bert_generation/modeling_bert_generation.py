@@ -362,7 +362,7 @@ class BertGenerationLayer(GradientCheckpointingLayer):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->BertGeneration
-class BertEncoder(nn.Module):
+class BertGenerationEncoder(nn.Module):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         self.config = config
@@ -411,29 +411,16 @@ class BertEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    past_key_values,
-                    output_attentions,
-                    cache_position,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    past_key_values,
-                    output_attentions,
-                    cache_position,
-                )
+            layer_outputs = layer_module(
+                hidden_states,
+                attention_mask,
+                layer_head_mask,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                encoder_attention_mask=encoder_attention_mask,
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                cache_position=cache_position,
+            )
 
             hidden_states = layer_outputs[0]
             if use_cache:
