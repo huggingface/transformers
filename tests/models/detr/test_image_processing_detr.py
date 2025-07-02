@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,14 @@ import unittest
 
 import numpy as np
 
-from transformers.testing_utils import require_torch, require_torch_gpu, require_torchvision, require_vision, slow
+from transformers.testing_utils import (
+    require_torch,
+    require_torch_accelerator,
+    require_torchvision,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import AnnotationFormatTestMixin, ImageProcessingTestMixin, prepare_image_inputs
@@ -172,7 +178,7 @@ class DetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixi
     def test_should_raise_if_annotation_format_invalid(self):
         image_processor_dict = self.image_processor_tester.prepare_image_processor_dict()
 
-        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", "r") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt") as f:
             detection_target = json.loads(f.read())
 
         annotations = {"image_id": 39769, "annotations": detection_target}
@@ -195,7 +201,7 @@ class DetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixi
     def test_valid_coco_detection_annotations(self):
         # prepare image and target
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", "r") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt") as f:
             target = json.loads(f.read())
 
         params = {"image_id": 39769, "annotations": target}
@@ -232,7 +238,7 @@ class DetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixi
     def test_call_pytorch_with_coco_detection_annotations(self):
         # prepare image and target
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", "r") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt") as f:
             target = json.loads(f.read())
 
         target = {"image_id": 39769, "annotations": target}
@@ -277,7 +283,7 @@ class DetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixi
     def test_call_pytorch_with_coco_panoptic_annotations(self):
         # prepare image, target and masks_path
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt", "r") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt") as f:
             target = json.loads(f.read())
 
         target = {"file_name": "000000039769.png", "image_id": 39769, "segments_info": target}
@@ -329,7 +335,7 @@ class DetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixi
         image_0 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         image_1 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png").resize((800, 800))
 
-        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", "r") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt") as f:
             target = json.loads(f.read())
 
         annotations_0 = {"image_id": 39769, "annotations": target}
@@ -448,7 +454,7 @@ class DetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixi
         image_0 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         image_1 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png").resize((800, 800))
 
-        with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt", "r") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt") as f:
             target = json.loads(f.read())
 
         annotation_0 = {"file_name": "000000039769.png", "image_id": 39769, "segments_info": target}
@@ -667,12 +673,12 @@ class DetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixi
             self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 50, 50]))
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_torchvision
-    def test_fast_processor_equivalence_cpu_gpu_coco_detection_annotations(self):
+    def test_fast_processor_equivalence_cpu_accelerator_coco_detection_annotations(self):
         # prepare image and target
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", "r") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt") as f:
             target = json.loads(f.read())
 
         target = {"image_id": 39769, "annotations": target}
@@ -680,8 +686,8 @@ class DetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixi
         processor = self.image_processor_list[1]()
         # 1. run processor on CPU
         encoding_cpu = processor(images=image, annotations=target, return_tensors="pt", device="cpu")
-        # 2. run processor on GPU
-        encoding_gpu = processor(images=image, annotations=target, return_tensors="pt", device="cuda")
+        # 2. run processor on accelerator
+        encoding_gpu = processor(images=image, annotations=target, return_tensors="pt", device=torch_device)
 
         # verify pixel values
         self.assertEqual(encoding_cpu["pixel_values"].shape, encoding_gpu["pixel_values"].shape)
@@ -723,12 +729,12 @@ class DetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixi
         torch.testing.assert_close(encoding_cpu["labels"][0]["size"], encoding_gpu["labels"][0]["size"].to("cpu"))
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_torchvision
-    def test_fast_processor_equivalence_cpu_gpu_coco_panoptic_annotations(self):
+    def test_fast_processor_equivalence_cpu_accelerator_coco_panoptic_annotations(self):
         # prepare image, target and masks_path
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt", "r") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt") as f:
             target = json.loads(f.read())
 
         target = {"file_name": "000000039769.png", "image_id": 39769, "segments_info": target}
@@ -740,9 +746,9 @@ class DetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixi
         encoding_cpu = processor(
             images=image, annotations=target, masks_path=masks_path, return_tensors="pt", device="cpu"
         )
-        # 2. run processor on GPU
+        # 2. run processor on accelerator
         encoding_gpu = processor(
-            images=image, annotations=target, masks_path=masks_path, return_tensors="pt", device="cuda"
+            images=image, annotations=target, masks_path=masks_path, return_tensors="pt", device=torch_device
         )
 
         # verify pixel values

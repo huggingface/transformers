@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -110,6 +109,7 @@ class PixtralVisionModelModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (PixtralVisionModel,) if is_torch_available() else ()
+    additional_model_inputs = ["image_sizes"]
     test_pruning = False
     test_head_masking = False
     test_torchscript = False

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 HuggingFace Inc..
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-isort:skip_file
+ruff: isort: skip_file
 """
 
 import os
@@ -38,9 +37,7 @@ from transformers import (
 from transformers.models.gpt2.tokenization_gpt2 import GPT2Tokenizer
 from transformers.testing_utils import (
     CaptureStderr,
-    require_flax,
     require_sentencepiece,
-    require_tf,
     require_tokenizers,
     require_torch,
     slow,
@@ -100,8 +97,6 @@ class TokenizerUtilsTest(unittest.TestCase):
 
     @require_tokenizers
     def test_batch_encoding_pickle(self):
-        import numpy as np
-
         tokenizer_p = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
         tokenizer_r = BertTokenizerFast.from_pretrained("google-bert/bert-base-cased")
 
@@ -120,27 +115,6 @@ class TokenizerUtilsTest(unittest.TestCase):
         with self.subTest("BatchEncoding (Rust, return_tensors=NUMPY)"):
             self.assert_dump_and_restore(
                 tokenizer_r("Small example to encode", return_tensors=TensorType.NUMPY), np.array_equal
-            )
-
-    @require_tf
-    @require_tokenizers
-    def test_batch_encoding_pickle_tf(self):
-        import tensorflow as tf
-
-        def tf_array_equals(t1, t2):
-            return tf.reduce_all(tf.equal(t1, t2))
-
-        tokenizer_p = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
-        tokenizer_r = BertTokenizerFast.from_pretrained("google-bert/bert-base-cased")
-
-        with self.subTest("BatchEncoding (Python, return_tensors=TENSORFLOW)"):
-            self.assert_dump_and_restore(
-                tokenizer_p("Small example to encode", return_tensors=TensorType.TENSORFLOW), tf_array_equals
-            )
-
-        with self.subTest("BatchEncoding (Rust, return_tensors=TENSORFLOW)"):
-            self.assert_dump_and_restore(
-                tokenizer_r("Small example to encode", return_tensors=TensorType.TENSORFLOW), tf_array_equals
             )
 
     @require_torch
@@ -209,38 +183,6 @@ class TokenizerUtilsTest(unittest.TestCase):
 
         batch = BatchEncoding({"inputs": [1, 2, 3], "labels": 0})
         tensor_batch = batch.convert_to_tensors(tensor_type="pt", prepend_batch_axis=True)
-        self.assertEqual(tensor_batch["inputs"].shape, (1, 3))
-        self.assertEqual(tensor_batch["labels"].shape, (1,))
-
-    @require_tf
-    def test_batch_encoding_with_labels_tf(self):
-        batch = BatchEncoding({"inputs": [[1, 2, 3], [4, 5, 6]], "labels": [0, 1]})
-        tensor_batch = batch.convert_to_tensors(tensor_type="tf")
-        self.assertEqual(tensor_batch["inputs"].shape, (2, 3))
-        self.assertEqual(tensor_batch["labels"].shape, (2,))
-        # test converting the converted
-        with CaptureStderr() as cs:
-            tensor_batch = batch.convert_to_tensors(tensor_type="tf")
-        self.assertFalse(len(cs.err), msg=f"should have no warning, but got {cs.err}")
-
-        batch = BatchEncoding({"inputs": [1, 2, 3], "labels": 0})
-        tensor_batch = batch.convert_to_tensors(tensor_type="tf", prepend_batch_axis=True)
-        self.assertEqual(tensor_batch["inputs"].shape, (1, 3))
-        self.assertEqual(tensor_batch["labels"].shape, (1,))
-
-    @require_flax
-    def test_batch_encoding_with_labels_jax(self):
-        batch = BatchEncoding({"inputs": [[1, 2, 3], [4, 5, 6]], "labels": [0, 1]})
-        tensor_batch = batch.convert_to_tensors(tensor_type="jax")
-        self.assertEqual(tensor_batch["inputs"].shape, (2, 3))
-        self.assertEqual(tensor_batch["labels"].shape, (2,))
-        # test converting the converted
-        with CaptureStderr() as cs:
-            tensor_batch = batch.convert_to_tensors(tensor_type="jax")
-        self.assertFalse(len(cs.err), msg=f"should have no warning, but got {cs.err}")
-
-        batch = BatchEncoding({"inputs": [1, 2, 3], "labels": 0})
-        tensor_batch = batch.convert_to_tensors(tensor_type="jax", prepend_batch_axis=True)
         self.assertEqual(tensor_batch["inputs"].shape, (1, 3))
         self.assertEqual(tensor_batch["labels"].shape, (1,))
 
@@ -381,20 +323,6 @@ class TokenizerUtilsTest(unittest.TestCase):
         batch = tokenizer.pad(features, padding=True, return_tensors="pt")
         self.assertTrue(isinstance(batch["input_ids"], torch.Tensor))
         self.assertEqual(batch["input_ids"].tolist(), [[0, 1, 2, tokenizer.pad_token_id], [0, 1, 2, 3]])
-
-    @require_tf
-    def test_padding_accepts_tensors_tf(self):
-        import tensorflow as tf
-
-        features = [{"input_ids": tf.constant([0, 1, 2])}, {"input_ids": tf.constant([0, 1, 2, 3])}]
-        tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
-
-        batch = tokenizer.pad(features, padding=True)
-        self.assertTrue(isinstance(batch["input_ids"], tf.Tensor))
-        self.assertEqual(batch["input_ids"].numpy().tolist(), [[0, 1, 2, tokenizer.pad_token_id], [0, 1, 2, 3]])
-        batch = tokenizer.pad(features, padding=True, return_tensors="tf")
-        self.assertTrue(isinstance(batch["input_ids"], tf.Tensor))
-        self.assertEqual(batch["input_ids"].numpy().tolist(), [[0, 1, 2, tokenizer.pad_token_id], [0, 1, 2, 3]])
 
     @require_tokenizers
     def test_instantiation_from_tokenizers(self):

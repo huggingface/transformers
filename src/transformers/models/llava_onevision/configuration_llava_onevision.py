@@ -49,7 +49,7 @@ class LlavaOnevisionConfig(PretrainedConfig):
             The feature selection strategy used to select the vision feature from the vision backbone.
             Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
             If `"full"`, the full vision features are used.
-        vision_feature_layer (`Union[int, List[int]]`, *optional*, defaults to -1):
+        vision_feature_layer (`Union[int, list[int]]`, *optional*, defaults to -1):
             The index of the layer to select the vision feature. If multiple indices are provided,
             the vision feature of the corresponding indices will be concatenated to form the
             vision features.
@@ -85,6 +85,10 @@ class LlavaOnevisionConfig(PretrainedConfig):
     ```"""
 
     model_type = "llava_onevision"
+    attribute_map = {
+        "image_token_id": "image_token_index",
+        "video_token_id": "video_token_index",
+    }
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
     def __init__(
@@ -172,7 +176,7 @@ class LlavaOnevisionConfig(PretrainedConfig):
                 patch_size=14,
                 image_size=384,
                 num_hidden_layers=26,
-                num_attention_heads=14,
+                num_attention_heads=16,
                 vision_use_head=False,
             )
 

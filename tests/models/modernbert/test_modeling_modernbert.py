@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -372,7 +371,7 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         config = ModernBertConfig(reference_compile=True)
         with tempfile.TemporaryDirectory() as tmpdirname:
             config.save_pretrained(tmpdirname)
-            with open(os.path.join(tmpdirname, "config.json"), "r") as f:
+            with open(os.path.join(tmpdirname, "config.json")) as f:
                 config_dict = json.load(f)
             self.assertNotIn("reference_compile", config_dict)
 

@@ -20,7 +20,7 @@ from transformers import (
     Text2TextGenerationPipeline,
     pipeline,
 )
-from transformers.testing_utils import is_pipeline_test, require_tf, require_torch
+from transformers.testing_utils import is_pipeline_test, require_torch
 from transformers.utils import is_torch_available
 
 from .test_pipelines_common import ANY
@@ -51,6 +51,7 @@ class Text2TextGenerationPipelineTests(unittest.TestCase):
             image_processor=image_processor,
             processor=processor,
             torch_dtype=torch_dtype,
+            max_new_tokens=20,
         )
         return generator, ["Something to write", "Something else"]
 
@@ -85,7 +86,13 @@ class Text2TextGenerationPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_small_model_pt(self):
-        generator = pipeline("text2text-generation", model="patrickvonplaten/t5-tiny-random", framework="pt")
+        generator = pipeline(
+            "text2text-generation",
+            model="patrickvonplaten/t5-tiny-random",
+            framework="pt",
+            num_beams=1,
+            max_new_tokens=9,
+        )
         # do_sample=False necessary for reproducibility
         outputs = generator("Something there", do_sample=False)
         self.assertEqual(outputs, [{"generated_text": ""}])
@@ -133,10 +140,3 @@ class Text2TextGenerationPipelineTests(unittest.TestCase):
                 ],
             ],
         )
-
-    @require_tf
-    def test_small_model_tf(self):
-        generator = pipeline("text2text-generation", model="patrickvonplaten/t5-tiny-random", framework="tf")
-        # do_sample=False necessary for reproducibility
-        outputs = generator("Something there", do_sample=False)
-        self.assertEqual(outputs, [{"generated_text": ""}])

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,7 +24,6 @@ from transformers.testing_utils import (
     require_essentia,
     require_librosa,
     require_scipy,
-    require_tf,
     require_torch,
 )
 from transformers.utils.import_utils import (
@@ -228,28 +226,6 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
 
         # check pt tensor or not
         self.assertEqual(type(input_features["input_features"]), torch.Tensor)
-
-        # check shape
-        self.assertEqual(len(input_features["input_features"].shape), 3)
-
-    @require_tf
-    def test_batch_feature_tf(self):
-        import tensorflow as tf
-
-        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
-        speech_input1 = np.zeros([1_000_000], dtype=np.float32)
-        speech_input2 = np.ones([2_000_000], dtype=np.float32)
-        speech_input3 = np.random.randint(low=0, high=10, size=500_000).astype(np.float32)
-
-        input_features = feature_extractor(
-            [speech_input1, speech_input2, speech_input3],
-            sampling_rate=[44_100, 16_000, 48_000],
-            return_tensors="tf",
-            return_attention_mask=True,
-        )
-
-        # check tf tensor or not
-        self.assertTrue(tf.is_tensor(input_features["input_features"]))
 
         # check shape
         self.assertEqual(len(input_features["input_features"].shape), 3)

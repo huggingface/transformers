@@ -18,7 +18,8 @@
 import dataclasses
 import re
 import string
-from typing import Any, Dict, Iterator, List, Mapping, Optional, Sequence, Tuple
+from collections.abc import Iterator, Mapping, Sequence
+from typing import Any, Optional
 
 import numpy as np
 
@@ -70,10 +71,10 @@ class Protein:
 
 def from_proteinnet_string(proteinnet_str: str) -> Protein:
     tag_re = r"(\[[A-Z]+\]\n)"
-    tags: List[str] = [tag.strip() for tag in re.split(tag_re, proteinnet_str) if len(tag) > 0]
-    groups: Iterator[Tuple[str, List[str]]] = zip(tags[0::2], [l.split("\n") for l in tags[1::2]])
+    tags: list[str] = [tag.strip() for tag in re.split(tag_re, proteinnet_str) if len(tag) > 0]
+    groups: Iterator[tuple[str, list[str]]] = zip(tags[0::2], [l.split("\n") for l in tags[1::2]])
 
-    atoms: List[str] = ["N", "CA", "C"]
+    atoms: list[str] = ["N", "CA", "C"]
     aatype = None
     atom_positions = None
     atom_mask = None
@@ -87,7 +88,7 @@ def from_proteinnet_string(proteinnet_str: str) -> Protein:
                 [residue_constants.restype_order.get(res_symbol, residue_constants.restype_num) for res_symbol in seq]
             )
         elif "[TERTIARY]" == g[0]:
-            tertiary: List[List[float]] = []
+            tertiary: list[list[float]] = []
             for axis in range(3):
                 tertiary.append(list(map(float, g[1][axis].split())))
             tertiary_np = np.array(tertiary)
@@ -118,8 +119,8 @@ def from_proteinnet_string(proteinnet_str: str) -> Protein:
     )
 
 
-def get_pdb_headers(prot: Protein, chain_id: int = 0) -> List[str]:
-    pdb_headers: List[str] = []
+def get_pdb_headers(prot: Protein, chain_id: int = 0) -> list[str]:
+    pdb_headers: list[str] = []
 
     remark = prot.remark
     if remark is not None:
@@ -142,18 +143,18 @@ def add_pdb_headers(prot: Protein, pdb_str: str) -> str:
     """Add pdb headers to an existing PDB string. Useful during multi-chain
     recycling
     """
-    out_pdb_lines: List[str] = []
+    out_pdb_lines: list[str] = []
     lines = pdb_str.split("\n")
 
     remark = prot.remark
     if remark is not None:
         out_pdb_lines.append(f"REMARK {remark}")
 
-    parents_per_chain: List[List[str]]
+    parents_per_chain: list[list[str]]
     if prot.parents is not None and len(prot.parents) > 0:
         parents_per_chain = []
         if prot.parents_chain_index is not None:
-            parent_dict: Dict[str, List[str]] = {}
+            parent_dict: dict[str, list[str]] = {}
             for p, i in zip(prot.parents, prot.parents_chain_index):
                 parent_dict.setdefault(str(i), [])
                 parent_dict[str(i)].append(p)
@@ -204,7 +205,7 @@ def to_pdb(prot: Protein) -> str:
 
     atom_types = residue_constants.atom_types
 
-    pdb_lines: List[str] = []
+    pdb_lines: list[str] = []
 
     atom_mask = prot.atom_mask
     aatype = prot.aatype

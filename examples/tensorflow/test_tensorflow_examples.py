@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -86,7 +85,7 @@ def get_results(output_dir):
     results = {}
     path = os.path.join(output_dir, "all_results.json")
     if os.path.exists(path):
-        with open(path, "r") as f:
+        with open(path) as f:
             results = json.load(f)
     else:
         raise ValueError(f"can't find {path}")
@@ -316,7 +315,6 @@ class ExamplesTests(TestCasePlus):
         testargs = f"""
             run_image_classification.py
             --dataset_name hf-internal-testing/cats_vs_dogs_sample
-            --trust_remote_code
             --model_name_or_path microsoft/resnet-18
             --do_train
             --do_eval

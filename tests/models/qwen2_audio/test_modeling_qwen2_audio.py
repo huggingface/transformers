@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -155,6 +154,10 @@ class Qwen2AudioForConditionalGenerationModelTest(ModelTesterMixin, unittest.Tes
 
     @unittest.skip(reason="Compile not yet supported because in Qwen2Audio models")
     def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+    @unittest.skip(reason="Qwen2 Audio does not support right padding.")
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
     @require_torch_sdpa

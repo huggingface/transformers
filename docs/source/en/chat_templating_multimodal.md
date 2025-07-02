@@ -56,7 +56,7 @@ Create a [`ImageTextToTextPipeline`] and pass the chat to it. For large models, 
 import torch
 from transformers import pipeline
 
-pipeline = pipeline("image-text-to-text", model="llava-hf/llava-onevision-qwen2-0.5b-ov-hf", device="cuda", torch_dtype=torch.float16)
+pipeline = pipeline("image-text-to-text", model="llava-hf/llava-onevision-qwen2-0.5b-ov-hf", device_map="auto", torch_dtype=torch.float16)
 pipeline(text=messages, max_new_tokens=50, return_full_text=False)
 [{'input_text': [{'role': 'system',
     'content': [{'type': 'text',
@@ -175,36 +175,7 @@ processed_chat = processor.apply_chat_template(
     add_generation_prompt=True,
     tokenize=True,
     return_dict=True,
-    video_fps=32,
-    video_load_backend="decord",
-)
-print(processed_chat.keys())
-```
-
-</hfoption>
-<hfoption id="custom frame sampling">
-
-Some models don't sample frames *uniformly* and require more complex logic to determine which frames to use. For example, the model may have an *adaptive frame selection* or if the model prioritizes *key moments* in a video rather than evenly spaced frames.
-
-If a model has a different sampling strategy, you can write a function that customizes frame selection. The function should include the following requirements.
-
-- Use the `sample_indices_fn` parameter to pass a callable function for sampling.
-- If provided, this function *overrides* the standard `num_frames` and `fps` parameters.
-- The function receives all the parameters passed to `load_video` and must return valid frame indices to sample from.
-
-An example function is shown below. This gives you full control over frame selection, making the model more adaptable to different video scenarios.
-
-```py
-def sample_indices_fn(metadata, **kwargs):
-    # samples only the first and the second frame
-    return [0, 1]
-
-processed_chat = processor.apply_chat_template(
-    messages,
-    add_generation_prompt=True,
-    tokenize=True,
-    return_dict=True,
-    sample_indices_fn=sample_indices_fn,
+    video_fps=16,
     video_load_backend="decord",
 )
 print(processed_chat.keys())

@@ -29,8 +29,6 @@ from .utils import (
     FEATURE_EXTRACTOR_NAME,
     PushToHubMixin,
     TensorType,
-    add_model_info_to_auto_map,
-    add_model_info_to_custom_pipelines,
     cached_file,
     copy_func,
     download_url,
@@ -77,7 +75,7 @@ class BatchFeature(UserDict):
         super().__init__(data)
         self.convert_to_tensors(tensor_type=tensor_type)
 
-    def __getitem__(self, item: str) -> Union[Any]:
+    def __getitem__(self, item: str) -> Any:
         """
         If the key is a string, returns the value of the dict associated to `key` ('input_values', 'attention_mask',
         etc.).
@@ -100,18 +98,6 @@ class BatchFeature(UserDict):
         if "data" in state:
             self.data = state["data"]
 
-    # Copied from transformers.tokenization_utils_base.BatchEncoding.keys
-    def keys(self):
-        return self.data.keys()
-
-    # Copied from transformers.tokenization_utils_base.BatchEncoding.values
-    def values(self):
-        return self.data.values()
-
-    # Copied from transformers.tokenization_utils_base.BatchEncoding.items
-    def items(self):
-        return self.data.items()
-
     def _get_is_as_tensor_fns(self, tensor_type: Optional[Union[str, TensorType]] = None):
         if tensor_type is None:
             return None, None
@@ -122,6 +108,10 @@ class BatchFeature(UserDict):
 
         # Get a function reference for the correct framework
         if tensor_type == TensorType.TENSORFLOW:
+            logger.warning_once(
+                "TensorFlow and JAX classes are deprecated and will be removed in Transformers v5. We "
+                "recommend migrating to PyTorch classes or pinning your version of Transformers."
+            )
             if not is_tf_available():
                 raise ImportError(
                     "Unable to convert output to TensorFlow tensors format, TensorFlow is not installed."
@@ -152,6 +142,10 @@ class BatchFeature(UserDict):
 
             is_tensor = torch.is_tensor
         elif tensor_type == TensorType.JAX:
+            logger.warning_once(
+                "TensorFlow and JAX classes are deprecated and will be removed in Transformers v5. We "
+                "recommend migrating to PyTorch classes or pinning your version of Transformers."
+            )
             if not is_flax_available():
                 raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")
             import jax.numpy as jnp  # noqa: F811
@@ -220,7 +214,6 @@ class BatchFeature(UserDict):
         requires_backends(self, ["torch"])
         import torch  # noqa
 
-        new_data = {}
         device = kwargs.get("device")
         non_blocking = kwargs.get("non_blocking", False)
         # Check if the args are a device or a dtype
@@ -235,17 +228,19 @@ class BatchFeature(UserDict):
             else:
                 # it's something else
                 raise ValueError(f"Attempting to cast a BatchFeature to type {str(arg)}. This is not supported.")
+
         # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `FloatTensor`
-        for k, v in self.items():
+        def maybe_to(v):
             # check if v is a floating point
             if isinstance(v, torch.Tensor) and torch.is_floating_point(v):
                 # cast and send to device
-                new_data[k] = v.to(*args, **kwargs)
+                return v.to(*args, **kwargs)
             elif isinstance(v, torch.Tensor) and device is not None:
-                new_data[k] = v.to(device=device, non_blocking=non_blocking)
+                return v.to(device=device, non_blocking=non_blocking)
             else:
-                new_data[k] = v
-        self.data = new_data
+                return v
+
+        self.data = {k: maybe_to(v) for k, v in self.items()}
         return self
 
 
@@ -308,7 +303,7 @@ class FeatureExtractionMixin(PushToHubMixin):
             resume_download:
                 Deprecated and ignored. All downloads are now resumed by default when possible.
                 Will be removed in v5 of Transformers.
-            proxies (`Dict[str, str]`, *optional*):
+            proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
             token (`str` or `bool`, *optional*):
@@ -331,7 +326,7 @@ class FeatureExtractionMixin(PushToHubMixin):
                 functions returns a `Tuple(feature_extractor, unused_kwargs)` where *unused_kwargs* is a dictionary
                 consisting of the key/value pairs whose keys are not feature extractor attributes: i.e., the part of
                 `kwargs` which has not been used to update `feature_extractor` and is otherwise ignored.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 The values in kwargs of any keys which are feature extractor attributes will be used to override the
                 loaded values. Behavior concerning key/value pairs whose keys are *not* feature extractor attributes is
                 controlled by the `return_unused_kwargs` keyword parameter.
@@ -397,7 +392,7 @@ class FeatureExtractionMixin(PushToHubMixin):
                 Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
                 repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
                 namespace).
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
         use_auth_token = kwargs.pop("use_auth_token", None)
@@ -459,7 +454,7 @@ class FeatureExtractionMixin(PushToHubMixin):
                 The identifier of the pre-trained checkpoint from which we want the dictionary of parameters.
 
         Returns:
-            `Tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the feature extractor object.
+            `tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the feature extractor object.
         """
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
@@ -551,16 +546,6 @@ class FeatureExtractionMixin(PushToHubMixin):
                 f"loading configuration file {feature_extractor_file} from cache at {resolved_feature_extractor_file}"
             )
 
-        if not is_local:
-            if "auto_map" in feature_extractor_dict:
-                feature_extractor_dict["auto_map"] = add_model_info_to_auto_map(
-                    feature_extractor_dict["auto_map"], pretrained_model_name_or_path
-                )
-            if "custom_pipelines" in feature_extractor_dict:
-                feature_extractor_dict["custom_pipelines"] = add_model_info_to_custom_pipelines(
-                    feature_extractor_dict["custom_pipelines"], pretrained_model_name_or_path
-                )
-
         return feature_extractor_dict, kwargs
 
     @classmethod
@@ -570,11 +555,11 @@ class FeatureExtractionMixin(PushToHubMixin):
         parameters.
 
         Args:
-            feature_extractor_dict (`Dict[str, Any]`):
+            feature_extractor_dict (`dict[str, Any]`):
                 Dictionary that will be used to instantiate the feature extractor object. Such a dictionary can be
                 retrieved from a pretrained checkpoint by leveraging the
                 [`~feature_extraction_utils.FeatureExtractionMixin.to_dict`] method.
-            kwargs (`Dict[str, Any]`):
+            kwargs (`dict[str, Any]`):
                 Additional parameters from which to initialize the feature extractor object.
 
         Returns:
@@ -603,7 +588,7 @@ class FeatureExtractionMixin(PushToHubMixin):
     def to_dict(self) -> dict[str, Any]:
         """
         Serializes this instance to a Python dictionary. Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
+            `dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
         output = copy.deepcopy(self.__dict__)
         output["feature_extractor_type"] = self.__class__.__name__
@@ -673,11 +658,7 @@ class FeatureExtractionMixin(PushToHubMixin):
         Register this class with a given auto class. This should only be used for custom feature extractors as the ones
         in the library are already mapped with `AutoFeatureExtractor`.
 
-        <Tip warning={true}>
 
-        This API is experimental and may have some slight breaking changes in the next releases.
-
-        </Tip>
 
         Args:
             auto_class (`str` or `type`, *optional*, defaults to `"AutoFeatureExtractor"`):

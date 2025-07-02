@@ -37,8 +37,8 @@ class EncodecConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        target_bandwidths (`List[float]`, *optional*, defaults to `[1.5, 3.0, 6.0, 12.0, 24.0]`):
-            The range of diffent bandwiths the model can encode audio with.
+        target_bandwidths (`list[float]`, *optional*, defaults to `[1.5, 3.0, 6.0, 12.0, 24.0]`):
+            The range of different bandwidths the model can encode audio with.
         sampling_rate (`int`, *optional*, defaults to 24000):
             The sampling rate at which the audio waveform should be digitalized expressed in hertz (Hz).
         audio_channels (`int`, *optional*, defaults to 1):

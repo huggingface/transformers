@@ -15,7 +15,7 @@
 """Feature extractor class for Pop2Piano"""
 
 import warnings
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy
 import numpy as np
@@ -31,6 +31,7 @@ from ...utils import (
     logging,
     requires_backends,
 )
+from ...utils.import_utils import requires
 
 
 if is_essentia_available():
@@ -47,6 +48,7 @@ if is_scipy_available():
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("essentia", "librosa", "scipy", "torch"))
 class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Pop2Piano feature extractor.
@@ -256,7 +258,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             )
 
             if add_zero_line:
-                # if it is batched then we seperate each examples using zero array
+                # if it is batched then we separate each examples using zero array
                 zero_array_len = max([*zip(*features_shapes)][1])
 
                 # we concatenate the zero array line here
@@ -302,14 +304,14 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             to it:
             - **attention_mask** numpy.ndarray of shape `(batch_size, max_input_features_seq_length)` --
                 Example :
-                    1, 1, 1, 0, 0 (audio 1, also here it is padded to max length of 5 thats why there are 2 zeros at
+                    1, 1, 1, 0, 0 (audio 1, also here it is padded to max length of 5 that's why there are 2 zeros at
                     the end indicating they are padded)
 
-                    0, 0, 0, 0, 0 (zero pad to seperate audio 1 and 2)
+                    0, 0, 0, 0, 0 (zero pad to separate audio 1 and 2)
 
                     1, 1, 1, 1, 1 (audio 2)
 
-                    0, 0, 0, 0, 0 (zero pad to seperate audio 2 and 3)
+                    0, 0, 0, 0, 0 (zero pad to separate audio 2 and 3)
 
                     1, 1, 1, 1, 1 (audio 3)
             - **attention_mask_beatsteps** numpy.ndarray of shape `(batch_size, max_beatsteps_seq_length)`
@@ -331,7 +333,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                     processed_features_dict[f"attention_mask_{feature_name}"] = attention_mask
 
         # If we are processing only one example, we should remove the zero array line since we don't need it to
-        # seperate examples from each other.
+        # separate examples from each other.
         if not is_batched and not return_attention_mask:
             processed_features_dict["input_features"] = processed_features_dict["input_features"][:-1, ...]
 
@@ -341,8 +343,8 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        audio: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
-        sampling_rate: Union[int, List[int]],
+        audio: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
+        sampling_rate: Union[int, list[int]],
         steps_per_beat: int = 2,
         resample: Optional[bool] = True,
         return_attention_mask: Optional[bool] = False,

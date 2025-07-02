@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Google SwitchTransformers Authors and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -43,6 +42,7 @@ if is_torch_available():
         SwitchTransformersEncoderModel,
         SwitchTransformersForConditionalGeneration,
         SwitchTransformersModel,
+        SwitchTransformersSparseMLP,
         SwitchTransformersTop1Router,
     )
     from transformers.models.switch_transformers.modeling_switch_transformers import (
@@ -709,40 +709,6 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         model = SwitchTransformersModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    def test_generate_with_head_masking(self):
-        attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        config = config_and_inputs[0]
-        max_length = config_and_inputs[1].shape[-1] + 3
-        model = SwitchTransformersForConditionalGeneration(config).eval()
-        model.to(torch_device)
-
-        head_masking = {
-            "head_mask": torch.zeros(config.num_layers, config.num_heads, device=torch_device),
-            "decoder_head_mask": torch.zeros(config.num_decoder_layers, config.num_heads, device=torch_device),
-            "cross_attn_head_mask": torch.zeros(config.num_decoder_layers, config.num_heads, device=torch_device),
-        }
-
-        for attn_name, (name, mask) in zip(attention_names, head_masking.items()):
-            head_masks = {name: mask}
-            # Explicitly pass decoder_head_mask as it is required from SWITCH_TRANSFORMERS model when head_mask specified
-            if name == "head_mask":
-                head_masks["decoder_head_mask"] = torch.ones(
-                    config.num_decoder_layers, config.num_heads, device=torch_device
-                )
-
-            out = model.generate(
-                config_and_inputs[1],
-                num_beams=1,
-                max_length=max_length,
-                output_attentions=True,
-                return_dict_in_generate=True,
-                **head_masks,
-            )
-            # We check the state of decoder_attentions and cross_attentions just from the last step
-            attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
-            self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
-
     @unittest.skip(
         reason="This architecture has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
     )
@@ -1134,3 +1100,16 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
 
         for i in range(0, BATCH_SIZE, 2):
             self.assertEqual(batch_output[i], batch_output[i + 1])
+
+
+@require_torch
+class SwitchTransformersSparseMLPTests(unittest.TestCase):
+    def test_token_dropping(self):
+        r"""
+        This test checks if the token dropping actually drops tokens.
+        """
+        config = SwitchTransformersConfig(expert_capacity=0)  # we drop everything
+        moe = SwitchTransformersSparseMLP(config)
+        dropped_token_results = moe(torch.randn(2, 3, 768))[0]
+
+        assert (dropped_token_results == 0).all(), f"Some tokens not dropped: {dropped_token_results}."

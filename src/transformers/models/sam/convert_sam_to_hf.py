@@ -137,7 +137,7 @@ def replace_keys(state_dict):
 def convert_sam_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, push_to_hub):
     config = get_config(model_name)
 
-    state_dict = torch.load(checkpoint_path, map_location="cpu")
+    state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
     state_dict = replace_keys(state_dict)
 
     image_processor = SamImageProcessor()

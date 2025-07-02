@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The Intel Team Authors, The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,7 @@
 
 
 import unittest
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -40,18 +39,18 @@ class TvpImageProcessingTester:
         self,
         parent,
         do_resize: bool = True,
-        size: Dict[str, int] = {"longest_edge": 40},
+        size: dict[str, int] = {"longest_edge": 40},
         do_center_crop: bool = False,
-        crop_size: Dict[str, int] = None,
+        crop_size: Optional[dict[str, int]] = None,
         do_rescale: bool = False,
         rescale_factor: Union[int, float] = 1 / 255,
         do_pad: bool = True,
-        pad_size: Dict[str, int] = {"height": 80, "width": 80},
-        fill: int = None,
+        pad_size: dict[str, int] = {"height": 80, "width": 80},
+        fill: Optional[int] = None,
         pad_mode: PaddingMode = None,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = [0.48145466, 0.4578275, 0.40821073],
-        image_std: Optional[Union[float, List[float]]] = [0.26862954, 0.26130258, 0.27577711],
+        image_mean: Optional[Union[float, list[float]]] = [0.48145466, 0.4578275, 0.40821073],
+        image_std: Optional[Union[float, list[float]]] = [0.26862954, 0.26130258, 0.27577711],
         batch_size=2,
         min_resolution=40,
         max_resolution=80,
