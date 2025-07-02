@@ -391,8 +391,6 @@ class SmolVLMProcessor(ProcessorMixin):
         self,
         conversation: Union[list[dict[str, str]], list[list[dict[str, str]]]],
         chat_template: Optional[str] = None,
-        num_frames: Optional[int] = None,
-        fps: Optional[int] = None,
         **kwargs: Unpack[AllKwargsForChatTemplate],
     ) -> str:
         """
@@ -437,10 +435,10 @@ class SmolVLMProcessor(ProcessorMixin):
             # re-assign to the correct default template for BC, if user is not requesting their own template
             chat_template = DEFAULT_CHAT_TEMPLATE
 
-        num_frames = self.video_processor.num_frames if num_frames is None else num_frames
-        fps = self.video_processor.fps if fps is None else fps
+        kwargs.setdefault("num_frames", self.video_processor.num_frames)
+        kwargs.setdefault("fps", self.video_processor.fps)
 
-        return super().apply_chat_template(conversation, chat_template, num_frames=num_frames, fps=fps, **kwargs)
+        return super().apply_chat_template(conversation, chat_template, **kwargs)
 
 
 __all__ = ["SmolVLMProcessor"]
