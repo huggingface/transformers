@@ -316,10 +316,11 @@ class PagedAttentionCache:
         # print(self.value_cache[layer_idx].shape)
         k_cache_flat = self.key_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
         v_cache_flat = self.value_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
-        self.reshape_and_cache_tensors(key_states, value_states, self.block_size, 16, layer_idx, write_index=write_index, reshaping_function=reshaping_function)
+        x=16
+        self.reshape_and_cache_tensors(key_states, value_states, self.block_size, x, layer_idx, write_index=write_index, reshaping_function=reshaping_function)
         # k_cache_flat[:, write_index, :] = key_states[0]
         # v_cache_flat[:, write_index, :] = value_states[0]
-        return k_cache_flat[None, :, read_index, :], v_cache_flat[None, :, read_index, :]
+        return k_cache_flat[:, read_index, :].view(self.num_key_value_heads, self.num_blocks, self.block_size, self.head_dim // x, x).permute(1, 0, 3, 2, 4), v_cache_flat[:, read_index, :].view(self.num_key_value_heads, self.num_blocks, self.block_size, self.head_dim).permute(1,0,3,2)
 
     def reshape_and_cache_tensors(
         self,
@@ -337,12 +338,15 @@ class PagedAttentionCache:
         """
         key_cache = self.key_cache[layer_idx]
         value_cache = self.value_cache[layer_idx]
-        key_cache = key_cache.view(self.num_blocks, self.num_key_value_heads, self.head_dim // x, self.block_size, x)
-        value_cache = value_cache.view(self.num_blocks, self.num_key_value_heads, self.head_dim, self.block_size)
+        key_cache = key_cache.view(self.num_key_value_heads, self.num_blocks, self.block_size, self.head_dim // x, x).permute(1, 0, 3, 2, 4)
+        value_cache = value_cache.permute(1,0,3,2)
         # Create slot mapping (which tokens go to which cache slots)
         # Convert write_index to int64 as expected by Metal kernel
         slot_mapping = write_index.to(torch.int64)
 
+        batch_size, num_heads, seq_len, head_size = key.shape
+        key = key.transpose(1, 2).reshape(batch_size * seq_len, num_heads, head_size)
+        value = value.transpose(1, 2).reshape(batch_size * seq_len, num_heads, head_size)
         # Populate the caches using reshape_and_cache
         torch.mps.synchronize()
         reshaping_function(
