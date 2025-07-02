@@ -41,10 +41,11 @@ class OpenAIMoeConfig(PretrainedConfig):
         # "layers.*.mlp.experts.down_proj_bias": "local", # TODO: maybe add smthg that says bias exists only once for all TPs
         # "layers.*.mlp.experts": "gather",
 
-        'model.layers.*.mlp.experts.gate_up_proj': "grouped_gemm",
-        'model.layers.*.mlp.experts.gate_up_proj_bias': "grouped_gemm",
-        'model.layers.*.mlp.experts.down_proj': "grouped_gemm",
-        'model.layers.*.mlp.experts.down_proj_bias': "grouped_gemm",
+        'layers.*.mlp.experts.gate_up_proj': "grouped_gemm",
+        'layers.*.mlp.experts.gate_up_proj_bias': "grouped_gemm",
+        'layers.*.mlp.experts.down_proj': "grouped_gemm",
+        'layers.*.mlp.experts.down_proj_bias': "grouped_gemm",
+        "layers.*.mlp.router": "ep_router",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

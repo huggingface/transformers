@@ -127,7 +127,7 @@ def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str]) -> Opti
     The parameter name can be a generic name with wildcards (e.g. "*.weight") or a specific name (e.g. "layer_1.weight").
     """
     generic_param_name = re.sub(r"\d+", "*", parameter_name)
-    if generic_param_name in tp_plan:
+    if generic_param_name in tp_plan: # TODO: i can't define hooks for parent modules, only leaf modules who have params
         return tp_plan[generic_param_name]
     elif "." in generic_param_name and generic_param_name.rsplit(".", 1)[0] in tp_plan:
         return tp_plan[generic_param_name.rsplit(".", 1)[0]]
@@ -751,6 +751,44 @@ class GroupedGemmParallel(TensorParallelLayer):
             param = param.contiguous()
         return param
 
+class RouterParallel(TensorParallelLayer):
+    def __init__(self, *args, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
+        self.use_dtensor = False
+
+    @staticmethod
+    def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
+        input_tensor = inputs[0]
+        if isinstance(input_tensor, DTensor):
+            raise ValueError("RouterParallel does not support DTensor input for now")
+        return input_tensor
+    
+    @staticmethod
+    def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
+        ep_rank, ep_size = device_mesh.get_local_rank(), device_mesh.size()
+        num_local_experts = mod.num_experts // ep_size
+        router_scores, router_indices = outputs
+        router_scores = router_scores[ep_rank * num_local_experts:(ep_rank + 1) * num_local_experts]
+        return router_scores, router_indices
+
+    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
+        param = param[...].to(param_casting_dtype)
+        if to_contiguous:
+            param = param.contiguous()
+        return param
+        
+
+    def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
+        # TODO: need an abstract Parallel class that is different from TensorParallelLayer
+        distribute_module(
+            module,
+            device_mesh,
+            partial(self._prepare_input_fn, None, None),
+            partial(self._prepare_output_fn, None, None),
+        )
+
+
 class ParallelInterface(GeneralInterface):
     # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
     # a new instance is created (in order to locally override a given entry)
@@ -768,6 +806,7 @@ class ParallelInterface(GeneralInterface):
             "sequence_parallel": SequenceParallel(),
             "replicate": ReplicateParallel(),
             "grouped_gemm": GroupedGemmParallel(),
+            "ep_router": RouterParallel(),
         }
         if is_torch_greater_or_equal("2.5") and _torch_distributed_available
         else {}

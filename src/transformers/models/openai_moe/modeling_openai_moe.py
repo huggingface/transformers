@@ -128,40 +128,46 @@ class OpenAIMoeExperts(nn.Module):
             next_states = next_states.view(-1, self.hidden_size)
         return next_states, None # bcz GatherParallel allreduces first element
 
+class TopKRouter(nn.Linear): # TODO: if i inherit from module it'll be annoying to attach hook to parent module
+    def __init__(self, config):
+        super().__init__(config.hidden_size, config.num_local_experts, bias=True)
+        self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_local_experts
+        # TODO: is it better to define self.weight and self.bias as nn.Parameter instead to keep the same namings: mlp.router.weight instead of mlp.router.router.weight?
+    
+    def forward(self, hidden_states):
+        router_logits = super().forward(hidden_states) # (seq_len, num_experts)
+        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1) # (seq_len, top_k)
+        router_top_value = torch.nn.functional.softmax(router_top_value, dim=1)
+        router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value).transpose(0, 1) # (num_experts, seq_len)
+        return router_scores, router_indices
+
 class OpenAIMoeMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.top_k = config.num_experts_per_tok
-        # self.top_k = 1
         self.hidden_dim = config.hidden_size
         self.enable_expert_parallel = config.enable_expert_parallel
         self.ep_size = dist.get_world_size() if (self.enable_expert_parallel and dist.is_initialized()) else 1
         self.ep_rank = dist.get_rank() if (self.enable_expert_parallel and dist.is_initialized()) else 0
         self.num_local_experts = config.num_local_experts // self.ep_size # TODO: bad naming
         self.experts = OpenAIMoeExperts(config)
-        self.router = nn.Linear(config.hidden_size, config.num_local_experts, bias=True)
+        self.router = TopKRouter(config)
 
     def forward(self, hidden_states):
         # we don't slice weight as its not compile compatible
         batch_size = hidden_states.shape[0]
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
-        router_logits = self.router(hidden_states) # (seq_len, num_experts)
-        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1) # (seq_len, top_k)
-        router_top_value = torch.nn.functional.softmax(router_top_value, dim=1)
-        router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value).transpose(0, 1) # (num_experts, seq_len)
-        if self.enable_expert_parallel:
-            local_router_scores = router_scores[self.ep_rank * self.num_local_experts:(self.ep_rank + 1) * self.num_local_experts]
-        else:
-            local_router_scores = router_scores
-        routed_out, _ = self.experts(hidden_states, router_indices, local_router_scores) #TODO: router_indices isn't used inside this func
+        router_scores, router_indices = self.router(hidden_states) # (num_experts, seq_len)
+
+        routed_out, _ = self.experts(hidden_states, router_indices, router_scores) #TODO: router_indices isn't used inside this func
         if self.training:
             output_states = routed_out.view(batch_size, -1, self.hidden_dim)
         else:
-            routed_out = routed_out.view(self.num_local_experts, -1, self.hidden_dim) * local_router_scores[..., None] # we're throwing away computed routed_out for rest of experts
+            routed_out = routed_out.view(self.num_local_experts, -1, self.hidden_dim) * router_scores[..., None] # we're throwing away computed routed_out for rest of experts
             output_states = routed_out.view(self.num_local_experts, batch_size, -1, self.hidden_dim).sum(dim=0)
             if self.enable_expert_parallel:
                 torch.distributed.all_reduce(output_states, op=torch.distributed.ReduceOp.SUM) # TODO: move to hook
-        return output_states, local_router_scores
+        return output_states, router_scores
 
 
 class OpenAIMoeRotaryEmbedding(nn.Module):
