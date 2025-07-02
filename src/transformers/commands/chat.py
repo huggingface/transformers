@@ -212,8 +212,11 @@ class ChatArguments:
     """
 
     # General settings
-    model_name_or_path: str = field(
-        metadata={"help": "Name of the pre-trained model."},
+    model_name_or_path: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "Name of the pre-trained model. The positional argument will take precedence if both are passed."
+        },
     )
     user: Optional[str] = field(
         default=None,
@@ -330,6 +333,11 @@ class ChatCommand(BaseTransformersCLICommand):
                     )
 
                 args.host, args.port = args.model_name_or_path_or_address.rsplit(":", 1)
+
+                if args.model_name_or_path is None:
+                    raise ValueError(
+                        "When connecting to a server, please specify a model name with the --model_name_or_path flag."
+                    )
             else:
                 self.spawn_backend = True
                 args.model_name_or_path = args.model_name_or_path_or_address
