@@ -522,6 +522,7 @@ class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
         pass
 
+
 @require_torch
 class Data2VecTextModelIntegrationTest(TestCasePlus):
     @slow

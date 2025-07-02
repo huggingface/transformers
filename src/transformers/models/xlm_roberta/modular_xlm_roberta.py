@@ -592,7 +592,6 @@ class XLMRobertaForQuestionAnswering(RobertaForQuestionAnswering):
         )
 
 
-
 __all__ = [
     "XLMRobertaForCausalLM",
     "XLMRobertaForMaskedLM",
