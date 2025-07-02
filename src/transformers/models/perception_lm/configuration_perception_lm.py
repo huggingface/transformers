@@ -71,7 +71,6 @@ class PerceptionLMConfig(PretrainedConfig):
             vision_config = vision_config
         elif vision_config is None:
             vision_config = TimmWrapperConfig()
-        vision_config._attn_implementation_autoset = True
         self.vision_config = vision_config
         self.vision_use_cls_token = vision_use_cls_token
 

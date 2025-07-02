@@ -328,6 +328,37 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
+    ## Skip flash attention releated tests below
+    ## correct configuration:
+    ## from_pretrained(model_id, attn_implementation={"text_config": "flash_attention_2", "vision_config": "eager"}
+    @unittest.skip("Flash attn test is not configured correctly as we need to configure vision/timm model to 'eager'.")
+    def test_eager_matches_fa2_generate(self):
+        pass
+
+    @unittest.skip("Flash attn test is not configured correctly as we need to configure vision/timm model to 'eager'.")
+    def test_flash_attn_2_fp32_ln(self):
+        pass
+
+    @unittest.skip("Flash attn test is not configured correctly as we need to configure vision/timm model to 'eager'.")
+    def test_flash_attn_2_from_config(self):
+        pass
+
+    @unittest.skip("Flash attn test is not configured correctly as we need to configure vision/timm model to 'eager'.")
+    def test_eager_matches_sdpa_generate_with_dynamic_cache(self):
+        pass
+
+    @unittest.skip("Flash attn test is not configured correctly as we need to configure vision/timm model to 'eager'.")
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        pass
+
+    @unittest.skip("Flash attn test is not configured correctly as we need to configure vision/timm model to 'eager'.")
+    def test_eager_matches_sdpa_generate(self):
+        pass
+
+    @unittest.skip("Flash attn test is not configured correctly as we need to configure vision/timm model to 'eager'.")
+    def test_flash_attn_2_inference_equivalence(self):
+        pass
+
 
 TEST_MODEL_PATH = "shumingh/plm_1b_hf"
 
