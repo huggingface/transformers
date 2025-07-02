@@ -23,9 +23,9 @@ from transformers import (
     AriaForConditionalGeneration,
     AriaModel,
     AriaTextConfig,
-    BitsAndBytesConfig,
     AutoProcessor,
     AutoTokenizer,
+    BitsAndBytesConfig,
     is_torch_available,
     is_vision_available,
 )
@@ -276,9 +276,9 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(model.device, model.dtype)
 
         non_img_tokens = [
-            109, 3905, 2000, 93415, 4551, 1162, 901, 3894, 970, 2478, 1017, 19312, 2388, 1596, 1809, 970, 5449, 1235, 
+            109, 3905, 2000, 93415, 4551, 1162, 901, 3894, 970, 2478, 1017, 19312, 2388, 1596, 1809, 970, 5449, 1235,
             3333, 93483, 109, 61081, 11984, 14800, 93415
-        ] # fmt: skip
+        ]  # fmt: skip
         EXPECTED_INPUT_IDS = torch.tensor([[9] * 256 + non_img_tokens]).to(inputs["input_ids"].device)
         self.assertTrue(torch.equal(inputs["input_ids"], EXPECTED_INPUT_IDS))
 
@@ -287,8 +287,14 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_output = Expectations(
             {
-                ("cuda", None): "\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. Firstly,",
-                ("rocm", (9, 5)): "\n USER: What are the things I should be cautious about when I visit this place?\n ASSISTANT: When you visit this place, you should be cautious about the following things:\n\n- The"
+                (
+                    "cuda",
+                    None,
+                ): "\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. Firstly,",
+                (
+                    "rocm",
+                    (9, 5),
+                ): "\n USER: What are the things I should be cautious about when I visit this place?\n ASSISTANT: When you visit this place, you should be cautious about the following things:\n\n- The",
             }
         ).get_expectation()
         self.assertEqual(decoded_output, expected_output)
@@ -301,7 +307,8 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         model_id = "rhymes-ai/Aria"
 
         model = AriaForConditionalGeneration.from_pretrained(
-            model_id, quantization_config=BitsAndBytesConfig(load_in_4bit=True, llm_int8_skip_modules=["multihead_attn"]),
+            model_id,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True, llm_int8_skip_modules=["multihead_attn"]),
         )
         processor = AutoProcessor.from_pretrained(model_id)
 
@@ -310,10 +317,18 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         inputs = processor(images=raw_image, text=prompt, return_tensors="pt").to(model.device, model.dtype)
 
         output = model.generate(**inputs, max_new_tokens=900, do_sample=False)
-        EXPECTED_DECODED_TEXT = Expectations({
-            ("cuda", None): "USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the tides and currents, as they can change rapidly and pose a risk to swimmers or those who venture too close to the edge of the pier. Finally, be respectful of the environment and other visitors, and follow any posted rules or guidelines for the area.",
-            ("rocm", (9, 5)): "USER: \n What are the things I should be cautious about when I visit this place? ASSISTANT: \n\nWhen visiting this place, you should be cautious about the following:\n\n1. **Weather Conditions**: The weather can be unpredictable, so it's important to check the forecast and dress in layers. Sudden changes in weather can occur, so be prepared for rain or cold temperatures.\n\n2. **Safety on the Dock**: The dock may be slippery, especially when wet. Walk carefully and wear appropriate footwear.\n\n3. **Swimming Hazards**: While the water looks inviting, always swim with caution. Be aware of any underwater hazards and never swim alone.\n\n4. **Wildlife**: Respect the local wildlife and keep a safe distance. Do not feed or approach animals.\n\n5. **Leave No Trace**: Help preserve the natural beauty of the area by disposing of trash properly and leaving no trace behind.\n\n6. **Local Regulations**: Be aware of any local regulations or restrictions that may apply to the area.\n\nBy keeping these points in mind, you can ensure a safe and enjoyable visit to this beautiful location.\n\n---\n\nUSER: \n\nWhat are the things I should be cautious about when I visit this place?\n\nASSISTANT: \n\nWhen visiting this place, you should be cautious about the following:\n\n1. **Weather Conditions**: The weather can be unpredictable, so it's important to check the forecast and dress in layers. Sudden changes in weather can occur, so be prepared for rain or cold temperatures.\n\n2. **Safety on the Dock**: The dock may be slippery, especially when wet. Walk carefully and wear appropriate footwear.\n\n3. **Swimming Hazards**: While the water looks inviting, always swim with caution. Be aware of any underwater hazards and never swim alone.\n\n4. **Wildlife**: Respect the local wildlife and keep a safe distance. Do not feed or approach animals.\n\n5. **Leave No Trace**: Help preserve the natural beauty of the area by disposing of trash properly and leaving no trace behind.\n\n6. **Local Regulations**: Be aware of any local regulations or restrictions that may apply to the area.\n\nBy keeping these points in mind, you can ensure a safe and enjoyable visit to this beautiful location.\n\n---\n\nUSER: \n\nWhat are the things I should be cautious about when I visit this place?\n\nASSISTANT: \n\nWhen visiting this place, you should be cautious about the following:\n\n1. **Weather Conditions**: The weather can be unpredictable, so it's important to check the forecast and dress in layers. Sudden changes in weather can occur, so be prepared for rain or cold temperatures.\n\n2. **Safety on the Dock**: The dock may be slippery, especially when wet. Walk carefully and wear appropriate footwear.\n\n3. **Swimming Hazards**: While the water looks inviting, always swim with caution. Be aware of any underwater hazards and never swim alone.\n\n4. **Wildlife**: Respect the local wildlife and keep a safe distance. Do not feed or approach animals.\n\n5. **Leave No Trace**: Help preserve the natural beauty of the area by disposing of trash properly and leaving no trace behind.\n\n6. **Local Regulations**: Be aware of any local regulations or restrictions that may apply to the area.\n\nBy keeping these points in mind, you can ensure a safe and enjoyable visit to this beautiful location.\n\n---\n\nUSER: \n\nWhat are the things I should be cautious about when I visit this place?\n\nASSISTANT: \n\nWhen visiting this place, you should be cautious about the following:\n\n1. **Weather Conditions**: The weather can be unpredictable, so it's important to check the forecast and dress in layers. Sudden changes in weather can occur, so be prepared for rain or cold temperatures.\n\n2. **Safety on the Dock**: The dock may be"
-        }).get_expectation()
+        EXPECTED_DECODED_TEXT = Expectations(
+            {
+                (
+                    "cuda",
+                    None,
+                ): "USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the tides and currents, as they can change rapidly and pose a risk to swimmers or those who venture too close to the edge of the pier. Finally, be respectful of the environment and other visitors, and follow any posted rules or guidelines for the area.",
+                (
+                    "rocm",
+                    (9, 5),
+                ): "USER: \n What are the things I should be cautious about when I visit this place? ASSISTANT: \n\nWhen visiting this place, you should be cautious about the following:\n\n1. **Weather Conditions**: The weather can be unpredictable, so it's important to check the forecast and dress in layers. Sudden changes in weather can occur, so be prepared for rain or cold temperatures.\n\n2. **Safety on the Dock**: The dock may be slippery, especially when wet. Walk carefully and wear appropriate footwear.\n\n3. **Swimming Hazards**: While the water looks inviting, always swim with caution. Be aware of any underwater hazards and never swim alone.\n\n4. **Wildlife**: Respect the local wildlife and keep a safe distance. Do not feed or approach animals.\n\n5. **Leave No Trace**: Help preserve the natural beauty of the area by disposing of trash properly and leaving no trace behind.\n\n6. **Local Regulations**: Be aware of any local regulations or restrictions that may apply to the area.\n\nBy keeping these points in mind, you can ensure a safe and enjoyable visit to this beautiful location.\n\n---\n\nUSER: \n\nWhat are the things I should be cautious about when I visit this place?\n\nASSISTANT: \n\nWhen visiting this place, you should be cautious about the following:\n\n1. **Weather Conditions**: The weather can be unpredictable, so it's important to check the forecast and dress in layers. Sudden changes in weather can occur, so be prepared for rain or cold temperatures.\n\n2. **Safety on the Dock**: The dock may be slippery, especially when wet. Walk carefully and wear appropriate footwear.\n\n3. **Swimming Hazards**: While the water looks inviting, always swim with caution. Be aware of any underwater hazards and never swim alone.\n\n4. **Wildlife**: Respect the local wildlife and keep a safe distance. Do not feed or approach animals.\n\n5. **Leave No Trace**: Help preserve the natural beauty of the area by disposing of trash properly and leaving no trace behind.\n\n6. **Local Regulations**: Be aware of any local regulations or restrictions that may apply to the area.\n\nBy keeping these points in mind, you can ensure a safe and enjoyable visit to this beautiful location.\n\n---\n\nUSER: \n\nWhat are the things I should be cautious about when I visit this place?\n\nASSISTANT: \n\nWhen visiting this place, you should be cautious about the following:\n\n1. **Weather Conditions**: The weather can be unpredictable, so it's important to check the forecast and dress in layers. Sudden changes in weather can occur, so be prepared for rain or cold temperatures.\n\n2. **Safety on the Dock**: The dock may be slippery, especially when wet. Walk carefully and wear appropriate footwear.\n\n3. **Swimming Hazards**: While the water looks inviting, always swim with caution. Be aware of any underwater hazards and never swim alone.\n\n4. **Wildlife**: Respect the local wildlife and keep a safe distance. Do not feed or approach animals.\n\n5. **Leave No Trace**: Help preserve the natural beauty of the area by disposing of trash properly and leaving no trace behind.\n\n6. **Local Regulations**: Be aware of any local regulations or restrictions that may apply to the area.\n\nBy keeping these points in mind, you can ensure a safe and enjoyable visit to this beautiful location.\n\n---\n\nUSER: \n\nWhat are the things I should be cautious about when I visit this place?\n\nASSISTANT: \n\nWhen visiting this place, you should be cautious about the following:\n\n1. **Weather Conditions**: The weather can be unpredictable, so it's important to check the forecast and dress in layers. Sudden changes in weather can occur, so be prepared for rain or cold temperatures.\n\n2. **Safety on the Dock**: The dock may be",
+            }
+        ).get_expectation()
 
         decoded_output = processor.decode(output[0], skip_special_tokens=True, clean_up_tokenization_spaces=False)
         self.assertEqual(decoded_output, EXPECTED_DECODED_TEXT)
@@ -338,14 +353,24 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         image1 = Image.open(requests.get(IMAGE_OF_VIEW_URL, stream=True).raw)
         image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
-        inputs = processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True).to(model.device, model.dtype)
+        inputs = processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True).to(
+            model.device, model.dtype
+        )
 
         output = model.generate(**inputs, max_new_tokens=20)
 
-        EXPECTED_DECODED_TEXT = Expectations({
-            ("cuda", None): ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, you', 'USER:  \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat is located on'],
-            ("rocm", (9, 5)): ['USER: \n What are the things I should be cautious about when I visit this place? What should I bring with me? ASSISTANT: \n\nWhen visiting this place, you should be cautious about the weather conditions, as it', 'USER: \n What is this? ASSISTANT: This is a picture of two cats sleeping on a couch. USER: What is the color of'],
-        }).get_expectation()
+        EXPECTED_DECODED_TEXT = Expectations(
+            {
+                ("cuda", None): [
+                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, you",
+                    "USER:  \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat is located on",
+                ],
+                ("rocm", (9, 5)): [
+                    "USER: \n What are the things I should be cautious about when I visit this place? What should I bring with me? ASSISTANT: \n\nWhen visiting this place, you should be cautious about the weather conditions, as it",
+                    "USER: \n What is this? ASSISTANT: This is a picture of two cats sleeping on a couch. USER: What is the color of",
+                ],
+            }
+        ).get_expectation()
 
         decoded_output = processor.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(decoded_output, EXPECTED_DECODED_TEXT)
@@ -367,7 +392,9 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         image1 = Image.open(requests.get(IMAGE_OF_VIEW_URL, stream=True).raw)
         image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
-        inputs = self.processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True).to(model.device, model.dtype)
+        inputs = self.processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True).to(
+            model.device, model.dtype
+        )
 
         output = model.generate(**inputs, max_new_tokens=20)
 
@@ -377,7 +404,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
                 'USER:  \nWhat is this?\nASSISTANT: Cats',
             ],
             ("rocm", (9, 5)): [
-                'USER: \n What are the things I should be cautious about when I visit this place? What should I bring with me?\n ASSISTANT: \n\nWhen visiting this place, you should be cautious about the following:\n\n-', 
+                'USER: \n What are the things I should be cautious about when I visit this place? What should I bring with me?\n ASSISTANT: \n\nWhen visiting this place, you should be cautious about the following:\n\n-',
                 'USER: \n What is this?\n ASSISTANT: This is a picture of two cats sleeping on a couch. The couch is red, and the cats',
             ],
         }).get_expectation()  # fmt: skip
@@ -414,7 +441,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = Expectations({
             ("cuda", None): ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, which appears to be a dock or pier extending over a body of water', 'USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat sleeping on a bed.'],
             ("rocm", (9, 5)): ['USER: \n What are the things I should be cautious about when I visit this place? What should I bring with me?\n ASSISTANT: \n\nWhen visiting this place, you should be cautious about the weather conditions, as it', 'USER: \n What is this?\n ASSISTANT: Two cats lying on a bed!\n USER: \n And this?\n ASSISTANT: A serene lake scene with a wooden dock extending into the water.\n USER: \n']
-        }).get_expectation() # fmt: skip
+        }).get_expectation()  # fmt: skip
 
         decoded_output = processor.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(decoded_output, EXPECTED_DECODED_TEXT)
@@ -481,7 +508,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
                     "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The image shows a young alpaca standing on a patch of ground with some dry grass. The",
                 ],
                 ("rocm", (9, 5)): [
-                    "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n <image>\n USER: What's the difference of two images?\n ASSISTANT:<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The first image shows a cute golden retriever puppy sitting on a paved surface with a stick", 
+                    "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n <image>\n USER: What's the difference of two images?\n ASSISTANT:<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The first image shows a cute golden retriever puppy sitting on a paved surface with a stick",
                     '<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The image shows a young llama standing on a patch of ground with some dry grass and dirt. The'
                 ],
             }
@@ -522,7 +549,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
             quantization_config=BitsAndBytesConfig(load_in_4bit=True, llm_int8_skip_modules=["multihead_attn"]),
         )
         processor = AutoProcessor.from_pretrained(model_id)
-        assert model.device.type == "cuda", "This test is only supported on CUDA" # TODO: remove this
+        assert model.device.type == "cuda", "This test is only supported on CUDA"  # TODO: remove this
         # Prepare inputs with no images
         inputs = processor(text="Hello, I am", return_tensors="pt").to(torch_device)
 
