@@ -15,6 +15,7 @@
 """Tokenization classes for BLT."""
 
 import os
+import torch
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
@@ -268,5 +269,18 @@ class BLTTokenizer(PreTrainedTokenizer):
     def get_vocab_size(self) -> int:
         """Get vocab size like the original tokenizer."""
         return self.vocab_size_unit_1 + self.offsetting_special_char
+
+    def __call__(self, text, **kwargs):
+        """Override the default __call__ method to properly handle BOS/EOS tokens."""
+        # Use our custom encode method to ensure consistent behavior
+        if isinstance(text, str):
+            tokens = self.encode(text, add_bos=self.add_bos_token, add_eos=self.add_eos_token)
+            return {"input_ids": torch.tensor([tokens])}
+        elif isinstance(text, list):
+            tokens_list = [self.encode(t, add_bos=self.add_bos_token, add_eos=self.add_eos_token) for t in text]
+            return {"input_ids": torch.tensor(tokens_list)}
+        else:
+            # Fallback to parent implementation
+            return super().__call__(text, **kwargs)
 
 __all__ = ["BLTTokenizer"] 
