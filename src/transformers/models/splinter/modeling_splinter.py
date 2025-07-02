@@ -24,11 +24,7 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import (
-    BaseModelOutput,
-    ModelOutput,
-    QuestionAnsweringModelOutput,
-)
+from ...modeling_outputs import BaseModelOutput, ModelOutput, QuestionAnsweringModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
@@ -336,7 +332,7 @@ class SplinterLayer(GradientCheckpointingLayer):
 
 # Copied from transformers.models.align.modeling_align.AlignTextEncoder with AlignText->Splinter
 class SplinterEncoder(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, layer_idx=None):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([SplinterLayer(config) for i in range(config.num_hidden_layers)])

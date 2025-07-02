@@ -938,9 +938,6 @@ class ClassAttrs:
     _supports_flex_attn = r"""
     Whether the model's attention implementation supports FlexAttention.
     """
-    _supports_cache_class = r"""
-    Whether the model supports a `Cache` instance as `past_key_values`.
-    """
     _supports_quantized_cache = r"""
     Whether the model supports a `QuantoQuantizedCache` instance as `past_key_values`.
     """

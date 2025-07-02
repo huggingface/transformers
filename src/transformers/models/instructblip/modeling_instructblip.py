@@ -337,9 +337,8 @@ class InstructBlipPreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
+
     _supports_static_cache = True
-    _supports_quantized_cache = False  # not all LM bacbones support (e.g. T5)
 
     _no_split_modules = [
         "InstructBlipQFormerEmbeddings",
@@ -1104,7 +1103,7 @@ class InstructBlipQFormerModel(InstructBlipPreTrainedModel):
 
         # past_key_values_length
         past_key_values_length = (
-            past_key_values[0][0].shape[2] - self.config.query_length if past_key_values is not None else 0
+            past_key_values.get_seq_length() - self.config.query_length if past_key_values is not None else 0
         )
 
         query_length = query_embeds.shape[1] if query_embeds is not None else 0
@@ -1386,9 +1385,8 @@ class InstructBlipModel(InstructBlipPreTrainedModel):
 class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, GenerationMixin):
     config_class = InstructBlipConfig
     main_input_name = "pixel_values"
-    _supports_cache_class = True
+
     _supports_static_cache = True
-    _supports_quantized_cache = False  # not all LM bacbones support (e.g. T5)
     _keep_in_fp32_modules = ["query_tokens"]  # TODO @ArthurZucker I don't know why this is required for FP8
 
     def __init__(self, config: InstructBlipConfig):

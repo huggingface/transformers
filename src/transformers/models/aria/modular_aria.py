@@ -1277,7 +1277,7 @@ class AriaTextPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = False
     _supports_sdpa = True
-    _supports_cache_class = True
+
     _supports_attention_backend = True
 
     def _init_weights(self, module):

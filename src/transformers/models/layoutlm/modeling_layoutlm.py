@@ -360,7 +360,7 @@ class LayoutLMLayer(GradientCheckpointingLayer):
 
 # Copied from transformers.models.align.modeling_align.AlignTextEncoder with AlignText->LayoutLM
 class LayoutLMEncoder(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, layer_idx=None):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([LayoutLMLayer(config) for i in range(config.num_hidden_layers)])
