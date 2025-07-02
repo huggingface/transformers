@@ -1030,7 +1030,7 @@ class MllamaPreTrainedModel(PreTrainedModel):
 class MllamaVisionModel(MllamaPreTrainedModel):
     config_class = MllamaVisionConfig
     base_model_prefix = "vision_model"
-    _supports_flash_attn_2 = False # TODO: check this is right
+    _supports_flash_attn_2 = False  # the vision model always adds a 4D attn mask which is not supported by FA2
 
     def __init__(self, config: MllamaVisionConfig):
         super().__init__(config)
@@ -1620,7 +1620,7 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
 class MllamaModel(MllamaPreTrainedModel):
     _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
     _supports_quantized_cache = False  # quant cache not supported in encoder-decoder setting
-    _supports_flash_attn_2 = False # the vision model does not support FA2
+    _supports_flash_attn_2 = False  # the vision model does not support FA2
 
     def __init__(self, config: MllamaConfig):
         super().__init__(config)
@@ -1782,7 +1782,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
     }
     _supports_quantized_cache = False  # quant cache not supported in encoder-decoder setting
     _tied_weights_keys = ["lm_head.weight"]
-    _supports_flash_attn_2 = False # the vision model does not support FA2
+    _supports_flash_attn_2 = False  # the vision model does not support FA2
 
     def __init__(self, config: MllamaConfig):
         super().__init__(config)

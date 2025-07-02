@@ -749,7 +749,9 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_output = output[0][prompt_len:]
         decoded_output = processor.decode(generated_output, skip_special_tokens=False)
 
-        expected_output = "The image shows a long, red, octagonal stop sign with the word \"STOP\" in white letters. The sign is"
+        expected_output = (
+            'The image shows a long, red, octagonal stop sign with the word "STOP" in white letters. The sign is'
+        )
 
         self.assertEqual(
             decoded_output,
