@@ -314,7 +314,7 @@ class DataCollatorForWav2Vec2Pretraining:
         mask_time_prob (:obj:`float`, `optional`, defaults to :obj:`0.65`):
             Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked for the contrastive task.
             Note that overlap between masked sequences may decrease the actual percentage of masked vectors.
-            The default value is taken from the original wav2vec 2.0 article (https://arxiv.org/abs/2006.11477),
+            The default value is taken from the original wav2vec 2.0 article (https://huggingface.co/papers/2006.11477),
             and results in about 49 percent of each sequence being masked on average.
         mask_time_length (:obj:`int`, `optional`, defaults to :obj:`10`):
             Length of each vector mask span to mask along the time axis in the contrastive task. The default value

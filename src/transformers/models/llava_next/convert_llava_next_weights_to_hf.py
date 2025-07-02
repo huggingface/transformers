@@ -175,15 +175,12 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
         model.resize_token_embeddings(num_tokens, pad_to_multiple_of=pad_shape)
         model.language_model.model.embed_tokens.weight.data[vocab_size:] = torch.stack(
             tuple(
-                (
-                    dist.sample()
-                    for _ in range(model.language_model.model.embed_tokens.weight.data[vocab_size:].shape[0])
-                )
+                dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[vocab_size:].shape[0])
             ),
             dim=0,
         )
         model.language_model.lm_head.weight.data[vocab_size:] = torch.stack(
-            tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[vocab_size:].shape[0]))),
+            tuple(dist.sample() for _ in range(model.language_model.lm_head.weight.data[vocab_size:].shape[0])),
             dim=0,
         )
 

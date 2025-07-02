@@ -65,7 +65,8 @@ class NewTaskModelForNewTask(PaliGemmaForConditionalGeneration):
         # L2 normalization
         embeddings = proj / proj.norm(dim=-1, keepdim=True)  # (batch_size, sequence_length, dim)
 
-        embeddings = embeddings * attention_mask.unsqueeze(-1)  # (batch_size, sequence_length, dim)
+        if attention_mask is not None:
+            embeddings = embeddings * attention_mask.unsqueeze(-1)  # (batch_size, sequence_length, dim)
 
         return (embeddings,) + vlm_outputs
 

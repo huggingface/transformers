@@ -16,7 +16,7 @@
 
 import json
 import os
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 from ....tokenization_utils import PreTrainedTokenizer
 from ....utils import logging
@@ -121,7 +121,7 @@ class Speech2Text2Tokenizer(PreTrainedTokenizer):
     def vocab_size(self) -> int:
         return len(self.decoder)
 
-    def get_vocab(self) -> Dict:
+    def get_vocab(self) -> dict:
         return dict(self.encoder, **self.added_tokens_encoder)
 
     def bpe(self, token):
@@ -205,7 +205,7 @@ class Speech2Text2Tokenizer(PreTrainedTokenizer):
         result = self.decoder.get(index, self.unk_token)
         return result
 
-    def convert_tokens_to_string(self, tokens: List[str]) -> str:
+    def convert_tokens_to_string(self, tokens: list[str]) -> str:
         """
         Converts a list of output tokens into a single string.
         """
@@ -217,7 +217,7 @@ class Speech2Text2Tokenizer(PreTrainedTokenizer):
 
         return string
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return

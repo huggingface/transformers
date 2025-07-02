@@ -38,6 +38,7 @@ torchao supports the [quantization techniques](https://github.com/pytorch/ao/blo
 - A8W8 Int8 Dynamic Quantization
 - A16W8 Int8 Weight Only Quantization
 - A16W4 Int4 Weight Only Quantization
+- A16W4 Int4 Weight Only Quantization + 2:4 Sparsity
 - Autoquantization
 
 torchao also supports module level configuration by specifying a dictionary from fully qualified name of module and its corresponding quantization config. This allows skip quantizing certain layers and using different quantization config for different modules.
@@ -62,16 +63,17 @@ Install torchao from PyPi or the PyTorch index with the following commands.
 # Stable release from Pypi which will default to CUDA 12.6
 pip install --upgrade torchao transformers
 ```
-</hfoption> 
+</hfoption>
 <hfoption id="PyTorch Index">
 Stable Release from the PyTorch index
+    
 ```bash
 pip install torchao --index-url https://download.pytorch.org/whl/cu126 # options are cpu/cu118/cu126/cu128
 ```
 </hfoption>
 </hfoptions>
 
-If your torcha version is below 0.10.0, you need to upgrade it, please refer to the [deprecation notice](#deprecation-notice) for more details.
+If your torchao version is below 0.10.0, you need to upgrade it, please refer to the [deprecation notice](#deprecation-notice) for more details.
 
 ## Quantization examples
 
@@ -88,6 +90,7 @@ We'll show examples for recommended quantization methods based on hardwares, e.g
 ### H100 GPU
 <hfoptions id="examples-H100-GPU">
 <hfoption id="float8-dynamic-and-weight-only">
+
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
@@ -145,9 +148,41 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 </hfoption>
 </hfoptions>
 
+</hfoption>
+<hfoption id="int4-weight-only-24sparse">
+
+```py
+import torch
+from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
+from torchao.quantization import Int4WeightOnlyConfig
+from torchao.dtypes import MarlinSparseLayout
+
+quant_config = Int4WeightOnlyConfig(layout=MarlinSparseLayout())
+quantization_config = TorchAoConfig(quant_type=quant_config)
+
+# Load and quantize the model with sparsity. A sparse checkpoint is needed to accelerate without accuraccy loss
+quantized_model = AutoModelForCausalLM.from_pretrained(
+    "RedHatAI/Sparse-Llama-3.1-8B-2of4",
+    torch_dtype=torch.float16,
+    device_map="cuda",
+    quantization_config=quantization_config
+)
+
+tokenizer = AutoTokenizer.from_pretrained("RedHatAI/Sparse-Llama-3.1-8B-2of4")
+input_text = "What are we having for dinner?"
+input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+
+# auto-compile the quantized model with `cache_implementation="static"` to get speed up
+output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+</hfoption>
+</hfoptions>
+
 ### A100 GPU
 <hfoptions id="examples-A100-GPU">
 <hfoption id="int8-dynamic-and-weight-only">
+    
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
@@ -212,9 +247,41 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 </hfoption>
 </hfoptions>
 
+</hfoption>
+<hfoption id="int4-weight-only-24sparse">
+
+```py
+import torch
+from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
+from torchao.quantization import Int4WeightOnlyConfig
+from torchao.dtypes import MarlinSparseLayout
+
+quant_config = Int4WeightOnlyConfig(layout=MarlinSparseLayout())
+quantization_config = TorchAoConfig(quant_type=quant_config)
+
+# Load and quantize the model with sparsity. A sparse checkpoint is needed to accelerate without accuraccy loss
+quantized_model = AutoModelForCausalLM.from_pretrained(
+    "RedHatAI/Sparse-Llama-3.1-8B-2of4",
+    torch_dtype=torch.float16,
+    device_map="cuda",
+    quantization_config=quantization_config
+)
+
+tokenizer = AutoTokenizer.from_pretrained("RedHatAI/Sparse-Llama-3.1-8B-2of4")
+input_text = "What are we having for dinner?"
+input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+
+# auto-compile the quantized model with `cache_implementation="static"` to get speed up
+output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+</hfoption>
+</hfoptions>
+
 ### CPU
 <hfoptions id="examples-CPU">
 <hfoption id="int8-dynamic-and-weight-only">
+    
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
@@ -276,18 +343,18 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ### Per Module Quantization
 #### 1. Skip quantization for certain layers
-With `AOPerModuleConfig` we can specify a default configuration for all layers while skipping quantization for certain layers.
+With `ModuleFqnToConfig` we can specify a default configuration for all layers while skipping quantization for certain layers.
 ```py
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
 
 model_id = "meta-llama/Llama-3.1-8B-Instruct"
 
-from torchao.quantization import Int4WeightOnlyConfig, AOPerModuleConfig
+from torchao.quantization import Int4WeightOnlyConfig, ModuleFqnToConfig
 config = Int4WeightOnlyConfig(group_size=128)
 
 # set default to int4 (for linears), and skip quantizing `model.layers.0.self_attn.q_proj`
-quant_config = AOPerModuleConfig({"_default": config, "model.layers.0.self_attn.q_proj": None})
+quant_config = ModuleFqnToConfig({"_default": config, "model.layers.0.self_attn.q_proj": None})
 quantization_config = TorchAoConfig(quant_type=quant_config)
 quantized_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", torch_dtype=torch.bfloat16, quantization_config=quantization_config)
 # lm_head is not quantized and model.layers.0.self_attn.q_proj is not quantized
@@ -311,7 +378,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
 
 model_id = "facebook/opt-125m"
 
-from torchao.quantization import Int4WeightOnlyConfig, AOPerModuleConfig, Int8DynamicActivationInt4WeightConfig, IntxWeightOnlyConfig, PerAxis, MappingType
+from torchao.quantization import Int4WeightOnlyConfig, ModuleFqnToConfig, Int8DynamicActivationInt4WeightConfig, IntxWeightOnlyConfig, PerAxis, MappingType
 
 weight_dtype = torch.int8
 granularity = PerAxis(0)
@@ -322,7 +389,7 @@ embedding_config = IntxWeightOnlyConfig(
     mapping_type=mapping_type,
 )
 linear_config = Int8DynamicActivationInt4WeightConfig(group_size=128)
-quant_config = AOPerModuleConfig({"_default": linear_config, "model.decoder.embed_tokens": embedding_config, "model.decoder.embed_positions": None})
+quant_config = ModuleFqnToConfig({"_default": linear_config, "model.decoder.embed_tokens": embedding_config, "model.decoder.embed_positions": None})
 # set `include_embedding` to True in order to include embedding in quantization
 # when `include_embedding` is True, we'll remove input embedding from `modules_not_to_convert` as well
 quantization_config = TorchAoConfig(quant_type=quant_config, include_embedding=True)
@@ -385,6 +452,7 @@ To avoid arbitrary user code execution, torchao sets `weights_only=True` in [tor
 
 <hfoptions id="serialization-examples">
 <hfoption id="save-locally">
+    
 ```py
 # don't serialize model with Safetensors
 output_dir = "llama3-8b-int4wo-128"
@@ -392,6 +460,7 @@ quantized_model.save_pretrained("llama3-8b-int4wo-128", safe_serialization=False
 ```
 </hfoption>
 <hfoption id="push-to-huggingface-hub">
+    
 ```py
 # don't serialize model with Safetensors
 USER_ID = "your_huggingface_user_id"
@@ -427,8 +496,8 @@ quantized_model.save_pretrained(output_dir, safe_serialization=False)
 
 # reload the quantized model
 reloaded_model = AutoModelForCausalLM.from_pretrained(
-    output_dir, 
-    device_map="auto", 
+    output_dir,
+    device_map="auto",
     torch_dtype=torch.bfloat16
 )
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
@@ -463,8 +532,8 @@ quantized_model.save_pretrained(output_dir, safe_serialization=False)
 
 # reload the quantized model
 reloaded_model = AutoModelForCausalLM.from_pretrained(
-    output_dir, 
-    device_map="cpu", 
+    output_dir,
+    device_map="cpu",
     torch_dtype=torch.bfloat16
 )
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")

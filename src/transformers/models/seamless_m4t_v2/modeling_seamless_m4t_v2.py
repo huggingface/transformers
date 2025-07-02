@@ -22,7 +22,7 @@
 import copy
 import math
 from dataclasses import dataclass
-from typing import Optional, Union, tuple
+from typing import Optional, Union
 
 import torch
 from torch import Tensor, nn
@@ -48,6 +48,37 @@ from .configuration_seamless_m4t_v2 import SeamlessM4Tv2Config
 
 logger = logging.get_logger(__name__)
 
+SEAMLESS_M4T_V2_COMMON_CUSTOM_ARGS = r"""
+    input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
+        Input audio features. This should be returned by the [`SeamlessM4TFeatureExtractor`] class or the
+        [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
+    decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+        Indices of decoder input sequence tokens in the vocabulary.
+
+        Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+        [`PreTrainedTokenizer.__call__`] for details.
+
+        [What are decoder input IDs?](../glossary#decoder-input-ids)
+
+        Bart uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
+        is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
+
+        For translation and summarization training, `decoder_input_ids` should be provided. If no
+        `decoder_input_ids` is provided, the model will create this tensor by shifting the `input_ids` to the right
+        for denoising pre-training following the paper.
+    decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+        Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+        be used by default.
+
+        If you want to change padding behavior, you should read [`modeling_bart._prepare_decoder_attention_mask`]
+        and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
+        information on the default strategy.
+    inputs_embeds (`torch.FloatTensor` of shape`(batch_size, sequence_length, hidden_size)`, *optional*):
+        Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+        is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+        model's internal embedding lookup matrix.
+"""
+
 
 @dataclass
 @auto_docstring(
@@ -56,6 +87,7 @@ logger = logging.get_logger(__name__)
     [`SeamlessM4Tv2ForTextToSpeech`], [`SeamlessM4Tv2ForSpeechToSpeech`] and [`SeamlessM4Tv2ForTextToSpeech`].
     """
 )
+# Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TGenerationOutput with SeamlessM4T->SeamlessM4Tv2
 class SeamlessM4Tv2GenerationOutput(ModelOutput):
     r"""
     waveform (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -76,6 +108,25 @@ class SeamlessM4Tv2GenerationOutput(ModelOutput):
     waveform_lengths: Optional[torch.IntTensor] = None
     sequences: Optional[tuple[torch.FloatTensor]] = None
     unit_sequences: Optional[tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Class defining the outputs from [`SeamlessM4Tv2TextToUnitDecoder`].
+    """
+)
+class SeamlessM4Tv2TextToUnitDecoderOutput(ModelOutput):
+    r"""
+    padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
+        for *masked*
+    """
+
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
+    padding_mask: Optional[torch.Tensor] = None
 
 
 @dataclass
@@ -168,7 +219,8 @@ class SeamlessM4Tv2ConformerFeedForward(nn.Module):
 
 class SeamlessM4Tv2ConformerConvolutionModule(nn.Module):
     """Convolution block used in the conformer block. Uses a causal depthwise convolution similar to that
-    described in Section 2.1 of `https://doi.org/10.48550/arxiv.1609.03499"""
+    described in Section 2.1 of https://huggingface.co/papers/1609.03499
+    """
 
     def __init__(self, config):
         super().__init__()
@@ -881,6 +933,7 @@ class SeamlessM4Tv2FeedForwardNetwork(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TEncoderLayer with SeamlessM4T->SeamlessM4Tv2
 class SeamlessM4Tv2EncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: SeamlessM4Tv2Config, encoder_ffn_dim=None, encoder_attention_heads=None):
         super().__init__()
@@ -944,6 +997,7 @@ class SeamlessM4Tv2EncoderLayer(GradientCheckpointingLayer):
         return outputs
 
 
+# Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TDecoderLayer with SeamlessM4T->SeamlessM4Tv2
 class SeamlessM4Tv2DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: SeamlessM4Tv2Config, decoder_ffn_dim=None, decoder_attention_heads=None):
         super().__init__()
@@ -1962,21 +2016,12 @@ class SeamlessM4Tv2TextToUnitDecoder(SeamlessM4Tv2PreTrainedModel):
                 if dropout_probability < self.layerdrop:
                     continue
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    padding_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=attention_mask,
-                    padding_mask=padding_mask,
-                    output_attentions=output_attentions,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=attention_mask,
+                padding_mask=padding_mask,
+                output_attentions=output_attentions,
+            )
             hidden_states = layer_outputs[0]
 
             if output_attentions:
@@ -2483,7 +2528,7 @@ class SeamlessM4Tv2CodeHifiGan(PreTrainedModel):
         lang = self.language_embedding(lang_id).transpose(1, 2)
 
         log_dur_pred = self.dur_predictor(hidden_states.transpose(1, 2))
-        dur_out = torch.clamp(torch.round((torch.expm1(log_dur_pred))).long(), min=1)
+        dur_out = torch.clamp(torch.round(torch.expm1(log_dur_pred)).long(), min=1)
         # B x C x T
         if hidden_states.size(0) == 1:
             hidden_states = torch.repeat_interleave(hidden_states, dur_out.view(-1), dim=2)

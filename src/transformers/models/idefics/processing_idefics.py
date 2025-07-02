@@ -16,7 +16,7 @@
 Processor class for IDEFICS.
 """
 
-from typing import Callable, Dict, List, Optional, Union
+from typing import Callable, Optional, Union
 from urllib.parse import urlparse
 
 from ...feature_extraction_utils import BatchFeature
@@ -45,9 +45,9 @@ IMAGE_TOKEN = "<image>"
 
 class IdeficsImagesKwargs(ImagesKwargs, total=False):
     transform: Optional[Callable]
-    image_size: Optional[Dict[str, int]]
-    image_mean: Optional[Union[float, List[float]]]
-    image_std: Optional[Union[float, List[float]]]
+    image_size: Optional[dict[str, int]]
+    image_mean: Optional[Union[float, list[float]]]
+    image_std: Optional[Union[float, list[float]]]
 
 
 class IdeficsTextKwargs(TextKwargs, total=False):
@@ -211,7 +211,6 @@ class IdeficsProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["image_size", "add_end_of_utterance_token"]
     image_processor_class = "IdeficsImageProcessor"
     tokenizer_class = "LlamaTokenizerFast"
 
@@ -244,14 +243,14 @@ class IdeficsProcessor(ProcessorMixin):
     @deprecate_kwarg(old_name="prompts", version="5.0.0", new_name="text", raise_if_both_names=True)
     def __call__(
         self,
-        images: Union[ImageInput, List[ImageInput], str, List[str], List[List[str]]] = None,
+        images: Union[ImageInput, list[ImageInput], str, list[str], list[list[str]]] = None,
         text: Union[
             TextInput,
             PreTokenizedInput,
-            List[TextInput],
-            List[PreTokenizedInput],
-            List[List[TextInput]],
-            List[List[PreTokenizedInput]],
+            list[TextInput],
+            list[PreTokenizedInput],
+            list[list[TextInput]],
+            list[list[PreTokenizedInput]],
         ] = None,
         audio=None,
         videos=None,
@@ -261,10 +260,10 @@ class IdeficsProcessor(ProcessorMixin):
         the model was trained on and prepares the image pixel values for the model to process.
 
         Args:
-            images (`Union[ImageInput, List[ImageInput], str, List[str], List[List[str]]]`):
+            images (`Union[ImageInput, list[ImageInput], str, list[str], list[list[str]]]`):
                 either a single image or a batched list of images - can be passed in when text contains only text prompts,
                 in order to use the image-text-to-text behavior.
-            text (`Union[List[TextInput], [List[List[TextInput]]]]`):
+            text (`Union[list[TextInput], [list[list[TextInput]]]]`):
                 either a single prompt or a batched list of prompts - see the detailed description immediately after
                 the end of the arguments doc section.
             return_tensors (`str` or `TensorType`, *optional*, defaults to `TensorType.PYTORCH`):

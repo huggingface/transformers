@@ -23,6 +23,7 @@ from pytest import mark
 
 from transformers import Siglip2Config, Siglip2TextConfig, Siglip2VisionConfig
 from transformers.testing_utils import (
+    Expectations,
     is_flaky,
     require_flash_attn,
     require_torch,
@@ -180,7 +181,7 @@ class Siglip2VisionModelTester:
         patch_size=2,
         num_channels=3,
         is_training=True,
-        hidden_size=32,
+        hidden_size=64,
         num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
@@ -363,7 +364,7 @@ class Siglip2TextModelTester:
         use_input_mask=True,
         use_labels=True,
         vocab_size=99,
-        hidden_size=32,
+        hidden_size=64,
         num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
@@ -760,17 +761,19 @@ class Siglip2ModelIntegrationTest(unittest.TestCase):
 
         # verify the logits values
         # fmt: off
-        expected_logits_per_text = torch.tensor(
-            [
-                [  1.0195,  -0.0280,  -1.4468],
-                [ -4.5395,  -6.2269,  -1.5667],
-                [  4.1757,   5.0358,   3.5159],
-                [  9.4264,  10.1879,   6.3353],
-                [  2.4409,   3.1058,   4.5491],
-                [-12.3230, -13.7355, -13.4632],
+        expected_logits_per_texts = Expectations({
+            ("cuda", None): [
+                [  1.0195,  -0.0280,  -1.4468], [ -4.5395,  -6.2269,  -1.5667], [  4.1757,   5.0358,   3.5159],
+                [  9.4264,  10.1879,   6.3353], [  2.4409,   3.1058,   4.5491], [-12.3230, -13.7355, -13.4632],
                 [  1.1520,   1.1687,  -1.9647],
-            ]
-        ).to(torch_device)
+            ],
+            ("rocm", (9, 5)): [
+                [  1.0236,  -0.0376,  -1.4464], [ -4.5358,  -6.2235,  -1.5628], [  4.1708,   5.0334,   3.5187],
+                [  9.4241,  10.1828,   6.3366], [  2.4371,   3.1062,   4.5530], [-12.3173, -13.7240, -13.4580],
+                [  1.1502,   1.1716,  -1.9623]
+            ],
+        })
+        EXPECTED_LOGITS_PER_TEXT = torch.tensor(expected_logits_per_texts.get_expectation()).to(torch_device)
         # fmt: on
 
-        torch.testing.assert_close(outputs.logits_per_text, expected_logits_per_text, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(outputs.logits_per_text, EXPECTED_LOGITS_PER_TEXT, rtol=1e-3, atol=1e-3)

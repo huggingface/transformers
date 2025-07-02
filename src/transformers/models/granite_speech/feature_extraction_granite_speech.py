@@ -50,6 +50,7 @@ class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
         **kwargs,
     ):
         super().__init__(**kwargs)
+        self.sampling_rate = sampling_rate
         self.melspec_kwargs = {
             "sample_rate": sampling_rate,
             "n_fft": n_fft,
@@ -57,8 +58,8 @@ class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
             "hop_length": hop_length,
             "n_mels": n_mels,
         }
-        # Currently lazily initialized
-        self.melspec = None
+        requires_backends(self, ["torchaudio"])
+        self.mel_filters = torchaudio.transforms.MelSpectrogram(**self.melspec_kwargs)
         self.projector_window_size = projector_window_size
         self.projector_downsample_rate = projector_downsample_rate
 
@@ -91,34 +92,16 @@ class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
         ).view(-1, 1)
         return BatchFeature(data=speech_inputs)
 
-    def _ensure_melspec_transform_is_initialized(self):
-        """
-        Ensures the mel spectrogram transform on this instance is initialized.
-
-        We do this for now since some logging explodes since the mel spectrogram
-        transform is not JSON serializable.
-        """
-        requires_backends(self, ["torchaudio"])
-
-        if self.melspec is None:
-            # TODO (@alex-jw-brooks / @eustlb) move this to common batch
-            # feature extraction in audio utils once they are written!
-            self.melspec = torchaudio.transforms.MelSpectrogram(**self.melspec_kwargs)
-
     def _extract_mel_spectrograms(self, audio: "torch.Tensor", device="cpu"):
         """
         Compute the Mel features to be passed to the conformer encoder.
         """
         requires_backends(self, ["torchaudio"])
-
-        # Initialize the mel spectrogram if isn't not already and
-        # move the melspec / audio to the computation device.
-        self._ensure_melspec_transform_is_initialized()
         if device is not None:
-            melspec = self.melspec.to(device)
+            melspec = self.mel_filters.to(device)
             audio = audio.to(device)
         else:
-            melspec = self.melspec
+            melspec = self.mel_filters
 
         bsz = audio.shape[0]
         with torch.no_grad():

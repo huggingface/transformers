@@ -4,7 +4,7 @@ LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-ARG PYTORCH='2.6.0'
+ARG PYTORCH='2.7.1'
 # Example: `cu102`, `cu113`, etc.
 ARG CUDA='cu126'
 

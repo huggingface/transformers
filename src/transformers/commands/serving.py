@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from argparse import ArgumentParser, Namespace
-from typing import Any, List, Optional
+from typing import Any, Optional
 
 from ..pipelines import Pipeline, get_supported_tasks, pipeline
 from ..utils import logging
@@ -69,8 +69,8 @@ class ServeTokenizeResult(BaseModel):
     Tokenize result model
     """
 
-    tokens: List[str]
-    tokens_ids: Optional[List[int]]
+    tokens: list[str]
+    tokens_ids: Optional[list[int]]
 
 
 class ServeDeTokenizeResult(BaseModel):
@@ -196,7 +196,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
     def detokenize(
         self,
-        tokens_ids: List[int] = Body(None, embed=True),
+        tokens_ids: list[int] = Body(None, embed=True),
         skip_special_tokens: bool = Body(False, embed=True),
         cleanup_tokenization_spaces: bool = Body(True, embed=True),
     ):

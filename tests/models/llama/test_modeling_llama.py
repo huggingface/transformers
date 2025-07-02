@@ -113,7 +113,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         """
         # diff on `EXPECTED_TEXT`:
         # 2024-08-26: updating from torch 2.3.1 to 2.4.0 slightly changes the results.
-        EXPECTED_TEXT = (
+        expected_base_text = (
             "Tell me about the french revolution. The french revolution was a period of radical political and social "
             "upheaval in France that lasted from 1789 until 1799. It was a time of great change and upheaval, marked "
             "by the overthrow of the monarchy, the rise of the middle class, and the eventual establishment of the "
@@ -122,6 +122,13 @@ class LlamaIntegrationTest(unittest.TestCase):
             "demanded greater representation and eventually broke away to form the National Assembly. This marked "
             "the beginning of the end of the absolute monarchy and the rise of the middle class.\n"
         )
+        expected_texts = Expectations(
+            {
+                ("rocm", (9, 5)): expected_base_text.replace("political and social", "social and political"),
+                ("cuda", None): expected_base_text,
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT = expected_texts.get_expectation()
 
         tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3.1-8B-Instruct")
         model = LlamaForCausalLM.from_pretrained(
@@ -306,7 +313,6 @@ class LlamaIntegrationTest(unittest.TestCase):
 
         from transformers.integrations.executorch import (
             TorchExportableModuleWithStaticCache,
-            convert_and_export_with_cache,
         )
 
         llama_models = {
@@ -352,7 +358,10 @@ class LlamaIntegrationTest(unittest.TestCase):
             max_new_tokens = max_generation_length - prompt_token_ids.shape[-1]
 
             # Static Cache + export
-            exported_program = convert_and_export_with_cache(model)
+            from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
+
+            exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
+            exported_program = exportable_module.export()
             ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
                 exported_program=exported_program, prompt_token_ids=prompt_token_ids, max_new_tokens=max_new_tokens
             )
