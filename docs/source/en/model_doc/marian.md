@@ -50,11 +50,11 @@ The example below demonstrates how to translate text using [`Pipeline`] or the [
 
 ```python
 
+import torch
 from transformers import pipeline
 
-translator = pipeline("translation_en_to_de", model="Helsinki-NLP/opus-mt-en-de")
-result = translator("Hello, how are you?")
-print(result)
+pipeline = pipeline("translation_en_to_de", model="Helsinki-NLP/opus-mt-en-de", torch_dtype=torch.float16, device=0)
+pipeline("Hello, how are you?")
 
 ```
 
@@ -64,44 +64,20 @@ print(result)
 
 ```python
 
+import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-model_name = "Helsinki-NLP/opus-mt-en-de"
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+tokenizer = AutoTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
+model = AutoModelForSeq2SeqLM.from_pretrained("Helsinki-NLP/opus-mt-en-de", torch_dtype=torch.float16, attn_implementation="sdpa", device_map="auto")
 
-inputs = tokenizer("Hello, how are you?", return_tensors="pt")
-outputs = model.generate(**inputs)
+inputs = tokenizer("Hello, how are you?", return_tensors="pt").to("cuda")
+outputs = model.generate(**inputs, cache_implementation="static")
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
 ```
 
 </hfoption>
 </hfoptions>
-
-## Quantization
-
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
-
-The example below uses [dynamic quantization](https://docs.pytorch.org/docs/stable/quantization.html#dynamic-quantization) to only quantize the weights to INT8.
-
-```python
-
-from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
-import torch
-
-model_name = "Helsinki-NLP/opus-mt-en-de"
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
-
-quantized_model = torch.quantization.quantize_dynamic(
-    model, {torch.nn.Linear}, dtype=torch.qint8
-)
-
-inputs = tokenizer("Hello, how are you?", return_tensors="pt")
-outputs = quantized_model.generate(**inputs)
-print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-```
 
 
 Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
@@ -164,23 +140,6 @@ print(result)
    add code snippet here
    
 
-
-
-
-
-
-
-## Resources
-
-- **Marian Research Paper:** [Marian: Fast Neural Machine Translation in C++](https://arxiv.org/abs/2001.08210)  
-- **MarianMT Model Collection:** [Helsinki-NLP on Hugging Face](https://huggingface.co/Helsinki-NLP)  
-- **Marian Official Framework:** [Marian-NMT GitHub](https://github.com/marian-nmt/marian)  
-- **Language Codes Reference:** [ISO 639-1 Language Codes](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes)  
-- **Translation Task Guide:** [Hugging Face Translation Guide](https://huggingface.co/tasks/translation)  
-- **Quantization Overview:** [Transformers Quantization Docs](https://huggingface.co/docs/transformers/main/en/perf_optimization#model-quantization)  
-- **Tokenizer Guide:** [Hugging Face Tokenizer Documentation](https://huggingface.co/docs/transformers/main/en/main_classes/tokenizer)  
-- **Model Conversion Tool:** [convert_marian_to_pytorch.py (GitHub)](https://github.com/huggingface/transformers/blob/main/src/transformers/models/marian/convert_marian_to_pytorch.py)  
-- **Supported Language Pairs:** Refer to individual model cards under [Helsinki-NLP](https://huggingface.co/Helsinki-NLP) for supported languages.  
 
 
 
