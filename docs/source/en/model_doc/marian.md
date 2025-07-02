@@ -162,7 +162,6 @@ print(result)
 
 
 
-- The modeling code is based on BartForConditionalGeneration with adjustments for translation.
 
 
 ## Resources
