@@ -33,7 +33,6 @@ rendered properly in your Markdown viewer.
 All MarianMT models are transformer encoder-decoders with 6 layers in each component, use static sinusoidal positional embeddings, don't have a layernorm embedding, and the model starts generating with the prefix `pad_token_id` instead of `<s/>`.
 
 
-There are over **1,000 MarianMT models**, covering a wide variety of language pairs. Each model is around **298 MB** on disk.
 
 You can find all the original MarianMT checkpoints under the [Helsinki-NLP](https://huggingface.co/Helsinki-NLP) collection.
 
