@@ -200,6 +200,9 @@ class SegformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_segmentation(*config_and_inputs)
 
+    def test_batching_equivalence(self, atol=2e-4, rtol=2e-4):
+        super().test_batching_equivalence(atol=atol, rtol=rtol)
+
     @unittest.skip(reason="SegFormer does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
