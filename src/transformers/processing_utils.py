@@ -24,7 +24,7 @@ import typing
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional, TypedDict, Union, TypeVar
+from typing import Any, Optional, TypedDict, TypeVar, Union
 
 import numpy as np
 import typing_extensions

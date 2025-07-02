@@ -20,7 +20,7 @@ import json
 import os
 import warnings
 from collections import UserDict
-from typing import TYPE_CHECKING, Any, Optional, Union, TypeVar
+from typing import TYPE_CHECKING, Any, Optional, TypeVar, Union
 
 import numpy as np
 
