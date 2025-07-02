@@ -545,6 +545,9 @@ class ModernBertDecoderForCausalLM(ModernBertDecoderPreTrainedModel, GenerationM
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Returns:
+            [`~modeling_outputs.CausalLMOutputWithPast`] or `tuple(torch.FloatTensor)`: A
+            [`~modeling_outputs.CausalLMOutputWithPast`] or a tuple of `torch.FloatTensor` (if `return_dict=False`)
+            comprising various elements depending on the configuration and inputs.
 
         Example:
 
@@ -554,13 +557,13 @@ class ModernBertDecoderForCausalLM(ModernBertDecoderPreTrainedModel, GenerationM
         >>> model = ModernBertDecoderForCausalLM.from_pretrained("blab-jhu/test-32m-dec")
         >>> tokenizer = AutoTokenizer.from_pretrained("blab-jhu/test-32m-dec")
 
-        >>> prompt = "Hello, I'm a language model,"
+        >>> prompt = "The capital of France is"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
 
         >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> generate_ids = model.generate(inputs.input_ids, max_length=1)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hello, I'm a language model, and I'm here to help you with your questions."
+        "The capital of France is Paris"
         ```
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
