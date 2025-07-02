@@ -432,6 +432,7 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
         else:
             images, image_sizes, tgt_sizes = [[]] * bs, [[]] * bs, [[]] * bs
 
+        final_texts_list = []
         input_ids_list = []
         image_bounds_list = []
         audio_bounds_list = []
@@ -467,14 +468,26 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
             final_text = "".join(text_chunks)
             input_ids, image_bounds, audio_bounds, spk_bounds = self._convert(final_text, max_length, **kwargs)
 
+            final_texts_list.append(final_text)
             input_ids_list.append(input_ids)
             image_bounds_list.append(image_bounds)
             audio_bounds_list.append(audio_bounds)
             spk_bounds_list.append(spk_bounds)
 
-        padded_input_ids, padding_lengths = self.pad(input_ids_list, padding_side="left")
-        attention_mask = torch.ones_like(padded_input_ids, dtype=torch.bool)
-        for i, length in enumerate(padding_lengths):
+        model_inputs = self.tokenizer(
+            final_texts_list,
+            padding="longest",
+            padding_side="left",
+            return_tensors=return_tensors,
+            truncation=truncation,
+            max_length=max_length,
+            **kwargs,
+        )
+        
+        padded_input_ids = model_inputs["input_ids"]
+        attention_mask = model_inputs["attention_mask"]
+        for i in range(bs):
+            length = (attention_mask[i] == 0).sum().item()
             image_bounds_list[i] = image_bounds_list[i] + length
             audio_bounds_list[i] = audio_bounds_list[i] + length
             spk_bounds_list[i] = spk_bounds_list[i] + length
@@ -500,52 +513,6 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
         image_processor_input_names = self.image_processor.model_input_names
         feature_extractor_input_names = self.feature_extractor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names + feature_extractor_input_names))
-
-    def pad(self, inputs, max_length=None, padding_value=0, padding_side="left"):
-        items = []
-        if isinstance(inputs[0], list):
-            assert isinstance(inputs[0][0], torch.Tensor)
-            for it in inputs:
-                for tr in it:
-                    items.append(tr)
-        else:
-            assert isinstance(inputs[0], torch.Tensor)
-            items = inputs
-
-        batch_size = len(items)
-        shape = items[0].shape
-        dim = len(shape)
-        assert dim <= 2
-        if max_length is None:
-            max_length = 0
-        max_length = max(max_length, max(item.shape[-1] for item in items))
-        min_length = min(item.shape[-1] for item in items)
-        dtype = items[0].dtype
-
-        if dim == 0:
-            return torch.stack([item for item in items], dim=0), [0]
-        elif dim == 1:
-            if max_length == min_length:
-                return torch.stack([item for item in items], dim=0), [0] * batch_size
-            tensor = torch.zeros((batch_size, max_length), dtype=dtype) + padding_value
-        else:
-            tensor = torch.zeros((batch_size, max_length, shape[-1]), dtype=dtype) + padding_value
-
-        padding_length = []
-        for i, item in enumerate(items):
-            if dim == 1:
-                if padding_side == "left":
-                    tensor[i, -len(item) :] = item.clone()
-                else:
-                    tensor[i, : len(item)] = item.clone()
-            elif dim == 2:
-                if padding_side == "left":
-                    tensor[i, -len(item) :, :] = item.clone()
-                else:
-                    tensor[i, : len(item), :] = item.clone()
-            padding_length.append(tensor.shape[-1] - len(item))
-
-        return tensor, padding_length
 
 
 class MelSpectrogramFeatures(torch.nn.Module):
