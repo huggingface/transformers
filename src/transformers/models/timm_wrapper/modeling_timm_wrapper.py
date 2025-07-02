@@ -95,6 +95,18 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
         """
         state_dict = {self._fix_state_dict_key_on_load(k)[0]: v for k, v in state_dict.items()}
         return super().load_state_dict(state_dict, *args, **kwargs)
+    
+    def _init_weights(self, module):
+        """
+        Initialize weights function to properly initialize Linear layer weights.
+        Since model architectures may vary, we assume only the classifier requires
+        initialization, while all other weights should be loaded from the checkpoint.
+        """
+        if isinstance(module, (nn.Linear)):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+
 
 
 class TimmWrapperModel(TimmWrapperPreTrainedModel):
