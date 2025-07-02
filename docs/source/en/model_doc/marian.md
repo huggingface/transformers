@@ -43,7 +43,7 @@ You can find all the original MarianMT checkpoints under the [Language Technolog
 > Click on the MarianMT models in the right sidebar for more examples of how to apply MarianMT to translation tasks.
 
 
-The example below demonstrates how to translate text using [`Pipeline`] or the [`AutoModelForSeq2SeqLM`] class.
+The example below demonstrates how to translate text using [`Pipeline`] or the [`AutoModel`] class.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
