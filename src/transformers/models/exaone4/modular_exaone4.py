@@ -361,6 +361,14 @@ class Exaone4Attention(nn.Module):
             # attention_mask can be None, so we use Cache's seq_length rather than attention_mask's shape
             if self.config._attn_implementation == "flash_attention_2":
                 seq_len = past_key_value.get_seq_length() if attention_mask is None else attention_mask.shape[1]
+                if self.is_sliding:
+                    # assume using sliding-window based cache
+                    sliding_window_len = past_key_value.sliding_window_len
+                    if key_states.shape[2] > sliding_window_len:
+                        key_states, value_states = (
+                            key_states[:, :, -sliding_window_len:, :],
+                            value_states[:, :, -sliding_window_len:, :],
+                        )
                 key_states, value_states = key_states[:, :, :seq_len, :], value_states[:, :, :seq_len, :]
 
         attention_interface: Callable = eager_attention_forward
