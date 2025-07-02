@@ -1626,7 +1626,7 @@ class GenerationTesterMixin:
 
             # 3.2. Decoder-only checks
             else:
-                num_cache_decoder_layers = len(past_kv) if is_legacy_cache else len(past_kv)
+                num_cache_decoder_layers = len(past_kv)
                 self.assertEqual(num_cache_decoder_layers, num_decoder_layers)
 
                 for i in range(num_decoder_layers):
@@ -1634,8 +1634,16 @@ class GenerationTesterMixin:
                         self.assertEqual(len(past_kv[0]), 2)  # legacy check: confirm number of elements in tuple
 
                     # Self attention
-                    self_attention_layer_keys = past_kv[i][0] if is_legacy_cache else past_kv.layers[i].keys
-                    self_attention_layer_values = past_kv[i][1] if is_legacy_cache else past_kv.layers[i].values
+                    if is_legacy_cache:
+                        self_attention_layer_keys = past_kv[i][0]
+                        self_attention_layer_values = past_kv[i][1]
+                    elif past_kv.layers is None:
+                        # Cache is lot layered (i.e, Mamba derivatives)
+                        self_attention_layer_keys = past_kv.key_cache[i]
+                        self_attention_layer_values = past_kv.value_cache[i]
+                    else:
+                        self_attention_layer_keys = past_kv.layers[i].keys
+                        self_attention_layer_values = past_kv.layers[i].values
                     self.assertEqual(self_attention_layer_keys.shape, all_cache_shapes[i][0])
                     self.assertEqual(self_attention_layer_values.shape, all_cache_shapes[i][1])
 
