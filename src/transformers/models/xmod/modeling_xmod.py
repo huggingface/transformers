@@ -854,7 +854,6 @@ class XmodPreTrainedModel(PreTrainedModel):
     """
 )
 class XmodModel(XmodPreTrainedModel):
-    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.__init__ with ClapText->Xmod
     def __init__(self, config, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
