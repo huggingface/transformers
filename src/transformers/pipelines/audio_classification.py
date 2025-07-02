@@ -17,7 +17,7 @@ from typing import Any, Union
 import numpy as np
 import requests
 
-from ..utils import add_end_docstrings, is_torch_available, is_torchaudio_available, logging
+from ..utils import add_end_docstrings, is_torch_available, is_torchaudio_available, is_torchcodec_available, logging
 from .base import Pipeline, build_pipeline_init_args
 
 
@@ -173,6 +173,16 @@ class AudioClassificationPipeline(Pipeline):
 
         if isinstance(inputs, bytes):
             inputs = ffmpeg_read(inputs, self.feature_extractor.sampling_rate)
+
+        if is_torchcodec_available():
+            import torchcodec
+
+            if isinstance(inputs, torchcodec.decoders.AudioDecoder):
+                _audio_samples = inputs.get_all_samples()
+                _array = _audio_samples.data
+                # to mono
+                _array = np.mean(_array, axis=tuple(range(_array.ndim - 1))) if _array.ndim > 1 else _array
+                inputs = {"array": _array, "sampling_rate": _audio_samples.sample_rate}
 
         if isinstance(inputs, dict):
             inputs = inputs.copy()  # So we don't mutate the original dictionary outside the pipeline
