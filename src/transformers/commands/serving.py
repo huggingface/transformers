@@ -623,7 +623,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
         self.loaded_model = model_id_and_revision
 
-        print("Loaded model", model_id_and_revision)
+        logger.warning(f"Loaded model {model_id_and_revision}")
         return model, tokenizer
 
 
