@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union, tuple
 
 import torch
 from torch import Tensor, nn
@@ -26,6 +26,7 @@ from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     Seq2SeqLMOutput,
@@ -80,85 +81,52 @@ class SeamlessM4Tv2GenerationOutput(SeamlessM4TGenerationOutput):
 
 
 @dataclass
-class SeamlessM4Tv2TextToUnitOutput(ModelOutput):
-    """
-        Class defining the outputs from [`SeamlessM4Tv2TextToUnitForConditionalGeneration`] and
+@auto_docstring(
+    custom_intro="""
+    Class defining the outputs from [`SeamlessM4Tv2TextToUnitForConditionalGeneration`] and
         [`SeamlessM4Tv2TextToUnitModel`].
+    """
+)
+class SeamlessM4Tv2TextToUnitOutput(ModelOutput):
+    r"""
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the decoder of the model.
 
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the decoder of the model.
-
-            If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
-            hidden_size)` is output.
-        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
-            for *masked*
-        decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the decoder at the output of each layer plus the optional initial embedding outputs.
-        decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
-            self-attention heads.
-        encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder of the model.
-        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the encoder at the output of each layer plus the optional initial embedding outputs.
-        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
-            self-attention heads.
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss.
+        If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
+        hidden_size)` is output.
+    padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
+        for *masked*
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss.
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
     padding_mask: Optional[torch.Tensor] = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[tuple[torch.FloatTensor]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[tuple[torch.FloatTensor]] = None
     loss: Optional[torch.FloatTensor] = None
 
 
 @dataclass
-class SeamlessM4Tv2TextToUnitDecoderOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Class defining the outputs from [`SeamlessM4Tv2TextToUnitDecoder`].
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
-            for *masked*
+    """
+)
+class SeamlessM4Tv2TextToUnitDecoderOutput(ModelOutput):
+    r"""
+    padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
+        for *masked*
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
     padding_mask: Optional[torch.Tensor] = None
 
 
@@ -305,7 +273,7 @@ class SeamlessM4Tv2ConformerSelfAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         # self-attention mechanism
         batch_size, sequence_length, hidden_size = hidden_states.size()
 
@@ -361,7 +329,7 @@ class SeamlessM4Tv2ConformerSelfAttention(nn.Module):
 
 
 class SeamlessM4Tv2ConformerEncoderLayer(Wav2Vec2ConformerEncoderLayer):
-    """Conformer block based on https://arxiv.org/abs/2005.08100."""
+    """Conformer block based on https://huggingface.co/papers/2005.08100."""
 
     def __init__(self, config):
         super().__init__(config)
@@ -420,7 +388,7 @@ class SeamlessM4Tv2ConformerEncoder(nn.Module):
         self.config = config
 
         self.dropout = nn.Dropout(config.speech_encoder_dropout)
-        self.layers = nn.ModuleList(
+        self.layers = nn.Modulelist(
             [SeamlessM4Tv2ConformerEncoderLayer(config) for _ in range(config.speech_encoder_layers)]
         )
 
@@ -495,7 +463,7 @@ class SeamlessM4Tv2ConformerEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
             skip_the_layer = (
@@ -503,21 +471,12 @@ class SeamlessM4Tv2ConformerEncoder(nn.Module):
             )
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        layer.__call__,
-                        hidden_states,
-                        attention_mask,
-                        output_attentions,
-                        conv_attention_mask,
-                    )
-                else:
-                    layer_outputs = layer(
-                        hidden_states,
-                        attention_mask=attention_mask,
-                        output_attentions=output_attentions,
-                        conv_attention_mask=conv_attention_mask,
-                    )
+                layer_outputs = layer(
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    output_attentions=output_attentions,
+                    conv_attention_mask=conv_attention_mask,
+                )
                 hidden_states = layer_outputs[0]
 
             if skip_the_layer:
@@ -571,10 +530,10 @@ class SeamlessM4Tv2Attention(BartAttention):
         self,
         hidden_states: torch.Tensor,
         encoder_hidden_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         is_cross_attention = encoder_hidden_states is not None
@@ -600,10 +559,10 @@ class SeamlessM4Tv2Attention(BartAttention):
         attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2))
 
         if self.is_decoder:
-            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
+            # if cross_attention save tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
             # Further calls to cross_attention layer can then reuse all cross-attention
             # key/value_states (first "if" case)
-            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
+            # if uni-directional self-attention (decoder) save tuple(torch.Tensor, torch.Tensor) of
             # all previous decoder key/value_states. Further calls to uni-directional self-attention
             # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
             # if encoder bi-directional self-attention `past_key_value` is always `None`
@@ -643,7 +602,7 @@ class SeamlessM4Tv2DecoderLayer(SeamlessM4TDecoderLayer):
     pass
 
 
-class SeamlessM4Tv2TextToUnitDecoderLayer(nn.Module):
+class SeamlessM4Tv2TextToUnitDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: SeamlessM4Tv2Config, decoder_ffn_dim=None, decoder_attention_heads=None):
         super().__init__()
         decoder_ffn_dim = config.decoder_ffn_dim if decoder_ffn_dim is None else decoder_ffn_dim
@@ -808,7 +767,7 @@ class SeamlessM4Tv2PreTrainedModel(SeamlessM4TPreTrainedModel):
         Args:
             input_ids (`torch.Tensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary.
-            subwords_batch (`List[List[str]]` of shape `(batch_size, sequence_length)`):
+            subwords_batch (`list[list[str]]` of shape `(batch_size, sequence_length)`):
                 Corresponding text string for each input id.
             merge_space_with_prev_subword (`bool`, *optional*, defaults to `False`):
                 Indicates if the space character is merged with the previous subword. If `False`, it will be merged
@@ -884,7 +843,7 @@ class SeamlessM4Tv2PreTrainedModel(SeamlessM4TPreTrainedModel):
         Args:
             input_ids (`torch.Tensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary.
-            subwords_batch (`List[List[str]]` of shape `(batch_size, sequence_length)`):
+            subwords_batch (`list[list[str]]` of shape `(batch_size, sequence_length)`):
                 Corresponding text string for each input id.
             char_count_per_id (`torch.Tensor` of shape `(batch_size, sequence_length)`):
                 Number of characters per input id.
@@ -1042,7 +1001,7 @@ class SeamlessM4Tv2TextToUnitDecoder(SeamlessM4Tv2PreTrainedModel):
                     decoder_ffn_dim=config.decoder_ffn_dim,
                 )
             )
-        self.layers = nn.ModuleList(layers)
+        self.layers = nn.Modulelist(layers)
         self.layer_norm = nn.LayerNorm(config.hidden_size)
 
         self.gradient_checkpointing = False
@@ -1063,7 +1022,7 @@ class SeamlessM4Tv2TextToUnitDecoder(SeamlessM4Tv2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SeamlessM4Tv2TextToUnitDecoderOutput]:
+    ) -> Union[tuple, SeamlessM4Tv2TextToUnitDecoderOutput]:
         r"""
         Args:
             char_input_ids (`torch.LongTensor` of shape `(batch_size, char_sequence_length)`):
@@ -1101,7 +1060,7 @@ class SeamlessM4Tv2TextToUnitDecoder(SeamlessM4Tv2PreTrainedModel):
 
         # predict duration
         log_dur_pred = self.duration_predictor(char_hidden_states, padding_mask=char_padding_mask)
-        dur_out = torch.clamp(torch.round((torch.expm1(log_dur_pred))).long(), min=1)
+        dur_out = torch.clamp(torch.round(torch.expm1(log_dur_pred)).long(), min=1)
         dur_out = dur_out.masked_fill(~char_padding_mask.bool(), 0.0)
 
         # upsample char hidden states according to predicted duration
@@ -1120,7 +1079,7 @@ class SeamlessM4Tv2TextToUnitDecoder(SeamlessM4Tv2PreTrainedModel):
         all_self_attns = () if output_attentions else None
 
         for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
             if self.training:
@@ -1188,12 +1147,12 @@ class SeamlessM4Tv2TextToUnitModel(SeamlessM4TTextToUnitModel):
         char_input_ids: Optional[torch.LongTensor] = None,
         char_count_per_id: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], Seq2SeqModelOutput]:
+    ) -> Union[tuple[torch.Tensor], Seq2SeqModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1262,14 +1221,14 @@ class SeamlessM4Tv2TextToUnitForConditionalGeneration(SeamlessM4TTextToUnitForCo
         char_input_ids: Optional[torch.LongTensor] = None,
         char_count_per_id: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[Seq2SeqLMOutput, Tuple[torch.FloatTensor]]:
+    ) -> Union[Seq2SeqLMOutput, tuple[torch.FloatTensor]]:
         r"""
         char_input_ids (`torch.LongTensor` of shape `(batch_size, char_sequence_length)`):
             Character indices. The correspondence between characters and indices can be found in `char_to_id`, a
@@ -1407,7 +1366,7 @@ class SeamlessM4Tv2CodeHifiGan(SeamlessM4TCodeHifiGan, nn.Module):
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TCodeHifiGan.forward with SeamlessM4T->SeamlessM4Tv2, spkr_id->speaker_id
     def forward(
         self, input_ids: torch.LongTensor, speaker_id: torch.Tensor, lang_id: torch.Tensor
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         """
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -1504,15 +1463,15 @@ SEAMLESS_M4T_V2_T2T_INPUTS_DOCSTRING = r"""
             priority: 1) from the `generation_config.json` model file, if it exists; 2) from the model
             configuration. Please note that unspecified parameters will inherit [`~generation.GenerationConfig`]'s
             default values, whose documentation should be checked to parameterize generation.
-        logits_processor (`LogitsProcessorList`, *optional*):
+        logits_processor (`LogitsProcessorlist`, *optional*):
             Custom logits processors that complement the default logits processors built from arguments and
             generation config. If a logit processor is passed that is already created with the arguments or a
             generation config an error is thrown. This feature is intended for advanced users.
-        stopping_criteria (`StoppingCriteriaList`, *optional*):
+        stopping_criteria (`StoppingCriterialist`, *optional*):
             Custom stopping criteria that complement the default stopping criteria built from arguments and a
             generation config. If a stopping criteria is passed that is already created with the arguments or a
             generation config an error is thrown. This feature is intended for advanced users.
-        prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], List[int]]`, *optional*):
+        prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], list[int]]`, *optional*):
             If provided, this function constraints the beam search to allowed tokens only at each step. If not
             provided no constraint is applied. This function takes 2 arguments: the batch ID `batch_id` and
             `input_ids`. It has to return a list with the allowed tokens for the next generation step conditioned
@@ -1555,15 +1514,15 @@ SEAMLESS_M4T_V2_S2T_INPUTS_DOCSTRING = r"""
             priority: 1) from the `generation_config.json` model file, if it exists; 2) from the model
             configuration. Please note that unspecified parameters will inherit [`~generation.GenerationConfig`]'s
             default values, whose documentation should be checked to parameterize generation.
-        logits_processor (`LogitsProcessorList`, *optional*):
+        logits_processor (`LogitsProcessorlist`, *optional*):
             Custom logits processors that complement the default logits processors built from arguments and
             generation config. If a logit processor is passed that is already created with the arguments or a
             generation config an error is thrown. This feature is intended for advanced users.
-        stopping_criteria (`StoppingCriteriaList`, *optional*):
+        stopping_criteria (`StoppingCriterialist`, *optional*):
             Custom stopping criteria that complement the default stopping criteria built from arguments and a
             generation config. If a stopping criteria is passed that is already created with the arguments or a
             generation config an error is thrown. This feature is intended for advanced users.
-        prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], List[int]]`, *optional*):
+        prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], list[int]]`, *optional*):
             If provided, this function constraints the beam search to allowed tokens only at each step. If not
             provided no constraint is applied. This function takes 2 arguments: the batch ID `batch_id` and
             `input_ids`. It has to return a list with the allowed tokens for the next generation step conditioned
@@ -1664,7 +1623,7 @@ class SeamlessM4Tv2ForTextToSpeech(SeamlessM4TForTextToSpeech):
 
 
         Returns:
-            `Union[SeamlessM4Tv2GenerationOutput, Tuple[Tensor]]`:
+            `Union[SeamlessM4Tv2GenerationOutput, tuple[Tensor]]`:
             - If `return_intermediate_token_ids`, returns [`SeamlessM4Tv2GenerationOutput`].
             - If not `return_intermediate_token_ids`, returns a tuple composed of waveforms of shape `(batch_size,
               sequence_length)` and `waveform_lengths` which gives the length of each sample.
@@ -1874,7 +1833,7 @@ class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4TForSpeechToSpeech):
 
 
         Returns:
-            `Union[SeamlessM4Tv2GenerationOutput, Tuple[Tensor]]`:
+            `Union[SeamlessM4Tv2GenerationOutput, tuple[Tensor]]`:
             - If `return_intermediate_token_ids`, returns [`SeamlessM4Tv2GenerationOutput`].
             - If not `return_intermediate_token_ids`, returns a tuple composed of waveforms of shape `(batch_size,
               sequence_length)` and `waveform_lengths` which gives the length of each sample.
@@ -2103,7 +2062,7 @@ class SeamlessM4Tv2Model(SeamlessM4TModel):
                     other.
 
         Returns:
-            `Union[SeamlessM4Tv2GenerationOutput, Tuple[Tensor], ModelOutput]`:
+            `Union[SeamlessM4Tv2GenerationOutput, tuple[Tensor], ModelOutput]`:
             - If `generate_speech` and `return_intermediate_token_ids`, returns [`SeamlessM4Tv2GenerationOutput`].
             - If `generate_speech` and not `return_intermediate_token_ids`, returns a tuple composed of waveforms of
               shape `(batch_size, sequence_length)` and `waveform_lengths` which gives the length of each sample.
