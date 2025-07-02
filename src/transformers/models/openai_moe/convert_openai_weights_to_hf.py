@@ -256,30 +256,47 @@ class OpenAIMoeConverter(TikTokenConverter):
 
 
 def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
-    # Chat template
-    chat_template = (
-        "{% for message in messages %}"
-        "{% if loop.index0 == 0 %}"
-        "{{ bos_token }}"
-        "{% endif %}"
-        "{{ '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n' }}"
-        "{% if message['content'] is string %}"
-        "{{ message['content'] }}"
-        "{% else %}"
-        "{% for content in message['content'] %}"
-        "{% if content['type'] == 'image' %}"
-        "{{ '<|image|>' }}"
-        "{% elif content['type'] == 'text' %}"
-        "{{ content['text'] }}"
-        "{% endif %}"
-        "{% endfor %}"
-        "{% endif %}"
-        "{{ '<|eot_id|>' }}"
-        "{% endfor %}"
-        "{% if add_generation_prompt %}"
-        "{{ '<|start_header_id|>assistant<|end_header_id|>\n\n' }}"
-        "{% endif %}"
-    )
+    # Updated Harmony chat template
+    chat_template = """{# Harmony chat template --------------------------------------------------
+   This template mirrors the message rendering logic implemented in
+   `harmony/src/encoding.rs`.  It can be consumed by Hugging Face
+   Transformers (``chat_template`` field) so that *text → tokens*
+   conversion of chat conversations happens fully on the Python side
+   without relying on the Rust renderer.
+
+   Supported *message* keys (per ``chat::Message``):
+     - role (user│assistant│system│developer│tool)
+     - name (optional author name)
+     - recipient (optional recipient – omitted or "all" → broadcast)
+     - channel   (optional meta channel)
+     - content_type (optional content-type qualifier)
+     - content (string – the actual message payload)
+
+   The template renders each historical message *fully* (incl. the
+   trailing <|end|>/<|return|> sentinel) and – if ``add_generation_prompt``
+   is True – appends a partial header for the **next** assistant turn
+   exactly like ``render_conversation_for_completion`` does on the Rust
+   side: ``<|start|>assistant``.
+#}
+
+{%- macro harmony_header(m) -%}
+    <|start|>{% if m['role'] == 'tool' %}{{ m['name'] }}{% else %}{{ m['role'] }}{% if m.get('name') %}:{{ m['name'] }}{% endif %}{% endif %}{% if m.get('recipient') and m['recipient'] != 'all' %} to={{ m['recipient'] }}{% endif %}{% if m.get('channel') %}<|channel|>{{ m['channel'] }}{% endif %}{% if m.get('content_type') %} {{ m['content_type'] }}{% endif %}<|message|>
+{%- endmacro -%}
+
+{# ---------------------------------------------------------------------
+   Render complete history
+#}
+{%- for message in messages -%}
+    {{- harmony_header(message) -}}{{ message['content'] }}{%- if message['role'] == 'assistant' -%}<|return|>{%- else -%}<|end|>{%- endif -%}
+{%- endfor -%}
+
+{# ---------------------------------------------------------------------
+   Generation prompt for *next* assistant answer
+#}
+{%- if add_generation_prompt -%}
+<|start|>assistant
+{%- endif -%}
+"""
 
     converter = OpenAIMoeConverter(
         vocab_file=tokenizer_path,
