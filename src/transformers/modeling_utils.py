@@ -4570,9 +4570,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         if is_offline_mode() and not local_files_only:
             logger.info("Offline mode: forcing local_files_only=True")
             local_files_only = True
-
         # Load config if we don't provide a configuration
         if not isinstance(config, PretrainedConfig):
+            print("here", cls.config_class)
             config_path = config if config is not None else pretrained_model_name_or_path
             config, model_kwargs = cls.config_class.from_pretrained(
                 config_path,
@@ -4604,6 +4604,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             kwarg_attn_imp = kwargs.pop("attn_implementation", None)
             if kwarg_attn_imp is not None:
                 config._attn_implementation = kwarg_attn_imp
+                print("config._attn_implementation", config._attn_implementation)
 
             model_kwargs = kwargs
 

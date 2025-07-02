@@ -249,7 +249,6 @@ class SamAttention(nn.Module):
         # SamAttention
         scale = query.shape[-1] ** -0.5
         attention_interface: Callable = eager_attention_forward
-        self.config._attn_implementation = "sdpa"
         if self.config._attn_implementation != "eager":
             if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
                 logger.warning_once(

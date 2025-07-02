@@ -23,57 +23,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class Sam2PromptEncoderConfig(PretrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`Sam2PromptEncoder`]. The [`Sam2PromptEncoder`]
-    module is used to encode the input 2D points and bounding boxes.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 256):
-            Dimensionality of the hidden states.
-        image_size (`int`, *optional*, defaults to 1024):
-            The expected output resolution of the image.
-        patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each patch.
-        mask_input_channels (`int`, *optional*, defaults to 16):
-            The number of channels to be fed to the `MaskDecoder` module.
-        num_point_embeddings (`int`, *optional*, defaults to 4):
-            The number of point embeddings to be used.
-        hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function in the encoder and pooler.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        scale (`float`, *optional*, defaults to 1):
-            The scale factor for the prompt encoder.
-    """
-
-    def __init__(
-        self,
-        hidden_size=256,
-        image_size=1024,
-        patch_size=16,
-        mask_input_channels=16,
-        num_point_embeddings=4,
-        hidden_act="gelu",
-        layer_norm_eps=1e-6,
-        scale=1,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.hidden_size = hidden_size
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.image_embedding_size = image_size // patch_size
-        self.mask_input_channels = mask_input_channels
-        self.num_point_embeddings = num_point_embeddings
-        self.hidden_act = hidden_act
-        self.layer_norm_eps = layer_norm_eps
-        self.scale = scale
-
-
 class Sam2VisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Sam2VisionEncoder`]. It is used to instantiate a SAM
@@ -143,7 +92,7 @@ class Sam2VisionConfig(PretrainedConfig):
     def __init__(
         self,
         hidden_size=96,
-        num_heads=1,
+        num_attention_heads=1,
         num_channels=3,
         image_size=1024,
         patch_kernel_size=7,
@@ -151,13 +100,13 @@ class Sam2VisionConfig(PretrainedConfig):
         patch_padding=3,
         drop_path_rate=0.0,
         q_pool=3,
-        q_stride=(2, 2),
-        stages=(1, 2, 7, 2),
+        q_stride=[2, 2],
+        stages=[1, 2, 7, 2],
         dim_mul=2.0,
         head_mul=2.0,
-        window_positional_embedding_background_size=(7, 7),
-        window_spec=(8, 4, 14, 7),
-        global_attention_blocks=(5, 7, 9),
+        window_positional_embedding_background_size=[7, 7],
+        window_spec=[8, 4, 14, 7],
+        global_attention_blocks=[5, 7, 9],
         backbone_channel_list=[768, 384, 192, 96],
         backbone_feature_sizes=[[256, 256], [128, 128], [64, 64]],
         fpn_hidden_size=256,
@@ -170,6 +119,7 @@ class Sam2VisionConfig(PretrainedConfig):
         fuse_type="sum",
         hidden_act="gelu",
         layer_norm_eps=1e-6,
+        initializer_range=0.02,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -178,7 +128,7 @@ class Sam2VisionConfig(PretrainedConfig):
         assert fuse_type in ["sum", "average"]
 
         self.hidden_size = hidden_size
-        self.num_heads = num_heads
+        self.num_attention_heads = num_attention_heads
         self.num_channels = num_channels
         self.image_size = image_size
         self.patch_kernel_size = patch_kernel_size
@@ -208,6 +158,58 @@ class Sam2VisionConfig(PretrainedConfig):
 
         self.hidden_act = hidden_act
         self.layer_norm_eps = layer_norm_eps
+        self.initializer_range = initializer_range
+
+
+class Sam2PromptEncoderConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`Sam2PromptEncoder`]. The [`Sam2PromptEncoder`]
+    module is used to encode the input 2D points and bounding boxes.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        hidden_size (`int`, *optional*, defaults to 256):
+            Dimensionality of the hidden states.
+        image_size (`int`, *optional*, defaults to 1024):
+            The expected output resolution of the image.
+        patch_size (`int`, *optional*, defaults to 16):
+            The size (resolution) of each patch.
+        mask_input_channels (`int`, *optional*, defaults to 16):
+            The number of channels to be fed to the `MaskDecoder` module.
+        num_point_embeddings (`int`, *optional*, defaults to 4):
+            The number of point embeddings to be used.
+        hidden_act (`str`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function in the encoder and pooler.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the layer normalization layers.
+        scale (`float`, *optional*, defaults to 1):
+            The scale factor for the prompt encoder.
+    """
+
+    def __init__(
+        self,
+        hidden_size=256,
+        image_size=1024,
+        patch_size=16,
+        mask_input_channels=16,
+        num_point_embeddings=4,
+        hidden_act="gelu",
+        layer_norm_eps=1e-6,
+        scale=1,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.hidden_size = hidden_size
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.image_embedding_size = image_size // patch_size
+        self.mask_input_channels = mask_input_channels
+        self.num_point_embeddings = num_point_embeddings
+        self.hidden_act = hidden_act
+        self.layer_norm_eps = layer_norm_eps
+        self.scale = scale
 
 
 class Sam2MaskDecoderConfig(PretrainedConfig):
@@ -505,6 +507,13 @@ class Sam2Config(PretrainedConfig):
     ```"""
 
     model_type = "sam2"
+    sub_configs = {
+        "vision_config": Sam2VisionConfig,
+        "prompt_encoder_config": Sam2PromptEncoderConfig,
+        "mask_decoder_config": Sam2MaskDecoderConfig,
+        "memory_attention_config": Sam2MemoryAttentionConfig,
+        "memory_encoder_config": Sam2MemoryEncoderConfig,
+    }
 
     def __init__(
         self,
@@ -514,6 +523,23 @@ class Sam2Config(PretrainedConfig):
         memory_attention_config=None,
         memory_encoder_config=None,
         initializer_range=0.02,
+        num_maskmem=7,
+        image_size=1024,
+        sigmoid_scale_for_mem_enc=20.0,
+        sigmoid_bias_for_mem_enc=-10.0,
+        binarize_mask_from_pts_for_mem_enc=True,
+        enable_occlusion_spatial_embedding=True,
+        multimask_output_in_sam=True,
+        multimask_min_pt_num=0,
+        multimask_max_pt_num=1,
+        multimask_output_for_tracking=True,
+        non_overlap_masks_for_mem_enc=False,
+        max_object_pointers_in_encoder=16,
+        enable_temporal_pos_encoding_for_object_pointers=True,
+        project_temporal_pos_encoding_in_object_pointers=True,
+        preserve_temporal_direction_in_object_pointers=True,
+        fill_hole_area=8,
+        non_overlap_masks=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -541,54 +567,46 @@ class Sam2Config(PretrainedConfig):
         self.memory_encoder_config = Sam2MemoryEncoderConfig(**memory_encoder_config)
 
         self.initializer_range = initializer_range
-        self.num_maskmem = 7  # default 1 input frame + 6 previous frames
-        self.image_size = 1024
-        self.backbone_stride = 16  # stride of the image backbone output
-        self.sigmoid_scale_for_mem_enc = 20.0  # scale factor for mask sigmoid prob
-        self.sigmoid_bias_for_mem_enc = -10.0  # bias factor for mask sigmoid prob
+        self.num_maskmem = num_maskmem  # default 1 input frame + 6 previous frames
+        self.image_size = image_size
+        self.sigmoid_scale_for_mem_enc = sigmoid_scale_for_mem_enc  # scale factor for mask sigmoid prob
+        self.sigmoid_bias_for_mem_enc = sigmoid_bias_for_mem_enc  # bias factor for mask sigmoid prob
         # During evaluation whether to binarize the sigmoid mask logits on interacted frames with clicks
-        self.binarize_mask_from_pts_for_mem_enc = True
-        self.use_mask_input_as_output_without_sam = True  # on frames with mask input whether to directly output the input mask without using a SAM prompt encoder + mask decoder
+        self.binarize_mask_from_pts_for_mem_enc = binarize_mask_from_pts_for_mem_enc
         # The maximum number of conditioning frames to participate in the memory attention (-1 means no limit; if there are more conditioning frames than this limit
         # we only cross-attend to the temporally closest `max_cond_frames_in_attn` conditioning frames in the encoder when tracking each frame). This gives the model
         # a temporal locality when handling a large number of annotated frames (since closer frames should be more important) and also avoids GPU OOM.
-        self.max_cond_frames_in_attn = -1
-        self.enable_occlusion_spatial_embedding = True
+        self.enable_occlusion_spatial_embedding = enable_occlusion_spatial_embedding
         # whether to output multiple (3) masks for the first click on initial conditioning frames
-        self.multimask_output_in_sam = True
+        self.multimask_output_in_sam = multimask_output_in_sam
         # the minimum and maximum number of clicks to use multimask_output_in_sam (only relevant when `multimask_output_in_sam=True`;
-        # default is 1 for both meaning that only the first click gives multimask output; also note that a box counts as two points)
-        self.multimask_min_pt_num = 0
-        self.multimask_max_pt_num = 1
+        self.multimask_min_pt_num = multimask_min_pt_num
+        self.multimask_max_pt_num = multimask_max_pt_num
         # whether to also use multimask output for tracking (not just for the first click on initial conditioning frames; only relevant when `multimask_output_in_sam=True`)
-        self.multimask_output_for_tracking = True
+        self.multimask_output_for_tracking = multimask_output_for_tracking
         # Whether to use multimask tokens for obj ptr; Only relevant when both
         # use_object_pointers_in_encoder=True and multimask_output_for_tracking=True
         # whether to use sigmoid to restrict ious prediction to [0-1]
-        self.iou_prediction_use_sigmoid = True
         # The memory bank's temporal stride during evaluation (i.e. the `r` parameter in XMem and Cutie; XMem and Cutie use r=5).
         # For r>1 the (self.num_maskmem - 1) non-conditioning memory frames consist of
         # (self.num_maskmem - 2) nearest frames from every r-th frames plus the last frame.
-        self.memory_temporal_stride_for_eval = 1
         # if `add_all_frames_to_correct_as_cond` is True we also append to the conditioning frame list any frame that receives a later correction click
         # if `add_all_frames_to_correct_as_cond` is False we conditioning frame list to only use those initial conditioning frames
-        self.add_all_frames_to_correct_as_cond = False
         # whether to apply non-overlapping constraints on the object masks in the memory encoder during evaluation (to avoid/alleviate superposing masks)
-        self.non_overlap_masks_for_mem_enc = False
+        self.non_overlap_masks_for_mem_enc = non_overlap_masks_for_mem_enc
         # whether to cross-attend to object pointers from other frames (based on SAM output tokens) in the encoder
-        self.use_object_pointers_in_encoder = True
         # the maximum number of object pointers from other frames in encoder cross attention (only relevant when `use_object_pointers_in_encoder=True`)
-        self.max_object_pointers_in_encoder = 16
+        self.max_object_pointers_in_encoder = max_object_pointers_in_encoder
         # whether to add temporal positional encoding to the object pointers in the encoder (only relevant when `use_object_pointers_in_encoder=True`)
-        self.enable_temporal_pos_encoding_for_object_pointers = True
+        self.enable_temporal_pos_encoding_for_object_pointers = enable_temporal_pos_encoding_for_object_pointers
         # whether to add an extra linear projection layer for the temporal positional encoding in the object pointers to avoid potential interference
         # with spatial positional encoding (only relevant when both `use_object_pointers_in_encoder=True` and `enable_temporal_pos_encoding_for_object_pointers=True`)
-        self.project_temporal_pos_encoding_in_object_pointers = True
-        self.preserve_temporal_direction_in_object_pointers = True
+        self.project_temporal_pos_encoding_in_object_pointers = project_temporal_pos_encoding_in_object_pointers
+        self.preserve_temporal_direction_in_object_pointers = preserve_temporal_direction_in_object_pointers
 
         # Video inference specific parameters
-        self.fill_hole_area = 8  # area threshold for filling holes in masks
-        self.non_overlap_masks = False  # whether to apply non-overlapping constraints on output masks
+        self.fill_hole_area = fill_hole_area  # area threshold for filling holes in masks
+        self.non_overlap_masks = non_overlap_masks  # whether to apply non-overlapping constraints on output masks
 
 
 __all__ = [

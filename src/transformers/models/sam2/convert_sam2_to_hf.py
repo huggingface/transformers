@@ -57,7 +57,7 @@ def get_config(model_name):
     elif "sam2.1_hiera_base_plus" in model_name:
         vision_config = Sam2VisionConfig(
             hidden_size=112,
-            num_heads=2,
+            num_attention_heads=2,
             stages=(2, 3, 16, 3),
             global_attention_blocks=(12, 16, 20),
             window_positional_embedding_background_size=(14, 14),
@@ -70,7 +70,7 @@ def get_config(model_name):
     elif "sam2.1_hiera_large" in model_name:
         vision_config = Sam2VisionConfig(
             hidden_size=144,
-            num_heads=2,
+            num_attention_heads=2,
             stages=(2, 6, 36, 4),
             global_attention_blocks=(23, 33, 43),
             window_positional_embedding_background_size=(7, 7),
