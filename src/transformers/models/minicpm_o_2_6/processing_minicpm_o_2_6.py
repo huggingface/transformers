@@ -33,7 +33,7 @@ from transformers import AutoImageProcessor, AutoTokenizer, WhisperFeatureExtrac
 from transformers.image_processing_utils import BaseImageProcessor
 from transformers.image_transforms import to_channel_dimension_format
 from transformers.image_utils import ImageInput
-from transformers.processing_utils import ProcessorMixin
+from transformers.processing_utils import ProcessorMixin, ProcessingKwargs, Unpack, ImagesKwargs, AudioKwargs
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
 from transformers.utils import logging, TensorType
 
@@ -117,6 +117,36 @@ class MiniCPMOBatchFeature(BatchFeature):
         return self
     
 
+class MiniCPMOImageKwargs(ImagesKwargs, total=False):
+    max_slice_nums: Optional[int]
+    use_image_id: bool
+
+
+class MiniCPMOAudioKwargs(AudioKwargs, total=False):
+    audio_parts: Optional[list]
+    chunk_input: bool
+
+
+class MiniCPM_o_2_6ProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: MiniCPMOImageKwargs
+    audio_kwargs: MiniCPMOAudioKwargs
+    _defaults = {
+        "images_kwargs": {
+            "do_pad": True,
+            "max_slice_nums": None,
+            "use_image_id": True,
+        },
+        "audio_kwargs": {
+            "audio_parts": None,
+            "chunk_input": False,
+            "sampling_rate": 16000,
+        },
+        "text_kwargs": {"add_special_tokens": True},
+        "videos_kwargs": {},
+        "common_kwargs": {"return_tensors": TensorType.PYTORCH},
+    }
+
+
 class MiniCPM_o_2_6Processor(ProcessorMixin):
     r"""
     Constructs a MiniCPMV processor which wraps a MiniCPMV image processor and a MiniCPMV tokenizer into a single processor.
@@ -137,14 +167,6 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
     tokenizer_class = "AutoTokenizer"
 
     def __init__(self, config=None, image_processor=None, feature_extractor=None, tokenizer=None):
-        if config is None:
-            raise ValueError("Config must be provided.")
-        if image_processor is None:
-            image_processor = AutoImageProcessor.from_pretrained(config._name_or_path)
-        if feature_extractor is None:
-            feature_extractor = WhisperFeatureExtractor.from_pretrained(config._name_or_path)
-        if tokenizer is None:
-            tokenizer = AutoTokenizer.from_pretrained(config._name_or_path, trust_remote_code=True)
         super().__init__(image_processor, feature_extractor, tokenizer)
         self.version = image_processor.version
         self.audio_start_token = "<|audio_start|>"
@@ -157,26 +179,29 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
         images: ImageInput = None,
         audios: Union[np.ndarray, List[np.ndarray], List[List[np.ndarray]]] = None,
-        audio_parts: Optional[list] = None,
-        max_length: Optional[int] = None,
-        do_pad: Optional[bool] = True,
-        max_slice_nums: int = None,
-        use_image_id: bool = True,
-        chunk_input: bool = False,
-        return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
-        sampling_rate: Optional[int] = 16000,
-        **kwargs,
+        **kwargs: Unpack[MiniCPM_o_2_6ProcessorKwargs],
     ) -> MiniCPMOBatchFeature:
+        output_kwargs = self._merge_kwargs(
+            MiniCPM_o_2_6ProcessorKwargs, self.tokenizer.init_kwargs, **kwargs
+        )
+        image_kwargs = output_kwargs["images_kwargs"]
+        audio_kwargs = output_kwargs["audio_kwargs"]
+        text_kwargs = output_kwargs["text_kwargs"]
+        common_kwargs = output_kwargs["common_kwargs"]
+
         if images is not None:
             image_inputs = self.image_processor(
-                images, do_pad=do_pad, max_slice_nums=max_slice_nums, return_tensors=return_tensors
+                images, **image_kwargs
             )
         else:
             image_inputs = None
 
         if audios is not None:
             audio_features, audio_feature_lens, audio_phs = self.audio_feature_extract(
-                audios, audio_parts, chunk_input, sampling_rate
+                audios,
+                audio_parts=audio_kwargs["audio_parts"],
+                chunk_input=audio_kwargs["chunk_input"],
+                sampling_rate=audio_kwargs["sampling_rate"]
             )
         else:
             audio_features, audio_feature_lens, audio_phs = [], [], []
@@ -185,10 +210,9 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
             image_inputs,
             audio_phs,
             text,
-            max_slice_nums=max_slice_nums,
-            use_image_id=use_image_id,
-            max_length=max_length,
-            **kwargs,
+            max_slice_nums=image_kwargs["max_slice_nums"],
+            use_image_id=image_kwargs["use_image_id"],
+            **text_kwargs,
         )
 
         model_inputs["audio_features"] = audio_features
@@ -325,10 +349,6 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
         result_text = []
         for result in output_ids:
             result = result[result != 0]
-            if result[0] == self.tokenizer.bos_token_id:
-                result = result[1:]
-            if result[-1] == self.tokenizer.eos_token_id:
-                result = result[:-1]
             result_text.append(self.tokenizer.decode(result, *args[1:], **kwargs).strip())
         return result_text
         # return self.tokenizer.batch_decode(*args, **kwargs)
@@ -341,12 +361,6 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
         """
         result = args[0]
         result = result[result != 0]
-        if result[0] == self.tokenizer.bos_token_id:
-            result = result[1:]
-        if result[-1] == self.tokenizer.eos_token_id or (
-            hasattr(self.tokenizer, "eot_token_id") and result[-1] == self.tokenizer.eot_token_id
-        ):
-            result = result[:-1]
         return self.tokenizer.decode(result, *args[1:], **kwargs).strip()
 
     def _convert(self, input_str, max_inp_length: Optional[int] = None, **kwargs):

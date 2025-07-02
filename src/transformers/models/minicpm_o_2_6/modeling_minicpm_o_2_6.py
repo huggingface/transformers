@@ -41,7 +41,7 @@ from torch.nn.utils.parametrizations import weight_norm
 from transformers.utils import logging
 from huggingface_hub import hf_hub_download
 
-from transformers import AutoProcessor, BertTokenizerFast, LlamaConfig, LlamaModel, PreTrainedModel, Qwen2ForCausalLM, Qwen2PreTrainedModel, TextIteratorStreamer
+from transformers import AutoProcessor, BertTokenizerFast, LlamaConfig, LlamaModel, PreTrainedModel, Qwen2ForCausalLM, Qwen2PreTrainedModel, TextIteratorStreamer, AutoImageProcessor, AutoTokenizer, WhisperFeatureExtractor
 from transformers.modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from transformers.utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, is_flash_attn_2_available, logging, replace_return_docstrings
 from transformers.cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
@@ -109,7 +109,11 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
             self.tts = self.init_tts_module()
 
         # self.processor = AutoProcessor.from_pretrained(self.config._name_or_path, trust_remote_code=True)
-        self.processor = MiniCPM_o_2_6Processor(config)
+
+        image_processor = AutoImageProcessor.from_pretrained(config._name_or_path)
+        feature_extractor = WhisperFeatureExtractor.from_pretrained(config._name_or_path)
+        tokenizer = AutoTokenizer.from_pretrained(config._name_or_path, trust_remote_code=True)
+        self.processor = MiniCPM_o_2_6Processor(image_processor=image_processor, feature_extractor=feature_extractor, tokenizer=tokenizer)
 
         self.terminators = ["<|im_end|>", "<|endoftext|>"]
 
@@ -953,7 +957,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
             prompts_lists,
             input_images_list,
             input_audios_list,
-            audio_parts_list,
+            audio_parts=audio_parts_list,
             max_slice_nums=max_slice_nums,
             use_image_id=use_image_id,
             chunk_input=chunk_input,
