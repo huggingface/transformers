@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
-from torch import Tensor
+from torch import Tensor, nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...modeling_outputs import ImageClassifierOutput, ModelOutput
@@ -95,7 +95,7 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
         """
         state_dict = {self._fix_state_dict_key_on_load(k)[0]: v for k, v in state_dict.items()}
         return super().load_state_dict(state_dict, *args, **kwargs)
-    
+
     def _init_weights(self, module):
         """
         Initialize weights function to properly initialize Linear layer weights.
@@ -106,7 +106,6 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-
 
 
 class TimmWrapperModel(TimmWrapperPreTrainedModel):
