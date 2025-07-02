@@ -2616,7 +2616,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         return config
 
     @classmethod
-    def _check_and_enable_sdpa(cls, config, hard_check_only: bool = False) -> PretrainedConfig:
+    def _check_and_enable_sdpa(cls, config, hard_check_only: bool = False):
         """
         Checks the availability of SDPA for a given model.
 
