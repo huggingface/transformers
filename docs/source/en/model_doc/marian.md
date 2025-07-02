@@ -25,7 +25,6 @@ rendered properly in your Markdown viewer.
 
 # MarianMT
 
-[MarianMT: Fast Neural Machine Translation in C++](https://arxiv.org/abs/2001.08210)
 
 ## Overview
 
