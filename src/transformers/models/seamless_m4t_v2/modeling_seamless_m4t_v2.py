@@ -22,7 +22,7 @@
 import copy
 import math
 from dataclasses import dataclass
-from typing import Optional, Union, tuple
+from typing import Optional, Union, list, tuple
 
 import torch
 from torch import Tensor, nn
