@@ -45,6 +45,7 @@ class OpenAIMoeConfig(PretrainedConfig):
         'layers.*.mlp.experts.gate_up_proj_bias': "grouped_gemm",
         'layers.*.mlp.experts.down_proj': "grouped_gemm",
         'layers.*.mlp.experts.down_proj_bias': "grouped_gemm",
+        'layers.*.mlp.experts': "grouped_gemm",
         "layers.*.mlp.router": "ep_router",
     }
     base_model_pp_plan = {

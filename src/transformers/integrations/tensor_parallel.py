@@ -751,6 +751,24 @@ class GroupedGemmParallel(TensorParallelLayer):
             param = param.contiguous()
         return param
 
+
+    @staticmethod
+    def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
+        if mod.config.enable_expert_parallel:
+            torch.distributed.all_reduce(outputs, op=torch.distributed.ReduceOp.SUM) # TODO: move to hook
+        return outputs
+
+
+    def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
+        # TODO: need an abstract Parallel class that is different from TensorParallelLayer
+        distribute_module(
+            module,
+            device_mesh,
+            partial(self._prepare_input_fn, None, None),
+            partial(self._prepare_output_fn, None, None),
+        )
+
+
 class RouterParallel(TensorParallelLayer):
     def __init__(self, *args, **kwargs):
         self.args = args
@@ -761,7 +779,7 @@ class RouterParallel(TensorParallelLayer):
     def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
         input_tensor = inputs[0]
         if isinstance(input_tensor, DTensor):
-            raise ValueError("RouterParallel does not support DTensor input for now")
+            raise NotImplementedError("RouterParallel does not support DTensor input for now")
         return input_tensor
     
     @staticmethod
