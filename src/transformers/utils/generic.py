@@ -963,15 +963,21 @@ def can_return_tuple(func):
     return wrapper
 
 
-@torch._dynamo.disable
-def register_hook_if_needed(layer, capture_outputs):
-    return layer.register_forward_hook(capture_outputs)
+if is_torch_available():
+
+    @torch._dynamo.disable
+    def register_hook_if_needed(layer, capture_outputs):
+        return layer.register_forward_hook(capture_outputs)
 
 
 def check_model_inputs(func):
     """
     Decorator to check if the model inputs are valid before calling the function.
     It raises a ValueError if the inputs are not valid.
+
+    BIG BIG TODO:
+    - if fullgraph compilation, just execute the fonction and don't add hooks
+      or anything!
     """
 
     @wraps(func)
