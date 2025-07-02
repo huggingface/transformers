@@ -2274,7 +2274,9 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
 
         inputs = {"inputs_embeds": inputs_embeds, "attention_mask": attention_mask}
         if not self.language_model.config.is_encoder_decoder:
-            inputs["input_ids"] = input_ids.to(language_model_inputs.device)
+            if input_ids is not None:
+                input_ids = input_ids.to(language_model_inputs.device)
+            inputs["input_ids"] = input_ids
 
         outputs = self.language_model.generate(**inputs, **generate_kwargs)
         return outputs
