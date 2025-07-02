@@ -195,7 +195,7 @@ class PretrainedConfig(PushToHubMixin):
 
     model_type: str = ""
     base_config_key: str = ""
-    sub_configs: dict[str, "PretrainedConfig"] = {}
+    sub_configs: dict[str, type["PretrainedConfig"]] = {}
     has_no_defaults_at_init: bool = False
     attribute_map: dict[str, str] = {}
     base_model_tp_plan: Optional[dict[str, Any]] = None
@@ -721,7 +721,9 @@ class PretrainedConfig(PushToHubMixin):
         return config_dict, kwargs
 
     @classmethod
-    def from_dict(cls, config_dict: dict[str, Any], **kwargs) -> "PretrainedConfig":
+    def from_dict(
+        cls: type[SpecificPretrainedConfigType], config_dict: dict[str, Any], **kwargs
+    ) -> SpecificPretrainedConfigType:
         """
         Instantiates a [`PretrainedConfig`] from a Python dictionary of parameters.
 
@@ -782,7 +784,9 @@ class PretrainedConfig(PushToHubMixin):
             return config
 
     @classmethod
-    def from_json_file(cls, json_file: Union[str, os.PathLike]) -> "PretrainedConfig":
+    def from_json_file(
+        cls: type[SpecificPretrainedConfigType], json_file: Union[str, os.PathLike]
+    ) -> SpecificPretrainedConfigType:
         """
         Instantiates a [`PretrainedConfig`] from the path to a JSON file of parameters.
 
