@@ -123,6 +123,7 @@ class OpenAIMoeExperts(nn.Module):
         return next_states
 
 
+@use_kernel_forward_from_hub("MegaBlocksMoeMLP")
 class OpenAIMoeMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
