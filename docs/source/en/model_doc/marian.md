@@ -161,7 +161,6 @@ print(result)
 - Originally trained with the Marian C++ framework for efficiency.
 
 
-- When using quantization, expect a small trade-off in accuracy for a significant gain in speed and memory.
 
 - The modeling code is based on BartForConditionalGeneration with adjustments for translation.
 
