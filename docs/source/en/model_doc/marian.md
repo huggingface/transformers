@@ -77,11 +77,6 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
 </hfoption>
-<hfoption id="transformers-cli">
-
-Not supported for this model.
-
-</hfoption>
 </hfoptions>
 
 ## Quantization
