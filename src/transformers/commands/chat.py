@@ -212,11 +212,8 @@ class ChatArguments:
     """
 
     # General settings
-    model_name_or_path: Optional[str] = field(
-        default=None,
-        metadata={
-            "help": "Name of the pre-trained model. The positional argument will take precedence if both are passed."
-        },
+    model_name_or_path: str = field(
+        metadata={"help": "Name of the pre-trained model."},
     )
     user: Optional[str] = field(
         default=None,
