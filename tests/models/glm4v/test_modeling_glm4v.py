@@ -87,8 +87,8 @@ class Glm4vVisionText2TextModelTester:
         vision_config={
             "depth": 2,
             "hidden_act": "silu",
-            "hidden_size": 20,
-            "out_hidden_size": 12,
+            "hidden_size": 48,
+            "out_hidden_size": 16,
             "intermediate_size": 22,
             "patch_size": 14,
             "spatial_merge_size": 1,
