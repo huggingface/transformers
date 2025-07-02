@@ -121,6 +121,7 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
         do_convert_rgb: bool,
         input_data_format: Optional[Union[str, ChannelDimension]],
         device: Optional[Union[str, torch.device]],
+        disable_grouping: Optional[bool],
     ):
         """
         Preprocess an image or batch of images. Copy of the `preprocess` method from `CLIPImageProcessor`.
@@ -173,7 +174,7 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
         resized_height, resized_width = height, width
 
         # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
@@ -191,7 +192,7 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
         # Group images by size for further processing
         # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             # Fused rescale and normalize
@@ -249,6 +250,7 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         device: Optional["torch.device"] = None,
+        disable_grouping: Optional[bool] = False,
         **kwargs,
     ):
         r"""
@@ -323,6 +325,7 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
                     do_convert_rgb=do_convert_rgb,
                     input_data_format=input_data_format,
                     device=device,
+                    disable_grouping=disable_grouping,
                 )
                 pixel_values.extend(patches)
                 vision_grid_thws.append(image_grid_thw)
@@ -351,11 +354,11 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
 
         factor = patch_size * merge_size
         resized_height, resized_width = smart_resize(
-            t=self.temporal_patch_size,
+            num_frames=self.temporal_patch_size,
             height=height,
             width=width,
+            temporal_factor=self.temporal_patch_size,
             factor=factor,
-            t_factor=self.temporal_patch_size,
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         return grid_h * grid_w

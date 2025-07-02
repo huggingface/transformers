@@ -27,6 +27,7 @@ from transformers import (
     AutoTokenizer,
     BitsAndBytesConfig,
     pipeline,
+    set_seed,
 )
 from transformers.models.opt.modeling_opt import OPTAttention
 from transformers.testing_utils import (
@@ -111,6 +112,8 @@ class Base4bitTest(unittest.TestCase):
     EXPECTED_OUTPUTS.add("Hello my name is John Doe, I am a student at the University")
     EXPECTED_OUTPUTS.add("Hello my name is John and I am 25 years old.")
     EXPECTED_OUTPUTS.add("Hello my name is John and I am a student at the University of")
+    # Expected values on Intel XPU and NV A100
+    EXPECTED_OUTPUTS.add("Hello my name is Alina. I have been working as a professional")
     MAX_NEW_TOKENS = 10
 
     def setUp(self):
@@ -513,6 +516,8 @@ class Pipeline4BitTest(Base4bitTest):
             max_new_tokens=self.MAX_NEW_TOKENS,
         )
 
+        # Avoid sampling different outputs
+        set_seed(42)
         # Real second forward pass
         pipeline_output = self.pipe(self.input_text)
         self.assertIn(pipeline_output[0]["generated_text"], self.EXPECTED_OUTPUTS)
@@ -520,14 +525,14 @@ class Pipeline4BitTest(Base4bitTest):
 
 @require_torch_multi_accelerator
 @apply_skip_if_not_implemented
-class Bnb4bitTestMultiGpu(Base4bitTest):
+class Bnb4bitTestMultiAccelerator(Base4bitTest):
     def setUp(self):
         super().setUp()
 
-    def test_multi_gpu_loading(self):
+    def test_multi_accelerator_loading(self):
         r"""
-        This tests that the model has been loaded and can be used correctly on a multi-GPU setup.
-        Let's just try to load a model on 2 GPUs and see if it works. The model we test has ~2GB of total, 3GB should suffice
+        This tests that the model has been loaded and can be used correctly on a multi-accelerator setup.
+        Let's just try to load a model on 2 accelerators and see if it works. The model we test has ~2GB of total, 3GB should suffice
         """
         device_map = {
             "transformer.word_embeddings": 0,
