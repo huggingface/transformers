@@ -474,11 +474,6 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
             rtol=TOLERANCE,
         )
 
-        expected_slice_hidden_state = torch.tensor(
-            [
-
-            ]
-        ).to(torch_device)
         expectations = Expectations(
             {
                 (None, None): [
@@ -519,23 +514,40 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
         self.assertEqual(
             masks_queries_logits.shape, (1, model.config.num_queries, inputs_shape[-2] // 4, inputs_shape[-1] // 4)
         )
-        expected_slice = [
-            [-8.7809, -9.0041, -8.8087],
-            [-7.4075, -7.0307, -6.5385],
-            [-6.6088, -6.3417, -6.4627],
-        ]
-        expected_slice = torch.tensor(expected_slice).to(torch_device)
+        expectations = Expectations(
+            {
+                (None, None): [
+                    [-8.7839, -9.0056, -8.8121],
+                    [-7.4104, -7.0313, -6.5401],
+                    [-6.6105, -6.3427, -6.4675],
+                ],
+                ("cuda", 8): [
+                    [-8.7809, -9.0041, -8.8087],
+                    [-7.4075, -7.0307, -6.5385],
+                    [-6.6088, -6.3417, -6.4627],
+                ],
+            }
+        )
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
         torch.testing.assert_close(masks_queries_logits[0, 0, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
         # class_queries_logits
         class_queries_logits = outputs.class_queries_logits
         self.assertEqual(class_queries_logits.shape, (1, model.config.num_queries, model.config.num_labels + 1))
-        expected_slice = torch.tensor(
-            [
-                [1.8326, -8.0834, -4.1916],
-                [0.8446, -9.0048, -3.6048],
-                [0.3042, -7.7296, -3.0277],
-            ]
-        ).to(torch_device)
+        expectations = Expectations(
+            {
+                (None, None): [
+                    [1.8324, -8.0835, -4.1922],
+                    [0.8450, -9.0050, -3.6053],
+                    [0.3045, -7.7293, -3.0275],
+                ],
+                ("cuda", 8): [
+                    [1.8326, -8.0834, -4.1916],
+                    [0.8446, -9.0048, -3.6048],
+                    [0.3042, -7.7296, -3.0277],
+                ],
+            }
+        )
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
         torch.testing.assert_close(
             outputs.class_queries_logits[0, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE
         )
