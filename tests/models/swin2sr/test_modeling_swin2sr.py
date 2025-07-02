@@ -367,5 +367,5 @@ class Swin2SRModelIntegrationTest(unittest.TestCase):
                 ("cuda", 8): [[0.5454, 0.5547, 0.5640], [0.5522, 0.5562, 0.5649], [0.5391, 0.5425, 0.5620]],
             }
         )
-        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device, dtype=model.dtype)
         torch.testing.assert_close(outputs.reconstruction[0, 0, :3, :3], expected_slice, rtol=2e-4, atol=2e-4)
