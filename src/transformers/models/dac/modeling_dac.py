@@ -23,25 +23,25 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedAudioTokenizerBase
 from ...utils import ModelOutput, auto_docstring
 from .configuration_dac import DacConfig
 
 
 @dataclass
+@auto_docstring
 class DacOutput(ModelOutput):
-    """
-    Args:
-        loss (`torch.Tensor`):
-            Loss from the encoder model, comprising the weighted combination of the commitment and codebook losses.
-        audio_values (`torch.Tensor` of shape `(batch_size, input_length)`):
-            Reconstructed audio data.
-        quantized_representation (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`):
-            Quantized continuous representation of input.
-        audio_codes (`torch.LongTensor` of shape `(batch_size, num_codebooks, time_steps)`):
-            Codebook indices for each codebook (quantized discrete representation of input).
-        projected_latents (`torch.Tensor` of shape `(batch_size, num_codebooks * dimension, time_steps)`):
-            Projected latents (continuous representation of input before quantization).
+    r"""
+    loss (`torch.Tensor`):
+        Loss from the encoder model, comprising the weighted combination of the commitment and codebook losses.
+    audio_values (`torch.Tensor` of shape `(batch_size, input_length)`):
+        Reconstructed audio data.
+    quantized_representation (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`):
+        Quantized continuous representation of input.
+    audio_codes (`torch.LongTensor` of shape `(batch_size, num_codebooks, time_steps)`):
+        Codebook indices for each codebook (quantized discrete representation of input).
+    projected_latents (`torch.Tensor` of shape `(batch_size, num_codebooks * dimension, time_steps)`):
+        Projected latents (continuous representation of input before quantization).
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -52,17 +52,17 @@ class DacOutput(ModelOutput):
 
 
 @dataclass
+@auto_docstring
 class DacEncoderOutput(ModelOutput):
-    """
-    Args:
-        loss (`torch.Tensor`):
-            Loss from the encoder model, comprising the weighted combination of the commitment and codebook losses.
-        quantized_representation (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`, *optional*):
-            Quantized continuous representation of input.
-        audio_codes (`torch.Tensor` of shape `(batch_size, num_codebooks, time_steps)`, *optional*):
-            Codebook indices for each codebook (quantized discrete representation of input).
-        projected_latents (`torch.Tensor` of shape `(batch_size, num_codebooks * dimension, time_steps)`, *optional*):
-            Projected latents (continuous representation of input before quantization).
+    r"""
+    loss (`torch.Tensor`):
+        Loss from the encoder model, comprising the weighted combination of the commitment and codebook losses.
+    quantized_representation (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`, *optional*):
+        Quantized continuous representation of input.
+    audio_codes (`torch.Tensor` of shape `(batch_size, num_codebooks, time_steps)`, *optional*):
+        Codebook indices for each codebook (quantized discrete representation of input).
+    projected_latents (`torch.Tensor` of shape `(batch_size, num_codebooks * dimension, time_steps)`, *optional*):
+        Projected latents (continuous representation of input before quantization).
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -72,12 +72,12 @@ class DacEncoderOutput(ModelOutput):
 
 
 @dataclass
+@auto_docstring
 # Copied from transformers.models.encodec.modeling_encodec.EncodecDecoderOutput with Encodec->Dac, segment_length->input_length
 class DacDecoderOutput(ModelOutput):
-    """
-    Args:
-        audio_values (`torch.FloatTensor`  of shape `(batch_size, input_length)`, *optional*):
-            Decoded audio values, obtained using the decoder part of Dac.
+    r"""
+    audio_values (`torch.FloatTensor`  of shape `(batch_size, input_length)`, *optional*):
+        Decoded audio values, obtained using the decoder part of Dac.
     """
 
     audio_values: Optional[torch.FloatTensor] = None
@@ -471,7 +471,7 @@ class DacEncoder(nn.Module):
 
 
 @auto_docstring
-class DacPreTrainedModel(PreTrainedModel):
+class DacPreTrainedModel(PreTrainedAudioTokenizerBase):
     config_class = DacConfig
     base_model_prefix = "dac"
     main_input_name = "input_values"

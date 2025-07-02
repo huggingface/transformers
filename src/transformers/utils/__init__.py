@@ -26,11 +26,12 @@ from .args_doc import (
     ClassDocstring,
     ImageProcessorArgs,
     ModelArgs,
+    ModelOutputArgs,
     auto_class_docstring,
     auto_docstring,
+    get_args_doc_from_source,
     parse_docstring,
     set_min_indent,
-    source_args_doc,
 )
 from .backbone_utils import BackboneConfigMixin, BackboneMixin
 from .chat_template_utils import DocstringParsingException, TypeHintParsingException, get_json_schema
@@ -152,6 +153,7 @@ from .import_utils import (
     is_faiss_available,
     is_fbgemm_gpu_available,
     is_flash_attn_2_available,
+    is_flash_attn_3_available,
     is_flash_attn_greater_or_equal,
     is_flash_attn_greater_or_equal_2_10,
     is_flax_available,
@@ -253,6 +255,7 @@ from .import_utils import (
     is_torch_xpu_available,
     is_torchao_available,
     is_torchaudio_available,
+    is_torchcodec_available,
     is_torchdistx_available,
     is_torchdynamo_available,
     is_torchdynamo_compiling,
@@ -289,6 +292,7 @@ CONFIG_NAME = "config.json"
 FEATURE_EXTRACTOR_NAME = "preprocessor_config.json"
 IMAGE_PROCESSOR_NAME = "preprocessor_config.json"
 VIDEO_PROCESSOR_NAME = "video_preprocessor_config.json"
+AUDIO_TOKENIZER_NAME = "audio_tokenizer_config.json"
 PROCESSOR_NAME = "processor_config.json"
 GENERATION_CONFIG_NAME = "generation_config.json"
 MODEL_CARD_NAME = "modelcard.json"

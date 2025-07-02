@@ -15,7 +15,7 @@
 """Jukebox configuration"""
 
 import os
-from typing import List, Union
+from typing import Union
 
 from ....configuration_utils import PretrainedConfig
 from ....utils import logging
@@ -592,7 +592,7 @@ class JukeboxConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
     @classmethod
-    def from_configs(cls, prior_configs: List[JukeboxPriorConfig], vqvae_config: JukeboxVQVAEConfig, **kwargs):
+    def from_configs(cls, prior_configs: list[JukeboxPriorConfig], vqvae_config: JukeboxVQVAEConfig, **kwargs):
         r"""
         Instantiate a [`JukeboxConfig`] (or a derived class) from clip text model configuration and clip vision model
         configuration.

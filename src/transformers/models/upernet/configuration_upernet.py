@@ -52,7 +52,7 @@ class UperNetConfig(PretrainedConfig):
             The number of hidden units in the convolutional layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        pool_scales (`Tuple[int]`, *optional*, defaults to `[1, 2, 3, 6]`):
+        pool_scales (`tuple[int]`, *optional*, defaults to `[1, 2, 3, 6]`):
             Pooling scales used in Pooling Pyramid Module applied on the last feature map.
         use_auxiliary_head (`bool`, *optional*, defaults to `True`):
             Whether to use an auxiliary head during training.

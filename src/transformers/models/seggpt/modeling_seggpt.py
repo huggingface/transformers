@@ -16,7 +16,7 @@
 
 import collections.abc
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from .configuration_seggpt import SegGptConfig
@@ -33,52 +34,57 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class SegGptEncoderOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Output type of [`SegGptEncoderOutput`].
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, patch_height, patch_width, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`Tuple[torch.FloatTensor]`, `optional`, returned when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape `(batch_size, patch_height, patch_width, hidden_size)`.
-        attentions (`Tuple[torch.FloatTensor]`, `optional`, returned when `config.output_attentions=True`):
-            Tuple of *torch.FloatTensor* (one for each layer) of shape
-            `(batch_size, num_heads, seq_len, seq_len)`.
-        intermediate_hidden_states (`Tuple[torch.FloatTensor]`, *optional*, returned when `config.intermediate_hidden_state_indices` is set):
-            Tuple of `torch.FloatTensor` of shape `(batch_size, patch_height, patch_width, hidden_size)`.
-            Each element in the Tuple corresponds to the output of the layer specified in `config.intermediate_hidden_state_indices`.
-            Additionally, each feature passes through a LayerNorm.
+    """
+)
+class SegGptEncoderOutput(ModelOutput):
+    r"""
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, patch_height, patch_width, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the model.
+    hidden_states (`tuple[torch.FloatTensor]`, `optional`, returned when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+        of shape `(batch_size, patch_height, patch_width, hidden_size)`.
+    attentions (`tuple[torch.FloatTensor]`, `optional`, returned when `config.output_attentions=True`):
+        Tuple of *torch.FloatTensor* (one for each layer) of shape
+        `(batch_size, num_heads, seq_len, seq_len)`.
+    intermediate_hidden_states (`tuple[torch.FloatTensor]`, *optional*, returned when `config.intermediate_hidden_state_indices` is set):
+        Tuple of `torch.FloatTensor` of shape `(batch_size, patch_height, patch_width, hidden_size)`.
+        Each element in the Tuple corresponds to the output of the layer specified in `config.intermediate_hidden_state_indices`.
+        Additionally, each feature passes through a LayerNorm.
     """
 
     last_hidden_state: torch.FloatTensor
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    intermediate_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
+    intermediate_hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
-class SegGptImageSegmentationOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Output type of [`SegGptImageSegmentationOutput`].
-
-    Args:
-        loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided):
-            The loss value.
-        pred_masks (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            The predicted masks.
-        hidden_states (`Tuple[torch.FloatTensor]`, `optional`, returned when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape `(batch_size, patch_height, patch_width, hidden_size)`.
-        attentions (`Tuple[torch.FloatTensor]`, `optional`, returned when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape
-            `(batch_size, num_heads, seq_len, seq_len)`.
+    """
+)
+class SegGptImageSegmentationOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided):
+        The loss value.
+    pred_masks (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        The predicted masks.
+    hidden_states (`tuple[torch.FloatTensor]`, `optional`, returned when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+        of shape `(batch_size, patch_height, patch_width, hidden_size)`.
+    attentions (`tuple[torch.FloatTensor]`, `optional`, returned when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape
+        `(batch_size, num_heads, seq_len, seq_len)`.
     """
 
     loss: Optional[torch.FloatTensor] = None
     pred_masks: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 # Copied from transformers.models.sam.modeling_sam.SamPatchEmbeddings with Sam->SegGpt
@@ -267,8 +273,8 @@ class SegGptAttention(nn.Module):
         query: torch.Tensor,
         rel_pos_h: torch.Tensor,
         rel_pos_w: torch.Tensor,
-        q_size: Tuple[int, int],
-        k_size: Tuple[int, int],
+        q_size: tuple[int, int],
+        k_size: tuple[int, int],
     ) -> torch.Tensor:
         """
         Calculate decomposed Relative Positional Embeddings from :paper:`mvitv2`.
@@ -392,10 +398,10 @@ class SegGptDropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
-class SegGptLayer(nn.Module):
+class SegGptLayer(GradientCheckpointingLayer):
     def __init__(self, config: SegGptConfig, drop_path_rate: float) -> None:
         super().__init__()
         self.attention = SegGptAttention(config)
@@ -410,7 +416,7 @@ class SegGptLayer(nn.Module):
         ensemble_cond: int,
         feature_ensemble: bool = False,
         output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in SegGpt, layernorm is applied before self-attention
             output_attentions=output_attentions,
@@ -470,16 +476,7 @@ class SegGptEncoder(nn.Module):
             # Condition to check if we have the appropriate number of prompts to ensemble
             ensemble_cond = 2 if self.config.merge_index > i else 1
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    ensemble_cond,
-                    feature_ensemble,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, ensemble_cond, feature_ensemble, output_attentions)
+            layer_outputs = layer_module(hidden_states, ensemble_cond, feature_ensemble, output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -663,7 +660,7 @@ class SegGptModel(SegGptPreTrainedModel):
     def get_input_embeddings(self) -> SegGptPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
-    def _prune_heads(self, heads_to_prune: Dict[int, List[int]]) -> None:
+    def _prune_heads(self, heads_to_prune: dict[int, list[int]]) -> None:
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
         class PreTrainedModel
@@ -684,7 +681,7 @@ class SegGptModel(SegGptPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SegGptEncoderOutput]:
+    ) -> Union[tuple, SegGptEncoderOutput]:
         r"""
         prompt_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Prompt pixel values. Prompt pixel values can be obtained using [`AutoImageProcessor`]. See
@@ -880,7 +877,7 @@ class SegGptForImageSegmentation(SegGptPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SegGptImageSegmentationOutput]:
+    ) -> Union[tuple, SegGptImageSegmentationOutput]:
         r"""
         prompt_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Prompt pixel values. Prompt pixel values can be obtained using [`AutoImageProcessor`]. See

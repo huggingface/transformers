@@ -17,7 +17,7 @@ Processor class for SmolVLM.
 """
 
 from datetime import timedelta
-from typing import TYPE_CHECKING, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
@@ -105,7 +105,7 @@ def get_image_prompt_string(
 
 class SmolVLMImagesKwargs(ImagesKwargs, total=False):
     return_row_col_info: Optional[bool]
-    max_image_size: Optional[Dict[str, int]]
+    max_image_size: Optional[dict[str, int]]
 
 
 class SmolVLMProcessorKwargs(ProcessingKwargs, total=False):
@@ -264,8 +264,8 @@ class SmolVLMProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: Union[ImageInput, List[ImageInput], List[List[ImageInput]]] = None,
-        text: Union[TextInput, "PreTokenizedInput", List[TextInput], List["PreTokenizedInput"]] = None,
+        images: Union[ImageInput, list[ImageInput], list[list[ImageInput]]] = None,
+        text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
         audio=None,
         videos: VideoInput = None,
         **kwargs: Unpack[SmolVLMProcessorKwargs],
@@ -301,18 +301,18 @@ class SmolVLMProcessor(ProcessorMixin):
         ```
 
         Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`, *optional*):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`, *optional*):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. If is of type `List[ImageInput]`, it's assumed that this is for a single prompt i.e. of batch size 1.
-            text (`Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]`, *optional*):
+                tensor. If is of type `list[ImageInput]`, it's assumed that this is for a single prompt i.e. of batch size 1.
+            text (`Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]`, *optional*):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
                 Wherever an image token, `<image>` is encountered it is expanded to
                 `<fake_token_around_image>` + `<row_x_col_y>` + `<image>` * `image_seq_len` * <fake_token_around_image>`.
-            videos (`List[PIL.Image.Image]`, `np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`, *optional*):
+            videos (`list[PIL.Image.Image]`, `np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`, *optional*):
                 The video or batch of videos to be prepared. Each video can be a list of PIL frames, NumPy array or PyTorch
-                tensor. If is of type `List[VideoInput]`, it's assumed that this is for a single prompt i.e. of batch size 1.
+                tensor. If is of type `list[VideoInput]`, it's assumed that this is for a single prompt i.e. of batch size 1.
             return_tensors (`Union[str, TensorType]`, *optional*):
                 If set, will return tensors of a particular framework. See [`PreTrainedTokenizerFast.__call__`] for more
                 information.
@@ -412,7 +412,7 @@ class SmolVLMProcessor(ProcessorMixin):
         ]
 
         Args:
-            conversation (`Union[List[Dict, [str, str]], List[List[Dict[str, str]]]]`):
+            conversation (`Union[list[Dict, [str, str]], list[list[dict[str, str]]]]`):
                 The conversation to format.
             chat_template (`Optional[str]`, *optional*):
                 The Jinja template to use for formatting the conversation. If not provided, the tokenizer's

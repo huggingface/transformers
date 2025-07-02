@@ -14,7 +14,7 @@
 # limitations under the License.
 """Tokenization class for Perceiver."""
 
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
@@ -77,7 +77,7 @@ class PerceiverTokenizer(PreTrainedTokenizer):
         self._utf_vocab_size = 2**8  # utf is 8 bits
 
         # Since these tokens are not part of the vocabulary, we manually add them
-        self._added_tokens_decoder: Dict[str, int] = {
+        self._added_tokens_decoder: dict[str, int] = {
             0: pad_token,
             1: bos_token,
             2: eos_token,
@@ -97,7 +97,7 @@ class PerceiverTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-    def get_vocab(self) -> Dict[str, int]:
+    def get_vocab(self) -> dict[str, int]:
         vocab = {}
         for i in range(self._utf_vocab_size):
             token = chr(i)
@@ -110,22 +110,22 @@ class PerceiverTokenizer(PreTrainedTokenizer):
         return self._utf_vocab_size
 
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
             already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            `list[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
@@ -138,8 +138,8 @@ class PerceiverTokenizer(PreTrainedTokenizer):
         return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
 
     def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks. A sequence has the
         following format:
@@ -148,20 +148,20 @@ class PerceiverTokenizer(PreTrainedTokenizer):
         - pair of sequences: `[CLS] A [SEP] B [SEP]`
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+            `list[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         if token_ids_1 is None:
             return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
         else:
             return [self.cls_token_id] + token_ids_0 + [self.sep_token_id] + token_ids_1 + [self.sep_token_id]
 
-    def _tokenize(self, text: str) -> List[str]:
+    def _tokenize(self, text: str) -> list[str]:
         """Take as input a string and return a list of strings (tokens) for words/sub-words"""
         tokens = [chr(i) for i in text.encode("utf-8")]
         return tokens
@@ -193,7 +193,7 @@ class PerceiverTokenizer(PreTrainedTokenizer):
         return string
 
     # PerceiverTokenizer has no vocab file
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         return ()
 
 

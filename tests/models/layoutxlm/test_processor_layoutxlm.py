@@ -33,8 +33,6 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_pytesseract_available():
-    from PIL import Image
-
     from transformers import LayoutLMv2ImageProcessor
 
 
@@ -162,11 +160,11 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         from datasets import load_dataset
 
         # set up
-        datasets = load_dataset("nielsr/funsd", trust_remote_code=True)
+        datasets = load_dataset("nielsr/funsd")
         processor = LayoutXLMProcessor.from_pretrained("microsoft/layoutxlm-base", apply_ocr=False)
 
         def preprocess_data(examples):
-            images = [Image.open(path).convert("RGB") for path in examples["image_path"]]
+            images = [image.convert("RGB") for image in examples["image"]]
             words = examples["words"]
             boxes = examples["bboxes"]
             word_labels = examples["ner_tags"]
@@ -200,12 +198,8 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
         # we verify our implementation on 2 document images from the DocVQA dataset
         from datasets import load_dataset
 
-        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test", trust_remote_code=True)
-
-        image_1 = Image.open(ds[0]["file"]).convert("RGB")
-        image_2 = Image.open(ds[1]["file"]).convert("RGB")
-
-        return image_1, image_2
+        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test")
+        return ds[0]["image"].convert("RGB"), ds[1]["image"].convert("RGB")
 
     @cached_property
     def get_tokenizers(self):
