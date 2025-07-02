@@ -35,7 +35,7 @@ if is_torch_available():
         XmodForTokenClassification,
         XmodModel,
     )
-    from transformers.models.xmod.modeling_xmod import XmodEmbeddings, create_position_ids_from_input_ids
+    from transformers.models.xmod.modeling_xmod import XmodEmbeddings
 
 
 class XmodModelTester:
@@ -398,6 +398,12 @@ class XmodModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
         return False
 
+    # Overwriting to add `is_decoder` flag
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
+        config, inputs = super().prepare_config_and_inputs_for_generate(batch_size)
+        config.is_decoder = True
+        return config, inputs
+
     def setUp(self):
         self.model_tester = XmodModelTester(self)
         self.config_tester = ConfigTester(self, config_class=XmodConfig, hidden_size=37)
@@ -413,6 +419,7 @@ class XmodModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         for type in ["absolute", "relative_key", "relative_key_query"]:
             config_and_inputs[0].position_embedding_type = type
+            config_and_inputs[0]._attn_implementation = "eager"
             self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_model_as_decoder(self):
@@ -457,6 +464,7 @@ class XmodModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_decoder_model_past_with_large_inputs_relative_pos_emb(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         config_and_inputs[0].position_embedding_type = "relative_key"
+        config_and_inputs[0]._attn_implementation = "eager"
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
     def test_for_masked_lm(self):
@@ -489,7 +497,7 @@ class XmodModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             [[0 + model.padding_idx + 1, 1 + model.padding_idx + 1, 2 + model.padding_idx + 1, model.padding_idx]]
         )
 
-        position_ids = create_position_ids_from_input_ids(input_ids, model.padding_idx)
+        position_ids = XmodEmbeddings.create_position_ids_from_input_ids(input_ids, model.padding_idx)
         self.assertEqual(position_ids.shape, expected_positions.shape)
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
 
@@ -510,7 +518,7 @@ class XmodModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             3 + embeddings.padding_idx + 1,
         ]
         expected_positions = torch.as_tensor([expected_single_positions, expected_single_positions])
-        position_ids = embeddings.create_position_ids_from_inputs_embeds(inputs_embeds)
+        position_ids = embeddings.create_position_ids_from_inputs_embeds(inputs_embeds, embeddings.padding_idx)
         self.assertEqual(position_ids.shape, expected_positions.shape)
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
 
@@ -529,6 +537,14 @@ class XmodModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         model.freeze_embeddings_and_language_adapters()
         num_trainable_params_after = sum(p.numel() for p in model.parameters() if p.requires_grad)
         self.assertLess(num_trainable_params_after, num_trainable_params_before)
+
+    @unittest.skip("Xmod token type ids does not work with the flash attention position ids")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Xmod token type ids does not work with the flash attention position ids")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        pass
 
 
 @require_sentencepiece
