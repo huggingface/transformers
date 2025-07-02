@@ -476,7 +476,7 @@ class EomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
         pipe = pipeline(model=self.model_id, subtask="panoptic", device=torch_device)
         output = pipe(image)
 
-        EXPECTED_OUTPUT_LABELS = ["LABEL_15", "LABEL_15", "LABEL_57", "LABEL_65", "LABEL_65"]
+        EXPECTED_OUTPUT_LABELS = ["cat", "cat", "couch", "remote", "remote"]
 
         output_labels = [segment["label"] for segment in output]
         self.assertEqual(output_labels, EXPECTED_OUTPUT_LABELS)
