@@ -90,40 +90,6 @@ visualizer("Hello, how are you?")
 ```
 
 
-## Supported Languages
-All models follow the naming convention:
-Helsinki-NLP/opus-mt-{src}-{tgt}, where src is the source language code and tgt is the target language code.
-
-The list of supported languages and codes is available in each model card.
-
-Some models are multilingual; for example, opus-mt-en-ROMANCE translates English to multiple Romance languages (French, Spanish, Portuguese, etc.).
-
-Newer models use 3-character language codes, e.g., >>fra<< for French, >>por<< for Portuguese.
-
-Older models use 2-character or region-specific codes like es_AR (Spanish from Argentina).
-
-Example of translating English to multiple Romance languages:
-```python
-from transformers import MarianMTModel, MarianTokenizer
-
-src_text = [
-    ">>fra<< This is a sentence in English to translate to French.",
-    ">>por<< This should go to Portuguese.",
-    ">>spa<< And this to Spanish."
-]
-
-model_name = "Helsinki-NLP/opus-mt-en-roa"
-tokenizer = MarianTokenizer.from_pretrained(model_name)
-model = MarianMTModel.from_pretrained(model_name)
-
-inputs = tokenizer(src_text, return_tensors="pt", padding=True)
-outputs = model.generate(**inputs)
-result = [tokenizer.decode(t, skip_special_tokens=True) for t in outputs]
-print(result)
-
-```
-
-
 ## Notes
 
 - MarianMT models are ~298MB on disk and there are more than 1000 models. Check this [list](https://huggingface.co/Helsinki-NLP) for supported language pairs. The language codes may be inconsistent. Two digit codes can be found [here](https://developers.google.com/admin-sdk/directory/v1/languages) while three digit codes may require further searching.
