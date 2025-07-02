@@ -692,10 +692,10 @@ def create_causal_mask(
             useful to easily overlay another mask on top of the causal one, for example for image tokens handling.
     """
     # If we have an HybridCache structure, here we want to create the mask for the full layers
-    if hasattr(past_key_values, "is_sliding") and False in past_key_values.is_sliding:
-        layer_idx = past_key_values.is_sliding.index(False)
-    else:
-        layer_idx = 0
+    is_sliding = []
+    if past_key_values is not None:
+        is_sliding = [getattr(layer, "is_sliding", False) for layer in past_key_values.layers]
+    layer_idx = is_sliding.index(True) if True in is_sliding else 0
 
     early_exit, attention_mask, kv_length, kv_offset = _preprocess_mask_arguments(
         config, input_embeds, attention_mask, cache_position, past_key_values, layer_idx
@@ -774,10 +774,10 @@ def create_sliding_window_causal_mask(
             useful to easily overlay another mask on top of the sliding causal one, for example for image tokens handling.
     """
     # If we have an HybridCache structure, here we want to create the mask for the sliding layers
-    if hasattr(past_key_values, "is_sliding") and True in past_key_values.is_sliding:
-        layer_idx = past_key_values.is_sliding.index(True)
-    else:
-        layer_idx = 0
+    is_sliding = []
+    if past_key_values is not None:
+        is_sliding = [getattr(layer, "is_sliding", False) for layer in past_key_values.layers]
+    layer_idx = is_sliding.index(True) if True in is_sliding else 0
 
     early_exit, attention_mask, kv_length, kv_offset = _preprocess_mask_arguments(
         config, input_embeds, attention_mask, cache_position, past_key_values, layer_idx
@@ -861,10 +861,10 @@ def create_chunked_causal_mask(
             useful to easily overlay another mask on top of the chunked causal one, for example for image tokens handling.
     """
     # If we have an HybridCache structure, here we want to create the mask for the sliding layers
-    if hasattr(past_key_values, "is_sliding") and True in past_key_values.is_sliding:
-        layer_idx = past_key_values.is_sliding.index(True)
-    else:
-        layer_idx = 0
+    is_sliding = []
+    if past_key_values is not None:
+        is_sliding = [getattr(layer, "is_sliding", False) for layer in past_key_values.layers]
+    layer_idx = is_sliding.index(True) if True in is_sliding else 0
 
     early_exit, attention_mask, kv_length, kv_offset = _preprocess_mask_arguments(
         config, input_embeds, attention_mask, cache_position, past_key_values, layer_idx

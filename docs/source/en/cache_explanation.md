@@ -82,24 +82,18 @@ When you use Transformers' [`Cache`] class, the self-attention module performs s
 
 ## Cache storage implementation
 
-The actual storage of key-value pairs varies between cache implementations. As an example, consider the [`DynamicCache`].
+Caches are structured as a list of layers, where each layer contains a key and value cache. The key and value caches are tensors with the shape `[batch_size, num_heads, seq_len, head_dim]`.
 
+Layers can be of different types (e.g. `DynamicLayer`, `StaticLayer`, `SlidingWindowLayer`), which mostly changes how sequence length is handled and how the cache is updated.
 
-In [`DynamicCache`], the key-value pairs are stored as two lists of tensors. Each tensor in the lists have the shape `[batch_size, num_heads, seq_len, head_dim]`.
-- `key_cache`: A list of tensors, one for each layer.
-- `value_cache`: A list of tensors, one for each layer.
+The simplest is a `DynamicLayer` that grows as more tokens are processed. The sequence length dimension (`seq_len`) increases with each new token:
 
-When new tokens are processed:
-
-1. For each layer, the new key and value states are concatenated with the existing cache.
 ```py
-self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
-self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
+cache.layers[idx].keys = torch.cat([cache.layers[idx].keys, key_states], dim=-2)
+cache.layers[idx].values = torch.cat([cache.layers[idx].values, value_states], dim=-2)
 ```
 
-2. The cache grows dynamically as more tokens are processed. The sequence length dimension (`seq_len`) increases with each new token.
-
-3. The cache maintains a count of seen tokens through `self._seen_tokens`. This is updated when the first layer processes a new token.
+Other layers like `StaticLayer` and `SlidingWindowLayer` have a fixed sequence length that is set when the cache is created. This makes them compatible with `torch.compile`. In the case of `SlidingWindowLayer`, existing tokens are shifted out of the cache when a new token is added.
 
 The example below demonstrates how to create a generation loop with [`DynamicCache`]. As discussed, the attention mask is a concatenation of past and current token values and `1` is added to the cache position for the next token.
 
@@ -143,7 +137,7 @@ The legacy format is essentially the same data structure but organized different
 - The tensors have the same shape `[batch_size, num_heads, seq_len, head_dim]`.
 - The format is less flexible and doesn't support features like quantization or offloading.
 
-If your project depends on this legacy format, you can convert between [`DynamicCache`] and a tuple of tuples as shown below with the [`~DynamicCache.from_legacy_cache`] and [`DynamicCache.to_legacy_cache`] functions. This is helpful if you have custom logic for manipulating a cache in a specific format.
+If your project depends on this legacy format, you can convert between [`DynamicCache`] and a tuple of tuples as shown below with the [`~Cache.from_legacy_cache`] and [`Cache.to_legacy_cache`] functions. This is helpful if you have custom logic for manipulating a cache in a specific format.
 
 ```py
 import torch

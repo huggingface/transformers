@@ -956,8 +956,9 @@ def fix_docstring(obj: Any, old_doc_args: str, new_doc_args: str):
     idx += 1
 
     if "".join(source[start_idx:idx])[:-1] != old_doc_args:
-        # Args are not fully defined in the docstring of this object
-        return
+        raise ValueError(
+            f"Expected\n{old_doc_args}\nbut got\n{''.join(source[start_idx:idx])[:-1]}\n in {find_source_file(obj)}: {obj.__name__}"
+        )
 
     obj_file = find_source_file(obj)
     with open(obj_file, "r", encoding="utf-8") as f:

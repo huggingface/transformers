@@ -1951,7 +1951,7 @@ class GenerationMixin(ContinuousMixin):
 
             layer_device_map = self._get_layer_device_map_for_cache_init()
             cache_kwargs = {
-                "config": self.config.get_text_config(),
+                "model_config": self.config.get_text_config(),
                 "max_batch_size": batch_size,
                 "max_cache_len": max_cache_len,
                 "dtype": cache_dtype,

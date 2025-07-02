@@ -171,7 +171,9 @@ class CacheTest(unittest.TestCase):
             return random_keys, random_values
 
         mha_config = LlamaConfig(num_attention_heads=32)
-        mha_static_cache = StaticCache(config=mha_config, max_batch_size=1, max_cache_len=10, device=torch_device)
+        mha_static_cache = StaticCache(
+            model_config=mha_config, max_batch_size=1, max_cache_len=10, device=torch_device
+        )
         cached_keys, cached_values = mha_static_cache.update(
             *_random_kvs(mha_config), 0, cache_kwargs={"cache_position": torch.arange(1).to(torch_device)}
         )
@@ -179,7 +181,9 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(cached_values.shape == (1, 32, 10, 128))
 
         gqa_config = LlamaConfig(num_attention_heads=32, num_key_value_heads=4)
-        gqa_static_cache = StaticCache(config=gqa_config, max_batch_size=1, max_cache_len=10, device=torch_device)
+        gqa_static_cache = StaticCache(
+            model_config=gqa_config, max_batch_size=1, max_cache_len=10, device=torch_device
+        )
         cached_keys, cached_values = gqa_static_cache.update(
             *_random_kvs(gqa_config), 0, cache_kwargs={"cache_position": torch.arange(1).to(torch_device)}
         )
@@ -187,7 +191,9 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(cached_values.shape == (1, 4, 10, 128))
 
         mqa_config = LlamaConfig(num_attention_heads=32, num_key_value_heads=1)
-        mqa_static_cache = StaticCache(config=mqa_config, max_batch_size=1, max_cache_len=10, device=torch_device)
+        mqa_static_cache = StaticCache(
+            model_config=mqa_config, max_batch_size=1, max_cache_len=10, device=torch_device
+        )
         cached_keys, cached_values = mqa_static_cache.update(
             *_random_kvs(mqa_config), 0, cache_kwargs={"cache_position": torch.arange(1).to(torch_device)}
         )
@@ -323,7 +329,7 @@ class CacheIntegrationTest(unittest.TestCase):
         )
 
         self.assertIsInstance(gen_out.past_key_values, QuantizedCache)
-        processor = gen_out.past_key_values.processor
+        processor = gen_out.past_key_values.cache_processor
         if backend == "quanto":
             self.assertIsInstance(processor, QuantoQuantizedCacheProcessor)
         elif backend == "hqq":
@@ -332,12 +338,10 @@ class CacheIntegrationTest(unittest.TestCase):
         decoded = self.tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
         self.assertListEqual(decoded, expected_generation)
 
-        self.assertTrue(len(processor._quantized_key_cache) > 0)
+        self.assertTrue(len(processor._quantized_keys) > 0)
 
         # Check that something is actually quantized
-        has_been_quantized = any(
-            (q[0] if isinstance(q, tuple) else q).numel() > 0 for q in processor._quantized_key_cache
-        )
+        has_been_quantized = any((q[0] if isinstance(q, tuple) else q).numel() > 0 for q in processor._quantized_keys)
         self.assertTrue(has_been_quantized)
 
     @parameterized.expand(TEST_CACHE_IMPLEMENTATIONS)
@@ -654,7 +658,7 @@ class CacheExportIntegrationTest(unittest.TestCase):
             past_key_values=DynamicCache(),
             use_cache=True,
         )
-        self.assertTrue(len(res.past_key_values.key_cache) == model.config.num_hidden_layers)
+        self.assertTrue(len(res.past_key_values) == model.config.num_hidden_layers)
         self.assertEqual(2 * model.config.num_hidden_layers + 1, len(ep.graph_signature.output_specs))
         self.assertEqual(
             3,
@@ -675,11 +679,9 @@ class CacheExportIntegrationTest(unittest.TestCase):
             use_cache=True,
         )
         self.assertTrue(torch.allclose(res.logits, res_eager.logits))
-        for k1, k2 in zip(res.past_key_values.key_cache, res_eager.past_key_values.key_cache):
-            self.assertTrue(torch.allclose(k1, k2))
-
-        for v1, v2 in zip(res.past_key_values.value_cache, res_eager.past_key_values.value_cache):
-            self.assertTrue(torch.allclose(v1, v2))
+        for l1, l2 in zip(res.past_key_values.layers, res_eager.past_key_values.layers):
+            self.assertTrue(torch.allclose(l1.keys, l2.keys))
+            self.assertTrue(torch.allclose(l1.values, l2.values))
 
     def test_dynamic_cache_exportability_multiple_run(self):
         # When exporting with DynamicCache, you should export two graphs:
@@ -703,7 +705,7 @@ class CacheExportIntegrationTest(unittest.TestCase):
             past_key_values=DynamicCache(),
             use_cache=True,
         )
-        self.assertTrue(len(res.past_key_values.key_cache) == model.config.num_hidden_layers)
+        self.assertTrue(len(res.past_key_values) == model.config.num_hidden_layers)
         self.assertEqual(2 * model.config.num_hidden_layers + 1, len(ep.graph_signature.output_specs))
         self.assertEqual(
             3,
@@ -728,9 +730,9 @@ class CacheExportIntegrationTest(unittest.TestCase):
         shapes = torch.export.ShapesCollection()
         dyn = torch.export.Dim("seq", max=512)
 
-        for ix in range(len(past_key_values.key_cache)):
-            shapes[past_key_values.key_cache[ix]] = (None, None, dyn, None)
-            shapes[past_key_values.value_cache[ix]] = (None, None, dyn, None)
+        for ix in range(len(past_key_values)):
+            shapes[past_key_values.layers[ix].keys] = (None, None, dyn, None)
+            shapes[past_key_values.layers[ix].values] = (None, None, dyn, None)
 
         ep_second = torch.export.export(
             model,
@@ -771,11 +773,9 @@ class CacheExportIntegrationTest(unittest.TestCase):
             use_cache=True,
         )
 
-        for k1, k2 in zip(res_export_2.past_key_values.key_cache, res_eager_2.past_key_values.key_cache):
-            self.assertTrue(torch.allclose(k1, k2))
-
-        for v1, v2 in zip(res_export_2.past_key_values.value_cache, res_eager_2.past_key_values.value_cache):
-            self.assertTrue(torch.allclose(v1, v2))
+        for l1, l2 in zip(res_export_2.past_key_values.layers, res_eager_2.past_key_values.layers):
+            self.assertTrue(torch.allclose(l1.keys, l2.keys))
+            self.assertTrue(torch.allclose(l1.values, l2.values))
 
     def test_static_cache_exportability(self):
         """
@@ -922,7 +922,7 @@ class SyntheticCacheTest(unittest.TestCase):
 
     def test_static_cache_out_of_bounds(self):
         """Test StaticCache raises IndexError for out-of-bounds positions."""
-        static_cache = StaticCache(config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        static_cache = StaticCache(model_config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len)
         pos_out_of_bounds = torch.tensor([self.max_cache_len])  # Position >= max_cache_len
 
         with self.assertRaises(IndexError):
@@ -944,7 +944,7 @@ class SyntheticCacheTest(unittest.TestCase):
         update pos 3:  [1.0, 2.0, 3.0, 4.0]
         """
         # Scenario 1: Fill up to near capacity
-        static_cache = StaticCache(config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        static_cache = StaticCache(model_config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len)
         prefill = torch.tensor([1.0, 2.0, 0.0, 0.0])[None, None, :, None]
         static_cache.update(key_states=prefill, value_states=prefill, layer_idx=0, cache_kwargs=None)
         static_cache.update(
@@ -954,7 +954,7 @@ class SyntheticCacheTest(unittest.TestCase):
             cache_kwargs={"cache_position": torch.tensor([2])},
         )
         self.assertEqual(
-            static_cache.key_cache[0][0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 0.0], "StaticCache Scenario 1 failed"
+            static_cache.layers[0].keys[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 0.0], "StaticCache Scenario 1 failed"
         )
 
         # Scenario 2: Fill to capacity
@@ -965,7 +965,7 @@ class SyntheticCacheTest(unittest.TestCase):
             cache_kwargs={"cache_position": torch.tensor([3])},
         )
         self.assertEqual(
-            static_cache.key_cache[0][0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 4.0], "StaticCache Scenario 2 failed"
+            static_cache.layers[0].keys[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 4.0], "StaticCache Scenario 2 failed"
         )
 
     def test_sliding_window_cache(self):
@@ -984,7 +984,9 @@ class SyntheticCacheTest(unittest.TestCase):
         result:        [3.0, 4.0, 5.0, 6.0] (keeps last window_size tokens)
         """
         # Scenario 1: Update within window, no slide yet
-        sliding_cache = SlidingWindowCache(config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        sliding_cache = SlidingWindowCache(
+            model_config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len
+        )
         prefill = torch.tensor([1.0, 2.0, 0.0, 0.0])[None, None, :, None]
         sliding_cache.update(
             key_states=prefill,
@@ -999,13 +1001,15 @@ class SyntheticCacheTest(unittest.TestCase):
             cache_kwargs={"cache_position": torch.tensor([2]), "sliding_window": self.window_size},
         )
         self.assertEqual(
-            sliding_cache.key_cache[0][0, 0, :, 0].tolist(),
+            sliding_cache.layers[0].keys[0, 0, :, 0].tolist(),
             [1.0, 2.0, 3.0, 0.0],
             "SlidingWindowCache Scenario 1 failed",
         )
 
         # Scenario 2: Update causing slide
-        sliding_cache = SlidingWindowCache(config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        sliding_cache = SlidingWindowCache(
+            model_config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len
+        )
         prefill = torch.tensor([1.0, 2.0, 3.0, 4.0])[None, None, :, None]
         sliding_cache.update(
             key_states=prefill,
@@ -1020,13 +1024,15 @@ class SyntheticCacheTest(unittest.TestCase):
             cache_kwargs={"cache_position": torch.tensor([4]), "sliding_window": self.window_size},
         )
         self.assertEqual(
-            sliding_cache.key_cache[0][0, 0, :, 0].tolist(),
+            sliding_cache.layers[0].keys[0, 0, :, 0].tolist(),
             [2.0, 3.0, 4.0, 5.0],
             "SlidingWindowCache Scenario 2 failed",
         )
 
         # Scenario 3: Long prompt handling
-        sliding_cache = SlidingWindowCache(config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        sliding_cache = SlidingWindowCache(
+            model_config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len
+        )
         long_prefill = torch.tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])[None, None, :, None]
         sliding_cache.update(
             key_states=long_prefill,
@@ -1035,7 +1041,7 @@ class SyntheticCacheTest(unittest.TestCase):
             cache_kwargs={"cache_position": torch.arange(6), "sliding_window": self.window_size},
         )
         self.assertEqual(
-            sliding_cache.key_cache[0][0, 0, :, 0].tolist(),
+            sliding_cache.layers[0].keys[0, 0, :, 0].tolist(),
             [3.0, 4.0, 5.0, 6.0],
             "SlidingWindowCache Scenario 3 failed",
         )
@@ -1054,7 +1060,7 @@ class SyntheticCacheTest(unittest.TestCase):
         config.sliding_window_pattern = 1  # Layer 0 is static (1 % 1 == 0)
 
         # Scenario 1
-        hybrid_cache_static_mode = HybridCache(config=config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        hybrid_cache_static_mode = HybridCache(model_config=config, max_batch_size=1, max_cache_len=self.max_cache_len)
         prefill = torch.tensor([1.0, 2.0, 0.0, 0.0])[None, None, :, None]
         hybrid_cache_static_mode.update(
             key_states=prefill,
@@ -1069,7 +1075,7 @@ class SyntheticCacheTest(unittest.TestCase):
             cache_kwargs={"cache_position": torch.tensor([2])},
         )
         self.assertEqual(
-            hybrid_cache_static_mode.key_cache[0][0, 0, :, 0].tolist(),
+            hybrid_cache_static_mode.layers[0].keys[0, 0, :, 0].tolist(),
             [1.0, 2.0, 3.0, 0.0],
             "HybridCache Static Scenario 1 failed",
         )
@@ -1082,7 +1088,7 @@ class SyntheticCacheTest(unittest.TestCase):
             cache_kwargs={"cache_position": torch.tensor([3])},
         )
         self.assertEqual(
-            hybrid_cache_static_mode.key_cache[0][0, 0, :, 0].tolist(),
+            hybrid_cache_static_mode.layers[0].keys[0, 0, :, 0].tolist(),
             [1.0, 2.0, 3.0, 4.0],
             "HybridCache Static Scenario 2 failed",
         )
@@ -1106,7 +1112,7 @@ class SyntheticCacheTest(unittest.TestCase):
         result:        [3.0, 4.0, 5.0, 6.0] (keeps last window_size tokens)
         """
         # Scenario 1: Update within window, no slide yet
-        hybrid_cache = HybridCache(config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        hybrid_cache = HybridCache(model_config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len)
         prefill = torch.tensor([1.0, 2.0, 0.0, 0.0])[None, None, :, None]
         hybrid_cache.update(
             key_states=prefill,
@@ -1121,13 +1127,13 @@ class SyntheticCacheTest(unittest.TestCase):
             cache_kwargs={"cache_position": torch.tensor([2]), "sliding_window": self.window_size},
         )
         self.assertEqual(
-            hybrid_cache.key_cache[0][0, 0, :, 0].tolist(),
+            hybrid_cache.layers[0].keys[0, 0, :, 0].tolist(),
             [1.0, 2.0, 3.0, 0.0],
             "HybridCache Sliding Scenario 1 failed",
         )
 
         # Scenario 2: Update causing first slide
-        hybrid_cache = HybridCache(config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        hybrid_cache = HybridCache(model_config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len)
         prefill = torch.tensor([1.0, 2.0, 3.0, 4.0])[None, None, :, None]
         hybrid_cache.update(
             key_states=prefill,
@@ -1142,7 +1148,7 @@ class SyntheticCacheTest(unittest.TestCase):
             cache_kwargs={"cache_position": torch.tensor([4]), "sliding_window": self.window_size},
         )
         self.assertEqual(
-            hybrid_cache.key_cache[0][0, 0, :, 0].tolist(),
+            hybrid_cache.layers[0].keys[0, 0, :, 0].tolist(),
             [2.0, 3.0, 4.0, 5.0],
             "HybridCache Sliding Scenario 2 failed",
         )
@@ -1155,13 +1161,13 @@ class SyntheticCacheTest(unittest.TestCase):
             cache_kwargs={"cache_position": torch.tensor([5]), "sliding_window": self.window_size},
         )
         self.assertEqual(
-            hybrid_cache.key_cache[0][0, 0, :, 0].tolist(),
+            hybrid_cache.layers[0].keys[0, 0, :, 0].tolist(),
             [3.0, 4.0, 5.0, 6.0],
             "HybridCache Sliding Scenario 3 failed",
         )
 
         # Scenario 4: Long prompt handling
-        hybrid_cache = HybridCache(config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        hybrid_cache = HybridCache(model_config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len)
         long_prefill = torch.tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])[None, None, :, None]
         hybrid_cache.update(
             key_states=long_prefill,
@@ -1170,7 +1176,7 @@ class SyntheticCacheTest(unittest.TestCase):
             cache_kwargs={"cache_position": torch.arange(6), "sliding_window": self.window_size},
         )
         self.assertEqual(
-            hybrid_cache.key_cache[0][0, 0, :, 0].tolist(),
+            hybrid_cache.layers[0].keys[0, 0, :, 0].tolist(),
             [3.0, 4.0, 5.0, 6.0],
             "HybridCache Sliding Scenario 4 failed",
         )
@@ -1190,10 +1196,10 @@ class SyntheticCacheTest(unittest.TestCase):
         cache = DynamicCache()
         cache.update(prefill, prefill, 0)
         cache.update(update3, update3, 0)
-        self.assertEqual(cache.key_cache[0][0, 0, :, 0].tolist(), [1.0, 2.0, 3.0], "DynamicCache Scenario 1 failed")
+        self.assertEqual(cache.layers[0].keys[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0], "DynamicCache Scenario 1 failed")
         cache.update(update4, update4, 0)
         self.assertEqual(
-            cache.key_cache[0][0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 4.0], "DynamicCache Scenario 1 (to 4) failed"
+            cache.layers[0].keys[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 4.0], "DynamicCache Scenario 1 (to 4) failed"
         )
 
         # Scenario 2: prefill and update for two layers independently
@@ -1210,8 +1216,10 @@ class SyntheticCacheTest(unittest.TestCase):
         cache.update(update4, update4, 0)
         cache.update(update4_1, update4_1, 1)
         self.assertEqual(
-            cache.key_cache[0][0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 4.0], "DynamicCache Scenario 2 layer 0 failed"
+            cache.layers[0].keys[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 4.0], "DynamicCache Scenario 2 layer 0 failed"
         )
         self.assertEqual(
-            cache.key_cache[1][0, 0, :, 0].tolist(), [10.0, 20.0, 30.0, 40.0], "DynamicCache Scenario 2 layer 1 failed"
+            cache.layers[1].keys[0, 0, :, 0].tolist(),
+            [10.0, 20.0, 30.0, 40.0],
+            "DynamicCache Scenario 2 layer 1 failed",
         )
