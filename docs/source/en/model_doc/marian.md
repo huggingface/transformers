@@ -28,9 +28,9 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-MarianMT is a machine translation model developed by the Microsoft Translator team and trained originally by Jörg Tiedemann using the Marian C++ library. MarianMT models are designed to be fast, efficient, and lightweight for translation tasks. Unlike very large general models, MarianMT provides compact, language-specific models that are small enough to run on CPUs or low-resource environments, making it ideal for production and offline usage.
+[MarianMT](https://huggingface.co/papers/1804.00344) is a machine translation model trained with the Marian framework which is written in pure C++. The framework includes its own custom auto-differentiation engine and efficient meta-algorithms to train encoder-decoder models like BART.
 
-All MarianMT models are Transformer encoder-decoder architectures with 6 layers each in both encoder and decoder, similar in design to BART but with important modifications for translation tasks:
+All MarianMT models are transformer encoder-decoders with 6 layers in each component, use static sinusoidal positional embeddings, don't have a layernorm embedding, and the model starts generating with the prefix `pad_token_id` instead of `<s/>`.
 
 - Static (sinusoidal) positional embeddings (`MarianConfig.static_position_embeddings=True`)
 - No layer normalization on embeddings (`MarianConfig.normalize_embedding=False`)
