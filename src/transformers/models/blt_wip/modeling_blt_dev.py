@@ -911,6 +911,10 @@ class BLTPreTrainedModel(PreTrainedModel):
             emb_std = module.config.hidden_size ** (-0.5)
             module.embed_tokens._custom_std = emb_std
             module.lm_head._custom_std = emb_std
+            
+        elif isinstance(module, BLTForCausalLM):
+            if module.lm_head is not None:
+                module.lm_head._custom_std = module.config.decoder_config.hidden_size ** (-0.5)
 
 
 class BLTModel(BLTPreTrainedModel):
@@ -1164,6 +1168,12 @@ class BLTPatcher(BLTPreTrainedModel):
 
 
 class BLTForCausalLM(BLTPreTrainedModel, GenerationMixin):
+    config_class = BLTConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["BLTTransformerLayer", "BLTLocalEncoder", "BLTLocalDecoder", "BLTGlobalTransformer"]
+    _tied_weights_keys = ["lm_head.weight"]
+
     def __init__(self, config):
         super().__init__(config)
         self.model = BLTModel(config)
@@ -1212,6 +1222,12 @@ class BLTForCausalLM(BLTPreTrainedModel, GenerationMixin):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
+
+    def set_decoder(self, decoder):
+        self.model = decoder
+
+    def get_decoder(self):
+        return self.model
 
 __all__ = [
     "BLTPreTrainedModel",
