@@ -855,7 +855,7 @@ class ModelTesterMixin:
             # For now, skip everything older than 2025 and "important models" (too much models to patch otherwise)
             # Use `supports_cache_class` as a proxy to judge "important" models in order to prioritize them
             # TODO: relax this as we patch more and more models
-            if addition_year < 2025 and not model_class._supports_cache_class:
+            if addition_year < 2024 and not model_class._supports_cache_class:
                 self.skipTest(reason=f"{model_class} is not a priorited model for now.")
 
             # Monkey patch the method to add a seed (we do it on PreTrainedModel._initialize_weights, which wraps
@@ -895,6 +895,11 @@ class ModelTesterMixin:
                 model_from_config.state_dict().items(), model_from_pretrained.state_dict().items()
             ):
                 self.assertEqual(k1, k2, "The keys from each model should be the same")
+
+                # In case using torch.nn.utils.parametrizations on a module, we should skip the resulting keys
+                if re.search(r"\.parametrizations\..*?\.original[01]", k1):
+                    continue
+
                 # Since we added the seed, they should be exactly the same (i.e. using allclose maybe be wrong due
                 # to very low std in init function)
                 if not (v1 == v2).all():
@@ -2833,7 +2838,9 @@ class ModelTesterMixin:
                 self.skipTest(reason="This model doesn't use `inputs_embeds`")
 
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
-            pad_token_id = config.pad_token_id if config.pad_token_id is not None else 1
+            pad_token_id = (
+                config.get_text_config().pad_token_id if config.get_text_config().pad_token_id is not None else 1
+            )
 
             wte = model.get_input_embeddings()
             if not self.is_encoder_decoder:

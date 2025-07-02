@@ -551,17 +551,18 @@ class SuperGluePreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.Conv1d)):
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
+        elif isinstance(module, nn.BatchNorm1d):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, SuperGlueMultiLayerPerceptron):
-            nn.init.constant_(module.linear.bias, 0.0)
+
+        if hasattr(module, "bin_score"):
+            module.bin_score.data.fill_(1.0)
 
 
 @auto_docstring(
@@ -725,8 +726,8 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         matches0 = torch.where(valid0, indices0, indices0.new_tensor(-1))
         matches1 = torch.where(valid1, indices1, indices1.new_tensor(-1))
 
-        matches = torch.cat([matches0, matches1]).reshape(batch_size, 2, -1)
-        matching_scores = torch.cat([matching_scores0, matching_scores1]).reshape(batch_size, 2, -1)
+        matches = torch.cat([matches0, matches1], dim=1).reshape(batch_size, 2, -1)
+        matching_scores = torch.cat([matching_scores0, matching_scores1], dim=1).reshape(batch_size, 2, -1)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + encoded_keypoints[1]
