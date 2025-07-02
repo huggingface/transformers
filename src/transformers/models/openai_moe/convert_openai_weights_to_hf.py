@@ -237,13 +237,25 @@ class OpenAIMoeConverter(TikTokenConverter):
         # TODO 1st donwload the vocabfile!!!
         tokenizer = tiktoken.get_encoding(vocab_file)
         self.additional_special_tokens = {}
-        # 199998 is not defined either
-        self.additional_special_tokens["<|reserved_199998|>"] = 199998
-        self.additional_special_tokens = {"<|endoftext|>": 199999, "<|endofprompt|>": 200018}
+        # Build Harmony special tokens → IDs.
+        special_tokens_map = {
+            "<|reserved_199998|>": 199998,
+            "<|endoftext|>": 199999,     # same as <|end|>
+            "<|constrain|>": 200003,
+            "<|call|>": 200012,
+            "<|endofprompt|>": 200018,
+        }
+
+        # Add the remaining reserved slots while skipping already-used IDs.
         for k in range(199999, 200018):
-            self.additional_special_tokens[f"<|reserved_{k}|>"] = k
-        sorted_list = sorted(self.additional_special_tokens.items(), key=lambda x: x[1])
-        self.additional_special_tokens = [k[0] for k in sorted_list]
+            if k in (200003, 200012):
+                continue
+            special_tokens_map.setdefault(f"<|reserved_{k}|>", k)
+
+        # Keep only token strings (sorted by ID) for TikTokenConverter.
+        self.additional_special_tokens = [
+            tok for tok, _ in sorted(special_tokens_map.items(), key=lambda x: x[1])
+        ]
         tokenizer = self.converted()
         if chat_template is not None:
             kwargs["chat_template"] = chat_template
