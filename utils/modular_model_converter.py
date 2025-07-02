@@ -414,32 +414,32 @@ class SuperTransformer(cst.CSTTransformer):
                 break
         return new_body
 
-    def replace_super_calls(self, node: cst.FunctionDef, func_name: str) -> cst.FunctionDef:
+    def replace_super_calls(self, node: cst.BaseSuite, func_name: str) -> cst.BaseSuite:
         """Updates the body of the input `node`'s `func_name` function by replacing calls
         to super().func_name() with the source code of the parent class' `func_name`.
         It keeps everything that is defined before `super().func_name()`.
         """
         new_body = []
-        modular_node_body = node.body.body
+        modular_node_body = node.body
         original_modeling_method_body = self.original_modeling_methods[func_name].body.body
 
         for i, expr in enumerate(modular_node_body):
             if is_call_to_super(expr, func_name):
                 new_body.extend(self.update_body(original_modeling_method_body, modular_node_body[i + 1 :]))
                 new_body = self._fix_init_location(new_body)
-                return new_body
+                return node.with_changes(body=new_body)
             else:
                 expr = expr.visit(self.transformer)
             if not m.matches(expr, m.SimpleStatementLine(body=[m.Del()])):
                 new_body.append(expr)
 
-        return new_body
+        return node.with_changes(body=new_body)
 
     def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:
         name = updated_node.name.value
         if name in self.modular_methods:
-            new_body = self.replace_super_calls(updated_node, name)
-            return updated_node.with_changes(body=cst.BaseSuite(body=new_body), params=updated_node.params)
+            new_body = self.replace_super_calls(updated_node.body, name)
+            return updated_node.with_changes(body=new_body, params=updated_node.params)
         return updated_node
 
     def leave_Return(self, original_node: cst.Return, updated_node: cst.Return) -> cst.Return:
