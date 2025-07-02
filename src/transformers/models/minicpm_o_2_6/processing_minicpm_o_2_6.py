@@ -147,6 +147,10 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
             tokenizer = AutoTokenizer.from_pretrained(config._name_or_path, trust_remote_code=True)
         super().__init__(image_processor, feature_extractor, tokenizer)
         self.version = image_processor.version
+        self.audio_start_token = "<|audio_start|>"
+        self.audio_end_token = "<|audio_end|>"
+        self.spk_bos_token = "<|spk_bos|>"
+        self.spk_eos_token = "<|spk_eos|>"
 
     def __call__(
         self,
@@ -209,11 +213,11 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
             total_unk_len = 0
             for _ in range(num_audio_chunks):
                 unk_len = min(audio_embeds_in_chunk, output_lens - total_unk_len)
-                place_holders += self.tokenizer.audio_start + "<unk>" * unk_len + self.tokenizer.audio_end
+                place_holders += self.audio_start_token + self.image_processor.unk_token * unk_len + self.audio_end_token
                 total_unk_len += unk_len
             audio_placeholder = place_holders
         else:
-            audio_placeholder = self.tokenizer.audio_start + "<unk>" * output_lens + self.tokenizer.audio_end
+            audio_placeholder = self.audio_start_token + self.image_processor.unk_token * output_lens + self.audio_end_token
 
         return audio_placeholder
 
@@ -321,9 +325,9 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
         result_text = []
         for result in output_ids:
             result = result[result != 0]
-            if result[0] == self.tokenizer.bos_id:
+            if result[0] == self.tokenizer.bos_token_id:
                 result = result[1:]
-            if result[-1] == self.tokenizer.eos_id:
+            if result[-1] == self.tokenizer.eos_token_id:
                 result = result[:-1]
             result_text.append(self.tokenizer.decode(result, *args[1:], **kwargs).strip())
         return result_text
@@ -337,10 +341,10 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
         """
         result = args[0]
         result = result[result != 0]
-        if result[0] == self.tokenizer.bos_id:
+        if result[0] == self.tokenizer.bos_token_id:
             result = result[1:]
-        if result[-1] == self.tokenizer.eos_id or (
-            hasattr(self.tokenizer, "eot_id") and result[-1] == self.tokenizer.eot_id
+        if result[-1] == self.tokenizer.eos_token_id or (
+            hasattr(self.tokenizer, "eot_token_id") and result[-1] == self.tokenizer.eot_token_id
         ):
             result = result[:-1]
         return self.tokenizer.decode(result, *args[1:], **kwargs).strip()
@@ -352,8 +356,8 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
         input_ids = torch.tensor(input_ids, dtype=torch.int32)
 
         ## image bound
-        start_cond = (input_ids == self.tokenizer.im_start_id) | (input_ids == self.tokenizer.slice_start_id)
-        end_cond = (input_ids == self.tokenizer.im_end_id) | (input_ids == self.tokenizer.slice_end_id)
+        start_cond = (input_ids == self.tokenizer.convert_tokens_to_ids(self.image_processor.im_start_token)) | (input_ids == self.tokenizer.convert_tokens_to_ids(self.image_processor.slice_start_token))
+        end_cond = (input_ids == self.tokenizer.convert_tokens_to_ids(self.image_processor.im_end_token)) | (input_ids == self.tokenizer.convert_tokens_to_ids(self.image_processor.slice_end_token))
 
         image_start_idx = torch.where(start_cond)[0]
         image_start_idx += 1
@@ -369,13 +373,13 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
         )
 
         ##  audio bound
-        audio_start_idx = torch.where(input_ids == self.tokenizer.audio_start_id)[0]
-        audio_end_idx = torch.where(input_ids == self.tokenizer.audio_end_id)[0]
+        audio_start_idx = torch.where(input_ids == self.tokenizer.convert_tokens_to_ids(self.audio_start_token))[0]
+        audio_end_idx = torch.where(input_ids == self.tokenizer.convert_tokens_to_ids(self.audio_end_token))[0]
         assert len(audio_start_idx) == len(audio_end_idx)
         audio_bounds = torch.hstack([(audio_start_idx + 1).unsqueeze(-1), audio_end_idx.unsqueeze(-1)])
 
-        spk_start_idx = torch.where(input_ids == self.tokenizer.spk_start_id)[0]
-        spk_end_idx = torch.where(input_ids == self.tokenizer.spk_end_id)[0]
+        spk_start_idx = torch.where(input_ids == self.tokenizer.convert_tokens_to_ids(self.spk_bos_token))[0]
+        spk_end_idx = torch.where(input_ids == self.tokenizer.convert_tokens_to_ids(self.spk_eos_token))[0]
         assert len(spk_start_idx) == len(spk_end_idx)
         spk_bounds = torch.hstack([(spk_start_idx + 1).unsqueeze(-1), spk_end_idx.unsqueeze(-1)])
 

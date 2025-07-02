@@ -49,7 +49,7 @@ from transformers.generation.logits_process import LogitsProcessor, TopKLogitsWa
 from transformers.models.siglip.configuration_siglip import SiglipVisionConfig
 from transformers.models.siglip.modeling_siglip import SiglipEncoderLayer, SiglipPreTrainedModel
 from transformers.models.idefics2.modeling_idefics2 import Idefics2Encoder
-from transformers.models.whisper.modeling_whisper import WHISPER_ATTENTION_CLASSES, WhisperConfig, WhisperEncoder
+from transformers.models.whisper.modeling_whisper import WhisperAttention, WhisperConfig, WhisperEncoder
 from transformers.activations import ACT2FN
 from transformers.modeling_attn_mask_utils import _prepare_4d_attention_mask
 from transformers.integrations import is_deepspeed_zero3_enabled
@@ -659,7 +659,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         result_text = []
         for result in result_ids:
             result = result[result != 0]
-            if result[0] == tokenizer.bos_id:
+            if result[0] == tokenizer.bos_token_id:
                 result = result[1:]
             if result[-1] in terminators:
                 result = result[:-1]
@@ -1020,9 +1020,9 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                 spk_embeds = self._get_last_spk_embeds(inputs, outputs)
 
             if isinstance(answer, list):
-                answer = [i.replace(tokenizer.tts_end, "") for i in answer]
+                answer = [i.replace("<|tts_eos|>", "") for i in answer]
             else:
-                answer = answer.replace(tokenizer.tts_end, "")
+                answer = answer.replace("<|tts_eos|>", "")
 
             if return_dict:
                 return OmniOutput(text=answer, spk_embeds=spk_embeds, audio_wav=wav_numpy, sampling_rate=sr)
@@ -1074,7 +1074,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
             else:
                 logger.error("Invalid content type:", c)
 
-        cur_contents = "".join(cur_msgs) if omni_input else "\n".join(omni_input)
+        cur_contents = "".join(cur_msgs) if omni_input else "\n".join(cur_msgs)
         if not self.is_first and self.new_user_msg and msg["role"] == "user":  # new user add im_start
             if self.llm_generated:
                 if self.llm_generate_completed:
@@ -1191,8 +1191,8 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         generate_prompt = "<|im_end|>\n<|im_start|>assistant\n<|spk_bos|><|spk|><|spk_eos|><|tts_bos|>"
         input_ids = tokenizer(generate_prompt, return_tensors="pt", add_special_tokens=False)["input_ids"].cuda()
 
-        spk_start_idx = torch.where(input_ids[0] == tokenizer.spk_start_id)[0]
-        spk_end_idx = torch.where(input_ids[0] == tokenizer.spk_end_id)[0]
+        spk_start_idx = torch.where(input_ids[0] == tokenizer.convert_tokens_to_ids("<|spk_bos|>"))[0]
+        spk_end_idx = torch.where(input_ids[0] == tokenizer.convert_tokens_to_ids("<|spk_eos|>"))[0]
         spk_bounds = [
             torch.hstack([(spk_start_idx + 1).unsqueeze(-1), spk_end_idx.unsqueeze(-1)])
         ]  # List[Tensor], (1,2)
@@ -1872,7 +1872,7 @@ class MiniCPMWhisperEncoderLayer(nn.Module):
     def __init__(self, config: WhisperConfig, layer_idx: int = None):
         super().__init__()
         self.embed_dim = config.d_model
-        self.self_attn = WHISPER_ATTENTION_CLASSES[config._attn_implementation](
+        self.self_attn = WhisperAttention(
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
