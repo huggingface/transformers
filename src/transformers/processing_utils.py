@@ -1097,9 +1097,13 @@ class ProcessorMixin(PushToHubMixin):
             processor_config=processor_dict, valid_kwargs=accepted_args_and_kwargs
         )
 
-        # remove args that are in processor_dict to avoid duplicate arguments
-        args_to_remove = [i for i, arg in enumerate(accepted_args_and_kwargs) if arg in processor_dict]
-        args = [arg for i, arg in enumerate(args) if i not in args_to_remove]
+        # update args that are already in processor_dict to avoid duplicate arguments
+        args_to_update = {
+            i: valid_kwargs.pop(arg)
+            for i, arg in enumerate(accepted_args_and_kwargs)
+            if (arg in valid_kwargs and i < len(args))
+        }
+        args = [arg if i not in args_to_update else args_to_update[i] for i, arg in enumerate(args)]
 
         # instantiate processor with used (and valid) kwargs only
         processor = cls(*args, **valid_kwargs)
