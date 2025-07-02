@@ -263,10 +263,11 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
         tile_size: int,
         max_num_tiles: int,
         return_tensors: Optional[Union[str, TensorType]],
+        disable_grouping: bool,
         **kwargs: Unpack[PerceptionLMFastImageProcessorKwargs],
     ) -> BatchFeature:
         # Group images by size for batched transformation
-        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=False)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
@@ -283,7 +284,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=False)
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             # Fused rescale and normalize

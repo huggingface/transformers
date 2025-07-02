@@ -256,6 +256,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("pegasus_x", "PegasusXModel"),
         ("perceiver", "PerceiverModel"),
         ("perception_encoder", "PerceptionEncoder"),
+        ("perception_lm", "PerceptionLMModel"),
         ("persimmon", "PersimmonModel"),
         ("phi", "PhiModel"),
         ("phi3", "Phi3Model"),

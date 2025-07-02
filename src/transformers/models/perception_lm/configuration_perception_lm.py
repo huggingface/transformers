@@ -48,27 +48,7 @@ class PerceptionLMConfig(PretrainedConfig):
             The image token index to encode the image prompt.
         video_token_id (`int`, *optional*, defaults to 128003):
             The video token index to encode the video prompt.
-
-    Example:
-
-    ```python
-    >>> from transformers import PerceptionLMForConditionalGeneration, PerceptionLMConfig, TimmWrapperConfig, LlamaConfig
-
-    >>> # Initializing a PerceptionEncoder config
-    >>> vision_config = TimmWrapperConfig()
-
-    >>> # Initializing a Llama config
-    >>> text_config = LlamaConfig()
-
-    >>> # Initializing a PerceptionLM perception_lm-1.5-7b style configuration
-    >>> configuration = PerceptionLMConfig(vision_config, text_config)
-
-    >>> # Initializing a model from the perception_lm-1.5-7b style configuration
-    >>> model = PerceptionLMForConditionalGeneration(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
+    """
 
     model_type = "perception_lm"
     sub_configs = {"text_config": AutoConfig, "vision_config": TimmWrapperConfig}
