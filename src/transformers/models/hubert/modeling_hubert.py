@@ -993,7 +993,7 @@ class HubertModel(HubertPreTrainedModel):
 
         >>> def map_to_array(batch):
         ...     decoder = AudioDecoder(batch["file"])
-        ...     batch["speech"] = decoder.get_all_samples().data
+        ...     batch["speech"] = torch.mean(decoder.get_all_samples().data, axis=0)
         ...     return batch
 
 

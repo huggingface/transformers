@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tempfile
 import unittest
 
 import requests
@@ -296,12 +295,9 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
         self.assistant_token = "<|assistant|>"
         self.end_token = "<|end|>"
         self.image = Image.open(requests.get(self.image_url, stream=True).raw)
-        with tempfile.NamedTemporaryFile(mode="w+b", suffix=".wav") as tmp:
-            tmp.write(requests.get(self.audio_url, stream=True).raw.data)
-            tmp.flush()
-            tmp.seek(0)
-            samples = torchcodec.decoders.AudioDecoder(tmp.name).get_all_samples()
-            self.audio, self.sampling_rate = samples.data, samples.sample_rate
+        audio_bytes = requests.get(self.audio_url, stream=True).raw.data
+        samples = torchcodec.decoders.AudioDecoder(audio_bytes).get_all_samples()
+        self.audio, self.sampling_rate = samples.data, samples.sample_rate
 
         cleanup(torch_device, gc_collect=True)
 

@@ -237,6 +237,7 @@ class HubertModel(Wav2Vec2Model, HubertPreTrainedModel):
         Example:
 
         ```python
+        >>> import torch
         >>> from transformers import AutoProcessor, HubertModel
         >>> from datasets import load_dataset
         >>> from torchcodec.decoders import AudioDecoder
@@ -247,7 +248,7 @@ class HubertModel(Wav2Vec2Model, HubertPreTrainedModel):
 
         >>> def map_to_array(batch):
         ...     decoder = AudioDecoder(batch["file"])
-        ...     batch["speech"] = decoder.get_all_samples().data
+        ...     batch["speech"] = torch.mean(decoder.get_all_samples().data, axis=0)
         ...     return batch
 
 
