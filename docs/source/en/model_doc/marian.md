@@ -160,7 +160,6 @@ print(result)
 
 - Originally trained with the Marian C++ framework for efficiency.
 
-- Does not support the older OPUS models that require BPE preprocessing (80 models not supported).
 
 - When using quantization, expect a small trade-off in accuracy for a significant gain in speed and memory.
 
