@@ -18,6 +18,8 @@ Processor class for PaliGemma.
 
 from typing import List, Optional, Union
 
+import numpy as np
+
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, make_flat_list_of_images
 from ...processing_utils import (
