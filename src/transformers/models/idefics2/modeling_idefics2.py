@@ -219,7 +219,7 @@ class Idefics2VisionAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
+        **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -235,13 +235,7 @@ class Idefics2VisionAttention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and output_attentions:
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -256,9 +250,6 @@ class Idefics2VisionAttention(nn.Module):
 
         attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
         attn_output = self.out_proj(attn_output)
-
-        if not output_attentions:
-            attn_weights = None
 
         return attn_output, attn_weights
 
@@ -942,10 +933,18 @@ class Idefics2Model(Idefics2PreTrainedModel):
         - The merging happens so that we obtain the following sequence: `vector_tok_1 vector_tok_2 vector_tok_3 vector_fake_tok_around_image {sequence of image_seq_len image hidden states} vector_fake_toke_around_image vector_tok_4`. That sequence is fed to the LM.
         - To fit the format of that sequence, `input_ids`, `input_embeds`, `attention_mask` are all 3 adapted to insert the image hidden states.
         """
-        special_image_token_mask = input_ids == self.image_token_id
-        new_inputs_embeds = inputs_embeds.clone()
-        new_inputs_embeds[special_image_token_mask] = image_hidden_states.to(new_inputs_embeds.device)
-        return new_inputs_embeds
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        image_hidden_states = image_hidden_states.to(inputs_embeds.device, inputs_embeds.dtype)
+        inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_hidden_states)
+        return inputs_embeds
 
     def get_image_features(self, pixel_values: torch.FloatTensor, pixel_attention_mask: torch.LongTensor = None):
         """
@@ -1050,25 +1049,8 @@ class Idefics2Model(Idefics2PreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        past_seen_tokens = 0
-        # kept for BC (non `Cache` `past_key_values` inputs)
-        return_legacy_cache = False
-        if use_cache:
-            if not isinstance(past_key_values, Cache):
-                return_legacy_cache = True
-                if past_key_values is None:
-                    past_key_values = DynamicCache()
-                else:
-                    past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-                    logger.warning_once(
-                        "We detected that you are passing `past_key_values` as a tuple of tuples. This is deprecated and "
-                        "will be removed in v4.47. Please convert your cache or use an appropriate `Cache` class "
-                        "(https://huggingface.co/docs/transformers/kv_cache#legacy-cache-format)"
-                    )
-            past_seen_tokens = past_key_values.get_seq_length()
-
-        if inputs_embeds is not None and input_ids is None and past_seen_tokens == 0:
-            raise ValueError("When first calling the model, if input_embeds are passed, input_ids should not be None.")
+        if use_cache and not isinstance(past_key_values, Cache):
+            past_key_values = DynamicCache()
 
         if inputs_embeds is None:
             inputs_embeds = self.text_model.get_input_embeddings()(input_ids)
@@ -1081,7 +1063,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
         elif image_hidden_states is not None:
             image_hidden_states = image_hidden_states.to(dtype=self.dtype, device=input_ids.device)
 
-        if past_seen_tokens == 0 and inputs_embeds is not None and image_hidden_states is not None:
+        if image_hidden_states is not None:
             # When we generate, we don't want to replace the potential image_token_id that we generated by images
             # that simply don't exist
             inputs_embeds = self.inputs_merger(
@@ -1102,9 +1084,6 @@ class Idefics2Model(Idefics2PreTrainedModel):
             return_dict=True,
             **kwargs,
         )
-
-        if return_legacy_cache and use_cache:
-            outputs.past_key_values = outputs.past_key_values.to_legacy_cache()
 
         return Idefics2BaseModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
@@ -1313,37 +1292,11 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
             **kwargs,
         )
 
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        # but IDEFICS requires both ids and embeds to be present
-        if inputs_embeds is not None and cache_position[0] == 0:
-            model_inputs["input_ids"] = input_ids
-
-        if image_hidden_states is not None:
+        if image_hidden_states is not None or cache_position[0] != 0:
             model_inputs["pixel_values"] = None
             model_inputs["pixel_attention_mask"] = None
 
         return model_inputs
-
-    def _update_model_kwargs_for_generation(self, outputs, model_kwargs, is_encoder_decoder, **kwargs):
-        model_kwargs = super()._update_model_kwargs_for_generation(
-            outputs=outputs,
-            model_kwargs=model_kwargs,
-            is_encoder_decoder=is_encoder_decoder,
-            **kwargs,
-        )
-        # Get the precomputed image_hidden_states
-        model_kwargs["image_hidden_states"] = outputs.image_hidden_states
-        return model_kwargs
-
-    @staticmethod
-    # Copied from transformers.models.opt.modeling_opt.OPTForCausalLM._reorder_cache
-    def _reorder_cache(past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
 
 
 __all__ = ["Idefics2ForConditionalGeneration", "Idefics2PreTrainedModel", "Idefics2Model"]

@@ -558,7 +558,7 @@ class GenerationMixin(ContinuousMixin):
         **kwargs,
     ):
         """
-        Prepare the model inputs for generation. In includes operations like computing the 4D attention mask or
+        Prepare the model inputs for generation. It includes operations like computing the 4D attention mask or
         slicing inputs given the existing cache.
 
         See the forward pass in the model documentation for expected arguments (different models might have different
@@ -733,7 +733,9 @@ class GenerationMixin(ContinuousMixin):
         # - encoder-decoder models should complain if the user attempts to pass `inputs_embeds` and `input_ids`, and
         # pull the former to inputs. It will be used in place of `input_ids` to get the encoder hidden states.
         if input_name == "input_ids" and "inputs_embeds" in model_kwargs:
-            if not self.config.is_encoder_decoder:
+            if model_kwargs["inputs_embeds"] is None:
+                model_kwargs.pop("inputs_embeds")
+            elif not self.config.is_encoder_decoder:
                 has_inputs_embeds_forwarding = "inputs_embeds" in set(
                     inspect.signature(self.prepare_inputs_for_generation).parameters.keys()
                 )
@@ -748,10 +750,11 @@ class GenerationMixin(ContinuousMixin):
                 model_kwargs["input_ids"] = self._maybe_initialize_input_ids_for_generation(
                     inputs, bos_token_id, model_kwargs=model_kwargs
                 )
+                inputs, input_name = model_kwargs["inputs_embeds"], "inputs_embeds"
             else:
                 if inputs is not None:
                     raise ValueError("You passed `inputs_embeds` and `input_ids` to `.generate()`. Please pick one.")
-            inputs, input_name = model_kwargs["inputs_embeds"], "inputs_embeds"
+                inputs, input_name = model_kwargs["inputs_embeds"], "inputs_embeds"
 
         # 4. if `inputs` is still None, try to create `input_ids` from BOS token
         inputs = self._maybe_initialize_input_ids_for_generation(inputs, bos_token_id, model_kwargs)

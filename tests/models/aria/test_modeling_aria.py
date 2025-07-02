@@ -30,6 +30,7 @@ from transformers import (
 )
 from transformers.models.idefics3 import Idefics3VisionConfig
 from transformers.testing_utils import (
+    Expectations,
     backend_empty_cache,
     require_bitsandbytes,
     require_torch,
@@ -188,49 +189,6 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
         self.model_tester = AriaVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=AriaConfig, has_text_modality=False)
 
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    # while some other models require pixel_values to be present
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            torch.testing.assert_close(out_embeds, out_ids)
-
     @unittest.skip(
         reason="This architecture seems to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
@@ -267,14 +225,6 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
 
     @unittest.skip(reason="Unstable test")
     def test_dola_decoding_sample(self):
-        pass
-
-    @unittest.skip(reason="Unsupported")
-    def test_generate_from_inputs_embeds_0_greedy(self):
-        pass
-
-    @unittest.skip(reason="Unsupported")
-    def test_generate_from_inputs_embeds_1_beam_search(self):
         pass
 
     @unittest.skip(reason="Dynamic control flow due to MoE")
@@ -483,23 +433,26 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
             device=model.device, dtype=model.dtype
         )
 
-        EXPECTED_OUTPUT = {
-            "cpu": [
-                "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n <image>\n USER: What's the difference of two images?\n ASSISTANT:<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The first image features a cute, light-colored puppy sitting on a paved surface with",
-                "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The image shows a young alpaca standing on a grassy hill. The alpaca has",
-            ],  # cpu output
-            "cuda": [
-                "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n <image>\n USER: What's the difference of two images?\n ASSISTANT:<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The first image features a cute, light-colored puppy sitting on a paved surface with",
-                "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The image shows a young alpaca standing on a patch of ground with some dry grass. The",
-            ],  # cuda output
-            "xpu": [
-                "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n <image>\n USER: What's the difference of two images?\n ASSISTANT:<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The first image features a cute, light-colored puppy sitting on a paved surface with",
-                "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The image shows a young alpaca standing on a grassy hill. The alpaca has",
-            ],  # xpu output
-        }
+        EXPECTED_OUTPUTS = Expectations(
+            {
+                ("cpu", None): [
+                    "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n <image>\n USER: What's the difference of two images?\n ASSISTANT:<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The first image features a cute, light-colored puppy sitting on a paved surface with",
+                    "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The image shows a young alpaca standing on a grassy hill. The alpaca has",
+                ],
+                ("cuda", None): [
+                    "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n <image>\n USER: What's the difference of two images?\n ASSISTANT:<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The first image features a cute, light-colored puppy sitting on a paved surface with",
+                    "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The image shows a young alpaca standing on a patch of ground with some dry grass. The",
+                ],
+                ("xpu", 3): [
+                    "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n <image>\n USER: What's the difference of two images?\n ASSISTANT:<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The first image features a cute, light-colored puppy sitting on a paved surface with",
+                    "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The image shows a young alpaca standing on a patch of ground with some dry grass. The",
+                ],
+            }
+        )  # fmt: skip
+        EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
         generate_ids = model.generate(**inputs, max_new_tokens=20)
         outputs = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-        self.assertListEqual(outputs, EXPECTED_OUTPUT[model.device.type])
+        self.assertListEqual(outputs, EXPECTED_OUTPUT)
 
     def test_tokenizer_integration(self):
         model_id = "rhymes-ai/Aria"
