@@ -421,10 +421,10 @@ class SuperTransformer(cst.CSTTransformer):
         """
         new_body = []
         modular_node_body = node.body
-        original_modeling_method_body = self.original_modeling_methods[func_name].body.body
 
         for i, expr in enumerate(modular_node_body):
             if is_call_to_super(expr, func_name):
+                original_modeling_method_body = self.original_modeling_methods[func_name].body.body
                 new_body.extend(self.update_body(original_modeling_method_body, modular_node_body[i + 1 :]))
                 new_body = self._fix_init_location(new_body)
                 return node.with_changes(body=new_body)
@@ -966,30 +966,27 @@ def common_partial_suffix(str1: str, str2: str) -> str:
 
 def replace_class_node(
     mapper: ModelFileMapper, modular_class_node: cst.ClassDef, renamed_super_class: str, original_super_class: str
-):
+) -> cst.ClassDef:
     """
     Replace a class node which inherits from another modeling class. This function works in the following way:
-    - start from the base class node of the inherited class (a cst.Node)
-    - replace all methods of the base node with the methods defined in the child class
-    - append all new methods defined in the child class
+    - start from the methods and class attributes of the original modeling code node, and replace their definition
+    if overriden in the modular
+    - append all new methods and class attributes defined in the child class
+    - all potential method/class docstrings and decorators use the ones found in modular if any, else in original modeling
     - replace all calls to super() with the unravelled code
 
-                    |    ```python                          |               |    ```python
-                    |    class GemmaModel(LlamaModel):      |               |       class GemmaModel(nn.Module):
-                    |        def __init__(self):            |               |           def __init__(self):
-    Going from:     |            super().__init__()         |       to:     |               super().__init__(config)
-                    |            self.dropout = 0.2         |               |               self.dropout = 0.2
-                    |     ```                               |               |               self.padding_idx = config.pad_token_id
-                                                                            |               self.vocab_size = config.vocab_size
-                                                                            |               self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-                                                                            |               self.layers = nn.ModuleList(
-                                                                            |                   [LlamaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-                                                                            |               )
-                                                                            |               self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-                                                                            |               self.gradient_checkpointing = False
-                                                                            |               # Initialize weights and apply final processing
-                                                                            |               self.post_init()
-                                                                            |     ```
+    Args:
+        mapper (`ModelFileMapper`):
+            The mapper corresponding to the visited file from which the modular class node inherits.
+        modular_class_node (`cst.ClassDef`):
+            The class node as found in the modular file.
+        renamed_super_class (`str`):
+            The name of the class from which `modular_class_node` inherits after automatic renaming.
+        original_super_class (`str`):
+            The name of the class from which `modular_class_node` inherits before automatic renaming.
+
+    Returns:
+        A new class node corresponding to the modular definition.
     """
     all_bases = [get_full_attribute_name(k.value) for k in modular_class_node.bases]
     if any(base is None for base in all_bases):
@@ -997,13 +994,13 @@ def replace_class_node(
 
     original_modeling_node = mapper.classes[renamed_super_class]
     # Always use the new name of the class (in case we use e.g. `ColPaliForRetrieval` inheriting from `PaliGemmaForConditionalGeneration`)
-    new_name = modular_class_node.name
+    new_class_name = modular_class_node.name
 
     # If the new class name is different from the renamed super class name, we need to update the docstrings/comments accordingly
-    if new_name.value != renamed_super_class:
-        common_suffix = common_partial_suffix(new_name.value, renamed_super_class)
+    if new_class_name.value != renamed_super_class:
+        common_suffix = common_partial_suffix(new_class_name.value, renamed_super_class)
         # Note that this works even without common prefix, in which case it does not replace anything
-        old, new = renamed_super_class.replace(common_suffix, ""), new_name.value.replace(common_suffix, "")
+        old, new = renamed_super_class.replace(common_suffix, ""), new_class_name.value.replace(common_suffix, "")
         temp_module = cst.Module(body=[original_modeling_node])
         original_modeling_node = temp_module.visit(
             ReplaceNameTransformer(get_lowercase_name(old), get_lowercase_name(new), only_doc=True)
@@ -1012,7 +1009,7 @@ def replace_class_node(
     # If we explicitly passed a new base with common suffix to an old base, it is for switching the prefix
     # e.g. if the "natural" parent class is `PreTrainedModel` but we wanted to rename it to `PreTrainedVisionModel`
     additional_bases = [base for base in all_bases if base != original_super_class]
-    new_bases = []
+    new_class_bases = []
     for original_base in original_modeling_node.bases:
         new_base = original_base
         # we only potentially switch base for Name-based bases, not Attribute
@@ -1024,10 +1021,10 @@ def replace_class_node(
                     new_name_node = original_base.value.with_changes(value=additional_base_name)
                     new_base = original_base.with_changes(value=new_name_node)
                     break
-        new_bases.append(new_base)
+        new_class_bases.append(new_base)
 
     # Use class decorators redefined in modular file if any
-    new_decorators = (
+    new_class_decorators = (
         modular_class_node.decorators if len(modular_class_node.decorators) > 0 else original_modeling_node.decorators
     )
 
@@ -1035,9 +1032,9 @@ def replace_class_node(
     original_modeling_docstring = [
         node for node in original_modeling_node.body.body if m.matches(node, DOCSTRING_NODE)
     ]
-    modular_docstring_node = [node for node in modular_class_node.body.body if m.matches(node, DOCSTRING_NODE)]
+    modular_docstring = [node for node in modular_class_node.body.body if m.matches(node, DOCSTRING_NODE)]
     # Use class docstring in modular if any, else original modeling code docstring
-    new_docstring = modular_docstring_node if len(modular_docstring_node) > 0 else original_modeling_docstring
+    new_class_docstring = modular_docstring if len(modular_docstring) > 0 else original_modeling_docstring
 
     # Compute new class attributes
     original_modeling_class_attributes = {
@@ -1074,22 +1071,34 @@ def replace_class_node(
         node.name.value: node for node in modular_class_node.body.body if m.matches(node, m.FunctionDef())
     }
 
-    new_methods = []
+    new_class_methods = []
     # Iterate over the methods of the original modeling code, and add them to the list of methods to add
     for name, node in original_modeling_methods.items():
         # If the method was redefined in modular, make appropriate changes to the node
         if name in modular_methods:
+            # Get the corresponding method node in modular
+            modular_node = modular_methods[name]
+
             # If we match the pattern, we should avoid inheriting the method
-            if re.match(
-                r"\ndef .*\(.*\):\n    raise.*Error\(.*", mapper.python_module.code_for_node(modular_methods[name])
-            ):
+            if re.match(r"\ndef .*\(.*\):\n    raise.*Error\(.*", mapper.python_module.code_for_node(modular_node)):
                 continue
 
+            # Compute new method docstring
+            modeling_docstring = [node_ for node_ in node.body.body if m.matches(node_, DOCSTRING_NODE)]
+            modular_docstring = [node_ for node_ in modular_node.body.body if m.matches(node_, DOCSTRING_NODE)]
+            # Use method docstring in modular if any, else original modeling code docstring
+            new_body = (
+                modular_node.body.body
+                if len(modular_docstring) > 0
+                else modeling_docstring + list(modular_node.body.body)
+            )
+            new_body = modular_node.body.with_changes(body=new_body)
+
             # Use arguments as defined in the modular
-            new_params = modular_methods[name].params
+            new_params = modular_node.params
 
             # If using the `**super_kwargs` syntax in modular, merge any existing modular arg with all the original modeling ones
-            kwarg_name = getattr(modular_methods[name].params, "star_kwarg", None)
+            kwarg_name = getattr(modular_node.params, "star_kwarg", None)
             if kwarg_name and kwarg_name.name.value == "super_kwargs":
                 original_modeling_params = {k.name.value: k for k in node.params.params}
                 modular_params = {k.name.value: k for k in new_params.params[1:]}
@@ -1097,30 +1106,28 @@ def replace_class_node(
                 new_params = new_params.with_changes(params=new_param_list, star_kwarg=node.params.star_kwarg)
 
             # Keep decorators in modular if any, else original decorators
-            new_decorators = (
-                modular_methods[name].decorators if len(modular_methods[name].decorators) > 0 else node.decorators
-            )
+            new_decorators = modular_node.decorators if len(modular_node.decorators) > 0 else node.decorators
 
             # Keep return annotation in modular if any, else original return annotation
-            new_return_annotation = modular_methods[name].returns if modular_methods[name].returns else node.returns
+            new_return_annotation = modular_node.returns if modular_node.returns else node.returns
 
             # Update the method node
             node = node.with_changes(
-                body=modular_methods[name].body,
+                body=new_body,
                 params=new_params,
                 decorators=new_decorators,
                 returns=new_return_annotation,
             )
 
-        new_methods.append(node)
+        new_class_methods.append(node)
 
     # Port new methods that are defined only in modular-file and append at the end
     for name, node in modular_methods.items():
         if name not in original_modeling_methods:
-            new_methods.append(node)
+            new_class_methods.append(node)
 
     # Recreate the whole new class body
-    new_class_body = new_docstring + new_class_attributes + new_methods
+    new_class_body = new_class_docstring + new_class_attributes + new_class_methods
 
     # Replace the calls to `super()` of the redefined modular methods with the unrolled code
     result_node = original_modeling_node.with_changes(body=cst.IndentedBlock(body=new_class_body))
@@ -1132,7 +1139,7 @@ def replace_class_node(
     new_class_body = new_replacement_class.body[0].body  # get the indented block
 
     return original_modeling_node.with_changes(
-        body=new_class_body, decorators=new_decorators, bases=new_bases, name=new_name
+        body=new_class_body, decorators=new_class_decorators, bases=new_class_bases, name=new_class_name
     )
 
 
