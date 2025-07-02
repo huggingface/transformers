@@ -222,6 +222,8 @@ class SamAttention(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.internal_dim)
         self.out_proj = nn.Linear(self.internal_dim, self.hidden_size)
 
+        self.is_causal = False
+
     def _separate_heads(self, hidden_states: Tensor, num_attention_heads: int) -> Tensor:
         batch, point_batch_size, n_tokens, channel = hidden_states.shape
         c_per_head = channel // num_attention_heads
@@ -265,7 +267,7 @@ class SamAttention(nn.Module):
             attention_mask=attention_similarity,
             dropout=0.0 if not self.training else self.dropout_p,
             scaling=scale,
-            is_causal=False,
+            is_causal=self.is_causal,
             **kwargs,
         )
 

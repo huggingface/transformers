@@ -38,7 +38,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, auto_docstring, logging
+from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
 from .configuration_sam2 import Sam2Config, Sam2MaskDecoderConfig, Sam2PromptEncoderConfig, Sam2VisionConfig
 
 
@@ -413,18 +413,17 @@ class Sam2VisionEncoder(nn.Module):
         pos_embed = pos_embed.permute(0, 2, 3, 1)
         return pos_embed
 
+    @can_return_tuple
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
     ) -> Union[tuple, Sam2VisionEncoderOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -459,14 +458,6 @@ class Sam2VisionEncoder(nn.Module):
             fpn_hidden_states[-self.num_feature_levels :][::-1],
             fpn_position_encoding[-self.num_feature_levels :][::-1],
         )
-
-        if not return_dict:
-            outputs = (hidden_states, fpn_hidden_states, fpn_position_encoding)
-            if output_hidden_states:
-                outputs = outputs + (all_hidden_states,)
-            if output_attentions:
-                outputs = outputs + (all_self_attentions,)
-            return outputs
 
         return Sam2VisionEncoderOutput(
             last_hidden_state=hidden_states,
@@ -874,6 +865,9 @@ class Sam2MaskDecoder(nn.Module):
 
         self.num_multimask_outputs = config.num_multimask_outputs
         self.num_mask_tokens = config.num_multimask_outputs + 1
+        self.dynamic_multimask_via_stability = config.dynamic_multimask_via_stability
+        self.dynamic_multimask_stability_delta = config.dynamic_multimask_stability_delta
+        self.dynamic_multimask_stability_thresh = config.dynamic_multimask_stability_thresh
 
         self.iou_token = nn.Embedding(1, self.hidden_size)
         self.mask_tokens = nn.Embedding(self.num_mask_tokens, self.hidden_size)
@@ -912,6 +906,53 @@ class Sam2MaskDecoder(nn.Module):
 
         self.obj_score_token = nn.Embedding(1, self.hidden_size)
         self.pred_obj_score_head = Sam2FeedForward(self.hidden_size, self.hidden_size, 1, 3, activation="relu")
+
+    def _get_stability_scores(self, mask_logits):
+        """
+        Compute stability scores of the mask logits based on the IoU between upper and
+        lower thresholds.
+        """
+        mask_logits = mask_logits.flatten(-2)
+        stability_delta = self.dynamic_multimask_stability_delta
+        area_i = torch.sum(mask_logits > stability_delta, dim=-1).float()
+        area_u = torch.sum(mask_logits > -stability_delta, dim=-1).float()
+        stability_scores = torch.where(area_u > 0, area_i / area_u, 1.0)
+        return stability_scores
+
+    def _dynamic_multimask_via_stability(self, all_mask_logits, all_iou_scores):
+        """
+        When outputting a single mask, if the stability score from the current single-mask
+        output (based on output token 0) falls below a threshold, we instead select from
+        multi-mask outputs (based on output token 1~3) the mask with the highest predicted
+        IoU score. This is intended to ensure a valid mask for both clicking and tracking.
+        """
+        # The best mask from multimask output tokens (1~3)
+        multimask_logits = all_mask_logits[:, :, 1:, :, :]
+        multimask_iou_scores = all_iou_scores[:, :, 1:]
+        best_scores_inds = torch.argmax(multimask_iou_scores, dim=-1)
+        batch_inds = torch.arange(multimask_iou_scores.size(0), device=all_iou_scores.device)
+        point_batch_inds = torch.arange(multimask_iou_scores.size(1), device=all_iou_scores.device)
+        best_multimask_logits = multimask_logits[batch_inds, point_batch_inds, best_scores_inds]
+        best_multimask_iou_scores = multimask_iou_scores[batch_inds, point_batch_inds, best_scores_inds]
+
+        # The mask from singlemask output token 0 and its stability score
+        singlemask_logits = all_mask_logits[:, :, 0:1, :, :]
+        singlemask_iou_scores = all_iou_scores[:, :, 0:1]
+        stability_scores = self._get_stability_scores(singlemask_logits)
+        is_stable = stability_scores >= self.dynamic_multimask_stability_thresh
+
+        # Dynamically fall back to best multimask output upon low stability scores.
+        mask_logits_out = torch.where(
+            is_stable[..., None, None].expand_as(singlemask_logits),
+            singlemask_logits,
+            best_multimask_logits,
+        )
+        iou_scores_out = torch.where(
+            is_stable.expand_as(singlemask_iou_scores),
+            singlemask_iou_scores,
+            best_multimask_iou_scores,
+        )
+        return mask_logits_out, iou_scores_out
 
     def forward(
         self,
@@ -1003,10 +1044,16 @@ class Sam2MaskDecoder(nn.Module):
         # Select the correct mask or masks for output
         if multimask_output:
             mask_slice = slice(1, None)
+            masks = masks[:, :, mask_slice, :, :]
+            iou_pred = iou_pred[:, :, mask_slice]
+        elif self.dynamic_multimask_via_stability and not self.training:
+            mask_slice = slice(0, 1)
+            masks, iou_pred = self._dynamic_multimask_via_stability(masks, iou_pred)
         else:
             mask_slice = slice(0, 1)
-        masks = masks[:, :, mask_slice, :, :]
-        iou_pred = iou_pred[:, :, mask_slice]
+            masks = masks[:, :, mask_slice, :, :]
+            iou_pred = iou_pred[:, :, mask_slice]
+
         sam_tokens_out = mask_tokens_out[:, :, mask_slice]  # [b, 3, c] shape
         outputs = (masks, iou_pred, sam_tokens_out, object_score_logits)
 
@@ -1416,6 +1463,8 @@ class Sam2Attention(nn.Module):
         self.v_proj = nn.Linear(self.kv_in_dim, self.internal_dim)
         self.out_proj = nn.Linear(self.internal_dim, self.hidden_size)
 
+        self.is_causal = False
+
     def _separate_heads(self, hidden_states: Tensor, num_attention_heads: int) -> Tensor:
         batch, point_batch_size, n_tokens, channel = hidden_states.shape
         c_per_head = channel // num_attention_heads
@@ -1459,7 +1508,7 @@ class Sam2Attention(nn.Module):
             attention_mask=attention_similarity,
             dropout=0.0 if not self.training else self.dropout_p,
             scaling=scale,
-            is_causal=False,
+            is_causal=self.is_causal,
             **kwargs,
         )
 
@@ -2242,13 +2291,11 @@ class Sam2Model(Sam2PreTrainedModel):
         pixel_values: torch.FloatTensor,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-        return_dict: bool = True,
     ):
         vision_outputs = self.vision_encoder(
             pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
         feature_maps = vision_outputs[1]
@@ -2265,6 +2312,7 @@ class Sam2Model(Sam2PreTrainedModel):
 
         return feature_maps, feature_maps_position_embeddings, vision_hidden_states, vision_attentions
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -2280,7 +2328,6 @@ class Sam2Model(Sam2PreTrainedModel):
         target_embedding: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs,
     ) -> list[dict[str, torch.Tensor]]:
         r"""
@@ -2365,7 +2412,6 @@ class Sam2Model(Sam2PreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if pixel_values is None and image_embeddings is None:
             raise ValueError("Either pixel_values or image_embeddings must be provided.")
@@ -2410,7 +2456,6 @@ class Sam2Model(Sam2PreTrainedModel):
                     pixel_values,
                     output_attentions=output_attentions,
                     output_hidden_states=output_hidden_states,
-                    return_dict=return_dict,
                 )
             )
             # flatten NxCxHxW to HWxNxC
@@ -2432,14 +2477,6 @@ class Sam2Model(Sam2PreTrainedModel):
         if input_points is not None and input_labels is None:
             input_labels = torch.ones_like(input_points[:, :, :, 0], dtype=torch.int, device=input_points.device)
 
-        # if input_points is not None and image_embeddings[-1].shape[1] != input_points.shape[0]:
-        #     raise ValueError(
-        #         "The batch size of the image embeddings and the input points must be the same. ",
-        #         "Got {} and {} respectively.".format(image_embeddings[-1].shape[1], input_points.shape[0]),
-        #         " if you want to pass multiple points for the same image, make sure that you passed ",
-        #         " input_points of shape (batch_size, point_batch_size, num_points_per_image, 3) and ",
-        #         " input_labels of shape (batch_size, point_batch_size, num_points_per_image)",
-        #     )
         if input_points is None:
             # If no points are provide, pad with an empty point (with label -1)
             input_points = torch.zeros(batch_size, point_batch_size, 1, 2, device=image_embeddings[-1].device)
@@ -2447,11 +2484,9 @@ class Sam2Model(Sam2PreTrainedModel):
                 batch_size, point_batch_size, 1, dtype=torch.int32, device=image_embeddings[-1].device
             )
 
-        # b) Handle mask prompts
         if input_masks is not None:
             # If mask_inputs is provided, downsize it into low-res mask input if needed
             # and feed it as a dense mask prompt into the SAM mask encoder
-            assert len(input_masks.shape) == 4 and input_masks.shape[:2] == (batch_size, 1)
             if input_masks.shape[-2:] != self.prompt_encoder.image_embedding_size:
                 input_masks = F.interpolate(
                     input_masks.float(),
@@ -2522,15 +2557,6 @@ class Sam2Model(Sam2PreTrainedModel):
             low_res_masks = low_res_multimasks.float()
             high_res_masks = None
             obj_ptr = None
-
-        if not return_dict:
-            output = (iou_scores, low_res_masks, high_res_masks, obj_ptr, object_score_logits, image_embeddings)
-            if output_hidden_states:
-                output = output + (vision_hidden_states,)
-
-            # if output_attentions:
-            # output = output + (vision_attentions, mask_decoder_attentions)
-            return output
 
         return Sam2ImageSegmentationOutput(
             iou_scores=iou_scores,
@@ -3039,9 +3065,9 @@ class Sam2Model(Sam2PreTrainedModel):
     def _use_mask_as_output(self, backbone_features, high_res_features, mask_inputs):
         """
         Directly turn binary `mask_inputs` into a output mask logits without using SAM.
-        (same input and output shapes as in _forward_sam_heads above).
+        (same input and output shapes as in forward above).
         """
-        # Use -10/+10 as logits for neg/pos pixels (very close to 0/1 in prob after sigmoid).
+        # Use -10/+20 as logits for neg/pos pixels (very close to 0/1 in prob after sigmoid).
         out_scale, out_bias = 20.0, -10.0  # sigmoid(-10.0)=4.5398e-05
         mask_inputs_float = mask_inputs.float()
         high_res_masks = mask_inputs_float * out_scale + out_bias

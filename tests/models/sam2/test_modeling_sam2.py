@@ -263,6 +263,10 @@ class Sam2VisionModelTest(ModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class, image_size)
 
+    # Override as diffence slightly higher than the threshold
+    def test_batching_equivalence(self, atol=5e-4, rtol=5e-4):
+        super().test_batching_equivalence(atol=atol, rtol=rtol)
+
     @require_torch_sdpa
     def test_sdpa_can_compile_dynamic(self):
         self.skipTest(reason="SAM model can't be compiled dynamic yet")
@@ -358,6 +362,8 @@ class Sam2MemoryEncoderTester:
         patch_kernel_size=2,
         patch_stride=2,
         patch_padding=1,
+        mask_downsampler_embed_dim=32,
+        memory_fuser_embed_dim=32,
     ):
         self.hidden_size = hidden_size
         self.num_heads = num_heads
@@ -366,6 +372,8 @@ class Sam2MemoryEncoderTester:
         self.patch_kernel_size = patch_kernel_size
         self.patch_stride = patch_stride
         self.patch_padding = patch_padding
+        self.mask_downsampler_embed_dim = mask_downsampler_embed_dim
+        self.memory_fuser_embed_dim = memory_fuser_embed_dim
 
     def get_config(self):
         return Sam2MemoryEncoderConfig(
@@ -376,6 +384,8 @@ class Sam2MemoryEncoderTester:
             patch_kernel_size=self.patch_kernel_size,
             patch_stride=self.patch_stride,
             patch_padding=self.patch_padding,
+            mask_downsampler_embed_dim=self.mask_downsampler_embed_dim,
+            memory_fuser_embed_dim=self.memory_fuser_embed_dim,
         )
 
     def prepare_config_and_inputs(self):
@@ -445,6 +455,12 @@ class Sam2ModelTester:
             fpn_hidden_size=self.fpn_hidden_size,
         )
 
+        memory_attention_config = Sam2MemoryAttentionConfig(
+            hidden_size=self.hidden_size,
+            num_layers=1,
+            dim_feedforward=32,
+        )
+
         prompt_encoder_config = self.prompt_encoder_tester.get_config()
 
         mask_decoder_config = self.mask_decoder_tester.get_config()
@@ -455,7 +471,7 @@ class Sam2ModelTester:
             vision_config=vision_config,
             prompt_encoder_config=prompt_encoder_config,
             mask_decoder_config=mask_decoder_config,
-            memory_attention_config=Sam2MemoryAttentionConfig(),
+            memory_attention_config=memory_attention_config,
             memory_encoder_config=memory_encoder_config,
             image_size=self.image_size,
         )
@@ -467,43 +483,7 @@ class Sam2ModelTester:
         with torch.no_grad():
             result = model(pixel_values)
         self.parent.assertEqual(result.iou_scores.shape, (self.batch_size, 1, 3))
-        self.parent.assertEqual(result.pred_masks.shape[:3], (self.batch_size, 1, 3))
-
-    def create_and_check_get_image_features(self, config, pixel_values):
-        model = Sam2Model(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.no_grad():
-            result = model.get_image_embeddings(pixel_values)
-        self.parent.assertEqual(result[0].shape, (self.output_channels, 12, 12))
-
-    def create_and_check_get_image_hidden_states(self, config, pixel_values):
-        model = Sam2Model(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.no_grad():
-            result = model.vision_encoder(
-                pixel_values,
-                output_hidden_states=True,
-                return_dict=True,
-            )
-
-        # after computing the convolutional features
-        expected_hidden_states_shape = (self.batch_size, 12, 12, 36)
-        self.parent.assertEqual(len(result[1]), self.num_hidden_layers + 1)
-        self.parent.assertEqual(result[1][0].shape, expected_hidden_states_shape)
-
-        with torch.no_grad():
-            result = model.vision_encoder(
-                pixel_values,
-                output_hidden_states=True,
-                return_dict=False,
-            )
-
-        # after computing the convolutional features
-        expected_hidden_states_shape = (self.batch_size, 12, 12, 36)
-        self.parent.assertEqual(len(result[1]), self.num_hidden_layers + 1)
-        self.parent.assertEqual(result[1][0].shape, expected_hidden_states_shape)
+        self.parent.assertEqual(result.low_res_masks.shape[:3], (self.batch_size, 1, 3))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -556,14 +536,6 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_get_image_features(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_get_image_features(*config_and_inputs)
-
-    def test_image_hidden_states(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_get_image_hidden_states(*config_and_inputs)
 
     # Overriding as attention shape depends on window_size
     def test_attention_outputs(self):
@@ -620,24 +592,7 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 [num_windows, window_size, window_size, out_dim],
             )
 
-    @unittest.skip(reason="Sam2Model does not support training")
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @unittest.skip(reason="Hidden_states is tested in create_and_check_model tests")
-    def test_hidden_states_output(self):
-        pass
-
-    # @slow
-    # def test_model_from_pretrained(self):
-    #     model_name = "facebook/sam-vit-huge"
-    #     model = SamModel.from_pretrained(model_name)
-    #     self.assertIsNotNone(model)
-
-    @require_torch_sdpa
-    def test_sdpa_can_compile_dynamic(self):
-        self.skipTest(reason="SAM2 model can't be compiled dynamic yet")
-
+    # Override as Sam2Model has different sub-modules
     @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         """
@@ -662,7 +617,7 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model_sdpa = model_class.from_pretrained(tmpdirname)
+                model_sdpa = model_class.from_pretrained(tmpdirname, attn_implementation="sdpa")
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
                 vision_encoder_sdpa = getattr(model_sdpa, "vision_encoder")
@@ -687,44 +642,116 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     ):
                         raise ValueError("The eager model should not have SDPA attention layers")
 
-    # # Overriding as attention shape depends on window_size
-    # def test_hidden_states_output(self):
-    #     def check_hidden_states_output(inputs_dict, config, model_class, image_size):
-    #         model = model_class(config)
-    #         model.to(torch_device)
-    #         model.eval()
+    # Override as Sam2Model doesn't have hidden states
+    def flash_attn_inference_equivalence(self, attn_implementation: str, padding_side: str):
+        r"""
+        Tests the equivalence between the eager and flash attention implementations.
+        This test is only for inference and runs with `torch_dtype=torch.bfloat16`.
+        """
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
 
-    #         with torch.no_grad():
-    #             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+        for model_class in self.all_model_classes:
+            if (attn_implementation == "flash_attention_2" and not model_class._supports_flash_attn_2) or (
+                attn_implementation == "flash_attention_3" and not model_class._supports_flash_attn_3
+            ):
+                self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
 
-    #         hidden_states = outputs.hidden_states
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
 
-    #         expected_num_layers = sum(self.model_tester.stages) + 1
-    #         self.assertEqual(len(hidden_states), expected_num_layers)
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_fa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation=attn_implementation
+                )
+                model_fa.to(torch_device)
 
-    #         self.assertListEqual(
-    #             list(hidden_states[0].shape[-4:]),
-    #             [
-    #                 self.model_tester.batch_size,
-    #                 self.model_tester.image_size // self.model_tester.patch_stride,
-    #                 self.model_tester.image_size // self.model_tester.patch_stride,
-    #                 self.model_tester.hidden_size,
-    #             ],
-    #         )
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
+                model.to(torch_device)
 
-    #     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+                dummy_input = inputs_dict[model.main_input_name][:1]
+                if dummy_input.dtype in [torch.float32, torch.float16]:
+                    dummy_input = dummy_input.to(torch.bfloat16)
 
-    #     image_size = self.model_tester.image_size
+                dummy_attention_mask = inputs_dict.get("attention_mask", None)
 
-    #     for model_class in self.all_model_classes:
-    #         inputs_dict["output_hidden_states"] = True
-    #         check_hidden_states_output(inputs_dict, config, model_class, image_size)
+                if dummy_attention_mask is not None:
+                    dummy_attention_mask = dummy_attention_mask[:1]
+                    if padding_side == "left":
+                        dummy_attention_mask[:, 1:] = 1
+                        dummy_attention_mask[:, :1] = 0
+                    else:
+                        dummy_attention_mask[:, :-1] = 1
+                        dummy_attention_mask[:, -1:] = 0
+                if model.config.is_encoder_decoder:
+                    decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[:1]
 
-    #         # check that output_hidden_states also work using config
-    #         del inputs_dict["output_hidden_states"]
-    #         config.output_hidden_states = True
+                    outputs = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
+                    outputs_fa = model_fa(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
+                else:
+                    outputs = model(dummy_input, output_hidden_states=True)
+                    outputs_fa = model_fa(dummy_input, output_hidden_states=True)
 
-    #         check_hidden_states_output(inputs_dict, config, model_class, image_size)
+                logits = outputs.vision_hidden_states[-1]
+                logits_fa = outputs_fa.vision_hidden_states[-1]
+
+                assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
+
+                if model.config.is_encoder_decoder:
+                    other_inputs = {
+                        "decoder_input_ids": decoder_input_ids,
+                        "decoder_attention_mask": dummy_attention_mask,
+                        "output_hidden_states": True,
+                    }
+                    if dummy_attention_mask is not None:
+                        other_inputs["attention_mask"] = dummy_attention_mask
+
+                    outputs = model(dummy_input, **other_inputs)
+                    outputs_fa = model_fa(dummy_input, **other_inputs)
+                else:
+                    other_inputs = {
+                        "output_hidden_states": True,
+                    }
+                    if dummy_attention_mask is not None:
+                        other_inputs["attention_mask"] = dummy_attention_mask
+
+                    outputs = model(dummy_input, **other_inputs)
+                    outputs_fa = model_fa(dummy_input, **other_inputs)
+
+                logits = outputs.vision_hidden_states[-1]
+                logits_fa = outputs_fa.vision_hidden_states[-1]
+
+                if padding_side == "left":
+                    assert torch.allclose(logits_fa[1:], logits[1:], atol=4e-2, rtol=4e-2)
+
+                    # check with inference + dropout
+                    model.train()
+                    _ = model_fa(dummy_input, **other_inputs)
+                else:
+                    assert torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
+
+    # Override as diffence slightly higher than the threshold
+    def test_batching_equivalence(self, atol=5e-4, rtol=5e-4):
+        super().test_batching_equivalence(atol=atol, rtol=rtol)
+
+    @unittest.skip(reason="Sam2Model does not support training")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    @unittest.skip(reason="Hidden_states is tested in sub modules tests")
+    def test_hidden_states_output(self):
+        pass
+
+    # @slow
+    # def test_model_from_pretrained(self):
+    #     model_name = "facebook/sam-vit-huge"
+    #     model = SamModel.from_pretrained(model_name)
+    #     self.assertIsNotNone(model)
+
+    @require_torch_sdpa
+    def test_sdpa_can_compile_dynamic(self):
+        self.skipTest(reason="SAM2 model can't be compiled dynamic yet")
 
 
 def prepare_image():

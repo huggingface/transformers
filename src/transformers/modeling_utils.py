@@ -4572,7 +4572,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             local_files_only = True
         # Load config if we don't provide a configuration
         if not isinstance(config, PretrainedConfig):
-            print("here", cls.config_class)
             config_path = config if config is not None else pretrained_model_name_or_path
             config, model_kwargs = cls.config_class.from_pretrained(
                 config_path,

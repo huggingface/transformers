@@ -89,6 +89,9 @@ class Sam2VisionConfig(PretrainedConfig):
 
     """
 
+    base_config_key = "vision_config"
+    model_type = "sam2_vision_model"
+
     def __init__(
         self,
         hidden_size=96,
@@ -188,6 +191,8 @@ class Sam2PromptEncoderConfig(PretrainedConfig):
             The scale factor for the prompt encoder.
     """
 
+    base_config_key = "prompt_encoder_config"
+
     def __init__(
         self,
         hidden_size=256,
@@ -256,6 +261,8 @@ class Sam2MaskDecoderConfig(PretrainedConfig):
 
     """
 
+    base_config_key = "mask_decoder_config"
+
     def __init__(
         self,
         hidden_size=256,
@@ -267,6 +274,9 @@ class Sam2MaskDecoderConfig(PretrainedConfig):
         num_multimask_outputs=3,
         iou_head_depth=3,
         iou_head_hidden_dim=256,
+        dynamic_multimask_via_stability=True,
+        dynamic_multimask_stability_delta=0.05,
+        dynamic_multimask_stability_thresh=0.98,
         feed_forward_hidden_act="relu",
         two_way_transformer_activation="relu",
         **kwargs,
@@ -279,6 +289,9 @@ class Sam2MaskDecoderConfig(PretrainedConfig):
         self.iou_head_depth = iou_head_depth
         self.iou_head_hidden_dim = iou_head_hidden_dim
         self.feed_forward_hidden_act = feed_forward_hidden_act
+        self.dynamic_multimask_via_stability = dynamic_multimask_via_stability
+        self.dynamic_multimask_stability_delta = dynamic_multimask_stability_delta
+        self.dynamic_multimask_stability_thresh = dynamic_multimask_stability_thresh
 
         # TwoWayTransformer configuration
         self.num_hidden_layers = num_hidden_layers
@@ -328,6 +341,8 @@ class Sam2MemoryAttentionConfig(PretrainedConfig):
             Whether to apply positional encoding at the queries of the cross-attention of the memory attention module.
 
     """
+
+    base_config_key = "memory_attention_config"
 
     def __init__(
         self,
@@ -403,6 +418,8 @@ class Sam2MemoryEncoderConfig(PretrainedConfig):
             The non-linear activation function in the memory fuser.
 
     """
+
+    base_config_key = "memory_encoder_config"
 
     def __init__(
         self,
