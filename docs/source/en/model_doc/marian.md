@@ -104,7 +104,10 @@ visualizer("Hello, how are you?")
 
    ```py
    add code snippet here
-   
+
+## MarianConfig
+
+[[autodoc]] MarianConfig
 
 
 
