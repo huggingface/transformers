@@ -1,5 +1,5 @@
 """
-torchrun --nproc_per_node=2 hf_generate.py 
+TP_SIZE=8 torchrun --nproc_per_node=8 hf_generate.py 
 """
 
 from transformers import AutoTokenizer, OpenAIMoeForCausalLM
@@ -11,7 +11,11 @@ from torch.distributed.tensor.experimental import context_parallel
 from torch.nn.attention import SDPBackend, sdpa_kernel
 from torch.distributed.device_mesh import DeviceMesh
 
-model_id = "ft-hf-o-c/random-checkpoint-converted-20b"
+# model_id = "ft-hf-o-c/random-checkpoint-converted-20b"
+# openai = "/fsx/vb/pytorch-os-mini-final-quantized-moe-sharded"
+
+# model_id = "/scratch/pytorch-os-mini-final-quantized-moe-sharded_hf"
+model_id = "pytorch-os-mini-final-quantized-moe-sharded_hf"
 
 
 # torch.use_deterministic_algorithms(True)
@@ -27,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 def main():
-    tp_size = int(os.environ.get("TP_SIZE", 4))
+    tp_size = int(os.environ.get("TP_SIZE", 8))
 
     # Initialize distributed environment
     if "RANK" in os.environ and "WORLD_SIZE" in os.environ:
@@ -51,11 +55,13 @@ def main():
     #     {"role": "user", "content": "Who are you?"},
     # ]
     # inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True)
-    inputs = tokenizer("Hello! How are you?", return_tensors="pt")
+    # inputs = tokenizer("Hello! How are you?", return_tensors="pt")
+    inputs = tokenizer("Who are you? And who made you?", return_tensors="pt")
     model = OpenAIMoeForCausalLM.from_pretrained(
         model_id,
         device_mesh=tp_mesh if dist.is_initialized() else None,
         tp_plan="auto",
+        enable_expert_parallel=os.environ.get("ENABLE_EXPERT_PARALLEL", "0") == "1",
         tp_size=tp_size,
         torch_dtype=torch.bfloat16,
         # torch_dtype=torch.float32,
@@ -66,7 +72,7 @@ def main():
     logger.info(f"Using device: {device} for non-model tensors")
     model.eval()
 
-    outputs = model.generate(**inputs.to(model.device), max_new_tokens=100)
+    outputs = model.generate(**inputs.to(model.device), max_new_tokens=100, use_cache=False, do_sample=False)
     outputs = tokenizer.batch_decode(outputs[:, inputs["input_ids"].shape[-1]:])
     print(outputs[0])
 

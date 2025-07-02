@@ -19,6 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from typing import Callable, List, Optional, Tuple, Union
+import torch.distributed as dist
 
 import torch
 from torch import nn
@@ -64,7 +65,9 @@ class OpenAIMoeRMSNorm(nn.Module):
 class OpenAIMoeExperts(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.num_experts = config.num_local_experts
+        self.enable_expert_parallel = config.enable_expert_parallel
+        self.ep_size = dist.get_world_size() if (self.enable_expert_parallel and dist.is_initialized()) else 1
+        self.num_experts = config.num_local_experts // self.ep_size
         self.intermediate_size = config.intermediate_size
         self.hidden_size = config.hidden_size
         self.expert_dim = self.intermediate_size
@@ -119,20 +122,22 @@ class OpenAIMoeExperts(nn.Module):
             gate, up = gate_up.chunk(2, dim=-1)  # not supported for DTensors
             glu = gate * torch.sigmoid(gate * self.alpha)
             next_states = torch.bmm(((up + 1) * glu), self.down_proj)
-            torch.distributed.all_reduce(next_states, op=torch.distributed.ReduceOp.SUM) # TODO: if we can attach hook to `down_proj` we can move this to hook
-            # add bias only on TP=0 so that we avoid adding it for all TPs
-            if torch.distributed.get_rank() == 0:
-                next_states = next_states + self.down_proj_bias[..., None, :]
+            if not self.enable_expert_parallel:
+                torch.distributed.all_reduce(next_states, op=torch.distributed.ReduceOp.SUM) # TODO: if we can attach hook to `down_proj` we can move this to hook
+            next_states = next_states + self.down_proj_bias[..., None, :]
             next_states = next_states.view(-1, self.hidden_size)
         return next_states, None # bcz GatherParallel allreduces first element
-
 
 class OpenAIMoeMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
+        # self.top_k = 1
         self.hidden_dim = config.hidden_size
-        self.num_local_experts = config.num_local_experts
+        self.enable_expert_parallel = config.enable_expert_parallel
+        self.ep_size = dist.get_world_size() if (self.enable_expert_parallel and dist.is_initialized()) else 1
+        self.ep_rank = dist.get_rank() if (self.enable_expert_parallel and dist.is_initialized()) else 0
+        self.num_local_experts = config.num_local_experts // self.ep_size # TODO: bad naming
         self.experts = OpenAIMoeExperts(config)
         self.router = nn.Linear(config.hidden_size, config.num_local_experts, bias=True)
 
@@ -140,17 +145,23 @@ class OpenAIMoeMLP(nn.Module):
         # we don't slice weight as its not compile compatible
         batch_size = hidden_states.shape[0]
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
-        router_logits = self.router(hidden_states)
-        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)
+        router_logits = self.router(hidden_states) # (seq_len, num_experts)
+        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1) # (seq_len, top_k)
         router_top_value = torch.nn.functional.softmax(router_top_value, dim=1)
-        router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value).transpose(0, 1)
-        routed_out, _ = self.experts(hidden_states, router_indices, router_top_value) #TODO: router_indices isn't used inside this func
+        router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value).transpose(0, 1) # (num_experts, seq_len)
+        if self.enable_expert_parallel:
+            local_router_scores = router_scores[self.ep_rank * self.num_local_experts:(self.ep_rank + 1) * self.num_local_experts]
+        else:
+            local_router_scores = router_scores
+        routed_out, _ = self.experts(hidden_states, router_indices, local_router_scores) #TODO: router_indices isn't used inside this func
         if self.training:
             output_states = routed_out.view(batch_size, -1, self.hidden_dim)
         else:
-            routed_out = routed_out.view(self.num_local_experts, -1, self.hidden_dim) * router_scores[..., None]
+            routed_out = routed_out.view(self.num_local_experts, -1, self.hidden_dim) * local_router_scores[..., None] # we're throwing away computed routed_out for rest of experts
             output_states = routed_out.view(self.num_local_experts, batch_size, -1, self.hidden_dim).sum(dim=0)
-        return output_states, router_scores
+            if self.enable_expert_parallel:
+                torch.distributed.all_reduce(output_states, op=torch.distributed.ReduceOp.SUM) # TODO: move to hook
+        return output_states, local_router_scores
 
 
 class OpenAIMoeRotaryEmbedding(nn.Module):

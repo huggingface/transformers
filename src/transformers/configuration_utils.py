@@ -302,6 +302,9 @@ class PretrainedConfig(PushToHubMixin):
         self._attn_implementation_internal = kwargs.pop("attn_implementation", None)
         self._attn_implementation_autoset = False
 
+        # Expert parallelism
+        self.enable_expert_parallel = kwargs.pop("enable_expert_parallel", False)
+
         # Drop the transformers version info
         self.transformers_version = kwargs.pop("transformers_version", None)
 
@@ -1017,6 +1020,8 @@ class PretrainedConfig(PushToHubMixin):
             del d["_attn_implementation_internal"]
         if "_attn_implementation_autoset" in d:
             del d["_attn_implementation_autoset"]
+        if "enable_expert_parallel" in d:
+            del d["enable_expert_parallel"]
         # Do not serialize `base_model_tp_plan` for now
         if "base_model_tp_plan" in d:
             del d["base_model_tp_plan"]
