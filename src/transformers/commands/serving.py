@@ -402,7 +402,7 @@ class ServeCommand(BaseTransformersCLICommand):
         if self.last_messages is None:
             req_continues_last_messages = False
         # The new request has fewer rounds of conversation: this is a new request
-        elif len(self.last_messages) > len(req.messages):
+        elif len(self.last_messages) >= len(req.messages):
             req_continues_last_messages = False
         # Otherwise, check that the last messages are a subset of the new request
         else:
