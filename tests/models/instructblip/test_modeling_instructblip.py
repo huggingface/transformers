@@ -20,7 +20,6 @@ import unittest
 import numpy as np
 import pytest
 import requests
-from parameterized import parameterized
 
 from transformers import (
     CONFIG_MAPPING,
@@ -522,12 +521,6 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(
-        "InstructBLIP cannot generate only from input ids, and requires pixel values in all cases to be present"
-    )
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -655,13 +648,6 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
 
             # They should result in very similar logits
             torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
-
-    @unittest.skip(
-        "InstructBLIP cannot generate only from input ids, and requires pixel values in all cases to be present"
-    )
-    @parameterized.expand([("greedy", 1), ("beam search", 2)])
-    def test_generate_from_inputs_embeds(self, _, num_beams):
-        pass
 
     @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
