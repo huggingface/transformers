@@ -101,6 +101,10 @@ jobs:
         working-directory: /transformers
         run: python3 -m pip install --no-cache-dir git+https://github.com/huggingface/datasets.git@main
 
+      - name: Install torchcodec
+        working-directory: /transformers
+        run: python3 -m pip install --no-cache-dir torch torchvision torchaudio torchcodec --index-url https://download.pytorch.org/whl/cu126
+
       - name: Show installed libraries and their versions
         working-directory: /transformers
         run: pip freeze
