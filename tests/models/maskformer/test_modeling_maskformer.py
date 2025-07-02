@@ -520,7 +520,10 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
             ]
         ).to(torch_device)
         torch.allclose(
-            outputs.encoder_last_hidden_state[0, 0, :3, :3], expected_slice_hidden_state, atol=TOLERANCE, rtol=TOLERANCE,
+            outputs.encoder_last_hidden_state[0, 0, :3, :3],
+            expected_slice_hidden_state,
+            atol=TOLERANCE,
+            rtol=TOLERANCE,
         )
 
         expected_slice_hidden_state = torch.tensor(
@@ -531,7 +534,10 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
             ]
         ).to(torch_device)
         torch.allclose(
-            outputs.pixel_decoder_last_hidden_state[0, 0, :3, :3], expected_slice_hidden_state, atol=TOLERANCE, rtol=TOLERANCE,
+            outputs.pixel_decoder_last_hidden_state[0, 0, :3, :3],
+            expected_slice_hidden_state,
+            atol=TOLERANCE,
+            rtol=TOLERANCE,
         )
 
         expected_slice_hidden_state = torch.tensor(
@@ -542,7 +548,10 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
             ]
         ).to(torch_device)
         torch.allclose(
-            outputs.transformer_decoder_last_hidden_state[0, :3, :3], expected_slice_hidden_state, atol=TOLERANCE, rtol=TOLERANCE,
+            outputs.transformer_decoder_last_hidden_state[0, :3, :3],
+            expected_slice_hidden_state,
+            atol=TOLERANCE,
+            rtol=TOLERANCE,
         )
 
     def test_inference_instance_segmentation_head(self):
@@ -582,9 +591,9 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
         )
         expected_slice = torch.tensor(
             [
-                [1.6507e+00, -5.2568e+00, -3.3520e+00],
-                [3.5767e-02, -5.9023e+00, -2.9313e+00],
-                [-6.2712e-04, -7.7627e+00, -5.1268e+00],
+                [1.6507e00, -5.2568e00, -3.3520e00],
+                [3.5767e-02, -5.9023e00, -2.9313e00],
+                [-6.2712e-04, -7.7627e00, -5.1268e00],
             ]
         ).to(torch_device)
         torch.testing.assert_close(

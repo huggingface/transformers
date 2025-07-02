@@ -301,7 +301,7 @@ class MobileNetV2ModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1001))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([ 0.2445, -1.1970,  0.1868]).to(torch_device)
+        expected_slice = torch.tensor([0.2445, -1.1970, 0.1868]).to(torch_device)
 
         torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=2e-4, atol=2e-4)
 
