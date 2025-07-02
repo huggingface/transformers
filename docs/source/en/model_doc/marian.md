@@ -154,7 +154,6 @@ print(result)
 
 - Based on Transformer encoder-decoder architecture with 6 layers each.
 
-- Originally trained with the Marian C++ framework for efficiency.
 
 
 
