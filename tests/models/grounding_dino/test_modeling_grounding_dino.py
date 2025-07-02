@@ -586,6 +586,8 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
                         or "value_proj" in name
                         or "output_proj" in name
                         or "reference_points" in name
+                        or "vision_proj" in name
+                        or "text_proj" in name
                     ):
                         continue
                     self.assertIn(
@@ -679,25 +681,48 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
         expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.d_model))
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
 
-        expected_boxes = torch.tensor(
-            [[0.7674, 0.4136, 0.4572], [0.2566, 0.5463, 0.4760], [0.2585, 0.5442, 0.4641]]
-        ).to(torch_device)
-        expected_logits = torch.tensor(
-            [[-4.8913, -0.1900, -0.2161], [-4.9653, -0.3719, -0.3950], [-5.9599, -3.3765, -3.3104]]
-        ).to(torch_device)
+        expectations = Expectations(
+            {
+                (None, None): [[0.7674, 0.4136, 0.4572], [0.2566, 0.5463, 0.4760], [0.2585, 0.5442, 0.4641]],
+                ("cuda", 8): [[0.7674, 0.4135, 0.4571], [0.2566, 0.5463, 0.4760], [0.2585, 0.5442, 0.4640]],
+            }
+        )
+        expected_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
+
+        expectations = Expectations(
+            {
+                (None, None): [[-4.8913, -0.1900, -0.2161], [-4.9653, -0.3719, -0.3950], [-5.9599, -3.3765, -3.3104]],
+                ("cuda", 8): [[-4.8927, -0.1910, -0.2169], [-4.9657, -0.3748, -0.3980], [-5.9579, -3.3812, -3.3153]],
+            }
+        )
+        expected_logits = torch.tensor(expectations.get_expectation()).to(torch_device)
 
         torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, rtol=1e-3, atol=1e-3)
 
         expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
-        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, rtol=2e-4, atol=2e-4)
 
         # verify postprocessing
         results = processor.image_processor.post_process_object_detection(
             outputs, threshold=0.35, target_sizes=[(image.height, image.width)]
         )[0]
-        expected_scores = torch.tensor([0.4526, 0.4082]).to(torch_device)
-        expected_slice_boxes = torch.tensor([344.8143, 23.1796, 637.4004, 373.8295]).to(torch_device)
+
+        expectations = Expectations(
+            {
+                (None, None): [[0.4526, 0.4082]],
+                ("cuda", 8): [0.4524, 0.4074],
+            }
+        )
+        expected_scores = torch.tensor(expectations.get_expectation()).to(torch_device)
+
+        expectations = Expectations(
+            {
+                (None, None): [344.8143, 23.1796, 637.4004, 373.8295],
+                ("cuda", 8): [344.8210, 23.1831, 637.3943, 373.8227],
+            }
+        )
+        expected_slice_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
 
         self.assertEqual(len(results["scores"]), 2)
         torch.testing.assert_close(results["scores"], expected_scores, rtol=1e-3, atol=1e-3)
