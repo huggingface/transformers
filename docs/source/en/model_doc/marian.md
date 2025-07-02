@@ -36,7 +36,6 @@ All MarianMT models are transformer encoder-decoders with 6 layers in each compo
 
 You can find all the original MarianMT checkpoints under the [Language Technology Research Group at the University of Helsinki](https://huggingface.co/Helsinki-NLP/models?search=opus-mt) organization.
 
-The MarianMT code and framework are open source and available on [Marian GitHub](https://github.com/marian-nmt/marian).
 
 > [!TIP]
 > Click on the MarianMT models in the right sidebar to see more examples of how to apply MarianMT to different translation tasks.
