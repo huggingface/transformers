@@ -152,7 +152,6 @@ print(result)
 
 - MarianMT models are smaller than many other translation models, enabling faster inference, low memory usage, and suitability for CPU environments.
 
-- Based on Transformer encoder-decoder architecture with 6 layers each.
 
 
 
