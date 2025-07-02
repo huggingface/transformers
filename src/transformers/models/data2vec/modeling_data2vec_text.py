@@ -172,8 +172,6 @@ class Data2VecTextPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
     _supports_cache_class = True
-    # Not too much usage so low prio to fix
-    _supports_static_cache = False
 
     def _init_weights(self, module):
         """Initialize the weights"""

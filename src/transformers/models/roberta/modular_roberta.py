@@ -144,8 +144,6 @@ class RobertaPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
     _supports_cache_class = True
-    # Not too much usage so low prio to fix
-    _supports_static_cache = False
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights with BertLMPredictionHead->RobertaLMHead
     def _init_weights(self, module):

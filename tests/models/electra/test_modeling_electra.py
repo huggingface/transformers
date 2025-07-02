@@ -403,7 +403,13 @@ class ElectraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         if is_torch_available()
         else {}
     )
-    fx_compatible = True
+    fx_compatible = False  # won't be maintained
+
+    # Overwriting to add `is_decoder` flag
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
+        config, inputs = super().prepare_config_and_inputs_for_generate(batch_size)
+        config.is_decoder = True
+        return config, inputs
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -435,6 +441,7 @@ class ElectraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         for type in ["absolute", "relative_key", "relative_key_query"]:
             config_and_inputs[0].position_embedding_type = type
+            config_and_inputs[0]._attn_implementation = "eager"
             self.model_tester.create_and_check_electra_model(*config_and_inputs)
 
     def test_for_masked_lm(self):
