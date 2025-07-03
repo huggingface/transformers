@@ -23,6 +23,7 @@ from transformers.modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
 )
+from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import logging
 
@@ -79,27 +80,23 @@ class Ernie4_5RopeEmbedding(nn.Module):
 
     Args:
         head_dim (int): Dimension size of each attention head
-        compression_ratio (float, optional): Sequence length compression ratio. Defaults to 1.0.
         base (int, optional): Base value for frequency calculation. Defaults to 10000.
 
     Attributes:
         head_dim (int): Dimension size of each attention head
-        compression_ratio (float): Sequence length compression factor
         base (int): Base value for frequency calculation
     """
 
-    def __init__(self, head_dim, compression_ratio=1.0, base=10000):
+    def __init__(self, head_dim, base=10000):
         """
         Initialize RoPE embedding layer.
 
         Args:
             head_dim: Dimension of each attention head
-            compression_ratio: Scaling factor for position indices
             base: Base value for frequency calculation
         """
         super().__init__()
         self.head_dim = head_dim
-        self.compression_ratio = compression_ratio
         self.base = base
 
     def forward(self, seq_length, position_ids=None):
@@ -119,10 +116,10 @@ class Ernie4_5RopeEmbedding(nn.Module):
             position_ids = torch.arange(
                 0, seq_length, 1, dtype=torch.float32
             ).unsqueeze(1)
-            position_ids = position_ids / self.compression_ratio
+            position_ids = position_ids
             sinusoid_inp = position_ids * indices.unsqueeze(0)
         else:
-            position_ids = position_ids / self.compression_ratio
+            position_ids = position_ids
             seq_length = position_ids.shape[-1]
             sinusoid_inp = position_ids.unsqueeze(-1).to(
                 torch.float32
@@ -261,13 +258,10 @@ class Ernie4_5Attention(nn.Module):
 
         self.rotary_emb = Ernie4_5RopeEmbedding(
             self.head_dim,
-            #compression_ratio=config.compression_ratio,
-            compression_ratio=1.0,
             base=config.rope_theta,
         )
         self.config = config
 
-        self.attn_func = self.core_attn
         self.scaling = self.head_dim**-0.5
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
 
@@ -275,21 +269,14 @@ class Ernie4_5Attention(nn.Module):
         self,
         hidden_states,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        attn_mask_start_row_indices: Optional[torch.Tensor] = None,
-        position_ids: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
-        token_type_ids: Optional[Tuple[torch.Tensor]] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Compute attention outputs.
 
         Args:
             hidden_states (torch.Tensor): Input tensor [bsz, seq_len, hidden_size]
             past_key_value (Optional[Tuple[torch.Tensor, torch.Tensor]]): Cached key/value states
-            attention_mask (Optional[torch.Tensor]): Attention mask tensor
-            attn_mask_start_row_indices (Optional[torch.Tensor]): Variable length attention indices
-            position_ids (Optional[torch.Tensor]): Position indices for RoPE
             output_attentions (bool): Return attention weights if True
             use_cache (bool): Cache key/value states if True
 
@@ -415,10 +402,6 @@ class Ernie4_5DecoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        attn_mask_start_row_indices: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         use_cache: Optional[bool] = False,
@@ -427,9 +410,6 @@ class Ernie4_5DecoderLayer(nn.Module):
 
         Args:
             hidden_states (torch.Tensor): Input tensor [batch_size, seq_len, hidden_size]
-            attention_mask (Optional[torch.Tensor]): Attention mask tensor
-            attn_mask_start_row_indices (Optional[torch.Tensor]): Indices for variable length attention
-            position_ids (Optional[torch.Tensor]): Position indices for rotary embeddings
             output_attentions (Optional[bool]): Whether to return attention weights
             past_key_value (Optional[Tuple[torch.Tensor]]): Cached key/value states
             use_cache (Optional[bool]): Whether to cache key/value states
@@ -444,15 +424,11 @@ class Ernie4_5DecoderLayer(nn.Module):
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
-        (hidden_states, self_attn_weights, present_key_value) = self.self_attn(
+        hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
             past_key_value=past_key_value,
-            attention_mask=attention_mask,
-            attn_mask_start_row_indices=attn_mask_start_row_indices,
-            position_ids=position_ids,
             output_attentions=output_attentions,
             use_cache=use_cache,
-            token_type_ids=token_type_ids,
         )
         hidden_states = residual + hidden_states
 
@@ -603,10 +579,6 @@ class Ernie4_5Model(Ernie4_5PretrainedModel):
 
             layer_outputs = decoder_layer(
                 hidden_states,
-                attention_mask,
-                attn_mask_start_row_indices,
-                position_ids,
-                token_type_ids,
                 output_attentions,
                 past_key_value,
                 use_cache,
