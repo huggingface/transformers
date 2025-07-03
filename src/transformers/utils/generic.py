@@ -47,7 +47,6 @@ logger = logging.get_logger(__name__)
 if is_torch_available():
     # required for @can_return_tuple decorator to work with torchdynamo
     import torch  # noqa: F401
-    from torch._dynamo import is_compiling
 
 
 class cached_property(property):
