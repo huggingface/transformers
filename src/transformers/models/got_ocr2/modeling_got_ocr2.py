@@ -378,7 +378,7 @@ class GotOcr2VisionNeck(nn.Module):
 
 
 class GotOcr2VisionEncoder(PreTrainedModel):
-    _can_record_outputs = {"hidden_states": (GotOcr2VisionLayer, 0), "attentions": (GotOcr2VisionAttention, 1)}
+    _can_record_outputs = {"hidden_states": GotOcr2VisionLayer, "attentions": GotOcr2VisionAttention}
 
     def __init__(self, config: GotOcr2VisionConfig):
         super().__init__(config)
