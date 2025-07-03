@@ -506,7 +506,7 @@ class MoonshinePreTrainedModel(PreTrainedModel):
             1,
         ),  # The issue is that we are attaching hooks to all MoonshiAttention instances
         "hidden_states": (MoonshineDecoderLayer, 0),
-    }
+    }  # TODO arthur, how do we separate when it cross / self coming from different layer?
 
     def _init_weights(self, module):
         std = self.config.initializer_range
