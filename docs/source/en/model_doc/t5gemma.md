@@ -51,7 +51,7 @@ pipe = pipeline(
 )
 
 messages = [
-    {"role": "user", "content": "Who are you? Please, answer in pirate-speak."},
+    {"role": "user", "content": "Tell me an unknown interesting biology fact about the brain."},
 ]
 prompt = pipe.tokenizer.apply_chat_template(messages, tokenize=False)
 
@@ -74,7 +74,7 @@ model = AutoModelForSeq2SeqLM.from_pretrained(
 )
 
 messages = [
-    {"role": "user", "content": "Who are you? Please, answer in pirate-speak."},
+    {"role": "user", "content": "Tell me an unknown interesting biology fact about the brain."},
 ]
 input_ids = tokenizer.apply_chat_template(messages, return_tensors="pt", return_dict=True).to("cuda")
 
