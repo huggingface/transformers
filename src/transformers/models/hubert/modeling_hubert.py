@@ -983,6 +983,7 @@ class HubertModel(HubertPreTrainedModel):
         Example:
 
         ```python
+        >>> import torch
         >>> from transformers import AutoProcessor, HubertModel
         >>> from datasets import load_dataset
         >>> from torchcodec.decoders import AudioDecoder
