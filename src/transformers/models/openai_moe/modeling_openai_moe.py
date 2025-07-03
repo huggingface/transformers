@@ -22,6 +22,7 @@ from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 from torch import nn
+from torch.nn import functional as F
 
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -126,16 +127,18 @@ class OpenAIMoeExperts(nn.Module):
             next_states = next_states.view(num_experts, batch_size, -1, self.hidden_size) # (num_experts, batch_size, seq_len, hidden_size)
         return next_states, None
 
-class TopKRouter(nn.Linear): # TODO: if i inherit from module it'll be annoying to attach hook to parent module
+class TopKRouter(nn.Module): # TODO: if i inherit from module it'll be annoying to attach hook to parent module
     def __init__(self, config):
-        super().__init__(config.hidden_size, config.num_local_experts, bias=True)
+        super().__init__()
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
+        self.bias = nn.Parameter(torch.empty(self.num_experts))
     
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
-        router_logits = super().forward(hidden_states) # (seq_len, num_experts)
+        router_logits = F.linear(hidden_states, self.weight, self.bias) # (seq_len, num_experts)
         router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1) # (seq_len, top_k)
         router_top_value = torch.nn.functional.softmax(router_top_value, dim=1)
         router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value).transpose(0, 1) # (num_experts, seq_len)
