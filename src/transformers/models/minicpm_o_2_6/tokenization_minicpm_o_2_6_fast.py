@@ -107,3 +107,6 @@ class MiniCPM_o_2_6TokenizerFast(Qwen2TokenizerFast):
     @staticmethod
     def unescape(text: str) -> str:
         return text
+
+
+__all__ = ["MiniCPM_o_2_6TokenizerFast"]
