@@ -18,6 +18,7 @@ import re
 import time
 from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass, field
+from random import choices
 from threading import Thread
 from typing import Any, Generator, Optional
 
@@ -46,7 +47,6 @@ if is_torch_available():
         GenerationConfig,
         PreTrainedModel,
     )
-
 
 if is_pydantic_available() and is_fastapi_available() and is_uvicorn_available():
     import uvicorn
@@ -83,7 +83,7 @@ if is_pydantic_available() and is_fastapi_available() and is_uvicorn_available()
         prompt: Optional[Prompt] = None
         temperature: Optional[float] = None
         text: Optional[TextFormat] = None
-        tools: any = None
+        tools: Any = None
         top_p: Optional[float] = None
 
         # Additional options supported by the Responses API
@@ -120,7 +120,6 @@ if is_pydantic_available() and is_fastapi_available() and is_uvicorn_available()
 
 
 logger = logging.get_logger(__name__)
-
 
 # Possible tokens that indicate the start/end of a tool call
 # TODO (joao, matt): streamline tool token detection logic
@@ -293,9 +292,9 @@ class ServeCommand(BaseTransformersCLICommand):
         cb_logger = logging.get_logger("transformers.generation.continuous_batching")
         cb_logger.setLevel(logging.log_levels[self.args.log_level.lower()])
 
-    def build_chat_completion_chunk(
+    def build_chat_completions_chunk(
         self,
-        request_id: str,
+        request_id: Optional[str] = "",
         content: Optional[str] = None,
         role: Optional[str] = None,
         finish_reason: Optional[str] = None,
@@ -349,25 +348,54 @@ class ServeCommand(BaseTransformersCLICommand):
         finish_reason: Optional[str] = None,
         tool_calls: Optional[list[ChatCompletionStreamOutputDeltaToolCall]] = None,
     ) -> str:
+        _id = choices("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", k=48)
+
         payload = {
-            "object": "chat.completion.chunk",
-            "id": request_id,
-            "created": int(time.time()),
-            "model": self.loaded_model,
-            "system_fingerprint": "",
-            "choices": [
-                ChatCompletionStreamOutputChoice(
-                    delta=ChatCompletionStreamOutputDelta(
-                        role=role,
-                        content=content,
-                        tool_calls=tool_calls,
-                    ),
-                    index=0,
-                    logprobs=None,
-                    finish_reason=finish_reason,
-                ),
+            "id": f"resp_{_id}",
+            "object": "response",
+            "created_at": time.time_ns(),
+            "status": "completed",
+            "error": None,
+            "incomplete_details": None,
+            "instructions": None,
+            "max_output_tokens": None,
+            "model": "gpt-4.1-2025-04-14",
+            "output": [
+                {
+                    "type": "message",
+                    "id": f"msg_{_id}",
+                    "status": "completed",
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "output_text",
+                            "text": "In a peaceful grove beneath a silver moon, a unicorn named Lumina discovered a hidden pool that reflected the stars. As she dipped her horn into the water, the pool began to shimmer, revealing a pathway to a magical realm of endless night skies. Filled with wonder, Lumina whispered a wish for all who dream to find their own hidden magic, and as she glanced back, her hoofprints sparkled like stardust.",
+                            "annotations": [],
+                        }
+                    ],
+                }
             ],
+            "parallel_tool_calls": True,
+            "previous_response_id": None,
+            "reasoning": {"effort": None, "summary": None},
+            "store": True,
+            "temperature": 1.0,
+            "text": {"format": {"type": "text"}},
+            "tool_choice": "auto",
+            "tools": [],
+            "top_p": 1.0,
+            "truncation": "disabled",
+            "usage": {
+                "input_tokens": 36,
+                "input_tokens_details": {"cached_tokens": 0},
+                "output_tokens": 87,
+                "output_tokens_details": {"reasoning_tokens": 0},
+                "total_tokens": 123,
+            },
+            "user": None,
+            "metadata": {},
         }
+
         return f"data: {json.dumps(payload)}\n\n"
 
     def run(self):
@@ -384,7 +412,7 @@ class ServeCommand(BaseTransformersCLICommand):
                 allow_headers=["*"],
             )
 
-        @app.get("/v1/chat/completions")
+        @app.post("/v1/chat/completions")
         def chat_completion(req: ChatCompletionInput):
             if not req.stream:
                 return {"error": "Only streaming mode is supported."}
@@ -393,7 +421,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
             return StreamingResponse(output, media_type="text/event-stream")
 
-        @app.get("/v1/responses")
+        @app.post("/v1/responses")
         def responses(req: ResponsesInput):
             if not req.stream:
                 return {"error": "Only streaming mode is supported."}
@@ -462,16 +490,16 @@ class ServeCommand(BaseTransformersCLICommand):
             self.running_continuous_batching_manager = self.model.init_continuous_batching(
                 generation_config=generation_config, streaming=True
             )
-            
+
             # TODO (Joao, Lysandre): the logits processors should be fixed in continuous batching
             # and correctly applied in non-cb
             self.running_continuous_batching_manager.logit_processor = LogitsProcessorList()
             self.running_continuous_batching_manager.start()
 
         # TODO (Joao, Lysandre): this should also work with tool support
-        inputs = self.tokenizer.apply_chat_template(
-            req.messages, return_tensors="pt", add_generation_prompt=True
-        ).to(self.model.device)
+        inputs = self.tokenizer.apply_chat_template(req.messages, return_tensors="pt", add_generation_prompt=True).to(
+            self.model.device
+        )
 
         def stream_response(_inputs):
             try:
@@ -492,8 +520,8 @@ class ServeCommand(BaseTransformersCLICommand):
                             queue_is_flushed = True
 
                     finish_reason = "stop" if result.status == RequestStatus.FINISHED else None
-                    yield self.build_chunk(
-                        result.next_token, request_id=request_id, finish_reason=finish_reason
+                    yield self.build_chat_completions_chunk(
+                        content=result.next_token, request_id=request_id, finish_reason=finish_reason
                     )
 
                     if result.status == RequestStatus.FINISHED:
@@ -579,7 +607,9 @@ class ServeCommand(BaseTransformersCLICommand):
                         # End of tool call: reset `inside_tool_call`, emit a `finish_reason`
                         if result.strip() == _TOOL_CALL_TOKENS[tool_model_family]["end"]:
                             tool_state.reset()
-                            yield self.build_chunk("", _request_id, role=None, finish_reason="tool_calls")
+                            yield self.build_chat_completions_chunk(
+                                request_id=_request_id, role=None, finish_reason="tool_calls"
+                            )
                             continue
 
                         # Inside a tool call
@@ -632,13 +662,15 @@ class ServeCommand(BaseTransformersCLICommand):
                                     id=None,
                                 )
 
-                            yield self.build_chunk(None, _request_id, role=None, tool_calls=[tool])
+                            yield self.build_chat_completions_chunk(
+                                request_id=_request_id, role=None, tool_calls=[tool]
+                            )
                             continue
                     # ====== END OF TOOL CALL LOGIC ======
 
                     # All non-tool related tokens are emitted as assistant messages
-                    yield self.build_chunk(result, _request_id, role="assistant")
-                yield self.build_chunk(None, _request_id, role=None, finish_reason="stop")
+                    yield self.build_chat_completions_chunk(content=result, request_id=_request_id, role="assistant")
+                yield self.build_chat_completions_chunk(request_id=_request_id, role=None, finish_reason="stop")
 
                 thread.join()
             except Exception as e:
@@ -686,8 +718,8 @@ class ServeCommand(BaseTransformersCLICommand):
             try:
                 thread.start()
                 for result in streamer:
-                    yield self.build_chunk(result, _request_id, role="assistant")
-                yield self.build_chunk(None, _request_id, role=None, finish_reason="stop")
+                    yield self.build_chat_completions_chunk(content=result, request_id=_request_id, role="assistant")
+                yield self.build_chat_completions_chunk(request_id=_request_id, role=None, finish_reason="stop")
 
                 thread.join()
             except Exception as e:
