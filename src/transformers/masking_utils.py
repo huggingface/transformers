@@ -115,6 +115,7 @@ def padding_mask_function(padding_mask: torch.Tensor) -> Callable:
     """
     This return the mask_function function corresponding to a 2D padding mask.
     """
+
     def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
         # Note that here the mask should ALWAYS be at least of the max `kv_index` size in the dimension 1. This is because
         # we cannot pad it here in the mask_function as we don't know the final size, and we cannot try/except, as it is not
@@ -128,6 +129,7 @@ def packed_sequence_mask_function(packed_sequence_mask: torch.Tensor) -> Callabl
     """
     This return the mask_function function corresponding to a 1D packed sequence mask.
     """
+
     def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
         return packed_sequence_mask[q_idx] == packed_sequence_mask[kv_idx]
 
@@ -622,7 +624,7 @@ def find_packed_sequence_indices(position_ids: torch.Tensor) -> Optional[torch.T
     # Packed format is always on batch of size 1 so we can early exit if not the case
     if not position_ids.shape[0] == 1:
         return None
-    
+
     position_ids = position_ids.squeeze(0)
     # What separate different sequences is when 2 consecutive positions_ids are separated by more than 1. So
     # taking the diff (by prepending the first value - 1 to keep correct indexing) and applying cumsum to the result
@@ -636,6 +638,7 @@ def find_packed_sequence_indices(position_ids: torch.Tensor) -> Optional[torch.T
         return None
 
     return packed_sequence_mask
+
 
 def _preprocess_mask_arguments(
     config: PretrainedConfig,
