@@ -154,7 +154,6 @@ class TokenDispatcher(nn.Module):
         # routed_out is (num_experts, batch_size, seq_len, hidden_size)
         routed_out = routed_out * routing_weights[:, None, :, None] # we're throwing away computed routed_out for rest of experts
         routed_out = routed_out.sum(dim=0) # (batch_size, seq_len, hidden_size)
-        torch.distributed.all_reduce(routed_out, op=torch.distributed.ReduceOp.SUM) # TODO: move to hook
         return routed_out
 
 class OpenAIMoeMLP(nn.Module):

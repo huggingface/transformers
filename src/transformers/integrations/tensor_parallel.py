@@ -392,7 +392,8 @@ class GatherParallel(TensorParallelLayer):
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
         # this op cannot be async, otherwise it completely breaks the outputs of models
         if isinstance(outputs, torch.Tensor):
-            raise ValueError("GatherParallel should not be used with a single tensor, it should be used with a tuple of tensors")
+            torch.distributed.all_reduce(outputs, op=torch.distributed.ReduceOp.SUM, async_op=False)
+        # TODO: we assume we want to allreduce first element of tuple
         torch.distributed.all_reduce(outputs[0], op=torch.distributed.ReduceOp.SUM, async_op=False) # TODO: rename GatherParallel to ReduceParallel or something
         return outputs
 
@@ -929,7 +930,7 @@ def add_tensor_parallel_hooks_to_module(
 
 def shard_and_distribute_module(
     model, param, empty_param, parameter_name, param_casting_dtype, is_contiguous, rank, device_mesh
-):
+): # TODO: rename to shard_and_distribute_param
     r"""
     Main uses cases:
     - column / rowise parallelism, you just shard all the weights of the layer (weight and bias)

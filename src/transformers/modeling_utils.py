@@ -2095,6 +2095,23 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                         f"Unsupported tensor parallel style {v}. Supported styles are {ALL_PARALLEL_STYLES}"
                     )
 
+        # loop over named modules and attach hooks. this is necessary when a module doesn't have parameters and thus we never hit
+        # device_mesh = self._device_mesh # TODO: can we attach device_mesh to model
+        device_mesh = torch.distributed.device_mesh.DeviceMesh.from_group(torch.distributed.distributed_c10d._get_default_group(), device_type="cuda") # TODO:
+        for name, module in self.named_modules():
+            if not getattr(module, "_is_hooked", False): # this adds gather hook to layers.*.mlp.experts and skips the rest
+                from transformers.integrations.tensor_parallel import add_tensor_parallel_hooks_to_module
+                add_tensor_parallel_hooks_to_module(
+                    model=self,
+                    module=module,
+                    tp_plan=self._tp_plan,
+                    layer_name="", # TODO: make this optional?
+                    current_module_plan=_get_parameter_tp_plan(parameter_name=name, tp_plan=self._tp_plan),
+                    device_mesh=device_mesh,
+                    parameter_name=None
+                )
+            module._is_hooked = True
+
     def dequantize(self):
         """
         Potentially dequantize the model in case it has been quantized by a quantization method that support
@@ -4642,7 +4659,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 # TODO: i shouldn't have to do the above, but when removing it, it doesnt partition them
                 'layers.*.mlp.experts': None,
                 'layers.*.mlp.token_dispatcher': "gather",
-                'layers.*.mlp': "gather",
                 "layers.*.mlp.router": "ep_router",
             })
             # Remove None values from the tp plan
