@@ -446,7 +446,7 @@ class VideoMAEModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [0.3669, -0.0688, -0.2421],
-                ("cuda", 8): [ 0.3668, -0.0690, -0.2421],
+                ("cuda", 8): [0.3668, -0.0690, -0.2421],
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)

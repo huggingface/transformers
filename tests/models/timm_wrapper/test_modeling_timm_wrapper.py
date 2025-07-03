@@ -308,7 +308,7 @@ class TimmWrapperModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [-11.2618, -9.6192, -10.3205],
-                ("cuda", 8): [-11.2634,  -9.6208, -10.3199],
+                ("cuda", 8): [-11.2634, -9.6208, -10.3199],
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -359,7 +359,7 @@ class TimmWrapperModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [-2.4043, 1.4492, -0.5127],
-                ("cuda", 8): [-2.2676,  1.5303, -0.4409],
+                ("cuda", 8): [-2.2676, 1.5303, -0.4409],
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
