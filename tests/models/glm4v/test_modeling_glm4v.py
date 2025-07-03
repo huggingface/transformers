@@ -13,12 +13,10 @@
 # limitations under the License.
 """Testing suite for the PyTorch GLM-4.1V model."""
 
-import copy
 import gc
 import unittest
 
 import requests
-from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -71,16 +69,15 @@ class Glm4vVisionText2TextModelTester:
         is_training=True,
         text_config={
             "vocab_size": 99,
-            "hidden_size": 32,
-            "intermediate_size": 37,
-            "num_hidden_layers": 4,
-            "num_attention_heads": 4,
-            "num_key_value_heads": 2,
+            "hidden_size": 16,
+            "intermediate_size": 22,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 2,
+            "num_key_value_heads": 1,
             "output_channels": 64,
             "hidden_act": "silu",
             "max_position_embeddings": 512,
             "rope_scaling": {"type": "default", "mrope_section": [2, 1, 1]},
-            "max_window_layers": 3,
             "rope_theta": 10000,
             "tie_word_embeddings": True,
             "bos_token_id": 0,
@@ -89,11 +86,10 @@ class Glm4vVisionText2TextModelTester:
         },
         vision_config={
             "depth": 2,
-            "embed_dim": 32,
             "hidden_act": "silu",
-            "hidden_size": 32,
-            "mlp_ratio": 4,
-            "num_heads": 4,
+            "hidden_size": 48,
+            "out_hidden_size": 16,
+            "intermediate_size": 22,
             "patch_size": 14,
             "spatial_merge_size": 1,
             "temporal_patch_size": 2,
@@ -237,47 +233,15 @@ class Glm4vModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    @parameterized.expand([("greedy", 1), ("beam search", 2)])
-    @unittest.skip("Cannot generate from inputs embeds with pixel values")
-    def test_generate_from_inputs_embeds(self):
-        pass
-
     @unittest.skip(reason="Size mismatch")
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    @unittest.skip(reason="We cannot configure to output a smaller model.")
-    def test_model_is_small(self):
-        pass
-
-    @unittest.skip("Cannot generate from inputs embeds with pixel values")
+    @unittest.skip("Error with compilation")
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
-    # The multimodal base model embeds will not match ids, due to pixel values. We can't change base test
-    # because in some models `pixel_values` are required. Will be fixed when we add support for merging `embeds+pixels`
-    # TODO: @raushan
-
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-            del inputs["image_grid_thw"]
-
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
-            with torch.no_grad():
-                model(**inputs)[0]
-
+    # RoPE index doesn't match when using embeddings
     def test_inputs_embeds_matches_input_ids(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
