@@ -1130,6 +1130,7 @@ class StaticCache(Cache):
         device: Union[torch.device, str, None] = None,
         dtype: torch.dtype = torch.float32,
         layer_device_map: Optional[dict[int, Union[str, torch.device, int]]] = None,
+        tp_size: Optional[int] = None,
     ) -> None:
         super().__init__()
         self.max_batch_size = max_batch_size
@@ -1139,12 +1140,17 @@ class StaticCache(Cache):
         self.head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
         self._dtype = dtype
-        tp_size = torch.distributed.get_world_size() if torch.distributed.is_initialized() else 1
         self.num_key_value_heads = (
             config.num_attention_heads
             if getattr(config, "num_key_value_heads", None) is None
             else config.num_key_value_heads
-        ) // tp_size
+        )
+        if tp_size is not None and tp_size > 1:
+            assert self.num_key_value_heads % tp_size == 0, (
+                f"Number of key value heads {self.num_key_value_heads} must be divisible by tensor parallel size {tp_size}."
+            )
+            # If the model is using tensor parallelism, we need to adjust the number of heads accordingly.
+            self.num_key_value_heads //= tp_size
 
         self.key_cache: list[torch.Tensor] = []
         self.value_cache: list[torch.Tensor] = []
