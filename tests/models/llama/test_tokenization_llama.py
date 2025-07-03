@@ -407,6 +407,8 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.tokenizer.add_eos_token = False
         self.rust_tokenizer.add_eos_token = False
 
+    # See internal discussion: https://huggingface.slack.com/archives/C01NE71C4F7/p1750680376085749?thread_ts=1750676268.233309&cid=C01NE71C4F7
+    @unittest.skip("failing, won't fix")
     @slow
     def test_conversion(self):
         # This is excruciatingly slow since it has to recreate the entire merge

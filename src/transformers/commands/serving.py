@@ -388,7 +388,7 @@ class ServeCommand(BaseTransformersCLICommand):
             if not req.stream:
                 return {"error": "Only streaming mode is supported."}
 
-            update_model = req.model != self.loaded_model
+            update_model = self.canonicalized_model_name(req.model) != self.loaded_model
 
             if update_model:
                 self.model, self.tokenizer = self.load_model_and_tokenizer(req.model, self.args)
@@ -461,7 +461,7 @@ class ServeCommand(BaseTransformersCLICommand):
         @app.post("/v1/chat/completions")
         def _serve(req: "ChatCompletionInput"):
             logger.debug(f"Received request: {req}")
-            update_model = req.model != self.loaded_model
+            update_model = self.canonicalized_model_name(req.model) != self.loaded_model
 
             if update_model:
                 self.model, self.tokenizer = self.load_model_and_tokenizer(req.model, self.args)
@@ -635,6 +635,11 @@ class ServeCommand(BaseTransformersCLICommand):
 
         return quantization_config
 
+    def canonicalized_model_name(self, model_id: str) -> str:
+        if "@" in model_id:
+            return model_id
+        return f"{model_id}@main"
+
     def load_model_and_tokenizer(
         self, model_id_and_revision: str, args: ServeArguments
     ) -> tuple[PreTrainedModel, PreTrainedTokenizerFast]:
@@ -671,9 +676,9 @@ class ServeCommand(BaseTransformersCLICommand):
         if getattr(model, "hf_device_map", None) is None:
             model = model.to(args.device)
 
-        self.loaded_model = model_id_and_revision
+        self.loaded_model = f"{model_id}@{revision}"
 
-        print("Loaded model", model_id_and_revision)
+        logger.warning(f"Loaded model {self.loaded_model}")
         return model, tokenizer
 
 
