@@ -28,14 +28,15 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
+from transformers.modeling_outputs import ModelOutput
+from transformers.modeling_utils import PreTrainedModel
 from transformers.utils.generic import TransformersKwargs, can_return_tuple, check_model_inputs
 
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
-from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, auto_docstring, logging
+from ...utils import auto_docstring, logging
 from .configuration_sam_hq import SamHQConfig, SamHQMaskDecoderConfig, SamHQPromptEncoderConfig, SamHQVisionConfig
 
 
@@ -65,6 +66,23 @@ class SamHQVisionEncoderOutput(ModelOutput):
     attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
     intermediate_embeddings: Optional[list[torch.FloatTensor]] = None
+
+
+@dataclass
+class SamHQMMaskDecoderOutputs(ModelOutput):
+    r"""
+    masks (`torch.FloatTensor` of shape `(batch_size, num_prompts, num_masks, height, width)`):
+        The predicted masks for the input image. The masks are of shape `(batch_size, num_prompts, num_masks, height, width)`.
+    iou_scores (`torch.FloatTensor` of shape `(batch_size, num_prompts, num_masks)`):
+        The predicted IoU scores for each mask. The scores are of shape `(batch_size, num_prompts, num_masks)`.
+    mask_decoder_attentions (`torch.FloatTensor`, *optional*):
+        The attention weights from the mask decoder, if `output_attentions=True` was passed during the forward pass.
+        This is specific to SAM-HQ and not present in base SAM.
+    """
+
+    masks: torch.FloatTensor
+    iou_scores: Optional[torch.FloatTensor] = None
+    mask_decoder_attentions: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -456,7 +474,7 @@ class SamHQVisionNeck(nn.Module):
 
 
 class SamHQVisionEncoder(PreTrainedModel):
-    _can_record_outputs = {"hidden_states": (SamHQVisionLayer, 0), "attentions": (SamHQVisionAttention, 1)}
+    _can_record_outputs = {"hidden_states": (SamHQVisionLayer, 0), "vision_attentions": (SamHQVisionAttention, 1)}
 
     def __init__(self, config: SamHQVisionConfig):
         super().__init__(config)
@@ -495,18 +513,28 @@ class SamHQVisionEncoder(PreTrainedModel):
     @check_model_inputs
     def forward(
         self, pixel_values: Optional[torch.FloatTensor] = None, **kwargs: Unpack[TransformersKwargs]
-    ) -> SamHQVisionEncoderOutput:
+    ) -> Union[tuple, SamHQVisionEncoderOutput]:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
         hidden_states = self.patch_embed(pixel_values)
         if self.pos_embed is not None:
             hidden_states = hidden_states + self.pos_embed
+
+        intermediate_embeddings = []
+
         for layer_module in self.layers:
             hidden_states = layer_module(hidden_states)
+
+            # Collect embeddings from non-windowed blocks
+            if hasattr(layer_module, "window_size") and layer_module.window_size == 0:
+                intermediate_embeddings.append(hidden_states)
+
         hidden_states = self.neck(hidden_states)
+
         return SamHQVisionEncoderOutput(
             last_hidden_state=hidden_states,
+            intermediate_embeddings=intermediate_embeddings,
         )
 
 
@@ -808,9 +836,11 @@ class SamHQFeedForward(nn.Module):
         return hidden_states
 
 
-class SamHQMaskDecoder(nn.Module):
+class SamHQMaskDecoder(PreTrainedModel):
+    _can_record_outputs = {"mask_decoder_attentions": (SamHQVisionAttention, 1, "transformer")}
+
     def __init__(self, config: SamHQMaskDecoderConfig):
-        super().__init__()
+        super().__init__(config)
         self.hidden_size = config.hidden_size
 
         self.num_multimask_outputs = config.num_multimask_outputs
@@ -854,6 +884,7 @@ class SamHQMaskDecoder(nn.Module):
         self.mask_norm = SamHQLayerNorm(self.hidden_size // 4, data_format="channels_first")
         self.mask_conv2 = nn.Conv2d(self.hidden_size // 4, self.hidden_size // 8, kernel_size=3, stride=1, padding=1)
 
+    @check_model_inputs
     def forward(
         self,
         image_embeddings: torch.Tensor,
@@ -866,7 +897,7 @@ class SamHQMaskDecoder(nn.Module):
         attention_similarity: Optional[torch.Tensor] = None,
         target_embedding: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> SamHQMMaskDecoderOutputs:
         """
         Predict high-quality masks given image and prompt embeddings.
 
@@ -935,7 +966,6 @@ class SamHQMaskDecoder(nn.Module):
             image_positional_embeddings=image_positional_embeddings,
             attention_similarity=attention_similarity,
             target_embedding=target_embedding,
-            **kwargs,
         )
         iou_token_out = point_embedding[:, :, 0, :]
         mask_tokens_out = point_embedding[:, :, 1 : (1 + self.num_mask_tokens), :]
@@ -1008,8 +1038,7 @@ class SamHQMaskDecoder(nn.Module):
         else:
             masks = masks_sam + masks_hq
 
-        outputs = (masks, iou_pred)
-        return outputs
+        return SamHQMMaskDecoderOutputs(masks=masks, iou_scores=iou_pred)
 
 
 @auto_docstring
@@ -1276,7 +1305,6 @@ class SamHQModel(SamHQPreTrainedModel):
     def get_image_embeddings(
         self,
         pixel_values,
-        **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
         Returns the image embeddings by passing the pixel values through the vision encoder.
@@ -1324,6 +1352,7 @@ class SamHQModel(SamHQPreTrainedModel):
         return prompt_output
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1473,7 +1502,7 @@ class SamHQModel(SamHQPreTrainedModel):
         )
 
         # Predict masks
-        low_res_masks, iou_predictions = self.mask_decoder(
+        mask_decoder_output = self.mask_decoder(
             image_embeddings=image_embeddings,
             image_positional_embeddings=image_positional_embeddings,
             sparse_prompt_embeddings=sparse_embeddings,
@@ -1483,12 +1512,14 @@ class SamHQModel(SamHQPreTrainedModel):
             intermediate_embeddings=intermediate_embeddings,
             attention_similarity=attention_similarity,
             target_embedding=target_embedding,
+            **kwargs,
         )
         return SamHQImageSegmentationOutput(
-            iou_scores=iou_predictions,
-            pred_masks=low_res_masks,
+            iou_scores=mask_decoder_output.iou_scores,
+            pred_masks=mask_decoder_output.masks,
+            mask_decoder_attention=mask_decoder_output.mask_decoder_attentions,
             vision_hidden_states=vision_outputs.hidden_states,
-            vision_attentions=vision_outputs.attentions,
+            vision_attentions=vision_outputs.vision_attentions,
         )
 
 

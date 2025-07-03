@@ -955,7 +955,7 @@ def can_return_tuple(func):
         if return_dict is None:
             return_dict = return_dict
         output = func(self, *args, **kwargs)
-        if not return_dict:
+        if not return_dict and not isinstance(output, tuple):
             output = output.to_tuple()
         return output
 
@@ -989,17 +989,15 @@ def check_model_inputs(func):
         return_dict = kwargs.pop("return_dict", return_dict)
         if return_dict is None:
             return_dict = True
-        kwargs.setdefault("use_cache", use_cache)
         sig = inspect.signature(func)
         bound = sig.bind_partial(self, *args, **kwargs)
         bound.apply_defaults()
         all_args = bound.arguments
-
         if getattr(self, "gradient_checkpointing", False) and self.training and use_cache:
             logger.warning_once(
                 "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
             )
-            use_cache = False
+            kwargs["use_cache"] = False
 
         hooks = []
         collected_outputs = defaultdict(tuple)
@@ -1017,11 +1015,18 @@ def check_model_inputs(func):
         if "kwargs" in all_args:
             for k, v in all_args["kwargs"].items():  # we do this for dynamo compile
                 all_args[k] = v
+
         recordable_keys = {
-            f"output_{k}": all_args.get(f"output_{k}", getattr(self.config, f"output_{k}", False))
+            f"output_{k}": all_args.get(
+                f"output_{k}", getattr(self.config, f"output_{k}", all_args.get("output_attentions", False))
+            )
             for k in capture_flags
         }
+        print(recordable_keys, capture_flags)
         recordable_keys["output_cross_attentions"] = recordable_keys.get("output_attentions", None)
+        recordable_keys["output_mask_decoder_attentions"] = recordable_keys.get("output_attentions", None)
+        if "output_vision_attentions" not in recordable_keys:
+            recordable_keys["output_vision_attentions"] = recordable_keys.get("output_attentions", None)
         if any(recordable_keys.values()):
             capture_tasks = []
             for key, layer_specs in capture_flags.items():
@@ -1037,10 +1042,13 @@ def check_model_inputs(func):
                     if isinstance(module, specs[0]):
                         if len(specs) > 2:
                             if specs[2] in name:
-                                print(f"Attaching hook to {name}, {specs[0]}, {module}")
+                                print(f"Attaching hook to {name}, {specs[0]}")
                                 hook_fn = make_capture_fn(key, specs[1] if len(specs) > 1 else 0)
                                 hooks.append(register_hook_if_needed(module, hook_fn))
+                            else:
+                                print("Skipping hook for", name, specs[0], "because it does not match", specs[2])
                         else:
+                            print(f"Attaching hook to {name}, {specs[0]}, key: {key}")
                             hook_fn = make_capture_fn(key, specs[1] if len(specs) > 1 else 0)
 
                             hooks.append(register_hook_if_needed(module, hook_fn))
@@ -1048,6 +1056,7 @@ def check_model_inputs(func):
         for h in hooks:
             if h is not None:
                 h.remove()
+        print(collected_outputs.keys())
         for key in collected_outputs:
             if key == "hidden_states":
                 if hasattr(outputs, "vision_hidden_states"):
