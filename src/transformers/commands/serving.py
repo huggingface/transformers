@@ -450,43 +450,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
         return f"data: {json.dumps(payload)}\n\n"
 
-    def build_responses_chunk(
-        self,
-        response: BaseModel,
-        # type: str,
-        # request_id: str,
-        # content: Optional[str] = None,
-        # role: Optional[str] = None,
-        # finish_reason: Optional[str] = None,
-        # status: Optional[str] = "in_progress",
-        # instructions: Optional[str] = None,
-        # text: Optional[dict] = None,
-    ) -> str:
-        # content = [
-        #         ResponsesOutputOutput(
-        #         type="message",
-        #         id=request_id,
-        #         status=finish_reason,
-        #         role=role,
-        #         content=ResponsesOutputContent(type="output_text", text=content)
-        #     )
-        # ] if content is not None else []
-        #
-        # response_output = ResponsesOutput(
-        #     id=request_id,
-        #     created_at=time.time_ns(),
-        #     status=status,
-        #     model=self.loaded_model,
-        #     output=content,
-        #     instructions=instructions,
-        #     text=text,
-        # )
-        #
-        # response = Response(
-        #     type=type,
-        #     response=response_output
-        # )
-        #
+    def build_responses_chunk(self, response: BaseModel) -> str:
         return f"data: {response.model_dump_json()}\n\n"
 
     def run(self):
@@ -780,6 +744,8 @@ class ServeCommand(BaseTransformersCLICommand):
         # Check generation config parameters
         # Implement KV caching (with previous_request_id?)
         # Implement metadata forwarding (both input and output have a metadata field)
+        # Implement non-streaming mode
+        # Implement different output_index and content_index than 0
 
         update_model = req.model != self.loaded_model
         if update_model:
