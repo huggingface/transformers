@@ -321,22 +321,14 @@ class BLTConfig(PretrainedConfig):
         encoder_config=None,
         decoder_config=None,
         global_config=None,
-        # Generation configuration
-        bos_token_id=1,
-        eos_token_id=2,
-        pad_token_id=-1,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         
         # Basic model configuration
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
-
-        # Generation configuration
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.return_dict = True
 
         # Patching configuration
         self.patch_in_forward = patch_in_forward
@@ -387,7 +379,7 @@ class BLTConfig(PretrainedConfig):
         elif isinstance(global_config, BLTGlobalTransformerConfig):
             self.global_config = global_config
 
-        super().__init__(**kwargs)
+        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 __all__ = [
     "BLTConfig", 

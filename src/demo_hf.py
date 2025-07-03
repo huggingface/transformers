@@ -23,19 +23,8 @@ torch.cuda.empty_cache()
 def main(prompt: str = "my name is", model_name: str = "blt-1b"):
     device = "cuda"
 
-    blt_model = BLTModel.from_pretrained("itazap/blt-1b-converted")
-
-    causal_lm = BLTForCausalLM(blt_model.config)
-    causal_lm.model.load_state_dict(blt_model.state_dict(), strict=False)
-    causal_lm.lm_head.weight = blt_model.local_decoder.lm_head.weight
-    causal_lm.save_pretrained( "./blt-1b-causallm")
-
-    # TRUE causal_lm.lm_head.weight == blt_model.local_decoder.lm_head.weight
-
-    model = BLTForCausalLM.from_pretrained("./blt-1b-causallm").to(device)
+    model = BLTForCausalLM.from_pretrained("itazap/blt-1b").to(device)
     
-    # FALSE model.lm_head.weight != blt_model.local_decoder.lm_head.weight
-
     tokenizer = BLTTokenizer(add_bos_token=True, add_eos_token=True)
 
     input_ids = torch.tensor([tokenizer.encode(prompt, add_eos=False)]).to(device)

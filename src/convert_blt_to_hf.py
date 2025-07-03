@@ -10,6 +10,7 @@ from safetensors.torch import load_file, save_file
 
 from transformers.models.blt_wip.configuration_blt import BLTConfig
 from transformers.models.blt_wip.modeling_blt import BLTModel
+from transformers.models.blt_wip.modeling_blt_dev import BLTForCausalLM
 from transformers.utils import logging as transformers_logging
 
 
@@ -156,6 +157,8 @@ def merge_configurations(config_path: str, entropy_params_path: str) -> Dict[str
         "global_config": global_config,
     }
 
+    main_config_dict["tie_word_embeddings"] = False
+
     logger.info(f"Merged configuration with {len(main_config_dict)} parameters")
     return main_config_dict
 
@@ -203,8 +206,6 @@ def merge_weights(weights_path: str, entropy_weights_path: str) -> Dict[str, tor
     elif "state_dict" in entropy_weights:
         entropy_weights = entropy_weights["state_dict"]
 
-    logger.info(f"Loaded entropy model weights: {len(entropy_weights)} tensors")
-
     unified_weights = main_weights.copy()
 
     for key, tensor in entropy_weights.items():
@@ -212,6 +213,22 @@ def merge_weights(weights_path: str, entropy_weights_path: str) -> Dict[str, tor
         unified_weights[patcher_key] = tensor
     
     unified_weights = apply_weight_mapping(unified_weights)
+    
+    decoder_lm_head_key = "local_decoder.lm_head.weight"
+    top_lm_head_key = "lm_head.weight"
+    unified_weights[top_lm_head_key] = unified_weights[decoder_lm_head_key]
+    del unified_weights[decoder_lm_head_key]
+
+    prefixed_weights = {}
+    for key, tensor in unified_weights.items():
+        if key == top_lm_head_key:
+            prefixed_weights[key] = tensor
+        elif not key.startswith("model."):
+            prefixed_weights[f"model.{key}"] = tensor
+        else:
+            prefixed_weights[key] = tensor
+    
+    unified_weights = prefixed_weights
     
     return unified_weights
 
@@ -232,8 +249,6 @@ def create_tokenizer_config(output_dir: str, config: Dict[str, Any]):
     tokenizer_path = os.path.join(output_dir, "tokenizer_config.json")
     with open(tokenizer_path, "w") as f:
         json.dump(tokenizer_config, f, indent=2)
-
-    logger.info(f"Tokenizer config saved to {tokenizer_path}")
 
 
 def push_to_hub(
@@ -344,7 +359,7 @@ def main():
     parser.add_argument(
         "--push_to_hub",
         type=str,
-        default="itazap/blt-1b-converted",
+        default=None,
     )
     parser.add_argument(
         "--hub_private",
