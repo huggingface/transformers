@@ -391,7 +391,7 @@ class GatherParallel(TensorParallelLayer):
     @staticmethod
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
         # this op cannot be async, otherwise it completely breaks the outputs of models
-        # torch.distributed.all_reduce(outputs[0], op=torch.distributed.ReduceOp.SUM, async_op=False) # TODO: need to create a new class for backward compatibility
+        torch.distributed.all_reduce(outputs[0], op=torch.distributed.ReduceOp.SUM, async_op=False) # TODO: rename GatherParallel to ReduceParallel or something
         return outputs
 
 
