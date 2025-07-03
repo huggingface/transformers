@@ -12,12 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torch.nn.attention import SDPBackend, sdpa_kernel
 
 from transformers.activations import ACT2FN
 from transformers.generation import GenerationMixin
@@ -168,6 +166,56 @@ class Ernie4_5RopeEmbedding(nn.Module):
         return query, key
 
 
+# llama copy
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+# llama copy except for the (on the fly) causal mask
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+        attn_weights = attn_weights + causal_mask
+
+    ###
+    # Causal mask
+    seq_len = attn_weights.size(-1)
+    mask = torch.triu(
+        torch.ones((seq_len, seq_len), dtype=torch.bool, device=attn_weights.device),
+        diagonal=1,
+    )
+    attn_weights = attn_weights.masked_fill(mask, float("-inf"))
+    ###
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class Ernie4_5Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -220,6 +268,8 @@ class Ernie4_5Attention(nn.Module):
         self.config = config
 
         self.attn_func = self.core_attn
+        self.scaling = self.head_dim**-0.5
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
 
     def forward(
         self,
@@ -249,137 +299,33 @@ class Ernie4_5Attention(nn.Module):
                 - attention_weights: Optional attention probabilities
                 - updated_key_value_cache: Optional updated cache
         """
-        if token_type_ids is not None:
-            token_type_ids = token_type_ids[:, :-1]
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        bsz, q_len, _ = hidden_states.shape
-
-        query_states = self.q_proj(hidden_states).reshape(
-            [bsz, q_len, -1, self.head_dim]
-        )
-        key_states = self.k_proj(hidden_states).reshape([bsz, q_len, -1, self.head_dim])
-        value_states = self.v_proj(hidden_states).reshape(
-            [bsz, q_len, -1, self.head_dim]
-        )
+        query_states = self.q_proj(hidden_states).view(hidden_shape)#.transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape)#.transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape)#.transpose(1, 2)
 
         attn_output, attn_weights, past_key_value = self.rope_attn(
             query_states=query_states,
             key_states=key_states,
             value_states=value_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            output_attentions=output_attentions,
             past_key_value=past_key_value,
             use_cache=use_cache,
-            attn_mask_start_row_indices=attn_mask_start_row_indices,
         )
-
-        attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
 
-    def repeat_kv(self, hidden_states, n_rep):
-        """
-        This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-        num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-        """
-        batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-        if n_rep == 1:
-            return hidden_states
-        hidden_states = hidden_states[:, :, None, :, :].expand(
-            batch, num_key_value_heads, n_rep, slen, head_dim
-        )
-        return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-    def core_attn(
-        self,
-        q,
-        k,
-        v,
-        attention_mask=None,
-        attn_mask_start_row_indices=None,
-        seq_length=None,
-    ):
-        """Standard self-attention implementation.
-
-        Args:
-            q (torch.Tensor): Query tensor
-            k (torch.Tensor): Key tensor
-            v (torch.Tensor): Value tensor
-            attention_mask (Optional[torch.Tensor]): Attention mask
-            attn_mask_start_row_indices (Optional[torch.Tensor]): Variable length indices
-            seq_length (Optional[int]): Sequence length
-
-        Returns:
-            Tuple[torch.Tensor, torch.Tensor]: Attention output and weights
-        """
-        origin_dtype = q.dtype
-
-        q = q.permute(0, 2, 1, 3)
-        k = k.permute(0, 2, 1, 3)
-        v = v.permute(0, 2, 1, 3)
-
-        scale_qk_coeff = (
-            getattr(self.config, "scale_qk_coeff", 1.0) * self.head_dim**0.5
-        )
-
-        q = q / scale_qk_coeff
-
-        # Handle GQA case - repeat k and v heads to match q heads
-        if self.is_gqa:
-            # [batch, num_key_value_heads, seq_len, head_dim] -> [batch, num_heads, seq_len, head_dim]
-            repeat_factor = self.num_heads // self.num_key_value_heads
-            k = self.repeat_kv(k, repeat_factor)
-            v = self.repeat_kv(v, repeat_factor)
-
-        attn_scores = torch.matmul(q, k.transpose(-2, -1))
-
-        if getattr(self.config, "scale_qk_coeff", 1.0) != 1.0:
-            attn_scores = attn_scores * getattr(self.config, "scale_qk_coeff", 1.0)
-
-        # Causal mask
-        seq_len = attn_scores.size(-1)
-        mask = torch.triu(
-            torch.ones((seq_len, seq_len), dtype=torch.bool, device=attn_scores.device),
-            diagonal=1,
-        )
-        attn_scores = attn_scores.masked_fill(mask, float("-inf"))
-        attn_weights = F.softmax(attn_scores, dim=-1)
-
-        attn_weights = attn_weights.to(origin_dtype)
-
-        # attention_probs_dropout_prob default 0.0
-        if getattr(self.config, "attention_probs_dropout_prob", 0.0) > 0:
-            attn_weights = F.dropout(
-                attn_weights,
-                p=self.config.attention_probs_dropout_prob,
-                training=self.training,
-            )
-
-        # [batch, num_heads, q_len, k_len] @ [batch, num_heads, k_len, head_dim] -> [batch, num_heads, q_len, head_dim]
-        out = torch.matmul(attn_weights, v)
-
-        # [batch, num_heads, seq_len, head_dim] -> [batch, seq_len, num_heads, head_dim]
-        out = out.permute(0, 2, 1, 3)
-        # [batch, seq_len, hidden_size]
-        out = out.contiguous().view(out.size(0), out.size(1), -1)
-
-        return out, attn_weights
-
     def rope_attn(
         self,
         query_states,
         key_states,
         value_states,
-        attention_mask,
-        position_ids,
-        output_attentions=False,
         past_key_value=None,
         use_cache=False,
-        attn_mask_start_row_indices=None,
     ):
         """Attention computation with rotary embeddings.
 
@@ -387,12 +333,8 @@ class Ernie4_5Attention(nn.Module):
             query_states (torch.Tensor): Query states
             key_states (torch.Tensor): Key states
             value_states (torch.Tensor): Value states
-            attention_mask (Optional[torch.Tensor]): Attention mask
-            position_ids (Optional[torch.Tensor]): Position indices
-            output_attentions (bool): Return attention weights
             past_key_value (Optional[Tuple[torch.Tensor, torch.Tensor]]): Cached states
             use_cache (bool): Cache new states
-            attn_mask_start_row_indices (Optional[torch.Tensor]): Variable length indices
 
         Returns:
             Tuple containing:
@@ -401,6 +343,7 @@ class Ernie4_5Attention(nn.Module):
                 - updated_key_value_cache: Optional cache
         """
 
+        ## rope and caching
         query_states_dtype = query_states.dtype
 
         kv_seq_len = key_states.shape[-3]
@@ -424,18 +367,25 @@ class Ernie4_5Attention(nn.Module):
             # reuse k, v, self_attention
             key_states = torch.cat([past_key_value[0], key_states], dim=1)
             value_states = torch.cat([past_key_value[1], value_states], dim=1)
-
-        # shape: [2, b, s, kvh, d]
         past_key_value = [key_states, value_states] if use_cache else None
-        seq_length = query_states.shape[1]
-        attn_output, attn_weights = self.attn_func(
+        ## rope and caching
+
+        query_states = query_states.transpose(1, 2)
+        key_states = key_states.transpose(1, 2)
+        value_states = value_states.transpose(1, 2)
+
+        attn_output, attn_weights = eager_attention_forward(
+            self,
             query_states,
             key_states,
             value_states,
-            attention_mask,
-            attn_mask_start_row_indices,
-            seq_length,
+            None,
+            self.scaling,
         )
+
+        attn_output = attn_output.contiguous().view(attn_output.size(0), attn_output.size(1), -1)
+        attn_output = self.o_proj(attn_output)
+
         return attn_output, attn_weights, past_key_value
 
 
