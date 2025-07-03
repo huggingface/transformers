@@ -22,6 +22,7 @@ from datasets import load_dataset
 
 from transformers import Wav2Vec2ConformerConfig, is_torch_available
 from transformers.testing_utils import (
+    is_flaky,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
@@ -424,6 +425,9 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @is_flaky(
+        description="The `codevector_idx` computed with `argmax()` in `Wav2Vec2ConformerGumbelVectorQuantizer.forward` is not stable."
+    )
     def test_batching_equivalence(self, atol=1e-4, rtol=1e-4):
         super().test_batching_equivalence(atol=atol, rtol=rtol)
 

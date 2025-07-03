@@ -20,6 +20,7 @@ from datasets import load_dataset
 
 from transformers import Wav2Vec2BertConfig, is_torch_available
 from transformers.testing_utils import (
+    is_flaky,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
@@ -434,6 +435,7 @@ class Wav2Vec2BertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @is_flaky(description="Get lager difference with A10 and even with the new `5e-4` still flaky")
     def test_batching_equivalence(self, atol=5e-4, rtol=5e-4):
         super().test_batching_equivalence(atol=atol, rtol=rtol)
 
