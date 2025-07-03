@@ -368,6 +368,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("yoso", "YosoModel"),
         ("zamba", "ZambaModel"),
         ("zamba2", "Zamba2Model"),
+        ("mobilenet_v5", "MobileNetV5Model"),
     ]
 )
 
