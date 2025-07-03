@@ -885,8 +885,6 @@ class SamHQMaskDecoder(nn.Module):
                 Whether to use only the high-quality token output or combine with SAM output.
             intermediate_embeddings (`torch.Tensor`):
                 Intermediate embeddings from the vision encoder for feature fusion.
-            output_attentions (bool, *optional*):
-                Whether or not to return the attentions tensors of all attention layers.
             attention_similarity (`torch.Tensor`, *optional*):
                 Optional tensor for attention similarity computation.
             target_embedding (`torch.Tensor`, *optional*):
@@ -1286,20 +1284,10 @@ class SamHQModel(SamHQPreTrainedModel):
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
                 Input pixel values
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-
         """
-        vision_output = self.vision_encoder(
-            pixel_values=pixel_values,
-        )
+        vision_output = self.vision_encoder(pixel_values=pixel_values)
         image_embeddings = vision_output[0]
         intermediate_embeddings = vision_output[1]
-
         return image_embeddings, intermediate_embeddings
 
     @torch.no_grad()
