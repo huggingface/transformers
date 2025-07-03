@@ -309,6 +309,8 @@ class T5GemmaConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.classifier_dropout_rate = classifier_dropout_rate
         self.tie_word_embeddings = tie_word_embeddings
+        # Used in pipeline generation.
+        self.vocab_size = kwargs.get("vocab_size", decoder.vocab_size)
 
     def __setattr__(self, key, value):
         shared_attr_with_submodules = [
