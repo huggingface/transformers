@@ -21,8 +21,6 @@ from threading import Thread
 from typing import Any, Optional
 
 from huggingface_hub import (
-    ChatCompletionStreamOutputChoice,
-    ChatCompletionStreamOutputDelta,
     ChatCompletionStreamOutputDeltaToolCall,
     ChatCompletionStreamOutputFunction,
     ModelInfo,
@@ -52,6 +50,7 @@ if is_torch_available():
 if is_pydantic_available() and is_fastapi_available() and is_uvicorn_available():
     import uvicorn
     from fastapi import FastAPI
+    from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import JSONResponse, StreamingResponse
     from pydantic import BaseModel
 
@@ -211,6 +210,15 @@ class ServeArguments:
     log_level: str = field(
         default="info", metadata={"help": "Logging level as a string. Example: 'info' or 'warning'."}
     )
+    enable_cors: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Whether to enable CORS. Some apps that make requests from external domains (e.g. Cursor) require "
+                "CORS to be enabled."
+            ),
+        },
+    )
 
 
 class ServeCommand(BaseTransformersCLICommand):
@@ -238,6 +246,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
         self.args = args
         self.use_continuous_batching = self.args.attn_implementation == "sdpa_paged"
+        self.enable_cors = self.args.enable_cors
 
         # State: preserves information about the last call and last KV cache, to determine whether we can reuse the KV
         # cache and avoid re-running prefil
@@ -252,48 +261,65 @@ class ServeCommand(BaseTransformersCLICommand):
 
     def build_chunk(
         self,
-        content: str,
         request_id: str,
+        content: Optional[str] = None,
         role: Optional[str] = None,
         finish_reason: Optional[str] = None,
         tool_calls: Optional[list[ChatCompletionStreamOutputDeltaToolCall]] = None,
     ) -> str:
-        print("role", role)
-        print("content", content)
-        print("finish_reason", finish_reason)
+        """
+        Builds a chunk of a streaming response.
+
+        IMPORTANT: The built chunk won't contain empty fields (fields with `None`). Some downstream apps, like Cursor,
+        assume that when the field exists, it has data.
+
+        Args:
+            request_id (`str`):
+                The request ID.
+            content (`str`, *optional*):
+                Content of the response from the model.
+            role (`str`, *optional*):
+                The role of the next content, until a new role is defined.
+            finish_reason (`str`, *optional*):
+                The reason the generation by the model has finished.
+            tool_calls (`list[ChatCompletionStreamOutputDeltaToolCall]`, *optional*):
+                Data about the tool calls, when they are triggered.
+
+        Returns:
+            `str`: The built chunk, a string containing a JSON string with the payload.
+        """
         payload = {
             "object": "chat.completion.chunk",
             "id": request_id,
             "created": int(time.time()),
             "model": self.loaded_model,
+            "choices": [{"delta": {}, "index": 0}],
             "system_fingerprint": "",
-            "choices": [
-                ChatCompletionStreamOutputChoice(
-                    delta=ChatCompletionStreamOutputDelta(
-                        role=role,
-                        content=content,
-                        tool_calls=tool_calls,
-                    ),
-                    index=0,
-                    logprobs=None,
-                    finish_reason=finish_reason,
-                ),
-            ],
         }
+        if content is not None:
+            payload["choices"][0]["delta"]["content"] = content
+        if role is not None:
+            payload["choices"][0]["delta"]["role"] = role
+        if tool_calls is not None:
+            payload["choices"][0]["delta"]["tool_calls"] = tool_calls
+        if finish_reason is not None:
+            payload["choices"][0]["finish_reason"] = finish_reason
+
         return f"data: {json.dumps(payload)}\n\n"
 
     def run(self):
         app = FastAPI()
 
-        from fastapi.middleware.cors import CORSMiddleware
-
-        app.add_middleware(
-            CORSMiddleware,
-            allow_origins=['*'],
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
-        )
+        # Some apps that make requests from external domains (e.g. Cursor) require CORS to be enabled. However, for
+        # security purposes, it's disabled by default
+        if self.enable_cors:
+            app.add_middleware(
+                CORSMiddleware,
+                allow_origins=["*"],
+                allow_credentials=True,
+                allow_methods=["*"],
+                allow_headers=["*"],
+            )
 
         if self.use_continuous_batching:
             self.continuous_batching(app)
@@ -376,7 +402,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
             def stream_response(_inputs):
                 try:
-                    max_new_tokens = req.max_tokens or generation_config.max_new_tokens or 256
+                    max_new_tokens = req.max_tokens or generation_config.max_new_tokens or 1024
                     request_id = manager.add_request(_inputs, request_id=req.request_id, max_new_tokens=max_new_tokens)
                     queue_is_flushed = False
 
@@ -388,7 +414,9 @@ class ServeCommand(BaseTransformersCLICommand):
                                 queue_is_flushed = True
 
                         finish_reason = "stop" if result.status == RequestStatus.FINISHED else None
-                        yield self.build_chunk(result.next_token, request_id=request_id, finish_reason=finish_reason)
+                        yield self.build_chunk(
+                            request_id=request_id, content=result.next_token, finish_reason=finish_reason
+                        )
 
                         if result.status == RequestStatus.FINISHED:
                             break
@@ -432,6 +460,7 @@ class ServeCommand(BaseTransformersCLICommand):
     def generate(self, app):
         @app.post("/v1/chat/completions")
         def _serve(req: "ChatCompletionInput"):
+            logger.debug(f"Received request: {req}")
             update_model = req.model != self.loaded_model
 
             if update_model:
@@ -469,7 +498,7 @@ class ServeCommand(BaseTransformersCLICommand):
             generation_streamer = TextIteratorStreamer(self.tokenizer, skip_special_tokens=True, skip_prompt=True)
 
             generation_config = create_generation_config_from_req(req)
-            max_new_tokens = req.max_tokens or generation_config.max_new_tokens or 256
+            max_new_tokens = req.max_tokens or generation_config.max_new_tokens or 1024
             generation_config.max_new_tokens = max_new_tokens
 
             last_kv_cache = None
@@ -497,7 +526,14 @@ class ServeCommand(BaseTransformersCLICommand):
                     thread.start()
                     tool_state = ToolState()
 
+                    # Emit the assistant role to start the stream. Other chunks won't have a role, as it is implicit
+                    # they come from the assistant.
+                    logger.debug("Starting model output")
+                    yield self.build_chunk(_request_id, role="assistant")
+
                     for result in streamer:
+                        logger.debug(f"Model output: {result}")
+
                         # ====== TOOL CALL LOGIC ======
                         if tool_model_family is not None:
                             # Start of a tool call: reset state variables, set `inside_tool_call`
@@ -508,7 +544,7 @@ class ServeCommand(BaseTransformersCLICommand):
                             # End of tool call: reset `inside_tool_call`, emit a `finish_reason`
                             if result.strip() == _TOOL_CALL_TOKENS[tool_model_family]["end"]:
                                 tool_state.reset()
-                                yield self.build_chunk("", _request_id, role=None, finish_reason="tool_calls")
+                                yield self.build_chunk(_request_id, finish_reason="tool_calls")
                                 continue
 
                             # Inside a tool call
@@ -527,7 +563,6 @@ class ServeCommand(BaseTransformersCLICommand):
                                     tool = ChatCompletionStreamOutputDeltaToolCall(
                                         function=ChatCompletionStreamOutputFunction(
                                             name=tool_name,
-                                            arguments=None,
                                         ),
                                         index=0,
                                         type="function",
@@ -558,16 +593,16 @@ class ServeCommand(BaseTransformersCLICommand):
                                         ),
                                         index=0,
                                         type="function",
-                                        id=None,
                                     )
 
-                                yield self.build_chunk(None, _request_id, role=None, tool_calls=[tool])
+                                yield self.build_chunk(_request_id, tool_calls=[tool])
                                 continue
                         # ====== END OF TOOL CALL LOGIC ======
 
-                        # All non-tool related tokens are emitted as assistant messages
-                        yield self.build_chunk(result, _request_id, role="assistant")
-                    yield self.build_chunk(None, _request_id, role=None, finish_reason="stop")
+                        # All non-tool related tokens are emitted as assistant messages. Empty text is skipped.
+                        if result != "":
+                            yield self.build_chunk(_request_id, content=result)
+                    yield self.build_chunk(_request_id, finish_reason="stop")
 
                     thread.join()
                 except Exception as e:
@@ -630,8 +665,8 @@ class ServeCommand(BaseTransformersCLICommand):
 
         model = AutoModelForCausalLM.from_pretrained(model_id, **model_kwargs)
 
-        if model.generation_config.max_new_tokens is not None and model.generation_config.max_new_tokens < 256:
-            model.generation_config.max_new_tokens = 256
+        if model.generation_config.max_new_tokens is not None and model.generation_config.max_new_tokens < 1024:
+            model.generation_config.max_new_tokens = 1024
 
         if getattr(model, "hf_device_map", None) is None:
             model = model.to(args.device)
