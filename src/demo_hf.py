@@ -5,10 +5,9 @@ import torch
 from huggingface_hub import hf_hub_download
 from safetensors.torch import load_file
 
-from transformers.models.blt_wip.modeling_blt_dev import BLTForCausalLM
-from transformers.models.blt_wip.modeling_blt import BLTModel
+from transformers.models.blt.modeling_blt import BLTForCausalLM
 
-from transformers.models.blt_wip.tokenization_blt import BLTTokenizer
+from transformers.models.blt.tokenization_blt import BLTTokenizer
 
 
 logger = logging.getLogger()
