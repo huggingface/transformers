@@ -314,6 +314,7 @@ extras["hub-kernels"] = deps_list("kernels")
 extras["integrations"] = extras["hub-kernels"] + extras["optuna"] + extras["ray"] + extras["sigopt"]
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
+extras["chat"] = deps_list("aiohttp", "rich")
 extras["audio"] = deps_list(
     "librosa",
     "pyctcdecode",
