@@ -860,9 +860,9 @@ class Emu3PreTrainedModel(ChameleonPreTrainedModel, Emu3VQVAE):
 
 
 class Emu3TextModel(LlamaModel, Emu3PreTrainedModel):
-    _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
-        "hidden_states": (Emu3DecoderLayer, 0),
-        "attentions": (Emu3Attention, 1),
+    _can_record_outputs = {
+        "hidden_states": Emu3DecoderLayer,
+        "attentions": Emu3Attention,
     }
 
     def __init__(self, config: Emu3Config):

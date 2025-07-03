@@ -137,9 +137,9 @@ class CsmPreTrainedModel(PreTrainedModel):
     _supports_quantized_cache = True
     _supports_static_cache = True
     _supports_attention_backend = True
-    _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
-        "hidden_states": (CsmDecoderLayer, 0),
-        "attentions": (CsmAttention, 1),
+    _can_record_outputs = {
+        "hidden_states": CsmDecoderLayer,
+        "attentions": CsmAttention,
     }
 
     def _init_weights(self, module):

@@ -941,9 +941,6 @@ class MoonshineModel(MoonshinePreTrainedModel):
             `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
             `input_values`, the [`AutoFeatureExtractor`] should be used for padding
             and conversion into a tensor of type `torch.FloatTensor`.
-        decoder_position_ids (<fill_type>):
-            <fill_docstring>
-
         Example:
 
         ```python
@@ -1061,8 +1058,6 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
             `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
             `input_values`, the [`AutoFeatureExtractor`] should be used for padding
             and conversion into a tensor of type `torch.FloatTensor`.
-        decoder_position_ids (<fill_type>):
-            <fill_docstring>
 
         Example:
 
