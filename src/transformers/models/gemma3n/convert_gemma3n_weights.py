@@ -553,7 +553,7 @@ def convert_vision_weights(
     elif _MOBILE_NET_CONV in path:
         if "Conv_0" in path:
             converted_path = "conv_stem.conv.weight"
-            converted_weight = weights.transpose(3, 2, 1, 0)
+            converted_weight = weights.transpose(3, 2, 0, 1)
         elif "Normalize_0" in path:
             converted_path = "conv_stem.bn.weight"
             converted_weight = weights
@@ -567,7 +567,7 @@ def convert_vision_weights(
             converted_weight = weights
         elif "expand_conv" in path:
             converted_path += ".conv_exp.weight"
-            converted_weight = weights.transpose(3, 2, 1, 0)
+            converted_weight = weights.transpose(3, 2, 0, 1)
         else:
             converted_path += ".conv_pwl.weight"
             converted_weight = weights.transpose()[:, :, None, None]
@@ -588,7 +588,7 @@ def convert_vision_weights(
             converted_weight = weights
         elif "key_dwconv" in path:
             converted_path += ".attn.key.down_conv.weight"
-            converted_weight = weights.transpose()
+            converted_weight = weights.transpose(3, 2, 0, 1)
         elif "key_proj" in path:
             converted_path += ".attn.key.proj.weight"
             converted_weight = weights.transpose()[:, :, None, None]
@@ -600,7 +600,7 @@ def convert_vision_weights(
             converted_weight = weights.transpose()[:, :, None, None]
         elif "value_dwconv" in path:
             converted_path += ".attn.value.down_conv.weight"
-            converted_weight = weights.transpose()
+            converted_weight = weights.transpose(3, 2, 0, 1)
         elif "value_proj" in path:
             converted_path += ".attn.value.proj.weight"
             converted_weight = weights.transpose()[:, :, None, None]
@@ -630,13 +630,13 @@ def convert_vision_weights(
             converted_weight = weights.transpose()[:, :, None, None]
         elif "middle_dwconv" in path:
             converted_path += ".dw_mid.conv.weight"
-            converted_weight = weights.transpose(3, 2, 1, 0)
+            converted_weight = weights.transpose(3, 2, 0, 1)
         elif "project" in path:
             converted_path += ".pw_proj.conv.weight"
             converted_weight = weights.transpose()[:, :, None, None]
         elif "start_dwconv" in path:
             converted_path += ".dw_start.conv.weight"
-            converted_weight = weights.transpose(3, 2, 1, 0)
+            converted_weight = weights.transpose(3, 2, 0, 1)
 
     return [(converted_path, converted_weight)]
 
