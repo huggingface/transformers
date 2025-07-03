@@ -98,7 +98,7 @@ data: {"object": "chat.completion.chunk", "id": "req_0", "created": 1751377863, 
 (...)
 ```
 
-This server is also an MCP client, which can receive information available MCP servers (i.e. tools), massage their information into the model prompt, and prepare calls to these tools when the model commands to do so. Naturally, this requires a model that is trained to use tools.
+The server is also an MCP client, so it can interact with MCP tools in agentic use cases. This, of course, requires the use of an LLM that is designed to use tools.
 
 > [!TIP]
 > At the moment, MCP tool usage in `transformers` is limited to the `qwen` family of models.
