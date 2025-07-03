@@ -633,10 +633,8 @@ def find_packed_sequence_indices(position_ids: torch.Tensor) -> Optional[torch.T
     position_diff = torch.diff(position_ids, prepend=first_dummy_value)
     packed_sequence_mask = (position_diff != 1).cumsum(0)
 
-    # If the last index is 0, then all tokens belong to the same sequence, i.e. no packed format -> return None
-    if packed_sequence_mask[-1] == 0:
-        return None
-
+    # Here it would be nice to return None if we did not detect packed sequence format, i.e. if `packed_sequence_mask[-1] == 0`
+    # but it causes issues with export
     return packed_sequence_mask
 
 
