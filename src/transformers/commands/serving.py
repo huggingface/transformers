@@ -379,10 +379,10 @@ class ServeCommand(BaseTransformersCLICommand):
                                 queue_is_flushed = True
 
                         finish_reason = "stop" if result.status == RequestStatus.FINISHED else None
-                        next_token = self.build_chunk(
+                        next_chunk = self.build_chunk(
                             result.next_token, request_id=request_id, finish_reason=finish_reason
                         )
-                        yield next_token
+                        yield next_chunk
 
                         if result.status == RequestStatus.FINISHED:
                             break
