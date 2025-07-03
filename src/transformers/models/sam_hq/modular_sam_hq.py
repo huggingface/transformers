@@ -389,6 +389,10 @@ class SamHQPreTrainedModel(SamPreTrainedModel):
                 module.pos_embed.data.zero_()
 
 
+class SamHQVisionEncoder(SamVisionEncoder):
+    _can_record_outputs = {"hidden_states": (SamHQVisionLayer, 0), "attentions": (SamHQVisionAttention, 1)}
+
+
 class SamHQVisionModel(SamVisionModel):
     pass
 
@@ -400,7 +404,6 @@ class SamHQVisionModel(SamVisionModel):
 )
 class SamHQModel(SamModel):
     _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
-
     _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
 
     def __init__(self, config):

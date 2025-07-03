@@ -1029,7 +1029,7 @@ class SamVisionNeck(nn.Module):
 
 
 class SamVisionEncoder(PreTrainedModel):
-    _can_record_outputs = {"hidden_states": (SamVisionLayer, 0), "attentions": (SamVisionAttention, 0)}
+    _can_record_outputs = {"hidden_states": (SamVisionLayer, 0), "attentions": (SamVisionAttention, 1)}
 
     def __init__(self, config: SamVisionConfig):
         super().__init__(config)

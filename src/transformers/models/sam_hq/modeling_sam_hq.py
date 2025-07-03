@@ -456,7 +456,7 @@ class SamHQVisionNeck(nn.Module):
 
 
 class SamHQVisionEncoder(PreTrainedModel):
-    _can_record_outputs = {"attentions": (SamHQVisionAttention, 1)}
+    _can_record_outputs = {"hidden_states": (SamHQVisionLayer, 0), "attentions": (SamHQVisionAttention, 1)}
 
     def __init__(self, config: SamHQVisionConfig):
         super().__init__(config)
@@ -495,28 +495,18 @@ class SamHQVisionEncoder(PreTrainedModel):
     @check_model_inputs
     def forward(
         self, pixel_values: Optional[torch.FloatTensor] = None, **kwargs: Unpack[TransformersKwargs]
-    ) -> Union[tuple, SamHQVisionEncoderOutput]:
+    ) -> SamHQVisionEncoderOutput:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
         hidden_states = self.patch_embed(pixel_values)
         if self.pos_embed is not None:
             hidden_states = hidden_states + self.pos_embed
-
-        intermediate_embeddings = []
-
         for layer_module in self.layers:
             hidden_states = layer_module(hidden_states)
-
-            # Collect embeddings from non-windowed blocks
-            if hasattr(layer_module, "window_size") and layer_module.window_size == 0:
-                intermediate_embeddings.append(hidden_states)
-
         hidden_states = self.neck(hidden_states)
-
         return SamHQVisionEncoderOutput(
             last_hidden_state=hidden_states,
-            intermediate_embeddings=intermediate_embeddings,
         )
 
 
@@ -1251,7 +1241,6 @@ class SamHQPromptEncoder(nn.Module):
 )
 class SamHQModel(SamHQPreTrainedModel):
     _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
-
     _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
 
     def __init__(self, config):
