@@ -21,7 +21,7 @@ from torch import nn
 
 from transformers.modeling_outputs import ModelOutput
 from transformers.modeling_utils import PreTrainedModel
-from transformers.utils.generic import TransformersKwargs, can_return_tuple, check_model_inputs
+from transformers.utils.generic import TransformersKwargs, can_return_tuple, check_model_inputs, OutputRecorder
 
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
@@ -153,7 +153,10 @@ class SamHQVisionAttention(SamVisionAttention):
 
 
 class SamHQVisionEncoder(SamVisionEncoder):
-    _can_record_outputs = {"hidden_states": (SamHQVisionLayer, 0), "vision_attentions": (SamHQVisionAttention, 1)}
+    _can_record_outputs = {
+        "hidden_states": OutputRecorder(SamHQVisionLayer),
+        "vision_attentions": OutputRecorder(SamHQVisionAttention, index=1),
+    }
 
     @check_model_inputs
     def forward(
@@ -196,7 +199,9 @@ class SamHQFeedForward(SamFeedForward):
 
 
 class SamHQMaskDecoder(PreTrainedModel):
-    _can_record_outputs = {"mask_decoder_attentions": (SamHQVisionAttention, 1, "transformer")}
+    _can_record_outputs = {
+        "mask_decoder_attentions": OutputRecorder(SamHQVisionAttention, index=1, layer_name="transformer")
+    }
 
     def __init__(self, config: SamHQMaskDecoderConfig):
         super().__init__(config)

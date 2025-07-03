@@ -23,10 +23,10 @@ import warnings
 from collections import OrderedDict, UserDict, defaultdict
 from collections.abc import Iterable, MutableMapping
 from contextlib import ExitStack, contextmanager
-from dataclasses import fields, is_dataclass
+from dataclasses import dataclass, fields, is_dataclass
 from enum import Enum
 from functools import partial, wraps
-from typing import Any, Callable, ContextManager, Optional, TypedDict
+from typing import Any, Callable, ContextManager, Optional, Type, TypedDict, Union
 
 import numpy as np
 from packaging import version
@@ -967,6 +967,22 @@ if is_torch_available():
     @torch._dynamo.disable
     def register_hook_if_needed(layer, capture_outputs):
         return layer.register_forward_hook(capture_outputs)
+
+
+@dataclass
+class OutputRecorder:
+    """
+    Configuration for recording outputs from a model via hooks.
+
+    Attributes:
+        target_class (Type): The class (e.g., nn.Module) to which the hook will be attached.
+        index (Optional[int]): If the output is a tuple/list, optionally record only at a specific index.
+        layer_name (Optional[str]): Name of the submodule to target (if needed), e.g., "transformer.layer.3.attn".
+    """
+
+    target_class: Type
+    index: Optional[int] = None
+    layer_name: Optional[str] = None
 
 
 def check_model_inputs(func):
