@@ -358,17 +358,14 @@ class Exaone4Attention(nn.Module):
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
             # Here we need to slice as we use a static cache by default, but FA2 does not support it
-            # attention_mask can be None, so we use Cache's seq_length rather than attention_mask's shape
+            # attention_mask can be None, so we use cache_position rather than attention_mask's shape
+            # NOTE: seq_len can be retrieved from past_key_value.get_seq_length(),
+            # but currently, only 0th-layer is used for .get_seq_length() in HybridCache.
+            # This can cause issues when the 0th-layer is sliding window and seq_len > window_size,
+            # as it affects full attention layers by slicing KV cache improperly.
+            # Dynamic calculation of seq_len is not optimal for CUDAGraph, thus it seems to be updated later.
             if self.config._attn_implementation == "flash_attention_2":
-                seq_len = past_key_value.get_seq_length() if attention_mask is None else attention_mask.shape[1]
-                if self.is_sliding:
-                    # assume using sliding-window based cache
-                    sliding_window_len = past_key_value.sliding_window_len
-                    if key_states.shape[2] > sliding_window_len:
-                        key_states, value_states = (
-                            key_states[:, :, -sliding_window_len:, :],
-                            value_states[:, :, -sliding_window_len:, :],
-                        )
+                seq_len = cache_position[-1] + 1 if attention_mask is None else attention_mask.shape[1]
                 key_states, value_states = key_states[:, :, :seq_len, :], value_states[:, :, :seq_len, :]
 
         attention_interface: Callable = eager_attention_forward
