@@ -22,9 +22,9 @@ if TYPE_CHECKING:
     from .feature_extraction_dust3r import *
     from .image_processing_dust3r import *
     from .image_processing_dust3r_fast import *
+    from .modeling_dust3r import *
     from .modeling_flax_dust3r import *
     from .modeling_tf_dust3r import *
-    from .modeling_dust3r import *
 else:
     import sys
 

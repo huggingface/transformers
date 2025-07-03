@@ -590,7 +590,6 @@ class Dust3RPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module) -> None:
         """Initialize the weights"""
-
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data = nn.init.trunc_normal_(
                 module.weight.data.to(torch.float32), mean=0.0, std=self.config.initializer_range
@@ -962,11 +961,4 @@ class Dust3RForImageClassification(Dust3RPreTrainedModel):
         )
 
 
-__all__ = [
-    "Dust3RForImageClassification",
-    "Dust3RForMaskedImageModeling",
-    "Dust3RLayer",
-    "Dust3RModel",
-    "Dust3RPooler",
-    "Dust3RPreTrainedModel",
-]
+__all__ = ["Dust3RForImageClassification", "Dust3RForMaskedImageModeling", "Dust3RModel", "Dust3RPreTrainedModel"]
