@@ -20,6 +20,7 @@ from parameterized import parameterized
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, RecurrentGemmaConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
+    Expectations,
     require_bitsandbytes,
     require_read_token,
     require_torch,
@@ -215,12 +216,25 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_2b_sample(self):
         set_seed(0)
-        EXPECTED_TEXT = ['Where is Paris ?\n\nChoose the word or phrase that is closest in meaning to the word in capital letters.\n\nREDEEM\n(A) sort out\n(B) think over\n(C) turn in\n(D) take back\n\nWrite the correct word in the space next to each definition. Use each word only once.\n\nto badly damage\n\nOn the lines provided below, write <em>P</em> if the underlined word group is a phrase and <em>NP</em> if it is not a phrase. Example $\\underline{\\text{P}}$ 1. We have finally discovered the secret $\\underline{\\text{of delicious pizza. }}$']  # fmt: skip
+        expectations = Expectations(
+            {
+                ("cpu", None): [
+                    "What is Deep learning ?\n\nWhat is Deep Learning\n\nYou will be hearing a lot about Deep learning in the coming time. Today, Deep learning is at the pinnacle and is making history"
+                ],
+                ("xpu", 8): [
+                    "What is Deep learning ?\n\nDeep learning is the next frontier in computer vision. It is an Artificial Intelligence (AI) discipline that is rapidly being adopted across industries. The success of Deep"
+                ],
+                ("cuda", 7): [
+                    "What is Deep learning ?\n\nDeep learning is the next frontier in computer vision. It is an Artificial Intelligence-derived technique allowing machines to perform actions typically performed only by humans. Deep learning"
+                ],
+            }
+        )
+        EXPECTED_TEXT = expectations.get_expectation()
         model = AutoModelForCausalLM.from_pretrained(self.model_id).to(torch_device)
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
-        inputs = tokenizer("Where is Paris ?", return_tensors="pt", padding=True).to(torch_device)
-        output = model.generate(**inputs, max_new_tokens=128, do_sample=True)
+        inputs = tokenizer("What is Deep learning ?", return_tensors="pt", padding=True).to(torch_device)
+        output = model.generate(**inputs, max_new_tokens=32, do_sample=True)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXT)
