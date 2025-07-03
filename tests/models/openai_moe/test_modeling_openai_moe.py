@@ -424,8 +424,7 @@ class OpenAIMoeTokenizationIntegrationTest(unittest.TestCase):
         import tiktoken
 
         # Load the HF tokenizer (fast implementation)
-        tokenizer_id = os.getenv("OPENAI_MOE_TOKENIZER_PATH", "meta-openai/Openai-2-7b-hf")
-        cls.tokenizer = AutoTokenizer.from_pretrained(tokenizer_id, trust_remote_code=True)
+        cls.tokenizer = AutoTokenizer.from_pretrained("/fsx/vb/converted_model")
 
         # Build the (pre-release) o200k_harmony encoding for tiktoken
         o200k_base = tiktoken.get_encoding("o200k_base")
