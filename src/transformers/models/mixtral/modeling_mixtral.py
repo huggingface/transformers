@@ -427,8 +427,12 @@ class MixtralPreTrainedModel(PreTrainedModel):
     _supports_static_cache = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _supports_attention_backend = True
     _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
-        "hidden_states": (MixtralDecoderLayer, 0),
-        "attentions": (MixtralAttention, 1),
+        "hidden_states": MixtralDecoderLayer,
+        "attentions": MixtralAttention,
+    }
+    _can_record_outputs = {
+        "hidden_states": MixtralDecoderLayer,
+        "attentions": MixtralAttention,
     }
 
     def _init_weights(self, module):

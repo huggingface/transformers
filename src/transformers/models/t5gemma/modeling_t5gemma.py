@@ -24,7 +24,7 @@ from typing import Callable, Optional, Union
 import torch
 import torch.nn as nn
 
-from transformers.utils.generic import check_model_inputs
+from transformers.utils.generic import OutputRecorder, check_model_inputs
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
@@ -782,8 +782,8 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
 
 class T5GemmaDecoder(T5GemmaEncoder):
     _can_record_outputs = {
-        "attention": [(T5GemmaSelfAttention, 1), (T5GemmaCrossAttention, 1)],
-        "hidden_states": (T5GemmaDecoderLayer, 1),
+        "attention": [OutputRecorder(T5GemmaSelfAttention, index=1), OutputRecorder(T5GemmaCrossAttention, 1)],
+        "hidden_states": T5GemmaDecoderLayer,
     }
 
     def __init__(self, config):

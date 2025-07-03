@@ -295,8 +295,12 @@ class Phi3PreTrainedModel(PreTrainedModel):
     _supports_static_cache = True
     _supports_attention_backend = True
     _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
-        "hidden_states": (Phi3DecoderLayer, 0),
-        "attentions": (Phi3Attention, 1),
+        "hidden_states": Phi3DecoderLayer,
+        "attentions": Phi3Attention,
+    }
+    _can_record_outputs = {
+        "hidden_states": Phi3DecoderLayer,
+        "attentions": Phi3Attention,
     }
     _version = "0.0.5"
 

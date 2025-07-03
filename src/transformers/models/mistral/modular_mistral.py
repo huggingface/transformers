@@ -101,9 +101,9 @@ class MistralDecoderLayer(LlamaDecoderLayer):
 
 
 class MistralPreTrainedModel(LlamaPreTrainedModel):
-    _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
-        "hidden_states": (MistralDecoderLayer, 0),
-        "attentions": (MistralAttention, 1),
+    _can_record_outputs = {
+        "hidden_states": MistralDecoderLayer,
+        "attentions": MistralAttention,
     }
 
 
