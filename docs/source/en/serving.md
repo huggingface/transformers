@@ -107,7 +107,7 @@ The server is also an MCP client, so it can interact with MCP tools in agentic u
 
 ### Example 1: `tiny-agents` and MCP Tools
 
-This subsection showcases how to use `transformers serve` as a local LLM server to the [`tiny-agents`](https://huggingface.co/blog/python-tiny-agents) CLI, and how to configure MCP tools.
+To showcase the use of MCP tools, let's see how to integrate the `transformers serve` server with the [`tiny-agents`](https://huggingface.co/blog/python-tiny-agents) framework.
 
 The first step to use MCP tools is to let the model know which tools are available. As an example, let's consider a `tiny-agents` configuration file with a reference to an [image generation MCP server](https://evalstate-flux1-schnell.hf.space/).
 
