@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch openai model."""
 
+import os
 import unittest
 
 import torch
