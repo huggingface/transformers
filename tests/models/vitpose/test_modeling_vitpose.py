@@ -169,6 +169,9 @@ class VitPoseModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
 
+    def test_batching_equivalence(self, atol=5e-5, rtol=5e-5):
+        super().test_batching_equivalence(atol=atol, rtol=rtol)
+
     @unittest.skip(reason="VitPose does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass
