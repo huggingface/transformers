@@ -14,6 +14,8 @@ rendered properly in your Markdown viewer.
 
 -->
 
+# Agents
+
 (deprecated)
 
 > [!WARNING]
