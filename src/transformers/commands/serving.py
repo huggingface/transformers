@@ -19,9 +19,8 @@ import re
 import time
 from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass, field
-from random import choices
 from threading import Thread
-from typing import Any, Generator, Optional
+from typing import Any, Generator, Optional, Union
 
 from huggingface_hub import ModelInfo, model_info
 
@@ -81,11 +80,117 @@ if is_pydantic_available() and is_fastapi_available() and is_uvicorn_available()
         text: Optional[TextFormat] = None
         tools: Any = None
         top_p: Optional[float] = None
+        metadata: Optional[dict[str, Any]] = None
 
         # Additional options supported by the Responses API
         # that aren't yet supported here.
         # top_logprobs
 
+    class ResponsesOutputContent(BaseModel):
+        type: str
+        text: str
+        annotations: Optional[list[str]] = []
+
+    # Desperately need a better name than this
+    class ResponsesOutputOutput(BaseModel):
+        type: str
+        id: str
+        status: str
+        role: str
+        content: list[ResponsesOutputContent]
+
+    class ResponseOutputItem(BaseModel):
+        type: str
+        id: str
+        status: str
+        role: str
+        content: Optional[list[str | ResponsesOutputContent]] = []
+
+    ### For `response.created`, `response.in_progress`, and `response.completed`
+    class ResponsesOutput(BaseModel):
+        id: str
+        object: Optional[str] = "response"
+        created_at: int
+        status: str
+        error: Optional[str] = None
+        incomplete_details: Optional[str] = None
+        instructions: Optional[str] = None
+        max_output_tokens: Optional[int] = None
+        model: str
+        output: Optional[list[ResponsesOutputOutput]] = []
+        parallel_tool_calls: Optional[bool] = False
+        previous_response_id: Optional[str] = None
+        temperature: Optional[float] = None
+        text: Optional[Any] = None
+        tool_choice: Optional[str] = None
+        tools: Optional[list[str]] = None
+        top_p: Optional[float] = None
+        metadata: Optional[dict[str, Any]] = None
+
+    class Response(BaseModel):
+        type: str
+        response: Optional[ResponsesOutput] = None
+        output_index: Optional[int] = None
+
+    ###
+
+    #### For `response.output_item.added`
+    class ResponseOutputItemAdded(BaseModel):
+        type: str
+        output_index: int
+        item: ResponseOutputItem
+
+    ###
+
+    ### For `response.content_part.added`
+    class ResponseContentPartAdded(BaseModel):
+        type: str
+        item_id: str
+        output_index: int
+        content_index: int
+        part: ResponsesOutputContent
+
+    ###
+
+    ### For `response.output_text.delta`
+    class ResponseOutputTextDelta(BaseModel):
+        type: str
+        item_id: str
+        output_index: int
+        content_index: int
+        delta: str
+
+    ###
+
+    ### For `response.output_text.done`
+    class ResponseOutputTextDone(BaseModel):
+        type: str
+        item_id: str
+        output_index: int
+        content_index: int
+        text: str
+
+    ###
+
+    ### For `response.content_part.done`
+    class ResponseContentPartDone(BaseModel):
+        type: str
+        item_id: str
+        output_index: int
+        content_index: int
+        part: ResponsesOutputContent
+
+    ###
+
+    #### For `response.output_item.done`
+    class ResponseOutputItemDone(BaseModel):
+        type: str
+        output_index: int
+        item: ResponseOutputItem
+
+    ###
+
+    ### Chat Completion
     class ChatCompletionInput(BaseModel):
         messages: list[Message]
         model: str
@@ -141,7 +246,7 @@ def serve_command_factory(args: Namespace):
 
 
 def create_generation_config_from_req(
-    req: "ChatCompletionInput", model_generation_config: "GenerationConfig", **kwargs
+    req: Union["ChatCompletionInput", "ResponsesInput"], model_generation_config: "GenerationConfig", **kwargs
 ) -> "GenerationConfig":
     """
     Creates a generation config from the parameters of the request. If a generation config is passed in the request,
@@ -169,6 +274,9 @@ def create_generation_config_from_req(
     for k, v in non_standard_kwargs.items():
         if v is not None:
             setattr(generation_config, k, v)
+
+    if isinstance(req, ResponsesInput):
+        return generation_config
 
     if req.frequency_penalty is not None:
         generation_config.repetition_penalty = float(req.frequency_penalty)
@@ -350,61 +458,42 @@ class ServeCommand(BaseTransformersCLICommand):
 
     def build_responses_chunk(
         self,
-        content: str,
-        request_id: str,
-        role: Optional[str] = None,
-        finish_reason: Optional[str] = None,
-        tool_calls: Optional[list[ChatCompletionStreamOutputDeltaToolCall]] = None,
+        response: BaseModel,
+        # type: str,
+        # request_id: str,
+        # content: Optional[str] = None,
+        # role: Optional[str] = None,
+        # finish_reason: Optional[str] = None,
+        # status: Optional[str] = "in_progress",
+        # instructions: Optional[str] = None,
+        # text: Optional[dict] = None,
     ) -> str:
-        _id = choices("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", k=48)
-
-        payload = {
-            "id": f"resp_{_id}",
-            "object": "response",
-            "created_at": time.time_ns(),
-            "status": "completed",
-            "error": None,
-            "incomplete_details": None,
-            "instructions": None,
-            "max_output_tokens": None,
-            "model": "gpt-4.1-2025-04-14",
-            "output": [
-                {
-                    "type": "message",
-                    "id": f"msg_{_id}",
-                    "status": "completed",
-                    "role": "assistant",
-                    "content": [
-                        {
-                            "type": "output_text",
-                            "text": "In a peaceful grove beneath a silver moon, a unicorn named Lumina discovered a hidden pool that reflected the stars. As she dipped her horn into the water, the pool began to shimmer, revealing a pathway to a magical realm of endless night skies. Filled with wonder, Lumina whispered a wish for all who dream to find their own hidden magic, and as she glanced back, her hoofprints sparkled like stardust.",
-                            "annotations": [],
-                        }
-                    ],
-                }
-            ],
-            "parallel_tool_calls": True,
-            "previous_response_id": None,
-            "reasoning": {"effort": None, "summary": None},
-            "store": True,
-            "temperature": 1.0,
-            "text": {"format": {"type": "text"}},
-            "tool_choice": "auto",
-            "tools": [],
-            "top_p": 1.0,
-            "truncation": "disabled",
-            "usage": {
-                "input_tokens": 36,
-                "input_tokens_details": {"cached_tokens": 0},
-                "output_tokens": 87,
-                "output_tokens_details": {"reasoning_tokens": 0},
-                "total_tokens": 123,
-            },
-            "user": None,
-            "metadata": {},
-        }
-
-        return f"data: {json.dumps(payload)}\n\n"
+        # content = [
+        #         ResponsesOutputOutput(
+        #         type="message",
+        #         id=request_id,
+        #         status=finish_reason,
+        #         role=role,
+        #         content=ResponsesOutputContent(type="output_text", text=content)
+        #     )
+        # ] if content is not None else []
+        #
+        # response_output = ResponsesOutput(
+        #     id=request_id,
+        #     created_at=time.time_ns(),
+        #     status=status,
+        #     model=self.loaded_model,
+        #     output=content,
+        #     instructions=instructions,
+        #     text=text,
+        # )
+        #
+        # response = Response(
+        #     type=type,
+        #     response=response_output
+        # )
+        #
+        return f"data: {response.model_dump_json()}\n\n"
 
     def run(self):
         app = FastAPI()
@@ -434,7 +523,7 @@ class ServeCommand(BaseTransformersCLICommand):
             if not req.stream:
                 return {"error": "Only streaming mode is supported."}
 
-            output = self.generate_responses(req)
+            output = self.generate_response(req)
             return StreamingResponse(output, media_type="text/event-stream")
 
         @app.get("/v1/models")
@@ -479,6 +568,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
     def continuous_batching(self, req: ChatCompletionInput) -> Generator:
         update_model = self.canonicalized_model_name(req.model) != self.loaded_model
+
         if update_model:
             self.model, self.tokenizer = self.load_model_and_tokenizer(req.model, self.args)
 
@@ -692,24 +782,25 @@ class ServeCommand(BaseTransformersCLICommand):
         return stream_response(generation_streamer, request_id)
 
     def generate_response(self, req: ResponsesInput) -> Generator:
+        # TODO
+        # Check generation config parameters
+        # Implement KV caching (with previous_request_id?)
+        # Implement metadata forwarding (both input and output have a metadata field)
+
         update_model = req.model != self.loaded_model
         if update_model:
             self.model, self.tokenizer = self.load_model_and_tokenizer(req.model, self.args)
 
-        text = self.tokenizer.apply_chat_template(req.messages, add_generation_prompt=True, tokenize=False)
+        text = self.tokenizer.apply_chat_template(req.input, add_generation_prompt=True, tokenize=False)
 
         inputs = self.tokenizer(text, return_tensors="pt").to(self.model.device)["input_ids"]
-        request_id = req.request_id if req.request_id is not None else "req_0"
+        request_id = req.previous_response_id if req.previous_response_id is not None else "req_0"
 
         generation_streamer = TextIteratorStreamer(self.tokenizer, skip_special_tokens=True, skip_prompt=True)
 
         generation_config = create_generation_config_from_req(req)
-        max_new_tokens = req.max_tokens or generation_config.max_new_tokens or 256
+        max_new_tokens = req.max_output_tokens or generation_config.max_new_tokens or 256
         generation_config.max_new_tokens = max_new_tokens
-
-        last_kv_cache = None
-        if self.is_continuation(req) and not update_model:
-            last_kv_cache = self.last_kv_cache
 
         generation_kwargs = {
             "inputs": inputs,
@@ -717,7 +808,6 @@ class ServeCommand(BaseTransformersCLICommand):
             "streamer": generation_streamer,
             "generation_config": generation_config,
             "return_dict_in_generate": True,
-            "past_key_values": last_kv_cache,
         }
 
         def stream_response(streamer, _request_id):
@@ -725,14 +815,115 @@ class ServeCommand(BaseTransformersCLICommand):
 
             try:
                 thread.start()
+
+                created_at = time.time_ns()
+
+                response_created = Response(
+                    type="response.created",
+                    response=ResponsesOutput(
+                        id=f"resp_{request_id}",
+                        created_at=created_at,
+                        status="in_progress",
+                        model=self.loaded_model,
+                        instructions=req.instructions,
+                        text={"format": {"type": "text"}},
+                    ),
+                )
+                yield self.build_responses_chunk(response_created)
+
+                response_in_progress = Response(
+                    type="response.in_progress",
+                    response=ResponsesOutput(
+                        id=f"resp_{request_id}",
+                        created_at=created_at,
+                        status="in_progress",
+                        model=self.loaded_model,
+                        instructions=req.instructions,
+                        text={"format": {"type": "text"}},
+                    ),
+                )
+                yield self.build_responses_chunk(response_in_progress)
+
+                response_output_item_added = ResponseOutputItemAdded(
+                    type="response.output_item_added",
+                    output_index=0,
+                    item=ResponseOutputItem(
+                        id=f"msg_{request_id}", type="message", status="in_progress", role="assistant", content=[]
+                    ),
+                )
+                yield self.build_responses_chunk(response_output_item_added)
+
+                response_content_part_added = ResponseContentPartAdded(
+                    type="response.content_part.added",
+                    item_id=f"msg_{request_id}",
+                    output_index=0,
+                    content_index=0,
+                    part=ResponsesOutputContent(type="output_text", text="", annotations=[]),
+                )
+                yield self.build_responses_chunk(response_content_part_added)
+
+                results = ""
                 for result in streamer:
-                    yield self.build_chat_completions_chunk(content=result, request_id=_request_id, role="assistant")
-                yield self.build_chat_completions_chunk(request_id=_request_id, role=None, finish_reason="stop")
+                    results += result
+                    response_output_text_delta = ResponseOutputTextDelta(
+                        type="response.output_text_delta",
+                        item_id=f"msg_{request_id}",
+                        output_index=0,
+                        content_index=0,
+                        delta=result,
+                    )
+                    yield self.build_responses_chunk(response_output_text_delta)
+
+                response_output_text_done = ResponseOutputTextDone(
+                    type="response.output_text_done",
+                    item_id=f"msg_{request_id}",
+                    output_index=0,
+                    content_index=0,
+                    text=results,
+                )
+                yield self.build_responses_chunk(response_output_text_done)
+
+                response_content_part_done = ResponseContentPartDone(
+                    type="response.content_part_done",
+                    item_id=f"msg_{request_id}",
+                    output_index=0,
+                    content_index=0,
+                    part=ResponsesOutputContent(
+                        type="output_text", text=response_output_text_done.text, annotations=[]
+                    ),
+                )
+                yield self.build_responses_chunk(response_content_part_done)
+
+                response_output_item_done = ResponseOutputItemDone(
+                    type="response.output_item_done",
+                    output_index=0,
+                    item=ResponseOutputItem(
+                        id=f"msg_{request_id}",
+                        type="message",
+                        status="completed",
+                        role="assistant",
+                        content=[response_content_part_done.part],
+                    ),
+                )
+                yield self.build_responses_chunk(response_output_item_done)
+
+                response_completed = Response(
+                    type="response.completed",
+                    response=ResponsesOutput(
+                        id=f"resp_{request_id}",
+                        created_at=created_at,
+                        status="completed",
+                        model=self.loaded_model,
+                        instructions=req.instructions,
+                        text={"format": {"type": "text"}},
+                        output=response_output_item_done.item,
+                    ),
+                )
+                yield self.build_responses_chunk(response_completed)
 
                 thread.join()
             except Exception as e:
                 logger.error(str(e))
-                raise
                 yield f'data: {{"error": "{str(e)}"}}'
 
             finally:
