@@ -47,7 +47,6 @@ from torch.utils.checkpoint import checkpoint
 
 from transformers.utils import is_torchao_available
 
-
 if is_torchao_available():
     from torchao.quantization import Int4WeightOnlyConfig
 
@@ -55,6 +54,7 @@ from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
+from .distributed import DistributedConfig
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
 from .integrations.accelerate import find_tied_parameters, init_empty_weights
 from .integrations.deepspeed import _load_state_dict_into_zero3_model
@@ -777,7 +777,7 @@ def _load_state_dict_into_meta_model(
         file_pointer = safe_open(shard_file, framework="pt", device=tensor_device)
 
     for param_name, empty_param in state_dict.items():
-        if param_name not in expected_keys:
+        if param_name not in expected_keys: # when loading from ckpt, we skip param if doesnt exist in modeling
             continue
 
         # we need to use serialized_param_name as file pointer is untouched
@@ -2090,6 +2090,23 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     raise ValueError(
                         f"Unsupported tensor parallel style {v}. Supported styles are {ALL_PARALLEL_STYLES}"
                     )
+
+        # loop over named modules and attach hooks. this is necessary when a module doesn't have parameters and thus we never hit
+        # device_mesh = self._device_mesh # TODO: can we attach device_mesh to model
+        device_mesh = torch.distributed.device_mesh.DeviceMesh.from_group(torch.distributed.distributed_c10d._get_default_group(), device_type="cuda") # TODO:
+        for name, module in self.named_modules():
+            if not getattr(module, "_is_hooked", False): # this adds gather hook to layers.*.mlp.experts and skips the rest
+                from transformers.integrations.tensor_parallel import add_tensor_parallel_hooks_to_module
+                add_tensor_parallel_hooks_to_module(
+                    model=self,
+                    module=module,
+                    tp_plan=self._tp_plan,
+                    layer_name="", # TODO: make this optional?
+                    current_module_plan=_get_parameter_tp_plan(parameter_name=name, tp_plan=self._tp_plan),
+                    device_mesh=device_mesh,
+                    parameter_name=None
+                )
+            module._is_hooked = True
 
     def dequantize(self):
         """
@@ -4262,6 +4279,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         gguf_file = kwargs.pop("gguf_file", None)
         tp_plan = kwargs.pop("tp_plan", None)
         tp_size = kwargs.pop("tp_size", None)
+        distributed_config : DistributedConfig = kwargs.pop("distributed_config", None)
         device_mesh = kwargs.pop("device_mesh", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
 
@@ -4623,6 +4641,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 torch_dtype=torch_dtype,
                 device_map=device_map,
             )
+
+        if distributed_config is not None and distributed_config.enable_expert_parallel:
+            # TODO: add proper support for ep_plan independently of tp_plan
+            if config.base_model_ep_plan is None:
+                raise ValueError("base_model_ep_plan is required when enable_expert_parallel is True")
+            config.base_model_tp_plan = config.base_model_ep_plan # TODO: hack for now
 
         with ContextManagers(model_init_context):
             # Let's make sure we don't run the init function of buffer modules
