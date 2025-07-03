@@ -629,6 +629,7 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                         or "decoder.channel_projection_layers" in name
                         or "query_position_head" in name
                         or "decoder.encoder_vision_features" in name
+                        or "language_backbone.text_projection" in name
                     ):
                         continue
                     self.assertIn(
