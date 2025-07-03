@@ -17,6 +17,8 @@ from typing import Callable, Optional, Union
 import torch
 import torch.nn as nn
 
+from transformers.utils.generic import check_model_inputs
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...configuration_utils import PretrainedConfig
@@ -445,7 +447,6 @@ class MoonshineDecoderLayer(GradientCheckpointingLayer):
         position_ids: Optional[torch.LongTensor] = None,
         encoder_position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
@@ -460,7 +461,6 @@ class MoonshineDecoderLayer(GradientCheckpointingLayer):
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_value=past_key_value,
-            output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
             position_embeddings=position_embeddings,
@@ -476,7 +476,6 @@ class MoonshineDecoderLayer(GradientCheckpointingLayer):
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 past_key_value=past_key_value,
-                output_attentions=output_attentions,
                 use_cache=use_cache,
             )
             hidden_states = residual + hidden_states
@@ -499,14 +498,7 @@ class MoonshinePreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_cache_class = True
     _supports_static_cache = True
-    _can_record_outputs = {
-        "attentions": (MoonshineAttention, 1),
-        "cross_attentions": (
-            MoonshineAttention,
-            1,
-        ),  # The issue is that we are attaching hooks to all MoonshiAttention instances
-        "hidden_states": (MoonshineDecoderLayer, 0),
-    }  # TODO arthur, how do we separate when it cross / self coming from different layer?
+    # TODO arthur, how do we separate when it cross / self coming from different layer?
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -543,6 +535,10 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
     """
 
     main_input_name = "input_values"
+    _can_record_outputs = {
+        "attentions": (MoonshineAttention, 1, "self_attn"),
+        "hidden_states": (MoonshineDecoderLayer,),
+    }
 
     def __init__(self, config: MoonshineConfig):
         super().__init__(config)
@@ -570,7 +566,7 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.conv1 = value
 
-    @can_return_tuple
+    @check_model_inputs
     def forward(
         self,
         input_values: torch.FloatTensor,
@@ -638,6 +634,11 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
 
 class MoonshineDecoder(LlamaModel):
     main_input_name = "input_ids"
+    _can_record_outputs = {
+        "attentions": (MoonshineAttention, 1, "self_attn"),
+        "hidden_states": (MoonshineDecoderLayer,),
+        "cross_attentions": (MoonshineAttention, 1, "encoder_attn"),
+    }
 
     def __init__(self, config: MoonshineConfig):
         super().__init__(config)
@@ -646,6 +647,7 @@ class MoonshineDecoder(LlamaModel):
             [MoonshineDecoderLayer(config, idx) for idx in range(config.decoder_num_hidden_layers)]
         )
 
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

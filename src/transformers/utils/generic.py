@@ -978,6 +978,9 @@ def check_model_inputs(func):
     BIG BIG TODO:
     - if fullgraph compilation, just execute the fonction and don't add hooks
       or anything!
+
+    `nn.Module.named_modules()` will output the name of the layer, along with the class.
+    We use this to separate which instance should get hooks or not!
     """
 
     @wraps(func)
@@ -1027,13 +1030,13 @@ def check_model_inputs(func):
                     continue
                 if not isinstance(layer_specs, list):
                     layer_specs = [layer_specs]
-                for cls, idx in layer_specs:
-                    capture_tasks.append((key, cls, idx))
+                for specs in layer_specs:
+                    capture_tasks.append((key, specs))
 
             for name, module in self.named_modules():
-                for key, cls, idx in capture_tasks:
-                    if isinstance(module, cls):
-                        hook_fn = make_capture_fn(key, idx)
+                for key, specs in capture_tasks:
+                    if isinstance(module, specs[0]) and len(specs) > 2 and specs[2] in name:
+                        hook_fn = make_capture_fn(key, specs[1] if len(specs) > 1 else 0)
                         hooks.append(register_hook_if_needed(module, hook_fn))
 
         outputs = func(self, *args, **kwargs)
