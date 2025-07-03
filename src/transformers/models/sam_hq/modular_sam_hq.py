@@ -610,9 +610,9 @@ class SamHQModel(SamModel):
         return SamHQImageSegmentationOutput(
             iou_scores=mask_decoder_output.iou_scores,
             pred_masks=mask_decoder_output.masks,
-            mask_decoder_attention=mask_decoder_output.mask_decoder_attentions,
+            mask_decoder_attentions=mask_decoder_output.mask_decoder_attentions,
             vision_hidden_states=vision_outputs.hidden_states,
-            vision_attentions=vision_outputs.vision_attentions,
+            vision_attentions=vision_outputs.attentions,
         )
 
 
