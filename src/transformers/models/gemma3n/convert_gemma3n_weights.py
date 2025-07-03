@@ -552,8 +552,9 @@ def convert_vision_weights(
             converted_weight = weights
     elif _MOBILE_NET_CONV in path:
         if "Conv_0" in path:
-            converted_path = "conv_stem.conv.weight"
+            converted_path = ("conv_stem.conv.weight", "conv_stem.conv.bias")
             converted_weight = weights.transpose(3, 2, 0, 1)
+            converted_weight = (converted_weight, np.zeros(converted_weight.shape[0]))
         elif "Normalize_0" in path:
             converted_path = "conv_stem.bn.weight"
             converted_weight = weights
@@ -638,7 +639,10 @@ def convert_vision_weights(
             converted_path += ".dw_start.conv.weight"
             converted_weight = weights.transpose(3, 2, 0, 1)
 
-    return [(converted_path, converted_weight)]
+    if isinstance(converted_path, (tuple, list)):
+        return zip(converted_path, converted_weight)
+    else:
+        return [(converted_path, converted_weight)]
 
 
 def convert(checkpoint_path: str, config: Gemma3nConfig) -> dict[str, torch.Tensor]:
