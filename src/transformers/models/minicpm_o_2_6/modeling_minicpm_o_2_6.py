@@ -113,6 +113,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         image_processor = AutoImageProcessor.from_pretrained(config._name_or_path)
         feature_extractor = WhisperFeatureExtractor.from_pretrained(config._name_or_path)
         tokenizer = AutoTokenizer.from_pretrained(config._name_or_path, trust_remote_code=True)
+        image_processor.tokenizer = tokenizer
         self.processor = MiniCPM_o_2_6Processor(image_processor=image_processor, feature_extractor=feature_extractor, tokenizer=tokenizer)
 
         self.terminators = ["<|im_end|>", "<|endoftext|>"]
@@ -663,7 +664,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         result_text = []
         for result in result_ids:
             result = result[result != 0]
-            if result[0] == tokenizer.bos_token_id:
+            if result[0] == tokenizer.bos_id:
                 result = result[1:]
             if result[-1] in terminators:
                 result = result[:-1]
@@ -1024,9 +1025,9 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                 spk_embeds = self._get_last_spk_embeds(inputs, outputs)
 
             if isinstance(answer, list):
-                answer = [i.replace("<|tts_eos|>", "") for i in answer]
+                answer = [i.replace(tokenizer.tts_end, "") for i in answer]
             else:
-                answer = answer.replace("<|tts_eos|>", "")
+                answer = answer.replace(tokenizer.tts_end, "")
 
             if return_dict:
                 return OmniOutput(text=answer, spk_embeds=spk_embeds, audio_wav=wav_numpy, sampling_rate=sr)
@@ -1195,8 +1196,8 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         generate_prompt = "<|im_end|>\n<|im_start|>assistant\n<|spk_bos|><|spk|><|spk_eos|><|tts_bos|>"
         input_ids = tokenizer(generate_prompt, return_tensors="pt", add_special_tokens=False)["input_ids"].cuda()
 
-        spk_start_idx = torch.where(input_ids[0] == tokenizer.convert_tokens_to_ids("<|spk_bos|>"))[0]
-        spk_end_idx = torch.where(input_ids[0] == tokenizer.convert_tokens_to_ids("<|spk_eos|>"))[0]
+        spk_start_idx = torch.where(input_ids[0] == tokenizer.spk_start_id)[0]
+        spk_end_idx = torch.where(input_ids[0] == tokenizer.spk_end_id)[0]
         spk_bounds = [
             torch.hstack([(spk_start_idx + 1).unsqueeze(-1), spk_end_idx.unsqueeze(-1)])
         ]  # List[Tensor], (1,2)
