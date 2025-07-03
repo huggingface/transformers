@@ -19,6 +19,7 @@ from transformers.testing_utils import is_torch_available, require_torch
 
 if is_torch_available():
     import torch
+    from torch.nn.attention.flex_attention import create_block_mask
 
     from transformers import AutoConfig
     from transformers.masking_utils import create_causal_mask
@@ -122,5 +123,10 @@ class MaskTest(unittest.TestCase):
             position_ids=position_ids,
         )
 
-        block_mask = causal_mask.to_dense()
-        self.assertEqual(block_mask, EXPECTED_PACKED_MASK)
+        def dummy_mask_mod(b, h, q, kv):
+            return EXPECTED_PACKED_MASK[b, h, q, kv]
+
+        EXPECTED_BLOCK_MASK = create_block_mask(dummy_mask_mod, 2, None, 10, 10, device="cpu")
+
+        # We compatre the str representations, as the BlockMask objects themselves cannot easily be compared
+        self.assertEqual(causal_mask.to_string(), EXPECTED_BLOCK_MASK.to_string())
