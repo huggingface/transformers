@@ -71,7 +71,7 @@ vllm serve Qwen/Qwen2.5-1.5B-Instruct \
 > This section is experimental and subject to change in future versions
 
 <!-- TODO: LLMs -> models, after we add audio/image input/output support -->
-You can serve LLMs supported by `transformers` with the `transformers serve` CLI. It spawns a local server that offers a chat Completions API compatible with the OpenAI SDK, which is the _de facto_ standard for LLM conversations. This way, you can use the server from many third party applications, or test it using the `transformers chat` CLI.
+You can serve LLMs supported by `transformers` with the `transformers serve` CLI. It spawns a local server that offers a chat Completions API compatible with the OpenAI SDK, which is the _de facto_ standard for LLM conversations. This way, you can use the server from many third party applications, or test it using the `transformers chat` CLI ([docs](conversations.md#chat-cli)).
 
 To launch a server, simply use the `transformers serve` CLI command:
 
@@ -79,7 +79,13 @@ To launch a server, simply use the `transformers serve` CLI command:
 transformers serve
 ```
 
-The simplest way to interact with the server is by sending an HTTP request with `cURL`, e.g.
+The simplest way to interact with the server is through our `transformers chat` CLI
+
+```shell
+transformers chat localhost:8000 --model-name-or-path Qwen/Qwen3-4B
+```
+
+or by sending an HTTP request with `cURL`, e.g.
 
 ```shell
 curl -X POST http://localhost:8000/v1/chat/completions -H "Content-Type: application/json" -d '{"messages": [{"role": "system", "content": "hello"}], "temperature": 0.9, "max_tokens": 1000, "stream": true, "model": "Qwen/Qwen2.5-0.5B-Instruct"}'
@@ -109,7 +115,7 @@ This example shows how to use `transformers serve` as a local LLM provider for t
 
 To connect `transformers serve` with Jan, you'll need to set up a new model provider ("Settings" > "Model Providers"). Click on "Add Provider", and set a new name. In your new model provider page, all you need to set is the "Base URL" to the following pattern:
 
-```
+```shell
 http://[host]:[port]/v1
 ```
 
@@ -179,6 +185,9 @@ You are now ready to use your local model in Cursor! For instance, if you toggle
 
 To showcase the use of MCP tools, let's see how to integrate the `transformers serve` server with the [`tiny-agents`](https://huggingface.co/blog/python-tiny-agents) CLI.
 
+> [!TIP]
+> Many Hugging Face Spaces can be used as MCP servers, as in this example. You can find all compatible Spaces [here](https://huggingface.co/spaces?filter=mcp-server).
+
 The first step to use MCP tools is to let the model know which tools are available. As an example, let's consider a `tiny-agents` configuration file with a reference to an [image generation MCP server](https://evalstate-flux1-schnell.hf.space/).
 
 ```json
@@ -195,9 +204,6 @@ The first step to use MCP tools is to let the model know which tools are availab
     ]
 }
 ```
-
-> [!TIP]
-> Many Hugging Face Spaces can be used as MCP servers. You can find all compatible Spaces [here](https://huggingface.co/spaces?filter=mcp-server).
 
 You can then launch your `tiny-agents` chat interface with the following command.
 
