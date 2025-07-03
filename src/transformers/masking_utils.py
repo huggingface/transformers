@@ -629,7 +629,7 @@ def find_packed_sequence_indices(position_ids: torch.Tensor) -> Optional[torch.T
     # gives exactly the sequence indices
     first_dummy_value = position_ids[:1] - 1  # We just need the diff on this first value to be 1
     position_diff = torch.diff(position_ids, prepend=first_dummy_value)
-    packed_sequence_mask = (position_diff != 1).cumsum()
+    packed_sequence_mask = (position_diff != 1).cumsum(0)
 
     # If the last index is 0, then all tokens belong to the same sequence, i.e. no packed format -> return None
     if packed_sequence_mask[-1] == 0:
