@@ -19,7 +19,7 @@ import unittest
 from packaging import version
 from parameterized import parameterized
 
-from transformers import DeepseekV2Config, is_torch_available
+from transformers import DeepseekV2Config, FineGrainedFP8Config, is_torch_available
 from transformers.testing_utils import require_read_token, require_torch, require_torch_accelerator, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -212,16 +212,6 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
 
 @require_torch_accelerator
 class DeepseekV2IntegrationTest(unittest.TestCase):
-    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
-    # Depending on the hardware we get different logits / generations
-    cuda_compute_capability_major_version = None
-
-    @classmethod
-    def setUpClass(cls):
-        if is_torch_available() and torch.cuda.is_available():
-            # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
-
     @slow
     @require_read_token
     def test_deepseek_v2_lite_hard(self):
@@ -231,21 +221,25 @@ class DeepseekV2IntegrationTest(unittest.TestCase):
 
         EXPECTED_TEXT = """An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors.
 
-## Attention Function
+Attention functions are used in a variety of applications, including natural language processing, computer vision, and reinforcement learning.
 
-The attention function is a function that takes a query and a set of key-value pairs as input, and outputs a weighted sum of the values, where the weights are determined by the query and the keys.
+## What is an attention function?
 
-The attention function is used in many applications, such as machine translation, image captioning, and question answering.
+An attention function is a mathematical function that takes a set of inputs and produces a single output. The function is used to model the relationship between the inputs and the output.
 
-## Attention Function in Machine Translation
+The attention function is used in a variety of applications, including natural language processing, computer vision, and reinforcement learning.
 
-In machine translation, the attention function is used to determine the most relevant parts of the source sentence to be translated into the target language.
+## What is the purpose of an attention function?
 
-The attention function is used to determine the weights of the source sentence words, and"""
+An attention function is a mathematical function that takes a set of inputs and produces a single output. The"""
 
         tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V2-Lite")
+        quantization_config = FineGrainedFP8Config()
         model = DeepseekV2ForCausalLM.from_pretrained(
-            "deepseek-ai/DeepSeek-V2-Lite", device_map="auto", torch_dtype=torch.bfloat16
+            "deepseek-ai/DeepSeek-V2-Lite",
+            device_map=torch_device,
+            torch_dtype="auto",
+            quantization_config=quantization_config,
         )
         input_text = [
             "An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors."
@@ -258,70 +252,27 @@ The attention function is used to determine the weights of the source sentence w
 
     @slow
     @require_read_token
-    def test_model_lite_logits_bf16(self):
-        input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-
-        model = DeepseekV2ForCausalLM.from_pretrained(
-            "deepseek-ai/DeepSeek-V2-Lite", device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="eager"
-        )
-
-        with torch.no_grad():
-            out = model(torch.tensor([input_ids]).to(torch_device))
-        # Expected mean on dim = -1
-
-        # fmt: off
-        EXPECTED_MEAN = {
-            7: torch.tensor([[-6.1743, -5.0111, -4.0070, -2.5044, -2.1331, -2.4444, -3.7115, -3.6149]]),
-            8: torch.tensor([[-6.1890, -4.9891, -3.9917, -2.4924, -2.1125, -2.4480, -3.7443, -3.5946]])
-        }
-
-        self.assertTrue(
-            torch.allclose(
-                EXPECTED_MEAN[self.cuda_compute_capability_major_version].to(torch_device),
-                out.logits.float().mean(-1),
-                atol=1e-2,
-                rtol=1e-2
-            )
-        )
-
-        # slicing logits[0, 0, 0:15]
-        EXPECTED_SLICE = {
-            7: torch.tensor([[-1.2031, -0.7344, -0.0762, -2.9062,  1.2656, -2.6094, -0.7227, -2.9062, -2.5312, -0.5430, -0.2949, -1.7734, -2.1562, -0.7969, -3.8594]]),
-            8: torch.tensor([[-1.1875, -0.7383, -0.0601, -2.8594,  1.2578, -2.6094, -0.7383, -2.9062, -2.5469, -0.5469, -0.3125, -1.7734, -2.1719, -0.8125, -3.8438]])
-        }
-
-        # fmt: on
-        self.assertTrue(
-            torch.allclose(
-                EXPECTED_SLICE[self.cuda_compute_capability_major_version].to(torch_device),
-                out.logits[0, 0, :15].float(),
-                atol=1e-2,
-                rtol=1e-2,
-            )
-        )
-
-    @slow
-    @require_read_token
     def test_model_lite_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
+        quantization_config = FineGrainedFP8Config()
         model = DeepseekV2ForCausalLM.from_pretrained(
-            "deepseek-ai/DeepSeek-V2-Lite", device_map="auto", torch_dtype=torch.float16
+            "deepseek-ai/DeepSeek-V2-Lite",
+            device_map=torch_device,
+            torch_dtype="auto",
+            quantization_config=quantization_config,
+            attn_implementation="eager",
         )
 
         with torch.no_grad():
             out = model(torch.tensor([input_ids]).to(torch_device))
+        # Expected mean on dim = -1
 
         # fmt: off
-        # Expected mean on dim = -1
-        EXPECTED_MEAN = {
-            7: torch.tensor([[-6.6420, -4.1227, -4.9809, -3.2041, 0.8261, -3.0052, 1.2957, -3.3648]]),
-            8: torch.tensor([[-6.1736, -5.0128, -4.0018, -2.5014, -2.1399, -2.4453, -3.7112, -3.6169]])
-        }
-
+        expected_mean = torch.tensor([[-6.1586, -5.0041, -4.5611, -2.5616, -2.0913, -2.3482, -3.6658, -2.9652]])
         self.assertTrue(
             torch.allclose(
-                EXPECTED_MEAN[self.cuda_compute_capability_major_version].to(torch_device),
+                expected_mean,
                 out.logits.float().mean(-1),
                 atol=1e-2,
                 rtol=1e-2
@@ -329,15 +280,11 @@ The attention function is used to determine the weights of the source sentence w
         )
 
         # slicing logits[0, 0, 0:15]
-        EXPECTED_SLICE = {
-            7: torch.tensor([-1.0938, -0.5713, -0.2632, -2.9434,  1.2783, -2.6465, -0.6992, -2.6875, -2.3086, -0.5396, -0.2993, -1.5439, -2.2500, -0.4854, -3.7539]),
-            8: torch.tensor([-1.0898, -0.5703, -0.2627, -2.9414,  1.2725, -2.6504, -0.7007, -2.6836, -2.3125, -0.5415, -0.3003, -1.5420, -2.2480, -0.4829, -3.7520])
-        }
+        expected_slice = torch.tensor([[-1.1953, -0.7227, -0.0903, -2.8594,  1.2422, -2.6406, -0.7461, -2.9062, -2.5312, -0.5703, -0.3281, -1.7891, -2.2031, -0.8281, -3.8750]])
         # fmt: on
-
         self.assertTrue(
             torch.allclose(
-                EXPECTED_SLICE[self.cuda_compute_capability_major_version].to(torch_device),
+                expected_slice,
                 out.logits[0, 0, :15].float(),
                 atol=1e-2,
                 rtol=1e-2,
@@ -358,8 +305,8 @@ The attention function is used to determine the weights of the source sentence w
         # was changed to have a cache of 53 tokens (as opposed to 4096), on Ampere GPUs.
 
         EXPECTED_TEXT_COMPLETION = [
-            "Simply put, the theory of relativity states that  “the laws of physics are the same for all observers in uniform motion relative to one another.”\n\nThe theory of relativity is a theory of space, time, and gravity. It is",
-            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, my hot dogs, my hamburgers, my french fries, my chicken nuggets, my pizza, my grilled cheese, my grilled",
+            "Simply put, the theory of relativity states that \nthe speed of light is constant.\nThe speed of light is constant.\nThe speed of light is constant.\nThe speed of light is constant.\nThe speed of light is constant.",
+            "My favorite all time favorite condiment is ketchup. I love ketchup. I love ketchup on my hot dogs, hamburgers, french fries, and even on my eggs. I love ketchup. I love ketchup so much that I",
         ]
 
         prompts = [
@@ -369,8 +316,12 @@ The attention function is used to determine the weights of the source sentence w
         tokenizer = AutoTokenizer.from_pretrained(
             "deepseek-ai/DeepSeek-V2-Lite", pad_token="</s>", padding_side="right"
         )
+        quantization_config = FineGrainedFP8Config()
         model = DeepseekV2ForCausalLM.from_pretrained(
-            "deepseek-ai/DeepSeek-V2-Lite", device_map=torch_device, torch_dtype=torch.float16
+            "deepseek-ai/DeepSeek-V2-Lite",
+            device_map=torch_device,
+            torch_dtype="auto",
+            quantization_config=quantization_config,
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
@@ -379,7 +330,15 @@ The attention function is used to determine the weights of the source sentence w
         dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, dynamic_text)
 
+        generated_ids = model.generate(
+            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
+        )
+        static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
+
         # Static Cache + compile (`generate()` internally compiles each decoding step when static cache is used)
+        model._cache = None  # clear cache object, initialized when we pass `cache_implementation="static"`
+        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
         generated_ids = model.generate(
             **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
         )
