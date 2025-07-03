@@ -345,6 +345,7 @@ class Qwen3MoeModel(MixtralModel):
 
         if use_cache and past_key_values is None:
             from ...cache_utils import DynamicCache
+
             past_key_values = DynamicCache()
 
         if inputs_embeds is None:
@@ -359,6 +360,7 @@ class Qwen3MoeModel(MixtralModel):
             position_ids = cache_position.unsqueeze(0)
 
         from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+
         mask_function = create_causal_mask if self.config.sliding_window is None else create_sliding_window_causal_mask
         causal_mask = mask_function(
             config=self.config,
