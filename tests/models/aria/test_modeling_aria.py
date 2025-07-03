@@ -254,8 +254,9 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
 SKIP = False
 torch_accelerator_module = getattr(torch, torch_device)
 memory = 23  # skip on T4 / A10
-if torch_accelerator_module.get_device_properties(0).total_memory / 1024**3 < memory:
-    SKIP = True
+if hasattr(torch_accelerator_module, "get_device_properties"):
+    if torch_accelerator_module.get_device_properties(0).total_memory / 1024**3 < memory:
+        SKIP = True
 
 
 @unittest.skipIf(SKIP, reason="A10 doesn't have enough GPU memory for this tests")
