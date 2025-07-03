@@ -3346,9 +3346,9 @@ class Expectations(UserDict[PackedDeviceProperties, Any]):
         """
         Returns score indicating how similar two instances of the `Properties` tuple are.
         Rules are as follows:
-            * Matching `type` adds one point, semi-matching `type` adds half a point (e.g. cuda and rocm).
+            * Matching `type` adds one point, semi-matching `type` adds 0.1 point (e.g. cuda and rocm).
             * If types match, matching `major` adds another point, and then matching `minor` adds another.
-            * Default expectation (if present) is worth 0.1 point to distinguish it from a straight-up zero.
+            * Default expectation (if present) is worth 0.5 point, which is better than cross-device semi-matching.
         """
         device_type, major, minor = properties
         other_device_type, other_major, other_minor = other
