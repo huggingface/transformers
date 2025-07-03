@@ -21,6 +21,7 @@ import pytest
 
 from transformers import AutoTokenizer, JambaConfig, is_torch_available
 from transformers.testing_utils import (
+    DeviceProperties,
     Expectations,
     get_device_properties,
     require_bitsandbytes,
@@ -557,7 +558,7 @@ class JambaModelIntegrationTest(unittest.TestCase):
     tokenizer = None
     # This variable is used to determine which acclerator are we using for our runners (e.g. A10 or T4)
     # Depending on the hardware we get different logits / generations
-    device_properties = None
+    device_properties: DeviceProperties = (None, None, None)
 
     @classmethod
     def setUpClass(cls):
@@ -595,7 +596,7 @@ class JambaModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output_sentence, expected_sentence)
 
         # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
-        if self.device_properties == ("cuda", 8):
+        if self.device_properties[0] == "cuda" and self.device_properties[1] == 8:
             with torch.no_grad():
                 logits = self.model(input_ids=input_ids).logits
 
@@ -638,7 +639,7 @@ class JambaModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output_sentences[1], expected_sentences[1])
 
         # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
-        if self.device_properties == ("cuda", 8):
+        if self.device_properties[0] == "cuda" and self.device_properties[1] == 8:
             with torch.no_grad():
                 logits = self.model(input_ids=inputs["input_ids"]).logits
 

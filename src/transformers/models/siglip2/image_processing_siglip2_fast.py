@@ -14,7 +14,7 @@
 # limitations under the License.
 """Fast Image processor class for SigLIP2."""
 
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 
@@ -69,7 +69,7 @@ def convert_image_to_patches(image: "torch.Tensor", patch_size: int) -> "torch.T
 
 def pad_along_first_dim(
     tensor: "torch.Tensor", target_length: int, pad_value: int = 0
-) -> Tuple["torch.Tensor", "torch.Tensor"]:
+) -> tuple["torch.Tensor", "torch.Tensor"]:
     """
     Pad the tensor along the first dimension.
     """
@@ -123,7 +123,7 @@ class Siglip2ImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: List["torch.Tensor"],
+        images: list["torch.Tensor"],
         do_resize: bool,
         patch_size: int,
         max_num_patches: int,
@@ -131,8 +131,8 @@ class Siglip2ImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> BatchFeature:

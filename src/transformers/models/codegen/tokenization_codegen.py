@@ -17,7 +17,7 @@
 import json
 import os
 from functools import lru_cache
-from typing import TYPE_CHECKING, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 import regex as re
@@ -42,7 +42,7 @@ VOCAB_FILES_NAMES = {
 }
 
 
-@lru_cache()
+@lru_cache
 def bytes_to_unicode():
     """
     Returns list of utf-8 byte and a mapping to unicode strings. We specifically avoids mapping to whitespace/control
@@ -276,7 +276,7 @@ class CodeGenTokenizer(PreTrainedTokenizer):
         text = bytearray([self.byte_decoder[c] for c in text]).decode("utf-8", errors=self.errors)
         return text
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
@@ -313,10 +313,10 @@ class CodeGenTokenizer(PreTrainedTokenizer):
 
     def decode(
         self,
-        token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
+        token_ids: Union[int, list[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: Optional[bool] = None,
-        truncate_before_pattern: Optional[List[str]] = None,
+        truncate_before_pattern: Optional[list[str]] = None,
         **kwargs,
     ) -> str:
         """

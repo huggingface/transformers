@@ -13,11 +13,12 @@
 # limitations under the License.
 from __future__ import annotations
 
+import math
 import operator
 import os
 import re
 from functools import partial, reduce
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.distributed as dist
@@ -26,8 +27,6 @@ from torch import nn
 from ..utils import is_torch_greater_or_equal, logging
 from ..utils.generic import GeneralInterface
 
-
-ALL_LAYERNORM_LAYERS = [nn.LayerNorm]
 
 logger = logging.get_logger(__name__)
 
@@ -59,9 +58,11 @@ def initialize_tensor_parallelism(tp_plan, tp_size=None):
             local_rank = int(os.environ["LOCAL_RANK"])
             world_size = int(os.environ["WORLD_SIZE"])
 
-            backend_map = {"cuda": "nccl", "cpu": "gloo", "xpu": "ccl", "hpu": "hccl"}
+            backend_map = {"cuda": "nccl", "cpu": "gloo", "xpu": "xccl", "hpu": "hccl"}
             backend = backend_map.get(device_type)
             if device_type == "cpu" and int(os.environ.get("CCL_WORKER_COUNT", 0)):
+                backend = "ccl"
+            if device_type == "xpu" and not is_torch_greater_or_equal("2.8", accept_dev=True):
                 backend = "ccl"
 
             torch.distributed.init_process_group(backend=backend, rank=rank, world_size=world_size)
@@ -93,7 +94,7 @@ def initialize_tensor_parallelism(tp_plan, tp_size=None):
     return tp_device, device_map, device_mesh
 
 
-def _blocks_to_block_sizes(total_size: int, blocks: Union[int, List[int]]) -> List[int]:
+def _blocks_to_block_sizes(total_size: int, blocks: Union[int, list[int]]) -> list[int]:
     """
     Convert block count or proportions to block sizes.
 
@@ -101,7 +102,7 @@ def _blocks_to_block_sizes(total_size: int, blocks: Union[int, List[int]]) -> Li
 
     - The number of blocks (int), in which case the block size is
       total_size//blocks; or
-    - A list of block sizes (List[int]).
+    - A list of block sizes (list[int]).
 
     In the second case, if sum(blocks) < total_size, the ratios between
     the block sizes will be preserved. For instance, if blocks is
@@ -280,7 +281,48 @@ def repack_weights(
 def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
     """
     Generalized tensor sharding across a multi-dimensional device mesh.
+    Extract only the fraction of the parameter owned by the given `rank` when the parameter would have gone sharding at provided `dim`.
+    Extraction follows the pytorch `Shard` placement so that sharding and materializing back to full tensor follows `Shard` semantics.
+    `Shard` follows torch.chunk style sharding of the tensor. We demonstrate some cases below on how sharding happens including some edge cases
+    such as some ranks having an empty tensor as shard. Below implementation is robut to all these cases.
 
+    Case (1)
+    empty_param                 (16, 5120, 8190)
+    dim                         0
+    device_mesh.size()          4
+    rank 0 gets					(4, 5120, 8190)			 (0 ... 4, 5120, 8190)
+    rank 1 gets					(4, 5120, 8190)			 (4 ... 8, 5120, 8190)
+    rank 2 gets					(4, 5120, 8190)			 (8 ... 12, 5120, 8190)
+    rank 3 gets					(4, 5120, 8190)			 (12 ... 16, 5120, 8190)
+
+    Case (2)
+    empty_param                 (16, 5120, 8190)
+    dim                         0
+    device_mesh.size()          14
+    rank 0 gets					(2, 5120, 8190)			 (0 ... 2, 5120, 8190)
+    rank 1 gets					(2, 5120, 8190)			 (2 ... 4, 5120, 8190)
+    rank 2 gets					(2, 5120, 8190)			 (4 ... 6, 5120, 8190)
+    rank 3 gets					(2, 5120, 8190)			 (6 ... 8, 5120, 8190)
+    rank 4 gets					(2, 5120, 8190)			 (8 ... 10, 5120, 8190)
+    rank 5 gets					(2, 5120, 8190)			 (10 ... 12, 5120, 8190)
+    rank 6 gets					(2, 5120, 8190)			 (12 ... 14, 5120, 8190)
+    rank 7 gets					(2, 5120, 8190)			 (14 ... 16, 5120, 8190)
+    rank 8 gets					(0, 5120, 8190)
+    rank 9 gets					(0, 5120, 8190)
+    rank 10 gets			    (0, 5120, 8190)
+    rank 11 gets				(0, 5120, 8190)
+    rank 12 gets				(0, 5120, 8190)
+    rank 13 gets				(0, 5120, 8190)
+
+    Case (3)
+    empty_param                 (16, 5120, 8190)
+    dim                         0
+    device_mesh.size()          3
+    rank 0 gets					(6, 5120, 8190)			 (0 ... 6, 5120, 8190)
+    rank 1 gets					(6, 5120, 8190)			 (6 ... 12, 5120, 8190)
+    rank 2 gets					(4, 5120, 8190)			 (12 ... 16, 5120, 8190)
+
+    In case (2), empty shards are returned with appropriate dimension to allow for operations to work smoothly.
     Args:
         param (torch.Tensor): The tensor to shard.
         empty_param (torch.Tensor): A tensor used for shape reference.
@@ -289,6 +331,7 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
         dim (int): Dimension along which to shard the tensor.
     """
     param_dim = empty_param.dim()
+
     if dim < 0:
         dim = param_dim + dim
     if dim >= param_dim:
@@ -301,15 +344,18 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
     if rank >= world_size:
         raise ValueError(f"Rank {rank} is out of bounds for mesh size {world_size}")
 
-    shard_size = empty_param.shape[dim] // world_size
+    shard_size = math.ceil(empty_param.shape[dim] / world_size)
     start = rank * shard_size
-    end = start + shard_size
 
     # Construct slicing index dynamically
+    end = min(start + shard_size, empty_param.shape[dim])
     slice_indices = [slice(None)] * param_dim
-    slice_indices[dim] = slice(start, end)
-
-    return param[tuple(slice_indices)]
+    if start < empty_param.shape[dim]:
+        slice_indices[dim] = slice(start, end)
+        return param[tuple(slice_indices)]
+    dimensions = list(param.shape)
+    dimensions[dim] = 0
+    return torch.empty(tuple(dimensions), dtype=torch.int64)
 
 
 def distribute_module(
@@ -500,7 +546,9 @@ class ColwiseParallel(TensorParallelLayer):
         if to_contiguous:
             parameter = parameter.contiguous()
         if self.use_dtensor:
-            parameter = DTensor.from_local(parameter, device_mesh, shard, run_check=False)
+            parameter = DTensor.from_local(
+                parameter, device_mesh, shard, run_check=False, shape=empty_param.size(), stride=empty_param.stride()
+            )
         return nn.Parameter(parameter, requires_grad=parameter.is_floating_point())
 
     @staticmethod
@@ -574,7 +622,9 @@ class RowwiseParallel(TensorParallelLayer):
         if to_contiguous:
             parameter = parameter.contiguous()
         if self.use_dtensor:
-            parameter = DTensor.from_local(parameter, device_mesh, shard, run_check=False)
+            parameter = DTensor.from_local(
+                parameter, device_mesh, shard, run_check=False, shape=empty_param.size(), stride=empty_param.stride()
+            )
         return nn.Parameter(parameter, requires_grad=parameter.is_floating_point())
 
     @staticmethod
@@ -608,7 +658,7 @@ class RowwiseParallel(TensorParallelLayer):
         if self.use_dtensor:
             if isinstance(module, nn.Linear):
                 # rowwise linear runtime sharding requires input tensor shard on last dim
-                self.desired_input_layouts: Tuple[Placement, ...] = (Shard(-1),)
+                self.desired_input_layouts: tuple[Placement, ...] = (Shard(-1),)
             elif isinstance(module, nn.Embedding):
                 # rowwise embedding runtime sharding requires input tensor replicated
                 self.desired_input_layouts = (Replicate(),)
@@ -647,7 +697,7 @@ class SequenceParallel(TensorParallelLayer):
     `RMSNorm python implementation <https://github.com/facebookresearch/llama/blob/main/llama/model.py#L34>`__
 
     This style implements the operation that is described in the paper
-    `Reducing Activation Recomputation in Large Transformer Models <https://arxiv.org/abs/2205.05198>`__
+    `Reducing Activation Recomputation in Large Transformer Models <https://huggingface.co/papers/2205.05198>`__
 
     If the input passed in to this ``nn.Module`` is a :class:`torch.Tensor`, it assumes that the input is already sharded
     on the sequence dimension and converts the input to a :class:`DTensor` sharded on the sequence dimension. If the input

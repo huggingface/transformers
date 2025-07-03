@@ -1035,19 +1035,19 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         self.skipTest(reason="Musicgen doesn't use the MusicgenFlashAttention2 class method.")
 
     @require_torch_sdpa
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_sdpa_can_dispatch_on_flash(self):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
-        (device_type, major) = get_device_properties()
+        device_type, major, _ = get_device_properties()
         if device_type == "cuda" and major < 8:
             self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
         elif device_type == "rocm" and major < 9:
             self.skipTest(reason="This test requires an AMD GPU with compute capability >= 9.0")
-        else:
-            self.skipTest(reason="This test requires a Nvidia or AMD GPU")
+        elif device_type not in ["cuda", "rocm", "xpu"]:
+            self.skipTest(reason="This test requires a Nvidia or AMD GPU or an Intel XPU")
 
         torch.compiler.reset()
 

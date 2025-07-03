@@ -161,11 +161,11 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
             [
                 {
                     "input_text": "<image> What this is? Assistant: This is",
-                    "generated_text": "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are sleeping and appear to be comfortable",
+                    "generated_text": "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are facing the camera, and they",
                 },
                 {
                     "input_text": "<image> What this is? Assistant: This is",
-                    "generated_text": "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are sleeping and appear to be comfortable",
+                    "generated_text": "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are facing the camera, and they",
                 },
             ],
         )

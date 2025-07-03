@@ -26,7 +26,7 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import fields, is_dataclass
 from enum import Enum
 from functools import partial, wraps
-from typing import Any, Callable, ContextManager, List, Optional, TypedDict
+from typing import Any, Callable, ContextManager, Optional, TypedDict
 
 import numpy as np
 from packaging import version
@@ -990,5 +990,5 @@ class GeneralInterface(MutableMapping):
     def register(cls, key: str, value: Callable):
         cls._global_mapping.update({key: value})
 
-    def valid_keys(self) -> List[str]:
+    def valid_keys(self) -> list[str]:
         return list(self.keys())

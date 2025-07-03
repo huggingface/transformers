@@ -49,6 +49,7 @@ from .utils import (
     is_vision_available,
     logging,
 )
+from .utils.import_utils import is_rocm_platform
 
 
 if is_vision_available():
@@ -184,6 +185,7 @@ class DefaultFastImageProcessorKwargs(TypedDict, total=False):
     data_format: Optional[ChannelDimension]
     input_data_format: Optional[Union[str, ChannelDimension]]
     device: Optional["torch.device"]
+    disable_grouping: Optional[bool]
 
 
 @auto_docstring
@@ -279,7 +281,33 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 "Size must contain 'height' and 'width' keys, or 'max_height' and 'max_width', or 'shortest_edge' key. Got"
                 f" {size}."
             )
+        # This is a workaround to avoid a bug in torch.compile when dealing with uint8 on AMD MI3XX GPUs
+        # Tracked in PyTorch issue: https://github.com/pytorch/pytorch/issues/155209
+        # TODO: remove this once the bug is fixed (detected with torch==2.7.0+git1fee196, torchvision==0.22.0+9eb57cd)
+        if torch.compiler.is_compiling() and is_rocm_platform():
+            return self.compile_friendly_resize(image, new_size, interpolation, antialias)
         return F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
+
+    @staticmethod
+    def compile_friendly_resize(
+        image: "torch.Tensor",
+        new_size: tuple[int, int],
+        interpolation: Optional["F.InterpolationMode"] = None,
+        antialias: bool = True,
+    ) -> "torch.Tensor":
+        """
+        A wrapper around `F.resize` so that it is compatible with torch.compile when the image is a uint8 tensor.
+        """
+        if image.dtype == torch.uint8:
+            image = image.float() / 256
+            image = F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
+            image = image * 256
+            image = torch.where(image > 255, 255, image)
+            image = torch.where(image < 0, 0, image)
+            image = image.round().to(torch.uint8)
+        else:
+            image = F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
+        return image
 
     def rescale(
         self,
@@ -382,7 +410,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         Args:
             image (`"torch.Tensor"`):
                 Image to center crop.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Size of the output image.
 
         Returns:
@@ -480,18 +508,35 @@ class BaseImageProcessorFast(BaseImageProcessor):
     ) -> list["torch.Tensor"]:
         """
         Prepare the input images for processing.
+
+        Args:
+            images (`ImageInput`):
+                The input images to process.
+            do_convert_rgb (`bool`, *optional*):
+                Whether to convert the images to RGB.
+            input_data_format (`str` or `ChannelDimension`, *optional*):
+                The input data format of the images.
+            device (`torch.device`, *optional*):
+                The device to put the processed images on.
+
+        Returns:
+            List[`torch.Tensor`]: The processed images.
         """
+
+        # Get structured images (potentially nested)
         images = self._prepare_images_structure(images)
-        process_image_fn = partial(
-            self._process_image,
-            do_convert_rgb=do_convert_rgb,
-            input_data_format=input_data_format,
-            device=device,
+
+        process_image_partial = partial(
+            self._process_image, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
         )
-        # todo: yoni - check if we can parallelize this efficiently
-        processed_images = []
-        for image in images:
-            processed_images.append(process_image_fn(image))
+
+        # Check if we have nested structure, assuming the nesting is consistent
+        has_nested_structure = len(images) > 0 and isinstance(images[0], (list, tuple))
+
+        if has_nested_structure:
+            processed_images = [[process_image_partial(img) for img in nested_list] for nested_list in images]
+        else:
+            processed_images = [process_image_partial(img) for img in images]
 
         return processed_images
 
@@ -621,11 +666,12 @@ class BaseImageProcessorFast(BaseImageProcessor):
         do_normalize: bool,
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
+        disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
@@ -635,7 +681,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
         # Group images by size for further processing
         # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_center_crop:
@@ -656,47 +702,3 @@ class BaseImageProcessorFast(BaseImageProcessor):
         encoder_dict.pop("_valid_processor_keys", None)
         encoder_dict.pop("_valid_kwargs_names", None)
         return encoder_dict
-
-
-class SemanticSegmentationMixin:
-    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple]] = None):
-        """
-        Converts the output of [`MobileNetV2ForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
-
-        Args:
-            outputs ([`MobileNetV2ForSemanticSegmentation`]):
-                Raw outputs of the model.
-            target_sizes (`List[Tuple]` of length `batch_size`, *optional*):
-                List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
-                predictions will not be resized.
-
-        Returns:
-            semantic_segmentation: `List[torch.Tensor]` of length `batch_size`, where each item is a semantic
-            segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
-            specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
-        """
-        logits = outputs.logits
-
-        # Resize logits and compute semantic segmentation maps
-        if target_sizes is not None:
-            if len(logits) != len(target_sizes):
-                raise ValueError(
-                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
-                )
-
-            # if is_torch_tensor(target_sizes):
-            #     target_sizes = target_sizes.numpy()
-
-            semantic_segmentation = []
-
-            for idx in range(len(logits)):
-                resized_logits = torch.nn.functional.interpolate(
-                    logits[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
-                )
-                semantic_map = resized_logits[0].argmax(dim=0)
-                semantic_segmentation.append(semantic_map)
-        else:
-            semantic_segmentation = logits.argmax(dim=1)
-            semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
-
-        return semantic_segmentation

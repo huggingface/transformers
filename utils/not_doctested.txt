@@ -2,7 +2,6 @@ docs/source/en/_config.py
 docs/source/en/accelerate.md
 docs/source/en/add_new_model.md
 docs/source/en/add_new_pipeline.md
-docs/source/en/attention.md
 docs/source/en/community.md
 docs/source/en/contributing.md
 docs/source/en/custom_models.md
@@ -267,7 +266,6 @@ docs/source/en/model_doc/yolos.md
 docs/source/en/model_doc/yoso.md
 docs/source/en/model_memory_anatomy.md
 docs/source/en/model_sharing.md
-docs/source/en/model_summary.md
 docs/source/en/notebooks.md
 docs/source/en/pad_truncation.md
 docs/source/en/peft.md
@@ -309,7 +307,6 @@ docs/source/en/tasks/video_classification.md
 docs/source/en/tasks/visual_question_answering.md
 docs/source/en/tasks/zero_shot_image_classification.md
 docs/source/en/tasks/zero_shot_object_detection.md
-docs/source/en/tasks_explained.md
 docs/source/en/tf_xla.md
 docs/source/en/tflite.md
 docs/source/en/tokenizer_summary.md
