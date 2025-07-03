@@ -146,6 +146,7 @@ class LightGlueModelTest(ModelTesterMixin, unittest.TestCase):
     def test_batching_equivalence(self, atol=1e-5, rtol=1e-5):
         device_properties = get_device_properties()
         if device_properties[0] == "cuda" and device_properties[1] == 8:
+            # TODO: (ydshieh) fix this
             self.skipTest(reason="After switching to A10, this test always fails, but pass on CPU or T4.")
         super().test_batching_equivalence(atol=atol, rtol=rtol)
 
