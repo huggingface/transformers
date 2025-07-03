@@ -665,8 +665,8 @@ class AriaPreTrainedModel(PreTrainedModel):
     _supports_static_cache = False  # MoE models don't work with torch.compile (dynamic slicing)
     _supports_attention_backend = True
     _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
-        "hidden_states": (AriaTextDecoderLayer, 0),
-        "attentions": (AriaTextAttention, 1),
+        "hidden_states": AriaTextDecoderLayer,
+        "attentions": AriaTextAttention,
     }
 
     def _init_weights(self, module):

@@ -303,8 +303,8 @@ class PhiPreTrainedModel(PreTrainedModel):
     _supports_static_cache = True
     _supports_attention_backend = True
     _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
-        "hidden_states": (PhiDecoderLayer, 0),
-        "attentions": (PhiAttention, 1),
+        "hidden_states": PhiDecoderLayer,
+        "attentions": PhiAttention,
     }
 
     def _init_weights(self, module):

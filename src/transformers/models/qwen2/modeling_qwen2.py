@@ -267,8 +267,8 @@ class Qwen2PreTrainedModel(PreTrainedModel):
     _supports_static_cache = True
     _supports_attention_backend = True
     _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
-        "hidden_states": (Qwen2DecoderLayer, 0),
-        "attentions": (Qwen2Attention, 1),
+        "hidden_states": Qwen2DecoderLayer,
+        "attentions": Qwen2Attention,
     }
 
     def _init_weights(self, module):

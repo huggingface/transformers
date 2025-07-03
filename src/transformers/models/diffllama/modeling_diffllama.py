@@ -553,8 +553,8 @@ class DiffLlamaPreTrainedModel(PreTrainedModel):
     _supports_static_cache = True
     _supports_attention_backend = False
     _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
-        "hidden_states": (DiffLlamaDecoderLayer, 0),
-        "attentions": (DiffLlamaAttention, 1),
+        "hidden_states": DiffLlamaDecoderLayer,
+        "attentions": DiffLlamaAttention,
     }
 
     def _init_weights(self, module):

@@ -297,8 +297,8 @@ class SmolLM3PreTrainedModel(PreTrainedModel):
     _supports_static_cache = True
     _supports_attention_backend = True
     _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
-        "hidden_states": (SmolLM3DecoderLayer, 0),
-        "attentions": (SmolLM3Attention, 1),
+        "hidden_states": SmolLM3DecoderLayer,
+        "attentions": SmolLM3Attention,
     }
 
     def _init_weights(self, module):

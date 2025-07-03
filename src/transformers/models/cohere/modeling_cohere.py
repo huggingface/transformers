@@ -349,8 +349,8 @@ class CoherePreTrainedModel(PreTrainedModel):
     _supports_static_cache = True
     _supports_attention_backend = True
     _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
-        "hidden_states": (CohereDecoderLayer, 0),
-        "attentions": (CohereAttention, 1),
+        "hidden_states": CohereDecoderLayer,
+        "attentions": CohereAttention,
     }
 
     def _init_weights(self, module):

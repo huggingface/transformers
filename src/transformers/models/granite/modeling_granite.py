@@ -313,8 +313,8 @@ class GranitePreTrainedModel(PreTrainedModel):
     _supports_static_cache = True
     _supports_attention_backend = True
     _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
-        "hidden_states": (GraniteDecoderLayer, 0),
-        "attentions": (GraniteAttention, 1),
+        "hidden_states": GraniteDecoderLayer,
+        "attentions": GraniteAttention,
     }
 
     def _init_weights(self, module):

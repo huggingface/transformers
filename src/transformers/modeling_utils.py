@@ -1925,6 +1925,25 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         - **is_parallelizable** (`bool`) -- A flag indicating whether this model supports model parallelization.
         - **main_input_name** (`str`) -- The name of the principal input to the model (often `input_ids` for NLP
           models, `pixel_values` for vision models and `input_values` for speech models).
+        - **can_record_outputs** (dict): Maps output names (e.g., "attentions", "hidden_states")
+            to either:
+            - A module class (e.g., `LlamaDecoderLayer`), using default index conventions:
+                * index=0 for "hidden_states"
+                * index=1 for "attentions"
+            - Or an `OutputRecorder(...)` with `target_class`, optional `index`, and `layer_name`.
+
+        Examples:
+            These two are equivalent:
+
+            _can_record_outputs = {
+                "attentions": LlamaAttention,
+                "hidden_states": LlamaDecoderLayer
+            }
+
+            _can_record_outputs = {
+                "attentions": OutputRecorder(LlamaAttention, index=1),
+                "hidden_states": OutputRecorder(LlamaDecoderLayer, index=0)
+            }
     """
 
     config_class = None

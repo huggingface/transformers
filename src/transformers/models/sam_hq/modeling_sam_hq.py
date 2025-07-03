@@ -30,13 +30,13 @@ from torch import Tensor, nn
 
 from transformers.modeling_outputs import ModelOutput
 from transformers.modeling_utils import PreTrainedModel
-from transformers.utils.generic import TransformersKwargs, can_return_tuple, check_model_inputs
+from transformers.utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs
 
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, can_return_tuple, logging
 from .configuration_sam_hq import SamHQConfig, SamHQMaskDecoderConfig, SamHQPromptEncoderConfig, SamHQVisionConfig
 
 
@@ -474,7 +474,10 @@ class SamHQVisionNeck(nn.Module):
 
 
 class SamHQVisionEncoder(PreTrainedModel):
-    _can_record_outputs = {"hidden_states": (SamHQVisionLayer, 0), "vision_attentions": (SamHQVisionAttention, 1)}
+    _can_record_outputs = {
+        "hidden_states": OutputRecorder(SamHQVisionLayer),
+        "vision_attentions": OutputRecorder(SamHQVisionAttention, index=1),
+    }
 
     def __init__(self, config: SamHQVisionConfig):
         super().__init__(config)
@@ -837,7 +840,9 @@ class SamHQFeedForward(nn.Module):
 
 
 class SamHQMaskDecoder(PreTrainedModel):
-    _can_record_outputs = {"mask_decoder_attentions": (SamHQVisionAttention, 1, "transformer")}
+    _can_record_outputs = {
+        "mask_decoder_attentions": OutputRecorder(SamHQVisionAttention, index=1, layer_name="transformer")
+    }
 
     def __init__(self, config: SamHQMaskDecoderConfig):
         super().__init__(config)

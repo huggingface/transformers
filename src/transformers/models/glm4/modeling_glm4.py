@@ -339,8 +339,8 @@ class Glm4PreTrainedModel(PreTrainedModel):
     _supports_static_cache = True
     _supports_attention_backend = True
     _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
-        "hidden_states": (Glm4DecoderLayer, 0),
-        "attentions": (Glm4Attention, 1),
+        "hidden_states": Glm4DecoderLayer,
+        "attentions": Glm4Attention,
     }
 
     def _init_weights(self, module):

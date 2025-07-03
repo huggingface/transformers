@@ -590,8 +590,8 @@ class T5GemmaPreTrainedModel(PreTrainedModel):
     _supports_static_cache = True
     _supports_attention_backend = True
     _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
-        "hidden_states": (T5GemmaDecoderLayer, 0),
-        "attentions": (T5GemmaAttention, 1),
+        "hidden_states": T5GemmaDecoderLayer,
+        "attentions": T5GemmaAttention,
     }
 
     def _init_weights(self, module):

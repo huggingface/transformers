@@ -368,8 +368,8 @@ class GPTNeoXPreTrainedModel(PreTrainedModel):
     _supports_static_cache = True
     _supports_attention_backend = True
     _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
-        "hidden_states": (GPTNeoXDecoderLayer, 0),
-        "attentions": (GPTNeoXAttention, 1),
+        "hidden_states": GPTNeoXDecoderLayer,
+        "attentions": GPTNeoXAttention,
     }
     _keys_to_ignore_on_load_unexpected = [r"attention.bias", r"attention.masked_bias"]
 

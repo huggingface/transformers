@@ -316,8 +316,8 @@ class BitNetPreTrainedModel(PreTrainedModel):
     _supports_static_cache = True
     _supports_attention_backend = True
     _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
-        "hidden_states": (BitNetDecoderLayer, 0),
-        "attentions": (BitNetAttention, 1),
+        "hidden_states": BitNetDecoderLayer,
+        "attentions": BitNetAttention,
     }
 
     def _init_weights(self, module):

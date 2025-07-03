@@ -303,8 +303,8 @@ class Olmo2PreTrainedModel(PreTrainedModel):
     _supports_static_cache = True
     _supports_attention_backend = True
     _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
-        "hidden_states": (Olmo2DecoderLayer, 0),
-        "attentions": (Olmo2Attention, 1),
+        "hidden_states": Olmo2DecoderLayer,
+        "attentions": Olmo2Attention,
     }
 
     def _init_weights(self, module):

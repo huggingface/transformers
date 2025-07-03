@@ -348,8 +348,8 @@ class Gemma2PreTrainedModel(PreTrainedModel):
     _supports_static_cache = True
     _supports_attention_backend = True
     _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
-        "hidden_states": (Gemma2DecoderLayer, 0),
-        "attentions": (Gemma2Attention, 1),
+        "hidden_states": Gemma2DecoderLayer,
+        "attentions": Gemma2Attention,
     }
 
     def _init_weights(self, module):
