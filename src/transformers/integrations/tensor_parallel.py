@@ -393,8 +393,9 @@ class GatherParallel(TensorParallelLayer):
         # this op cannot be async, otherwise it completely breaks the outputs of models
         if isinstance(outputs, torch.Tensor):
             torch.distributed.all_reduce(outputs, op=torch.distributed.ReduceOp.SUM, async_op=False)
-        # TODO: we assume we want to allreduce first element of tuple
-        torch.distributed.all_reduce(outputs[0], op=torch.distributed.ReduceOp.SUM, async_op=False) # TODO: rename GatherParallel to ReduceParallel or something
+        else:
+            # TODO: we assume we want to allreduce first element of tuple
+            torch.distributed.all_reduce(outputs[0], op=torch.distributed.ReduceOp.SUM, async_op=False) # TODO: rename GatherParallel to ReduceParallel or something
         return outputs
 
 
