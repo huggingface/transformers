@@ -237,18 +237,24 @@ class OpenAIMoeConverter(TikTokenConverter):
         # TODO 1st donwload the vocabfile!!!
         tokenizer = tiktoken.get_encoding(vocab_file)
         self.additional_special_tokens = {}
-        # Build Harmony special tokens → IDs.
+        # Complete list of Harmony special tokens as per o200k_harmony spec
         special_tokens_map = {
-            "<|reserved_199998|>": 199998,
-            "<|endoftext|>": 199999,     # same as <|end|>
+            "<|startoftext|>": 199998,
+            "<|endoftext|>": 199999,
+            "<|return|>": 200002,
             "<|constrain|>": 200003,
+            "<|channel|>": 200005,
+            "<|start|>": 200006,
+            "<|end|>": 200007,
+            "<|message|>": 200008,
             "<|call|>": 200012,
             "<|endofprompt|>": 200018,
         }
 
-        # Add the remaining reserved slots while skipping already-used IDs.
+        # Add the remaining reserved slots while skipping IDs already present above.
+        used_ids = set(special_tokens_map.values())
         for k in range(199999, 200018):
-            if k in (200003, 200012):
+            if k in used_ids:
                 continue
             special_tokens_map.setdefault(f"<|reserved_{k}|>", k)
 
