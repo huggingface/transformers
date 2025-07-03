@@ -10,6 +10,7 @@ import torch.distributed as dist
 from torch.distributed.tensor.experimental import context_parallel
 from torch.nn.attention import SDPBackend, sdpa_kernel
 from torch.distributed.device_mesh import DeviceMesh
+from transformers.distributed import DistributedConfig
 
 # model_id = "ft-hf-o-c/random-checkpoint-converted-20b"
 # openai = "/fsx/vb/pytorch-os-mini-final-quantized-moe-sharded"
@@ -61,12 +62,15 @@ def main():
         model_id,
         device_mesh=tp_mesh if dist.is_initialized() else None,
         tp_plan="auto",
-        enable_expert_parallel=os.environ.get("ENABLE_EXPERT_PARALLEL", "0") == "1",
         tp_size=tp_size,
         torch_dtype=torch.bfloat16,
         attn_implementation="eager",
         # key_mapping={"mlp.router": "mlp.router.router"},
+        distributed_config=DistributedConfig(
+            enable_expert_parallel=os.environ.get("ENABLE_EXPERT_PARALLEL", "0") == "1"
+        )
     )
+
     logger.info(f"Model loaded onto device mesh: {tp_mesh}")
     device = torch.device(f"cuda:{local_rank}")
     logger.info(f"Using device: {device} for non-model tensors")

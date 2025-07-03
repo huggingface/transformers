@@ -47,7 +47,6 @@ from torch.utils.checkpoint import checkpoint
 
 from transformers.utils import is_torchao_available
 
-
 if is_torchao_available():
     from torchao.quantization import Int4WeightOnlyConfig
 
@@ -55,6 +54,7 @@ from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
+from .distributed import DistributedConfig
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
 from .integrations.accelerate import find_tied_parameters, init_empty_weights
 from .integrations.deepspeed import _load_state_dict_into_zero3_model
@@ -4283,7 +4283,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         gguf_file = kwargs.pop("gguf_file", None)
         tp_plan = kwargs.pop("tp_plan", None)
         tp_size = kwargs.pop("tp_size", None)
-        enable_expert_parallel = kwargs.pop("enable_expert_parallel", False)
+        distributed_config : DistributedConfig = kwargs.pop("distributed_config", None)
         device_mesh = kwargs.pop("device_mesh", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
 
@@ -4646,7 +4646,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 device_map=device_map,
             )
 
-        if enable_expert_parallel:
+        if distributed_config is not None and distributed_config.enable_expert_parallel:
             # TODO: add proper support for ep_plan independently of tp_plan
             if config.base_model_tp_plan is None:
                 raise ValueError("base_model_tp_plan is required when enable_expert_parallel is True")
@@ -4663,8 +4663,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             })
             # Remove None values from the tp plan
             config.base_model_tp_plan = {k: v for k, v in config.base_model_tp_plan.items() if v is not None}
-
-        print(f"using base_model_tp_plan: {config.base_model_tp_plan}")
 
         with ContextManagers(model_init_context):
             # Let's make sure we don't run the init function of buffer modules
