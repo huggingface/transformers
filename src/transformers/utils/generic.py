@@ -1035,9 +1035,15 @@ def check_model_inputs(func):
 
             for name, module in self.named_modules():
                 for key, specs in capture_tasks:
-                    if isinstance(module, specs[0]) and len(specs) > 2 and specs[2] in name:
-                        hook_fn = make_capture_fn(key, specs[1] if len(specs) > 1 else 0)
-                        hooks.append(register_hook_if_needed(module, hook_fn))
+                    if isinstance(module, specs[0]):
+                        if len(specs) > 2:
+                            if specs[2] in name:
+                                hook_fn = make_capture_fn(key, specs[1] if len(specs) > 1 else 0)
+                                hooks.append(register_hook_if_needed(module, hook_fn))
+                        else:
+                            hook_fn = make_capture_fn(key, specs[1] if len(specs) > 1 else 0)
+
+                            hooks.append(register_hook_if_needed(module, hook_fn))
 
         outputs = func(self, *args, **kwargs)
         for h in hooks:

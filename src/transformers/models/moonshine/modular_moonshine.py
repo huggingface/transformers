@@ -537,7 +537,7 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
     main_input_name = "input_values"
     _can_record_outputs = {
         "attentions": (MoonshineAttention, 1, "self_attn"),
-        "hidden_states": (MoonshineDecoderLayer,),
+        "hidden_states": (MoonshineEncoderLayer,),
     }
 
     def __init__(self, config: MoonshineConfig):
