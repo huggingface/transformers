@@ -91,6 +91,7 @@ PRIVATE_MODELS = [
     "AriaTextModel",
     "Phi4MultimodalAudioModel",
     "Phi4MultimodalVisionModel",
+    "Glm4vVisionModel",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
@@ -155,6 +156,7 @@ IGNORE_NON_TESTED = (
         "Llama4VisionModel",  # Building part of bigger (tested) model. # TODO: add tests
         "Emu3VQVAE",  # Building part of bigger (tested) model
         "Emu3TextModel",  # Building part of bigger (tested) model
+        "Glm4vTextModel",  # Building part of bigger (tested) model
         "Qwen2VLTextModel",  # Building part of bigger (tested) model
         "Qwen2_5_VLTextModel",  # Building part of bigger (tested) model
         "InternVLVisionModel",  # Building part of bigger (tested) model

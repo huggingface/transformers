@@ -29,7 +29,6 @@ from transformers.testing_utils import (
     Expectations,
     is_pipeline_test,
     nested_simplify,
-    require_tf,
     require_torch,
     require_vision,
     slow,
@@ -101,11 +100,6 @@ class MaskGenerationPipelineTests(unittest.TestCase):
 
     @unittest.skip(reason="TODO @Arthur: Implement me")
     def run_pipeline_test(self, mask_generator, examples):
-        pass
-
-    @require_tf
-    @unittest.skip(reason="Image segmentation not implemented in TF")
-    def test_small_model_tf(self):
         pass
 
     @slow

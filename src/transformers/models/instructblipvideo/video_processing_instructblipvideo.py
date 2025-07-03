@@ -94,11 +94,17 @@ class InstructBlipVideoVideoProcessor(BaseVideoProcessor):
         fps: Optional[int] = None,
         num_frames: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
+        device: Optional["torch.Tensor"] = None,
     ) -> BatchFeature:
         if do_sample_frames:
             videos = [
                 self.sample_frames(video, metadata, num_frames, fps) for video, metadata in zip(videos, video_metadata)
             ]
+
+        # We need to sample frames first before moving to device, if `do_sample_frames=True`. Otherwise
+        # moving the whole video incurs high GPU mem usage for long videos
+        if device is not None:
+            videos = [video.to(device) for video in videos]
 
         # Group videos by size for batched resizing
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)

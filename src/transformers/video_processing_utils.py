@@ -294,7 +294,6 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         videos: VideoInput,
         video_metadata: VideoMetadata = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        device: Optional["torch.device"] = None,
     ) -> list["torch.Tensor"]:
         """
         Prepare the input videos for processing.
@@ -312,10 +311,6 @@ class BaseVideoProcessor(BaseImageProcessorFast):
                 video = to_channel_dimension_format(video, ChannelDimension.FIRST, input_data_format)
                 # not using F.to_tensor as it doesn't handle (C, H, W) numpy arrays
                 video = torch.from_numpy(video).contiguous()
-
-            # Now that we have torch tensors, we can move them to the right device
-            if device is not None:
-                video = video.to(device)
 
             processed_videos.append(video)
         return processed_videos, batch_metadata
@@ -336,10 +331,9 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
 
         input_data_format = kwargs.pop("input_data_format")
-        device = kwargs.pop("device")
         video_metadata = kwargs.pop("video_metadata")
         videos, video_metadata = self._prepare_input_videos(
-            videos=videos, video_metadata=video_metadata, input_data_format=input_data_format, device=device
+            videos=videos, video_metadata=video_metadata, input_data_format=input_data_format
         )
 
         kwargs = self._further_process_kwargs(**kwargs)
@@ -378,6 +372,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         fps: Optional[int] = None,
         num_frames: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
+        device: Optional["torch.Tensor"] = None,
     ) -> BatchFeature:
         if do_sample_frames:
             # Sample video frames
@@ -385,6 +380,11 @@ class BaseVideoProcessor(BaseImageProcessorFast):
                 self.sample_frames(video, metadata=metadata, num_frames=num_frames, fps=fps)
                 for video, metadata in zip(videos, video_metadata)
             ]
+
+        # We need to sample frames first before moving to device, if `do_sample_frames=True`. Otherwise
+        # moving the whole video incurs high GPU mem usage for long videos
+        if device is not None:
+            videos = [video.to(device) for video in videos]
 
         # Group videos by size for batched resizing
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
@@ -775,6 +775,8 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             `dict[str, Any]`: Dictionary of all the attributes that make up this video processor instance.
         """
         output = copy.deepcopy(self.__dict__)
+        output.pop("model_valid_processing_keys", None)
+        output.pop("_valid_kwargs_names", None)
         output["video_processor_type"] = self.__class__.__name__
 
         return output

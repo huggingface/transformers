@@ -62,7 +62,7 @@ class AyaVisionVisionText2TextModelTester:
         bos_token_id=0,
         eos_token_id=0,
         pad_token_id=0,
-        image_token_index=1,
+        image_token_index=2,
         num_channels=3,
         image_size=64,
         model_type="aya_vision",
@@ -183,49 +183,6 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    # while some other models require pixel_values to be present
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            torch.testing.assert_close(out_embeds, out_ids)
-
     @unittest.skip("Failing because of unique cache (HybridCache)")
     def test_model_outputs_equivalence(self, **kwargs):
         pass
@@ -283,10 +240,6 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     @unittest.skip("Cohere2 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
     def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip("Cohere2 has HybridCache and doesn't support progressive generation using input embeds.")
-    def test_generate_continue_from_inputs_embeds(self):
         pass
 
     @unittest.skip("Failing because of unique cache (HybridCache)")
@@ -422,7 +375,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
 
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "Whispers on the breeze,\nLeaves dance under moonlit sky,\nNature's quiet song.",
+                ("xpu", 3): "Whispers on the breeze,\nLeaves dance under moonlit skies,\nNature's quiet song.",
                 # 4-bit
                 ("cuda", 7): "Sure, here's a haiku for you:\n\nMorning dew sparkles,\nPetals unfold in sunlight,\n",
                 ("cuda", 8): "Whispers on the breeze,\nLeaves dance under moonlit skies,\nNature's quiet song.",
@@ -434,6 +387,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
 
     @slow
     @require_torch_accelerator
+    @require_deterministic_for_xpu
     def test_small_model_integration_generate_chat_template(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         model = self.get_model()
@@ -458,7 +412,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
 
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "The image depicts a cozy scene of two cats resting on a bright pink blanket. The cats,",
+                ("xpu", 3): 'The image depicts a cozy scene of two cats resting on a bright pink blanket. The cats,',
                 # 4-bit
                 ("cuda", 7): 'The image depicts two cats comfortably resting on a pink blanket spread across a sofa. The cats,',
                 ("cuda", 8): 'The image depicts a cozy scene of two cats resting on a bright pink blanket. The cats,',

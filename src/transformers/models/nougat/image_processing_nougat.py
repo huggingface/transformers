@@ -169,6 +169,7 @@ class NougatImageProcessor(BaseImageProcessor):
         min_val = data.min()
         if max_val == min_val:
             image = np.array(image)
+            image = to_channel_dimension_format(image, input_data_format, ChannelDimension.LAST)
             image = (
                 to_channel_dimension_format(image, data_format, input_data_format)
                 if data_format is not None

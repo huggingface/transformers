@@ -332,6 +332,7 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         num_frames: Optional[int] = None,
         skip_secs: Optional[int] = 0,
         return_tensors: Optional[Union[str, TensorType]] = None,
+        device: Optional["torch.Tensor"] = None,
         **kwargs,
     ):
         # Group videos by size for batched resizing
@@ -355,6 +356,11 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
                 [(int((idx / 24) // 60), int((idx / 24) % 60)) for idx in range(len(video))] for video in videos
             ]
             durations_list = [len(video) // 24 for video in videos]
+
+        # We need to sample frames first before moving to device, if `do_sample_frames=True`. Otherwise
+        # moving the whole video incurs high GPU mem usage for long videos
+        if device is not None:
+            videos = [video.to(device) for video in videos]
 
         grouped_videos, grouped_videos_index = group_videos_by_shape(processed_videos)
         resized_videos_grouped = {}

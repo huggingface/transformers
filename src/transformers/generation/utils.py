@@ -558,7 +558,7 @@ class GenerationMixin(ContinuousMixin):
         **kwargs,
     ):
         """
-        Prepare the model inputs for generation. In includes operations like computing the 4D attention mask or
+        Prepare the model inputs for generation. It includes operations like computing the 4D attention mask or
         slicing inputs given the existing cache.
 
         See the forward pass in the model documentation for expected arguments (different models might have different
@@ -733,7 +733,9 @@ class GenerationMixin(ContinuousMixin):
         # - encoder-decoder models should complain if the user attempts to pass `inputs_embeds` and `input_ids`, and
         # pull the former to inputs. It will be used in place of `input_ids` to get the encoder hidden states.
         if input_name == "input_ids" and "inputs_embeds" in model_kwargs:
-            if not self.config.is_encoder_decoder:
+            if model_kwargs["inputs_embeds"] is None:
+                model_kwargs.pop("inputs_embeds")
+            elif not self.config.is_encoder_decoder:
                 has_inputs_embeds_forwarding = "inputs_embeds" in set(
                     inspect.signature(self.prepare_inputs_for_generation).parameters.keys()
                 )
@@ -748,10 +750,11 @@ class GenerationMixin(ContinuousMixin):
                 model_kwargs["input_ids"] = self._maybe_initialize_input_ids_for_generation(
                     inputs, bos_token_id, model_kwargs=model_kwargs
                 )
+                inputs, input_name = model_kwargs["inputs_embeds"], "inputs_embeds"
             else:
                 if inputs is not None:
                     raise ValueError("You passed `inputs_embeds` and `input_ids` to `.generate()`. Please pick one.")
-            inputs, input_name = model_kwargs["inputs_embeds"], "inputs_embeds"
+                inputs, input_name = model_kwargs["inputs_embeds"], "inputs_embeds"
 
         # 4. if `inputs` is still None, try to create `input_ids` from BOS token
         inputs = self._maybe_initialize_input_ids_for_generation(inputs, bos_token_id, model_kwargs)
@@ -3770,16 +3773,28 @@ class GenerationMixin(ContinuousMixin):
         Beam Search stopping condition -- halts the generation loop if any of these conditions becomes False
         """
         # a. Can the open beams improve the top completed scores?
-        # early_stopping == False -> apply heuristic = always get the best score from
-        #   `cur_len - decoder_prompt_len`. See the discussion below for more details.
-        #   https://github.com/huggingface/transformers/pull/20901#issuecomment-1369845565
+        # early_stopping == False -> apply heuristic = always get the best score from `cur_len - decoder_prompt_len`.
         # early_stopping == "never" -> compute the best score from `max_length` or `cur_len`, depending on the
         #   sign of `length_penalty`. Positive `length_penalty` favors longer sequences, thus we use
         #   `max_length` there.
+        # !!
+        # Be sure to check the docstring for `early_stopping` and `length_penalty`. The default parameterization
+        # does NOT correspond to a canonical beam search implementation, and tends to favor shorter output sequences
+        # compared to it (the heuristic active by default underestimates the maximum achievable score, and thus cut
+        # generation short). Also, be mindful that length penalty > 0.0 actually favors longer sequences, despite
+        # its name. These modifications were empirically found in the past (prior to 2022) to produce better quality
+        # generations, and changing them is BC breaking.
+        # For a canonical beam search implementation, set `early_stopping="never"` and `length_penalty=0.0`.
+        # See the discussion below for more details.
+        # https://github.com/huggingface/transformers/pull/20901#issuecomment-1369845565
+        # !!
         if early_stopping == "never" and length_penalty > 0.0:
             best_hypothetical_length = max_length - decoder_prompt_len
         else:
             best_hypothetical_length = cur_len - decoder_prompt_len
+
+        # best-case scenario: the next tokens have logprobs=0 (probability=1), and the score stays the same before
+        # applying length penalty
         best_possible_running_score = running_beam_scores[:, :1] / (best_hypothetical_length**length_penalty)
         worst_finished_score = torch.where(is_sent_finished, torch.min(beam_scores, dim=1, keepdim=True)[0], -1.0e9)
         improvement_possible = torch.any(best_possible_running_score > worst_finished_score)
