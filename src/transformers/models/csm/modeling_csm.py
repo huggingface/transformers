@@ -565,7 +565,7 @@ class CsmDepthDecoderForCausalLM(CsmPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
-    @check_model_inputs
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -693,7 +693,7 @@ class CsmBackboneModel(CsmPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    @can_return_tuple
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

@@ -324,7 +324,7 @@ class CsmDepthDecoderForCausalLM(LlamaForCausalLM, GenerationMixin):
 
         return model_inputs
 
-    @check_model_inputs
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -413,7 +413,7 @@ class CsmBackboneModel(LlamaModel):
         super().__init__(config)
         self.embed_tokens = CsmBackboneModelEmbeddings(config)
 
-    @can_return_tuple
+    @check_model_inputs
     @auto_docstring
     def forward(self, **super_kwargs):
         r"""

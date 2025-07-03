@@ -1023,7 +1023,6 @@ def check_model_inputs(func):
             for k in capture_flags
         }
         recordable_keys["output_cross_attentions"] = recordable_keys.get("output_attentions", None)
-        print(recordable_keys)
         if any(recordable_keys.values()):
             capture_tasks = []
             for key, layer_specs in capture_flags.items():
