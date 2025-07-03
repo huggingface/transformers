@@ -300,9 +300,9 @@ class Starcoder2PreTrainedModel(PreTrainedModel):
     _supports_quantized_cache = True
     _supports_static_cache = True
     _supports_attention_backend = True
-    _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
-        "hidden_states": (Starcoder2DecoderLayer, 0),
-        "attentions": (Starcoder2Attention, 1),
+    _can_record_outputs: = {
+        "hidden_states": Starcoder2DecoderLayer,
+        "attentions": Starcoder2Attention,
     }
 
     def _init_weights(self, module):
