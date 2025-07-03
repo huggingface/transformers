@@ -19,7 +19,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from typing import Callable, List, Optional, Tuple, Union
-import torch.distributed as dist
 
 import torch
 from torch import nn
@@ -75,7 +74,7 @@ class OpenAIMoeExperts(nn.Module):
         self.down_proj_bias = nn.Parameter(torch.empty(config.num_local_experts, self.hidden_size))
         self.alpha = 1.702
 
-    def forward(self, hidden_states: torch.Tensor, batch_size: int, router_indices=None, routing_weights=None) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, router_indices=None, routing_weights=None) -> torch.Tensor:
         """
         When training is is more efficient to just loop over the experts and compute the output for each expert
         as otherwise the memory would explode.
@@ -83,13 +82,14 @@ class OpenAIMoeExperts(nn.Module):
         For inference we can sacrifice some memory and compute the output for all experts at once. By repeating the inputs.
 
         Args:
-            hidden_states (torch.Tensor): (batch_size * token_num, hidden_size)
+            hidden_states (torch.Tensor): (batch_size, seq_len, hidden_size)
             selected_experts (torch.Tensor): (batch_size * token_num, top_k)
             routing_weights (torch.Tensor): (batch_size * token_num, top_k)
-            batch_size (int) # TODO: it's ugly to pass batch_size here :/
         Returns:
             torch.Tensor
         """
+        batch_size = hidden_states.shape[0]
+        hidden_states = hidden_states.reshape(-1, self.hidden_size) # (num_tokens, hidden_size)
         num_experts = routing_weights.shape[0]
         if self.training:
             next_states = torch.zeros_like(hidden_states, dtype=hidden_states.dtype, device=hidden_states.device)
@@ -123,41 +123,52 @@ class OpenAIMoeExperts(nn.Module):
             gate, up = gate_up.chunk(2, dim=-1)  # not supported for DTensors
             glu = gate * torch.sigmoid(gate * self.alpha)
             next_states = torch.bmm(((up + 1) * glu), self.down_proj)
-            # if not self.enable_expert_parallel:
-            #     torch.distributed.all_reduce(next_states, op=torch.distributed.ReduceOp.SUM) # TODO: if we can attach hook to `down_proj` we can move this to hook
             next_states = next_states + self.down_proj_bias[..., None, :]
-            next_states = next_states.view(num_experts, -1, self.hidden_size) * routing_weights[..., None] # we're throwing away computed routed_out for rest of experts
-            next_states = next_states.view(num_experts, batch_size, -1, self.hidden_size).sum(dim=0)
-        return next_states
+            next_states = next_states.view(num_experts, batch_size, -1, self.hidden_size) # (num_experts, batch_size, seq_len, hidden_size)
+        return next_states, None
 
 class TopKRouter(nn.Linear): # TODO: if i inherit from module it'll be annoying to attach hook to parent module
     def __init__(self, config):
         super().__init__(config.hidden_size, config.num_local_experts, bias=True)
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
         # TODO: is it better to define self.weight and self.bias as nn.Parameter instead to keep the same namings: mlp.router.weight instead of mlp.router.router.weight?
     
     def forward(self, hidden_states):
+        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = super().forward(hidden_states) # (seq_len, num_experts)
         router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1) # (seq_len, top_k)
         router_top_value = torch.nn.functional.softmax(router_top_value, dim=1)
         router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value).transpose(0, 1) # (num_experts, seq_len)
         return router_scores, router_indices
 
+class TokenDispatcher(nn.Module):
+    # TODO: this only exists to add EP hook
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+
+    def forward(self, routed_out, routing_weights):
+        # routed_out is (num_experts, batch_size, seq_len, hidden_size)
+        routed_out = routed_out * routing_weights[:, None, :, None] # we're throwing away computed routed_out for rest of experts
+        routed_out = routed_out.sum(dim=0) # (batch_size, seq_len, hidden_size)
+        return routed_out
+
 class OpenAIMoeMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.hidden_dim = config.hidden_size
         self.router = TopKRouter(config)
         self.experts = OpenAIMoeExperts(config)
+        self.token_dispatcher = TokenDispatcher(config) # TODO: i need this class because TP needs hook right after down_proj_bias, and EP needs hook right after routing_weights
 
     def forward(self, hidden_states):
         # we don't slice weight as its not compile compatible
-        batch_size = hidden_states.shape[0]
-        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_scores, router_indices = self.router(hidden_states) # (num_experts, seq_len)
-        routed_out = self.experts(hidden_states, batch_size=batch_size, router_indices=router_indices, routing_weights=router_scores) #TODO: router_indices isn't used inside this func
-        return routed_out, router_scores
+        routed_out, _ = self.experts(hidden_states, router_indices=router_indices, routing_weights=router_scores) #TODO: router_indices isn't used inside this func
+        hidden_states = self.token_dispatcher(routed_out, router_scores)
+        return hidden_states, router_scores
 
 
 class OpenAIMoeRotaryEmbedding(nn.Module):

@@ -1,5 +1,5 @@
 """
-TP_SIZE=8 torchrun --nproc_per_node=8 hf_generate.py 
+ENABLE_EXPERT_PARALLEL=1 TP_SIZE=8 torchrun --nproc_per_node=8 hf_generate.py 
 """
 
 from transformers import AutoTokenizer, OpenAIMoeForCausalLM

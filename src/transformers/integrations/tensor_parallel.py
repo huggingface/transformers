@@ -391,6 +391,8 @@ class GatherParallel(TensorParallelLayer):
     @staticmethod
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
         # this op cannot be async, otherwise it completely breaks the outputs of models
+        if isinstance(outputs, torch.Tensor):
+            raise ValueError("GatherParallel should not be used with a single tensor, it should be used with a tuple of tensors")
         torch.distributed.all_reduce(outputs[0], op=torch.distributed.ReduceOp.SUM, async_op=False) # TODO: rename GatherParallel to ReduceParallel or something
         return outputs
 
@@ -418,7 +420,8 @@ class IsolatedParallel(TensorParallelLayer):
         param = param[...].to(param_casting_dtype)
         if to_contiguous:
             param = param.contiguous()
-        # param = param / device_mesh.size()  # TODO should be optionable
+        param = param / device_mesh.size()  # TODO should be optionable
+        # TODO: assumes parent module will allreduce the output afterwards (e.g rowlinear bias is IsolatedParallel and parent module is GatherParallel)
         return param
 
     def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
