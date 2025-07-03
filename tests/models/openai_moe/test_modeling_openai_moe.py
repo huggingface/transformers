@@ -403,12 +403,6 @@ class OpenAIMoeIntegrationTest(unittest.TestCase):
         static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
 
-
-# =============================================================
-# Tokenizer ↔️  tiktoken equivalence checks
-# =============================================================
-
-
 @require_tokenizers
 @require_tiktoken
 class OpenAIMoeTokenizationIntegrationTest(unittest.TestCase):
@@ -416,17 +410,16 @@ class OpenAIMoeTokenizationIntegrationTest(unittest.TestCase):
     the reference `o200k_harmony` tiktoken encoding.
     """
 
-    @classmethod
-    def setUpClass(cls):
+    def setUp(self):
         import os
         import tiktoken
 
         # Load the HF tokenizer (fast implementation)
-        cls.tokenizer = AutoTokenizer.from_pretrained("/fsx/vb/converted_model")
+        self.tokenizer = AutoTokenizer.from_pretrained("/fsx/vb/converted_model")
 
         # Build the (pre-release) o200k_harmony encoding for tiktoken
         o200k_base = tiktoken.get_encoding("o200k_base")
-        cls.tkt_encoding = tiktoken.Encoding(
+        self.tkt_encoding = tiktoken.Encoding(
             name="o200k_harmony",
             pat_str=o200k_base._pat_str,
             mergeable_ranks=o200k_base._mergeable_ranks,
