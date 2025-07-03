@@ -86,9 +86,9 @@ class Ernie4_5DecoderLayer(LlamaDecoderLayer, nn.Module):
 
 
 @auto_docstring
-class Ernie4_5Model(LlamaModel, Ernie4_5PreTrainedModel, nn.Module):
+class Ernie4_5Model(LlamaModel, Ernie4_5PreTrainedModel):
     def __init__(self, config: Ernie4_5Config):
-        nn.Module().__init__()
+        Ernie4_5PreTrainedModel().__init__(config)
 
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -105,9 +105,9 @@ class Ernie4_5Model(LlamaModel, Ernie4_5PreTrainedModel, nn.Module):
         self.post_init()
 
 
-class Ernie4_5ForCausalLM(LlamaForCausalLM, Ernie4_5PreTrainedModel, nn.Module):
+class Ernie4_5ForCausalLM(LlamaForCausalLM, Ernie4_5PreTrainedModel):
     def __init__(self, config: Ernie4_5Config):
-        nn.Module().__init__()
+        Ernie4_5PreTrainedModel().__init__(config)
 
         self.model = Ernie4_5Model(config)
         self.vocab_size = config.vocab_size
