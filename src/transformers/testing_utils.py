@@ -3338,8 +3338,15 @@ class Expectations(UserDict[PackedDeviceProperties, Any]):
         return [(unpack_device_properties(k), v) for k, v in self.data.items()]
 
     @staticmethod
-    def is_default(properties: DeviceProperties) -> bool:
-        return all(p is None for p in properties)
+    def is_default(expectation_key: PackedDeviceProperties) -> bool:
+        """
+        This function returns True if the expectation_key is the Default expectation (None, None).
+        When an Expectation dict contains a Default value, it is generally because the test existed before Expectations.
+        When we modify a test to use Expectations for a specific hardware, we don't want to affect the tests on other
+        hardwares. Thus we set the previous value as the Default expectation with key (None, None) and add a value for
+        the specific hardware with key (hardware_type, (major, minor)).
+        """
+        return all(p is None for p in expectation_key)
 
     @staticmethod
     def score(properties: DeviceProperties, other: DeviceProperties) -> float:
@@ -3348,7 +3355,8 @@ class Expectations(UserDict[PackedDeviceProperties, Any]):
         Rules are as follows:
             * Matching `type` adds one point, semi-matching `type` adds 0.1 point (e.g. cuda and rocm).
             * If types match, matching `major` adds another point, and then matching `minor` adds another.
-            * Default expectation (if present) is worth 0.5 point, which is better than cross-device semi-matching.
+            * The Default expectation (None, None) is worth 0.5 point, which is better than semi-matching. More on this
+            in the `is_default` function.
         """
         device_type, major, minor = properties
         other_device_type, other_major, other_minor = other
