@@ -176,6 +176,7 @@ class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
             if not torch.is_floating_point(audios[0]):
                 raise ValueError("Invalid audio provided. Audio should be a floating point between 0 and 1")
             lengths = [audio.shape[-1] for audio in audios]
+            audios = [audio.squeeze(0) for audio in audios]
             audios = torch.nn.utils.rnn.pad_sequence(audios, batch_first=True, padding_value=0.0)
             return audios, lengths
 
