@@ -69,16 +69,15 @@ class Glm4vVisionText2TextModelTester:
         is_training=True,
         text_config={
             "vocab_size": 99,
-            "hidden_size": 32,
-            "intermediate_size": 37,
-            "num_hidden_layers": 4,
-            "num_attention_heads": 4,
-            "num_key_value_heads": 2,
+            "hidden_size": 16,
+            "intermediate_size": 22,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 2,
+            "num_key_value_heads": 1,
             "output_channels": 64,
             "hidden_act": "silu",
             "max_position_embeddings": 512,
             "rope_scaling": {"type": "default", "mrope_section": [2, 1, 1]},
-            "max_window_layers": 3,
             "rope_theta": 10000,
             "tie_word_embeddings": True,
             "bos_token_id": 0,
@@ -87,11 +86,10 @@ class Glm4vVisionText2TextModelTester:
         },
         vision_config={
             "depth": 2,
-            "embed_dim": 32,
             "hidden_act": "silu",
-            "hidden_size": 32,
-            "mlp_ratio": 4,
-            "num_heads": 4,
+            "hidden_size": 48,
+            "out_hidden_size": 16,
+            "intermediate_size": 22,
             "patch_size": 14,
             "spatial_merge_size": 1,
             "temporal_patch_size": 2,
@@ -237,10 +235,6 @@ class Glm4vModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
 
     @unittest.skip(reason="Size mismatch")
     def test_multi_gpu_data_parallel_forward(self):
-        pass
-
-    @unittest.skip(reason="We cannot configure to output a smaller model.")
-    def test_model_is_small(self):
         pass
 
     @unittest.skip("Error with compilation")
