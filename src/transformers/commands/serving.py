@@ -353,9 +353,13 @@ class ServeCommand(BaseTransformersCLICommand):
                 self.running_continuous_batching_manager = self.model.init_continuous_batching(
                     generation_config=generation_config, streaming=True
                 )
+
+                # TODO (Joao, Lysandre): the logits processors should be fixed in continuous batching
+                # and correctly applied in non-cb
                 self.running_continuous_batching_manager.logit_processor = LogitsProcessorList()
                 self.running_continuous_batching_manager.start()
 
+            # TODO (Joao, Lysandre): this should also work with tool support
             inputs = self.tokenizer.apply_chat_template(
                 req.messages, return_tensors="pt", add_generation_prompt=True
             ).to(self.model.device)
