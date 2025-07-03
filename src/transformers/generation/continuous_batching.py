@@ -189,6 +189,11 @@ class PagedAttentionCache:
         )
         self.num_hidden_layers = config.num_hidden_layers
 
+        self.sliding_window = getattr(config, "sliding_window", None)
+        if self.sliding_window is not None and self.sliding_window < 0:
+            raise ValueError(f"'sliding_window' must be a non-negative integer, got: {self.sliding_window}")
+        self.layer_types: list[str] = getattr(config, "layer_types", None)
+
         # Calculate optimal block size and number if not provided
         num_blocks = getattr(generation_config, "num_blocks", None)
         block_size = getattr(generation_config, "block_size", 32)
@@ -304,16 +309,67 @@ class PagedAttentionCache:
         return physical_indices
 
     @traced
+    def _get_physical_sliding_indices(
+        self, state: RequestState, logical_indices: list[int]
+    ) -> tuple[Optional[list[int]], Optional[list[int]]]:
+        # TODO
+        """
+        Maps logical sequence indices to physical cache indices using the sliding window mechanism.
+
+        Args:
+            state: The request state containing the block table.
+            logical_indices: A list of logical indices.
+
+        Returns:
+            A list of physical indices.
+
+        Raises:
+            ValueError: If no block table is found for the request ID.
+            IndexError: If a logical index maps to a block index that is out of bounds.
+        """
+        if self.sliding_window is None:
+            return None, None
+
+        request_id = state.request_id
+        block_table = self._block_tables.get(request_id)
+        if not block_table:
+            raise ValueError(f"No block table found for request {request_id}")
+
+        block_size = self.block_size
+        current_seq_len = len(logical_indices)
+        sliding_window = self.sliding_window
+
+        sliding_window_blocks = (sliding_window + block_size - 1) // block_size
+
+        # get all blocks
+        sliding_blocks = block_table[
+            :sliding_window_blocks
+        ]  # TODO: need to adapt code in _allocate_blocks_if_needed to avoid overallocating blocks
+
+        if current_seq_len <= sliding_window:
+            # within sliding window size
+            pass
+        else:
+            # exceeded window size
+            pass
+        pass
+
+    @traced
     def update(
         self,
         key_states: torch.Tensor,
         value_states: torch.Tensor,
         layer_idx: int,
-        read_index,
-        write_index,
+        cache_index: dict[str, tuple[Optional[list[int]], Optional[list[int]]]],
+        # read_index,
+        # write_index,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         # Reshape cache for easier indexing
+        layer_type = self.layer_types[layer_idx] if self.layer_types else "full_attention"
+        read_index, write_index = cache_index[layer_type]
+        if layer_type == "sliding_window" and read_index is None or write_index is None:
+            raise ValueError(f"layer {layer_idx} is sliding window, but `model.config.sliding_window` is set to None.")
         total_slots = self.num_blocks * self.block_size
         k_cache_flat = self.key_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
         v_cache_flat = self.value_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
@@ -363,6 +419,7 @@ class Scheduler(ABC):
 
 @attach_tracer()
 class FIFOScheduler(Scheduler):
+    # TODO: different behaviour for sliding window?
     @traced
     def _allocate_blocks_if_needed(self, state: RequestState, len_next_tokens: int):
         # 1. we check that the occupancy is less than the requested length
@@ -439,6 +496,7 @@ class FIFOScheduler(Scheduler):
         for state in candidates:
             self._prepare_request_for_processing(state, token_budget, request_ids_to_remove_from_waiting)
             request_len = len(state.prompt_ids)
+            # TODO: different behaviour for sliding window?
             if not self._allocate_blocks_if_needed(
                 state, len(state.prompt_ids)
             ):  # don't schedule if we can't allocate blocks
@@ -866,6 +924,7 @@ class ContinuousBatchProcessor:
         self.reset_static_tensors()
         position_ids = []
         input_ids = []
+        cache_index = {}
         read_index = []
         write_index = []
         cumulative_seqlens_q = [0]
@@ -882,8 +941,15 @@ class ContinuousBatchProcessor:
             cache_index = list(range(key_length))
 
             positions_to_add = cache_index[past_length:]
+            (sliding_read_indices, sliding_write_indices) = self.cache._get_physical_sliding_indices(
+                state, cache_index
+            )
             read_indices = self.cache._get_physical_indices(state, cache_index)
             write_indices = read_indices[-query_length:]
+            cache_index = {
+                "full_attention": (read_indices, write_indices),
+                "sliding_window": (sliding_read_indices, sliding_write_indices),
+            }
 
             position_ids.extend(positions_to_add)
             read_index.extend(read_indices)
