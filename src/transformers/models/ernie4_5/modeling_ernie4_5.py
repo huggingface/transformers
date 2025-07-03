@@ -20,12 +20,12 @@ import torch.nn.functional as F
 from torch.nn.attention import SDPBackend, sdpa_kernel
 
 from transformers.activations import ACT2FN
-from transformers.modeling_utils import PreTrainedModel
 from transformers.generation import GenerationMixin
 from transformers.modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
 )
+from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import logging
 
 from .configuration_ernie4_5 import Ernie4_5Config
@@ -34,49 +34,42 @@ from .configuration_ernie4_5 import Ernie4_5Config
 logger = logging.get_logger(__name__)
 
 
+# llama copy
 class Ernie4_5RMSNorm(nn.Module):
-    """
-    Root Mean Square Layer Normalization (Ernie4_5RMSNorm) implementation.
-
-    Ernie4_5RMSNorm is a simplified version of LayerNorm that focuses on the root mean square of inputs,
-    omitting the mean-centering operation. This provides computational efficiency while maintaining
-    good performance.
-    """
-
-    def __init__(self, config):
+    def __init__(self, hidden_size, eps=1e-6):
         """
-        Initialize Ernie4_5RMSNorm layer.
-
-        Args:
-            config: Model configuration.
+        Ernie4_5RMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
-        self.hidden_size = config.hidden_size
-        self.weight = nn.Parameter(
-            torch.ones(self.hidden_size, dtype=torch.get_default_dtype())
-        )
-        self.variance_epsilon = config.rms_norm_eps
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
 
     def forward(self, hidden_states):
-        """
-        Apply RMS normalization to input hidden states.
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
 
-        Args:
-            hidden_states (Tensor): Input tensor of shape [batch_size, seq_len, hidden_size]
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
-        Returns:
-            Tensor: Normalized output tensor of same shape as input
 
-        Note:
-            - computes Ernie4_5RMSNorm manually:
-                1. Compute variance of features
-                2. Apply reciprocal square root normalization
-                3. Scale by learned weight parameter
-            - Maintains original dtype for numerical stability during computation
-        """
-        variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
-        hidden_states = torch.rsqrt(variance + self.variance_epsilon) * hidden_states
-        return hidden_states.to(self.weight.dtype) * self.weight
+# llama copy
+class Ernie4_5MLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
 
 
 class Ernie4_5RopeEmbedding(nn.Module):
@@ -175,92 +168,6 @@ class Ernie4_5RopeEmbedding(nn.Module):
         return query, key
 
 
-class Ernie4_5FusedDropoutImpl(nn.Module):
-    """
-    Fused dropout implementation with residual connection support.
-
-    This layer combines dropout and residual addition in a single operation for better performance,
-    particularly on GPU devices. The dropout is conditionally applied based on the probability.
-
-    Args:
-        prob (float): Dropout probability (between 0 and 1)
-
-    Attributes:
-        prob (float): Stores the dropout probability
-        dropout (nn.Dropout): The actual dropout layer instance
-    """
-
-    def __init__(self, prob):
-        """
-        Initialize the fused dropout layer.
-
-        Args:
-            prob (float): Dropout probability (0 means no dropout)
-        """
-        super().__init__()
-        self.prob = prob
-        self.dropout = nn.Dropout(p=prob)
-
-    def forward(self, x, y):
-        """
-        Forward pass of the fused dropout layer.
-
-        Args:
-            x (Tensor): Input tensor to potentially apply dropout
-            y (Tensor): Residual tensor to add to the (possibly dropped out) x
-
-        Returns:
-            Tensor: Result of x (with optional dropout) + y
-        """
-        if self.prob > 0:
-            x = self.dropout(x)
-        output = x + y
-
-        return output
-
-
-class Ernie4_5MLP(nn.Module):
-    """
-    Ernie4_5MLP - Gated Multi-Layer Perceptron module used in Ernie model.
-    """
-
-    def __init__(self, config, layer_idx=0):
-        """
-        Initialize the MLP module with configuration options.
-
-        Args:
-            config: Model configurations.
-            layer_idx (int): Index of current layer (default: 0)
-        """
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-
-        self.gate_proj = nn.Linear(
-            self.hidden_size, self.intermediate_size, bias=config.use_bias
-        )
-        self.up_proj = nn.Linear(
-            self.hidden_size, self.intermediate_size, bias=config.use_bias
-        )
-        self.down_proj = nn.Linear(
-            self.intermediate_size, self.hidden_size, bias=config.use_bias
-        )
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, x):
-        """
-        Args:
-            x (Tensor): shape [batch_size, seq_len, hidden_size]
-
-        Returns:
-            Tensor: shape [batch_size, seq_len, hidden_size]
-        """
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
-
-
 class Ernie4_5Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -312,20 +219,7 @@ class Ernie4_5Attention(nn.Module):
         )
         self.config = config
 
-        self.set_attn_func()
-
-    def set_attn_func(self):
-        """Configure attention function based on settings.
-
-        Selects between flash/core attention.
-        """
-        config = self.config
-        use_flash_attn = False
-        #if config.use_flash_attention:
-        if use_flash_attn:
-            self.attn_func = self._flash_attention_wrapper
-        else:
-            self.attn_func = self.core_attn
+        self.attn_func = self.core_attn
 
     def forward(
         self,
@@ -399,50 +293,6 @@ class Ernie4_5Attention(nn.Module):
             batch, num_key_value_heads, n_rep, slen, head_dim
         )
         return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-    def _flash_attention_wrapper(
-        self,
-        q,
-        k,
-        v,
-        attention_mask=None,
-        attn_mask_start_row_indices=None,
-        seq_length=None,
-    ):
-        """Wrapper for flash attention implementation.
-
-        Args:
-            q (torch.Tensor): Query tensor
-            k (torch.Tensor): Key tensor
-            v (torch.Tensor): Value tensor
-            attention_mask (Optional[torch.Tensor]): Attention mask
-            attn_mask_start_row_indices (Optional[torch.Tensor]): Variable length indices
-            seq_length (Optional[int]): Sequence length
-
-        Returns:
-            Tuple[torch.Tensor, torch.Tensor]: Attention output and weights
-        """
-        q = q.transpose(1, 2)
-        k = k.transpose(1, 2)
-        v = v.transpose(1, 2)
-
-        with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
-            out = F.scaled_dot_product_attention(
-                q,
-                k,
-                v,
-                attn_mask=attention_mask,
-                #dropout_p=self.config.attention_probs_dropout_prob,
-                dropout_p=0.0,
-                is_causal=attention_mask is None and q.shape[1] != 1,
-                scale=1
-                / (getattr(self.config, "scale_qk_coeff", 1.0) * self.head_dim**0.5),
-                enable_gqa=self.is_gqa,
-            )
-        out = out.transpose(1, 2)
-        out = out.contiguous().view(out.size(0), out.size(1), -1)
-
-        return out, None
 
     def core_attn(
         self,
@@ -609,13 +459,8 @@ class Ernie4_5DecoderLayer(nn.Module):
         self.self_attn = Ernie4_5Attention(config, layer_idx)
         self.mlp = Ernie4_5MLP(config)
 
-        self.input_layernorm = Ernie4_5RMSNorm(config)
-        self.post_attention_layernorm = Ernie4_5RMSNorm(config)
-
-        #self.residual_add1 = Ernie4_5FusedDropoutImpl(config.hidden_dropout_prob)
-        #self.residual_add2 = Ernie4_5FusedDropoutImpl(config.hidden_dropout_prob)
-        self.residual_add1 = Ernie4_5FusedDropoutImpl(0.0)
-        self.residual_add2 = Ernie4_5FusedDropoutImpl(0.0)
+        self.input_layernorm = Ernie4_5RMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.post_attention_layernorm = Ernie4_5RMSNorm(config.hidden_size, config.rms_norm_eps)
 
     def forward(
         self,
@@ -646,7 +491,6 @@ class Ernie4_5DecoderLayer(nn.Module):
                 - With cache: Tuple of (hidden_states, cached_key_value)
         """
         residual = hidden_states
-
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
@@ -660,14 +504,14 @@ class Ernie4_5DecoderLayer(nn.Module):
             use_cache=use_cache,
             token_type_ids=token_type_ids,
         )
-        hidden_states = self.residual_add1(hidden_states, residual)
+        hidden_states = residual + hidden_states
 
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
 
-        hidden_states = self.residual_add2(hidden_states, residual)
         outputs = (hidden_states,)
 
         if output_attentions:
@@ -686,7 +530,7 @@ class Ernie4_5PretrainedModel(PreTrainedModel):
     """Base class for ERNIE pretrained models."""
 
     config_class = Ernie4_5Config
-    base_model_prefix = "ernie"
+    base_model_prefix = "model"
 
 
 class Ernie4_5Model(Ernie4_5PretrainedModel):
@@ -712,7 +556,7 @@ class Ernie4_5Model(Ernie4_5PretrainedModel):
             [Ernie4_5DecoderLayer(config, i) for i in range(config.num_hidden_layers)]
         )
 
-        self.norm = Ernie4_5RMSNorm(config)
+        self.norm = Ernie4_5RMSNorm(config.hidden_size, config.rms_norm_eps)
 
         self.gradient_checkpointing = False
 
@@ -861,96 +705,7 @@ class Ernie4_5Model(Ernie4_5PretrainedModel):
         )
 
 
-class Ernie4_5LMHead(nn.Module):
-    """Language model head for ERNIE"""
-
-    def __init__(self, config):
-        """Initialize the language model head.
-
-        Args:
-            config: Model configuration containing:
-                - vocab_size: Size of vocabulary
-                - hidden_size: Dimension of hidden states
-                - tie_word_embeddings: Whether to tie input/output embeddings
-                - weight_share_add_bias: Whether to add bias when weight sharing
-                - use_bias: Whether to use bias term
-        """
-
-        super(Ernie4_5LMHead, self).__init__()
-        self.config = config
-        vocab_size = config.vocab_size
-
-        if config.tie_word_embeddings:
-            # Weight of shape [vocab_size, hidden_size]
-            self.weight = nn.Parameter(
-                torch.empty(
-                    vocab_size, config.hidden_size, dtype=torch.get_default_dtype()
-                )
-            )
-        else:
-            # Weight of shape [hidden_size, vocab_size]
-            self.weight = nn.Parameter(
-                torch.empty(
-                    config.hidden_size, vocab_size, dtype=torch.get_default_dtype()
-                )
-            )
-        nn.init.xavier_uniform_(self.weight)
-
-        logger.info(
-            f"output-weight: {self.weight.shape}, tie_word_embeddings: {config.tie_word_embeddings}"
-        )
-
-        #if config.weight_share_add_bias and config.use_bias:
-        if True and config.use_bias:
-            self.bias = nn.Parameter(
-                torch.zeros(vocab_size, dtype=torch.get_default_dtype())
-            )
-        else:
-            self.bias = None
-
-    def forward(self, hidden_states):
-        """Project hidden states to vocabulary logits.
-
-        Args:
-            hidden_states (torch.Tensor): Input tensor of shape [batch_size, seq_len, hidden_size]
-
-        Returns:
-            Logits tensor of shape [batch_size, seq_len, vocab_size]
-        """
-        return self.calc_lm_head_logits(
-            self.config, hidden_states, self.weight, self.bias
-        )
-
-    def calc_lm_head_logits(self, config, hidden_states, weight, bias):
-        """
-        Calculate language model head logits.
-
-        This is the core function that computes the final output logits for a language model.
-
-        Args:
-            config: Model configuration.
-            hidden_states (Tensor): Hidden states from the transformer layers
-            weight (Tensor): Weight matrix for the language model head
-            bias (Tensor): Bias vector for the language model head
-
-        Returns:
-            Tensor: The computed logits for language modeling.
-        """
-
-        if config.tie_word_embeddings:
-            logits = torch.matmul(hidden_states, weight.T)
-        else:
-            logits = torch.matmul(hidden_states, weight)
-
-        if bias is not None:
-            logits = logits + bias
-
-        return logits
-
-
 class Ernie4_5ForCausalLM(Ernie4_5PretrainedModel, GenerationMixin):
-    """ERNIE model for causal language modeling."""
-
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
@@ -966,41 +721,27 @@ class Ernie4_5ForCausalLM(Ernie4_5PretrainedModel, GenerationMixin):
 
         self.config = config
         self.model = Ernie4_5Model(config)
-        self.lm_head = Ernie4_5LMHead(config)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @torch.no_grad()
-    def set_state_dict(self, state_dict, *args, **kwargs):
-        """
-        Loads the model state dictionary.
-        """
-        ret = super().set_state_dict(state_dict)
-        return ret
-
     def get_input_embeddings(self):
-        """Returns the input embeddings layer."""
         return self.model.embed_tokens
 
     def set_input_embeddings(self, value):
-        """Sets the input embeddings layer."""
         self.model.embed_tokens = value
 
     def get_output_embeddings(self):
-        """Returns the output embeddings (LM head)."""
         return self.lm_head
 
     def set_output_embeddings(self, new_embeddings):
-        """Sets the output embeddings layer."""
         self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
-        """Sets the ERNIE decoder model."""
         self.model = decoder
 
     def get_decoder(self):
-        """Gets the ERNIE decoder model."""
         return self.model
 
     def forward(
@@ -1075,4 +816,4 @@ class Ernie4_5ForCausalLM(Ernie4_5PretrainedModel, GenerationMixin):
         )
 
 
-__all__ = ["Ernie4_5ForCausalLM", "Ernie4_5Model", "Ernie4_5PreTrainedModel"]
+__all__ = ["Ernie4_5ForCausalLM", "Ernie4_5Model", "Ernie4_5PretrainedModel"]
