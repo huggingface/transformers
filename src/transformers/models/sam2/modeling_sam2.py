@@ -24,6 +24,7 @@ import math
 import warnings
 from collections import OrderedDict
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, Iterator, Optional, Union
 
 import numpy as np
@@ -48,12 +49,10 @@ logger = logging.get_logger(__name__)
 class Sam2VideoSessionState:
     images: torch.FloatTensor = None
     num_frames: int = None
-    offload_video_to_cpu: bool = None
-    offload_state_to_cpu: bool = None
     video_height: int = None
     video_width: int = None
-    device: torch.device = None
-    storage_device: torch.device = None
+    inference_device: torch.device = None
+    inference_state_device: torch.device = None
     point_inputs_per_obj: dict = None
     mask_inputs_per_obj: dict = None
     cached_features: dict = None
@@ -71,19 +70,20 @@ class Sam2VideoSessionState:
         video: torch.FloatTensor,
         video_height: int,
         video_width: int,
-        offload_video_to_cpu: bool = False,
-        offload_state_to_cpu: bool = False,
+        inference_device: Union[str, torch.device] = "cpu",
+        video_storage_device: Union[str, torch.device] = "cpu",
+        inference_state_device: Union[str, torch.device] = "cpu",
         async_loading_frames: bool = False,
     ):
         self.images = list(video)
         self.num_frames = len(video)
-        self.offload_video_to_cpu = offload_video_to_cpu
-        self.offload_state_to_cpu = offload_state_to_cpu
+        self.inference_device = inference_device
+        self.video_storage_device = video_storage_device
+        self.inference_state_device = inference_state_device
         self.async_loading_frames = async_loading_frames
         self.video_height = video_height
         self.video_width = video_width
         self.device = video.device
-        self.storage_device = torch.device("cpu") if offload_state_to_cpu else video.device
         self.cached_features = {}
         self.point_inputs_per_obj = {}
         self.mask_inputs_per_obj = {}
@@ -2060,6 +2060,27 @@ NO_OBJ_SCORE = -1024.0
 CUDA_KERNELS = None
 
 
+def load_cuda_kernels():
+    from torch.utils.cpp_extension import load
+
+    global CUDA_KERNELS
+
+    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "sam2"
+    src_files = [root / "connected_components.cu"]
+    CUDA_KERNELS = load(
+        "CUDA_KERNELS",
+        src_files,
+        with_cuda=True,
+        extra_include_paths=[str(root)],
+        extra_cuda_cflags=[
+            "-DCUDA_HAS_FP16=0",
+            "-D__CUDA_NO_HALF_OPERATORS__",
+            "-D__CUDA_NO_HALF_CONVERSIONS__",
+            "-D__CUDA_NO_HALF2_OPERATORS__",
+        ],
+    )
+
+
 def get_1d_sine_pe(pos_inds, dim, temperature=10000):
     """
     Get 1D sine positional embedding as in the original Transformer paper.
@@ -2085,7 +2106,6 @@ def get_connected_components(mask):
     - counts: A tensor of shape (N, 1, H, W) containing the area of the connected
               components for foreground pixels and 0 for background pixels.
     """
-
     return CUDA_KERNELS.get_connected_components(mask.to(torch.uint8).contiguous())
 
 
@@ -2197,12 +2217,12 @@ class Sam2Model(Sam2PreTrainedModel):
         )  # Compatibility with SAM2
         self.multimask_output_for_tracking = config.multimask_output_for_tracking
 
-        # if torch.cuda.is_available():
-        #     try:
-        #         logger.info("Building CUDA kernel, this might take some time...")
-        #         load_cuda_kernels()
-        #     except Exception as e:
-        #         logger.warning(f"Could not load custom CUDA kernels for postprocessing: {e}")
+        if torch.cuda.is_available():
+            try:
+                logger.info("Building CUDA kernel, this might take some time...")
+                load_cuda_kernels()
+            except Exception as e:
+                logger.warning(f"Could not load custom CUDA kernels for postprocessing: {e}")
 
         self.post_init()
 
@@ -2584,7 +2604,7 @@ class Sam2Model(Sam2PreTrainedModel):
         Resize the object scores to the original video resolution (video_res_masks)
         and apply non-overlapping constraints for final output.
         """
-        device = inference_state.device
+        device = inference_state.inference_device
         video_H = inference_state.video_height
         video_W = inference_state.video_width
         any_res_masks = any_res_masks.to(device, non_blocking=True)
@@ -2638,7 +2658,7 @@ class Sam2Model(Sam2PreTrainedModel):
                 size=(batch_size, 1, consolidated_H, consolidated_W),
                 fill_value=NO_OBJ_SCORE,
                 dtype=torch.float32,
-                device=inference_state.storage_device,
+                device=inference_state.inference_state_device,
             ),
         }
         for obj_idx in range(batch_size):
@@ -2688,9 +2708,6 @@ class Sam2Model(Sam2PreTrainedModel):
         """
         Add new conditioning inputs to a frame and run inference.
         """
-        device = inference_state.device
-        storage_device = inference_state.storage_device
-
         # Prepare batch inputs
         batch_size = 1
 
@@ -2750,7 +2767,7 @@ class Sam2Model(Sam2PreTrainedModel):
                     # Run memory encoder on the temporary outputs (if the memory feature is missing)
                     if out["maskmem_features"] is None:
                         high_res_masks = torch.nn.functional.interpolate(
-                            out["pred_masks"].to(inference_state.device),
+                            out["pred_masks"].to(inference_state.inference_device),
                             size=(self.image_size, self.image_size),
                             mode="bilinear",
                             align_corners=False,
@@ -2834,7 +2851,7 @@ class Sam2Model(Sam2PreTrainedModel):
                 if frame_idx in obj_output_dict["cond_frame_outputs"]:
                     storage_key = "cond_frame_outputs"
                     current_out = obj_output_dict[storage_key][frame_idx]
-                    device = inference_state.device
+                    device = inference_state.inference_device
                     pred_masks = current_out["pred_masks"].to(device, non_blocking=True)
                 else:
                     storage_key = "non_cond_frame_outputs"
@@ -2876,16 +2893,23 @@ class Sam2Model(Sam2PreTrainedModel):
             cached = inference_state.cached_features[frame_idx]
             vision_feats = cached["vision_feats"]
             vision_pos_embeds = cached["vision_pos_embeds"]
+            vision_feats = [vision_feat.to(inference_state.inference_device) for vision_feat in vision_feats]
+            vision_pos_embeds = [pe.to(inference_state.inference_device) for pe in vision_pos_embeds]
         else:
             # Compute features using image encoder
-            image_batch = inference_state.images[frame_idx].unsqueeze(0)  # Add batch dimension
+            image_batch = inference_state.images[frame_idx]
+            if inference_state.video_storage_device != inference_state.inference_device:
+                image_batch = image_batch.to(inference_state.inference_device)
+            image_batch = image_batch.unsqueeze(0)  # Add batch dimension
             feature_maps, feature_maps_position_embeddings, _, _ = self.get_image_features(image_batch)
             vision_feats = [x.flatten(2).permute(2, 0, 1) for x in feature_maps]
             vision_pos_embeds = [x.flatten(2).permute(2, 0, 1) for x in feature_maps_position_embeddings]
             # Cache features
             inference_state.cached_features[frame_idx] = {
-                "vision_feats": vision_feats,
-                "vision_pos_embeds": vision_pos_embeds,
+                "vision_feats": [
+                    vision_feat.to(inference_state.inference_state_device) for vision_feat in vision_feats
+                ],
+                "vision_pos_embeds": [pe.to(inference_state.inference_state_device) for pe in vision_pos_embeds],
             }
 
         # Expand to batch size if needed
@@ -2919,7 +2943,7 @@ class Sam2Model(Sam2PreTrainedModel):
         )
 
         # optionally offload the output to CPU memory to save GPU space
-        storage_device = inference_state.storage_device
+        storage_device = inference_state.inference_state_device
         maskmem_features = maskmem_features.to(torch.bfloat16)
         maskmem_features = maskmem_features.to(storage_device, non_blocking=True)
         # "maskmem_pos_enc" is the same across frames, so we only need to store one copy of it
@@ -2985,7 +3009,7 @@ class Sam2Model(Sam2PreTrainedModel):
         )
 
         # optionally offload the output to CPU memory to save GPU space
-        storage_device = inference_state.storage_device
+        storage_device = inference_state.inference_state_device
         maskmem_features = current_out["maskmem_features"]
         if maskmem_features is not None:
             maskmem_features = maskmem_features.to(torch.bfloat16)

@@ -107,12 +107,29 @@ class Sam2Processor(ProcessorMixin):
 
         return encoding_image_processor
 
-    def init_video_session(self, video: VideoInput):
-        processed_video = self.video_processor(videos=video, return_tensors="pt").to("cuda")
+    def init_video_session(
+        self,
+        video: VideoInput,
+        inference_device: Union[str, "torch.device"] = "cpu",
+        inference_state_device: Union[str, "torch.device"] = None,
+        processing_device: Union[str, "torch.device"] = None,
+        video_storage_device: Union[str, "torch.device"] = None,
+    ):
+        video_storage_device = video_storage_device if video_storage_device is not None else inference_device
+        inference_state_device = inference_state_device if inference_state_device is not None else inference_device
+        processing_device = processing_device if processing_device is not None else inference_device
+        processed_video = self.video_processor(videos=video, device=processing_device, return_tensors="pt")
+        if video_storage_device != inference_device:
+            processed_video.pixel_values_videos = processed_video.pixel_values_videos.to(video_storage_device)
+        elif processing_device != inference_device:
+            processed_video.pixel_values_videos = processed_video.pixel_values_videos.to(inference_device)
         inference_state = Sam2VideoSessionState(
             processed_video.pixel_values_videos[0],
             video_height=processed_video.original_sizes[0][0],
             video_width=processed_video.original_sizes[0][1],
+            inference_device=inference_device,
+            video_storage_device=video_storage_device,
+            inference_state_device=inference_state_device,
         )
         return inference_state
 
@@ -289,7 +306,7 @@ class Sam2Processor(ProcessorMixin):
         if points is None and box is None:
             raise ValueError("at least one of points or box must be provided as input")
 
-        device = inference_state.device
+        device = inference_state.inference_device
 
         # Process points
         if points is None:
@@ -385,7 +402,7 @@ class Sam2Processor(ProcessorMixin):
         point_inputs_per_frame = inference_state.point_inputs_per_obj[obj_idx]
         mask_inputs_per_frame = inference_state.mask_inputs_per_obj[obj_idx]
 
-        device = inference_state.device
+        device = inference_state.inference_device
 
         # Process mask
         if not isinstance(mask, torch.Tensor):
