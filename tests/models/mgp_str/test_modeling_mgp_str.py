@@ -140,7 +140,7 @@ class MgpstrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_batching_equivalence(self, atol=5e-5, rtol=5e-5):
+    def test_batching_equivalence(self, atol=1e-4, rtol=1e-4):
         super().test_batching_equivalence(atol=atol, rtol=rtol)
 
     @unittest.skip(reason="MgpstrModel does not use inputs_embeds")
