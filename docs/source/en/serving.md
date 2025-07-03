@@ -171,7 +171,7 @@ where `host` and `port` are the `transformers serve` CLI parameters (`localhost:
 You are now ready to chat!
 
 > [!TIP]
-> You can add any `transformers`-compatible model to Jan through `transformers server`. In the custom model provider you created, click on the "+" button in the "Models" section and add its Hub repository name.
+> You can add any `transformers`-compatible model to Jan through `transformers serve`. In the custom model provider you created, click on the "+" button in the "Models" section and add its Hub repository name.
 
 To conclude this example, let's look into a more advanced use-case. If you have a beefy machine to serve models with, but prefer using Jan on a different device, you need to add port forwarding. If you have `ssh` access from your Jan machine into your server, this can be accomplished by typing the following to your Jan machine's terminal
 
