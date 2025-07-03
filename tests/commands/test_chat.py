@@ -29,8 +29,30 @@ class ChatCLITest(unittest.TestCase):
         self.assertIn("chat interface", cs.out.lower())
 
     @patch.object(ChatCommand, "run")
-    def test_cli_dispatch(self, run_mock):
+    def test_cli_dispatch_model(self, run_mock):
+        """
+        Running transformers chat with just a model should work & spawn a serve underneath
+        """
         args = ["transformers", "chat", "hf-internal-testing/tiny-random-gpt2"]
+        with patch("sys.argv", args):
+            cli.main()
+        run_mock.assert_called_once()
+
+    def test_cli_dispatch_url(self):
+        """
+        Running transformers chat with just a URL should not work as a model should additionally be specified
+        """
+        args = ["transformers", "chat", "localhost:8000"]
+        with self.assertRaises(ValueError):
+            with patch("sys.argv", args):
+                cli.main()
+
+    @patch.object(ChatCommand, "run")
+    def test_cli_dispatch_url_and_model(self, run_mock):
+        """
+        Running transformers chat with a URL and a model should work
+        """
+        args = ["transformers", "chat", "localhost:8000", "--model_name_or_path=hf-internal-testing/tiny-random-gpt2"]
         with patch("sys.argv", args):
             cli.main()
         run_mock.assert_called_once()
