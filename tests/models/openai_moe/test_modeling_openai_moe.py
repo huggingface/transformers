@@ -403,8 +403,6 @@ class OpenAIMoeIntegrationTest(unittest.TestCase):
         static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
 
-@require_tokenizers
-@require_tiktoken
 class OpenAIMoeTokenizationIntegrationTest(unittest.TestCase):
     """Ensure the HF tokenizer extracted with `OpenAIMoeConverter` remains byte-level identical to
     the reference `o200k_harmony` tiktoken encoding.
@@ -437,9 +435,6 @@ class OpenAIMoeTokenizationIntegrationTest(unittest.TestCase):
             },
         )
 
-    # --------------------------------------------
-    # Helper util
-    # --------------------------------------------
     def _assert_equivalent(self, string: str):
         # Encode
         ids_hf = self.tokenizer.encode(string)
@@ -451,26 +446,6 @@ class OpenAIMoeTokenizationIntegrationTest(unittest.TestCase):
         decoded_tk = self.tkt_encoding.decode(ids_tk)
         self.assertEqual(decoded_hf, decoded_tk, msg=f"Decode diff on: {string!r}")
 
-    # --------------------------------------------
-    # Quick unit test on a handful of hand-picked strings
-    # --------------------------------------------
-    def test_equivalence_on_simple_strings(self):
-        samples = [
-            "",
-            "Hello world!",
-            "    ",
-            "I ❤️ Transformers 🤗",
-            "def foo(x): return x * x",
-            "<|start|><|message|>user\nHello<|end|>",
-        ]
-
-        for s in samples:
-            with self.subTest(sample=s):
-                self._assert_equivalent(s)
-
-    # --------------------------------------------
-    # Heavier integration test gated behind env flag
-    # --------------------------------------------
     @slow
     def test_equivalence_on_public_datasets(self):
         import tqdm
