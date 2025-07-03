@@ -14,7 +14,7 @@
 
 import unittest
 
-from transformers.testing_utils import is_torch_available, require_torch
+from transformers.testing_utils import is_torch_available, require_read_token, require_torch
 
 
 if is_torch_available():
@@ -54,6 +54,7 @@ EXPECTED_PACKED_MASK = torch.tensor([[[
 
 
 @require_torch
+@require_read_token
 class MaskTest(unittest.TestCase):
     def test_packed_sequence_mask_sdpa(self):
         config = AutoConfig.from_pretrained("meta-llama/Llama-3.2-1B")
