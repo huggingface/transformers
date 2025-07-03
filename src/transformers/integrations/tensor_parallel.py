@@ -736,7 +736,8 @@ class SequenceParallel(TensorParallelLayer):
             parameter = DTensor.from_local(parameter, device_mesh, [Replicate()], run_check=False)
         return nn.Parameter(parameter, requires_grad=parameter.is_floating_point())
 
-class GroupedGemmParallel(TensorParallelLayer):
+class GroupedGemmParallel(TensorParallelLayer): # self.experts
+    # Applies EP to MoE experts
     def __init__(self):
         super().__init__()
         self.use_dtensor = False
@@ -751,11 +752,9 @@ class GroupedGemmParallel(TensorParallelLayer):
             param = param.contiguous()
         return param
 
-
     @staticmethod
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
-        if mod.config.enable_expert_parallel:
-            torch.distributed.all_reduce(outputs, op=torch.distributed.ReduceOp.SUM) # TODO: move to hook
+        torch.distributed.all_reduce(outputs, op=torch.distributed.ReduceOp.SUM)
         return outputs
 
 
@@ -770,6 +769,7 @@ class GroupedGemmParallel(TensorParallelLayer):
 
 
 class RouterParallel(TensorParallelLayer):
+    # applies EP to router
     def __init__(self, *args, **kwargs):
         self.args = args
         self.kwargs = kwargs

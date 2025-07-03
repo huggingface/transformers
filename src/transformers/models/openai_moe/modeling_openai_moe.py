@@ -74,7 +74,6 @@ class OpenAIMoeExperts(nn.Module):
         self.down_proj = nn.Parameter(torch.empty((config.num_local_experts, self.expert_dim, self.hidden_size)))
         self.down_proj_bias = nn.Parameter(torch.empty(config.num_local_experts, self.hidden_size))
         self.alpha = 1.702
-        self.enable_expert_parallel = config.enable_expert_parallel
 
     def forward(self, hidden_states: torch.Tensor, batch_size: int, router_indices=None, routing_weights=None) -> torch.Tensor:
         """
@@ -124,8 +123,8 @@ class OpenAIMoeExperts(nn.Module):
             gate, up = gate_up.chunk(2, dim=-1)  # not supported for DTensors
             glu = gate * torch.sigmoid(gate * self.alpha)
             next_states = torch.bmm(((up + 1) * glu), self.down_proj)
-            if not self.enable_expert_parallel:
-                torch.distributed.all_reduce(next_states, op=torch.distributed.ReduceOp.SUM) # TODO: if we can attach hook to `down_proj` we can move this to hook
+            # if not self.enable_expert_parallel:
+            #     torch.distributed.all_reduce(next_states, op=torch.distributed.ReduceOp.SUM) # TODO: if we can attach hook to `down_proj` we can move this to hook
             next_states = next_states + self.down_proj_bias[..., None, :]
             next_states = next_states.view(num_experts, -1, self.hidden_size) * routing_weights[..., None] # we're throwing away computed routed_out for rest of experts
             next_states = next_states.view(num_experts, batch_size, -1, self.hidden_size).sum(dim=0)

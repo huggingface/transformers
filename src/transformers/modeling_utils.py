@@ -777,7 +777,7 @@ def _load_state_dict_into_meta_model(
         file_pointer = safe_open(shard_file, framework="pt", device=tensor_device)
 
     for param_name, empty_param in state_dict.items():
-        if param_name not in expected_keys:
+        if param_name not in expected_keys: # when loading from ckpt, we skip param if doesnt exist in modeling
             continue
 
         # we need to use serialized_param_name as file pointer is untouched
@@ -1997,6 +1997,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
     # - `_pp_plan["layers"][PipelineParallel.inputs]`
     # - `_pp_plan["layers"][PipelineParallel.outputs]`
     _pp_plan = None
+
+    # Whether expert parallelism is enabled for the model. In that case we override
+    # `base_model_tp_plan` with expert parallel plan
+    _enable_expert_parallel = False
 
     # This flag signal that the model can be used as an efficient backend in TGI and vLLM
     # In practice, it means that they support attention interface functions, fully pass the kwargs
@@ -4262,6 +4266,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         gguf_file = kwargs.pop("gguf_file", None)
         tp_plan = kwargs.pop("tp_plan", None)
         tp_size = kwargs.pop("tp_size", None)
+        enable_expert_parallel = kwargs.pop("enable_expert_parallel", False)
         device_mesh = kwargs.pop("device_mesh", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
 
@@ -4623,6 +4628,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 torch_dtype=torch_dtype,
                 device_map=device_map,
             )
+
+        if enable_expert_parallel:
+            # TODO: add proper support for ep_plan independently of tp_plan
+            if config.base_model_tp_plan is None:
+                raise ValueError("base_model_tp_plan is required when enable_expert_parallel is True")
+            # We apply ep on MoE layers
+            config.base_model_tp_plan.update({
+                "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+                "layers.*.mlp.experts.gate_up_proj_bias": "grouped_gemm",
+                "layers.*.mlp.experts.down_proj": "grouped_gemm",
+                "layers.*.mlp.experts.down_proj_bias": "grouped_gemm", 
+                # TODO: i shouldn't have to do the above, but when removing it, it doesnt partition them
+                'layers.*.mlp.experts': "grouped_gemm",
+                "layers.*.mlp.router": "ep_router",
+            })
 
         with ContextManagers(model_init_context):
             # Let's make sure we don't run the init function of buffer modules

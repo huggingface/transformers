@@ -64,8 +64,8 @@ def main():
         enable_expert_parallel=os.environ.get("ENABLE_EXPERT_PARALLEL", "0") == "1",
         tp_size=tp_size,
         torch_dtype=torch.bfloat16,
-        # torch_dtype=torch.float32,
         attn_implementation="eager",
+        # key_mapping={"mlp.router": "mlp.router.router"},
     )
     logger.info(f"Model loaded onto device mesh: {tp_mesh}")
     device = torch.device(f"cuda:{local_rank}")
