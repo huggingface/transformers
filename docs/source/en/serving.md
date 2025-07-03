@@ -154,7 +154,7 @@ I have generated an image of a cat on the moon using the Flux 1 Schnell Image Ge
 
 ### Example 2: Jan and serving in a different machine
 
-This subsection showcases how to use `transformers serve` as a local LLM server within the [Jan](https://jan.ai/) app. Jan is a ChatGPT-alternative graphical interface interface, with a focus on local models.
+This example shows how to use `transformers serve` as a local LLM provider for the [Jan](https://jan.ai/) app. Jan is a ChatGPT-alternative graphical interface, with a focus on local models.
 
 To connect `transformers server` with Jan, you'll need to set up a new model provider ("Settings" > "Model Providers"). Click on "Add Provider", and set a new name. In your new model provider page, all you need to set is the "Base URL" to following pattern
 
