@@ -414,9 +414,6 @@ class OpenAIMoeIntegrationTest(unittest.TestCase):
 class OpenAIMoeTokenizationIntegrationTest(unittest.TestCase):
     """Ensure the HF tokenizer extracted with `OpenAIMoeConverter` remains byte-level identical to
     the reference `o200k_harmony` tiktoken encoding.
-
-    Set the environment variable ``OPENAI_MOE_TOKENIZER_PATH`` to override the tokenizer location
-    (repo ID or local path). When the variable is unset the default public checkpoint is used.
     """
 
     @classmethod
@@ -481,10 +478,6 @@ class OpenAIMoeTokenizationIntegrationTest(unittest.TestCase):
     # --------------------------------------------
     # Heavier integration test gated behind env flag
     # --------------------------------------------
-    @unittest.skipIf(
-        os.getenv("RUN_TOKENIZER_INTEGRATION", "0") == "0",
-        "Set RUN_TOKENIZER_INTEGRATION=1 to enable slow tokenizer equivalence tests",
-    )
     @slow
     def test_equivalence_on_public_datasets(self):
         import tqdm
