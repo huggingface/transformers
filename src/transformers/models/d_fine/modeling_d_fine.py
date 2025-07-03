@@ -1674,21 +1674,7 @@ class DFineForObjectDetection(DFinePreTrainedModel):
         return_dict: Optional[bool] = None,
         **loss_kwargs,
     ) -> Union[tuple[torch.FloatTensor], DFineObjectDetectionOutput]:
-        r"""
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing the flattened feature map (output of the backbone + projection layer), you
-            can choose to directly pass a flattened representation of an image.
-        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
-            Optionally, instead of initializing the queries with a tensor of zeros, you can choose to directly pass an
-            embedded representation.
-        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
-            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
-            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
-            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
-            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
-
-        Examples:
-
+        """
         ```python
         >>> import torch
         >>> from transformers.image_utils import load_image
@@ -1729,7 +1715,8 @@ class DFineForObjectDetection(DFinePreTrainedModel):
         Detected cat with confidence 0.956 at location [11.71, 53.52, 316.64, 472.33]
         Detected remote with confidence 0.947 at location [40.46, 73.7, 175.62, 117.57]
         Detected sofa with confidence 0.918 at location [0.59, 1.88, 640.25, 474.74]
-        ```"""
+        ```
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

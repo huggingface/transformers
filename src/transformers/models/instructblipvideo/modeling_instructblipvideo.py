@@ -1504,41 +1504,6 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
         **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[tuple, InstructBlipVideoForConditionalGenerationModelOutput]:
         r"""
-        qformer_input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of input sequence tokens in the vocabulary of the Q-Former. Input tokens can optionally be provided
-            to serve as text prompt, which the Q-Former model will encode.
-
-            Indices can be obtained using [`InstructBlipVideoProcessor`]. See [`InstructBlipVideoProcessor.__call__`] for
-            details.
-
-            [What are input IDs?](../glossary#input-ids)
-        qformer_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of input sequence tokens in the vocabulary of the language model. Input tokens can optionally be
-            provided to serve as text prompt, which the language model can continue.
-
-            Indices can be obtained using [`InstructBlipVideoProcessor`]. See [`InstructBlipVideoProcessor.__call__`] for
-            details.
-
-            [What are input IDs?](../glossary#input-ids)
-        decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
-            be used by default.
-
-            Only relevant in case an encoder-decoder language model (like T5) is used.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the language modeling loss. Indices should be in `[-100, 0, ..., config.vocab_size -
-            1]`. All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
-            config.vocab_size]`
-
-        Examples:
-
         ```python
         >>> from transformers import InstructBlipVideoProcessor, InstructBlipVideoForConditionalGeneration
         >>> import torch

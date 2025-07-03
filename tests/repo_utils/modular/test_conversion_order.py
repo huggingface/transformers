@@ -23,7 +23,6 @@ FILES_TO_PARSE = [
     os.path.join(MODEL_ROOT, "rt_detr", "modular_rt_detr.py"),
     os.path.join(MODEL_ROOT, "qwen2", "modular_qwen2.py"),
     os.path.join(MODEL_ROOT, "qwen3", "modular_qwen3.py"),
-    os.path.join(MODEL_ROOT, "qwen3", "modular_qwen3_moe.py"),
     os.path.join(MODEL_ROOT, "llava_next_video", "modular_llava_next_video.py"),
     os.path.join(MODEL_ROOT, "cohere2", "modular_cohere2.py"),
     os.path.join(MODEL_ROOT, "modernbert", "modular_modernbert.py"),

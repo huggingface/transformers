@@ -65,10 +65,7 @@ logger = logging.get_logger(__name__)
 
 
 class T5GemmaModuleConfig(Gemma2Config):
-    """Module config (encoder or decoder): the same as Gemma2Config."""
-
-    def __init__(self, **super_kwargs):
-        super().__init__(**super_kwargs)
+    pass
 
 
 class T5GemmaConfig(PretrainedConfig):

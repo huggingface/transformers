@@ -877,16 +877,6 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[tuple, SmolVLMCausalLMOutputWithPast]:
         r"""
-        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
-            Mask to avoid performing attention on padding pixel indices.
-        image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The hidden states of the image encoder after modality projection.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or `model.image_token_id` (where `model` is your instance of `SmolVLMForConditionalGeneration`).
-            Tokens with indices set to `model.image_token_id` are ignored (masked), the loss is only
-            computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python

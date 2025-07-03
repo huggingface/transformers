@@ -319,17 +319,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 
 class Zamba2Attention(nn.Module):
     """
-    Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer
-    and "Generating Long Sequences with Sparse Transformers".
-
-    Adapted from transformers.models.mistral.modeling_mistral.MistralAttention:
-    The input dimension here is attention_hidden_size = 2 * hidden_size, and head_dim = attention_hidden_size // num_heads.
-    The extra factor of 2 comes from the input being the concatenation of original_hidden_states with the output of the previous (mamba) layer
-    (see fig. 2 in https://huggingface.co/papers/2405.16712).
-    Additionally, replaced
-    attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim) with
-    attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim/2)
-
     Multi-headed attention from 'Attention Is All You Need' paper.
 
     Adapted from transformers.models.mistral.modeling_mistral.MistralAttention:

@@ -71,8 +71,37 @@ class SamHQVisionConfig(SamVisionConfig):
 
 class SamHQMaskDecoderConfig(SamMaskDecoderConfig):
     r"""
-    vit_dim (`int`, *optional*, defaults to 768):
-        Dimensionality of the Vision Transformer (ViT) used in the `SamHQMaskDecoder` module.
+    This is the configuration class to store the configuration of a [`SamHQMaskDecoder`]. It is used to instantiate a SAM_HQ
+    mask decoder to the specified arguments, defining the model architecture. Instantiating a configuration defaults
+    will yield a similar configuration to that of the SAM_HQ-vit-h
+    [facebook/sam_hq-vit-huge](https://huggingface.co/facebook/sam_hq-vit-huge) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        hidden_size (`int`, *optional*, defaults to 256):
+            Dimensionality of the hidden states.
+        hidden_act (`str`, *optional*, defaults to `"relu"`):
+            The non-linear activation function used inside the `SamHQMaskDecoder` module.
+        mlp_dim (`int`, *optional*, defaults to 2048):
+            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        num_hidden_layers (`int`, *optional*, defaults to 2):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 8):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        attention_downsample_rate (`int`, *optional*, defaults to 2):
+            The downsampling rate of the attention layer.
+        num_multimask_outputs (`int`, *optional*, defaults to 3):
+            The number of outputs from the `SamHQMaskDecoder` module. In the Segment Anything paper, this is set to 3.
+        iou_head_depth (`int`, *optional*, defaults to 3):
+            The number of layers in the IoU head module.
+        iou_head_hidden_dim (`int`, *optional*, defaults to 256):
+            The dimensionality of the hidden states in the IoU head module.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the layer normalization layers.
+        vit_dim (`int`, *optional*, defaults to 768):
+            Dimensionality of the Vision Transformer (ViT) used in the `SamHQMaskDecoder` module.
     """
 
     def __init__(
