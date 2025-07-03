@@ -628,6 +628,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("mobilebert", "MobileBERT"),
         ("mobilenet_v1", "MobileNetV1"),
         ("mobilenet_v2", "MobileNetV2"),
+        ("mobilenet_v5", "MobileNetV5"),
         ("mobilevit", "MobileViT"),
         ("mobilevitv2", "MobileViTV2"),
         ("modernbert", "ModernBERT"),
@@ -805,7 +806,6 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("zamba", "Zamba"),
         ("zamba2", "Zamba2"),
         ("zoedepth", "ZoeDepth"),
-        ("mobilenet_v5", "MobileNetV5"),
     ]
 )
 
