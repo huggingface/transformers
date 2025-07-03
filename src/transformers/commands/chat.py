@@ -333,6 +333,11 @@ class ChatCommand(BaseTransformersCLICommand):
                     )
 
                 args.host, args.port = args.model_name_or_path_or_address.rsplit(":", 1)
+
+                if args.model_name_or_path is None:
+                    raise ValueError(
+                        "When connecting to a server, please specify a model name with the --model_name_or_path flag."
+                    )
             else:
                 self.spawn_backend = True
                 args.model_name_or_path = args.model_name_or_path_or_address
