@@ -982,7 +982,7 @@ def check_model_inputs(func):
 
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        use_cache = kwargs.get("use_cache", self.config.use_cache)
+        use_cache = kwargs.get("use_cache", getattr(self.config, "use_cache", False))
         return_dict = self.config.return_dict if hasattr(self, "config") else True
         return_dict = kwargs.pop("return_dict", return_dict)
         if return_dict is None:
@@ -993,7 +993,7 @@ def check_model_inputs(func):
         bound.apply_defaults()
         all_args = bound.arguments
 
-        if self.gradient_checkpointing and self.training and use_cache:
+        if getattr(self, "gradient_checkpointing", False) and self.training and use_cache:
             logger.warning_once(
                 "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
             )
@@ -1042,7 +1042,10 @@ def check_model_inputs(func):
                 h.remove()
         for key in collected_outputs:
             if key == "hidden_states":
-                collected_outputs[key] += (outputs.last_hidden_state,)
+                if hasattr(outputs, "vision_hidden_states"):
+                    collected_outputs[key] += (outputs.vision_hidden_states,)
+                else:
+                    collected_outputs[key] += (outputs.last_hidden_state,)
                 outputs[key] = collected_outputs[key]
             elif key == "attentions":
                 if isinstance(capture_flags[key], list) and len(capture_flags[key]) == 2:

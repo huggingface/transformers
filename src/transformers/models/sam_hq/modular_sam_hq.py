@@ -16,9 +16,11 @@
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
+from transformers.utils.generic import TransformersKwargs, can_return_tuple, check_model_inputs
+
+from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
 from ..sam.configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
 from ..sam.modeling_sam import (
@@ -28,6 +30,7 @@ from ..sam.modeling_sam import (
     SamModel,
     SamPreTrainedModel,
     SamTwoWayTransformer,
+    SamVisionAttention,
     SamVisionEncoder,
     SamVisionEncoderOutput,
     SamVisionModel,
@@ -125,20 +128,17 @@ class SamHQImageSegmentationOutput(SamImageSegmentationOutput):
     pass
 
 
-class SamHQVisionEncoder(SamVisionEncoder):
-    def forward(
-        self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, SamHQVisionEncoderOutput]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+class SamHQVisionAttention(SamVisionAttention):
+    pass
 
+
+class SamHQVisionEncoder(SamVisionEncoder):
+    _can_record_outputs = {"attentions": (SamHQVisionAttention, 1)}
+
+    @check_model_inputs
+    def forward(
+        self, pixel_values: Optional[torch.FloatTensor] = None, **kwargs: Unpack[TransformersKwargs]
+    ) -> Union[tuple, SamHQVisionEncoderOutput]:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -146,41 +146,20 @@ class SamHQVisionEncoder(SamVisionEncoder):
         if self.pos_embed is not None:
             hidden_states = hidden_states + self.pos_embed
 
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
         intermediate_embeddings = []
 
         for layer_module in self.layers:
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-            layer_outputs = layer_module(hidden_states, output_attentions=output_attentions)
-            hidden_states = layer_outputs[0]
+            hidden_states = layer_module(hidden_states)
 
             # Collect embeddings from non-windowed blocks
             if hasattr(layer_module, "window_size") and layer_module.window_size == 0:
                 intermediate_embeddings.append(hidden_states)
 
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
         hidden_states = self.neck(hidden_states)
-
-        if not return_dict:
-            outputs = (hidden_states, intermediate_embeddings)
-            if output_hidden_states:
-                outputs = outputs + (all_hidden_states,)
-            if output_attentions:
-                outputs = outputs + (all_self_attentions,)
-            return outputs
 
         return SamHQVisionEncoderOutput(
             last_hidden_state=hidden_states,
             intermediate_embeddings=intermediate_embeddings,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
         )
 
 
@@ -251,9 +230,9 @@ class SamHQMaskDecoder(nn.Module):
         multimask_output: bool,
         hq_token_only: bool,
         intermediate_embeddings: Optional[list[torch.Tensor]] = None,
-        output_attentions: Optional[bool] = None,
         attention_similarity: Optional[torch.Tensor] = None,
         target_embedding: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Predict high-quality masks given image and prompt embeddings.
@@ -315,18 +294,17 @@ class SamHQMaskDecoder(nn.Module):
         else:
             tokens = output_tokens
         point_embeddings = tokens.to(self.iou_token.weight.dtype)
-
         image_embeddings = image_embeddings + dense_prompt_embeddings
         image_embeddings = image_embeddings.repeat_interleave(point_batch_size, 0)
         image_positional_embeddings = image_positional_embeddings.repeat_interleave(point_batch_size, 0)
 
-        point_embedding, image_embeddings, attentions = self.transformer(
+        point_embedding, iou_token_out = self.transformer(
             point_embeddings=point_embeddings,
             image_embeddings=image_embeddings,
             image_positional_embeddings=image_positional_embeddings,
             attention_similarity=attention_similarity,
             target_embedding=target_embedding,
-            output_attentions=output_attentions,
+            **kwargs,
         )
         iou_token_out = point_embedding[:, :, 0, :]
         mask_tokens_out = point_embedding[:, :, 1 : (1 + self.num_mask_tokens), :]
@@ -400,11 +378,6 @@ class SamHQMaskDecoder(nn.Module):
             masks = masks_sam + masks_hq
 
         outputs = (masks, iou_pred)
-        if output_attentions:
-            outputs = outputs + (attentions,)
-        else:
-            outputs = outputs + (None,)
-
         return outputs
 
 
@@ -442,9 +415,7 @@ class SamHQModel(SamModel):
     def get_image_embeddings(
         self,
         pixel_values,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
         Returns the image embeddings by passing the pixel values through the vision encoder.
@@ -462,15 +433,13 @@ class SamHQModel(SamModel):
         """
         vision_output = self.vision_encoder(
             pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
         image_embeddings = vision_output[0]
         intermediate_embeddings = vision_output[1]
 
         return image_embeddings, intermediate_embeddings
 
+    @can_return_tuple
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -483,11 +452,8 @@ class SamHQModel(SamModel):
         hq_token_only: bool = False,
         attention_similarity: Optional[torch.FloatTensor] = None,
         target_embedding: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         intermediate_embeddings: Optional[list[torch.FloatTensor]] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> list[dict[str, torch.Tensor]]:
         r"""
         input_points (`torch.FloatTensor` of shape `(batch_size, num_points, 2)`):
@@ -576,12 +542,6 @@ class SamHQModel(SamModel):
         ... )
         ```
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if pixel_values is None and image_embeddings is None:
             raise ValueError("Either pixel_values or image_embeddings must be provided.")
 
@@ -614,32 +574,10 @@ class SamHQModel(SamModel):
         batch_size = pixel_values.shape[0] if pixel_values is not None else image_embeddings.shape[0]
         image_positional_embeddings = image_positional_embeddings.repeat(batch_size, 1, 1, 1)
 
-        vision_attentions = None
-        vision_hidden_states = None
-
         if pixel_values is not None:
-            vision_outputs = self.vision_encoder(
-                pixel_values,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
-
-            if return_dict:
-                image_embeddings = vision_outputs.last_hidden_state
-                intermediate_embeddings = vision_outputs.intermediate_embeddings
-                if output_hidden_states:
-                    vision_hidden_states = vision_outputs.hidden_states
-                if output_attentions:
-                    vision_attentions = vision_outputs.attentions
-            else:
-                image_embeddings = vision_outputs[0]
-                intermediate_embeddings = vision_outputs[1]
-                if output_hidden_states:
-                    vision_hidden_states = vision_outputs[2]
-                if output_attentions:
-                    vision_attentions = vision_outputs[-1]
-
+            vision_outputs = self.vision_encoder(pixel_values, **kwargs)
+            image_embeddings = vision_outputs.last_hidden_state
+            intermediate_embeddings = vision_outputs.intermediate_embeddings
         if input_points is not None and input_labels is None:
             input_labels = torch.ones_like(input_points[:, :, :, 0], dtype=torch.int, device=input_points.device)
 
@@ -651,7 +589,7 @@ class SamHQModel(SamModel):
         )
 
         # Predict masks
-        low_res_masks, iou_predictions, mask_decoder_attentions = self.mask_decoder(
+        low_res_masks, iou_predictions = self.mask_decoder(
             image_embeddings=image_embeddings,
             image_positional_embeddings=image_positional_embeddings,
             sparse_prompt_embeddings=sparse_embeddings,
@@ -661,24 +599,12 @@ class SamHQModel(SamModel):
             intermediate_embeddings=intermediate_embeddings,
             attention_similarity=attention_similarity,
             target_embedding=target_embedding,
-            output_attentions=output_attentions,
         )
-
-        if not return_dict:
-            output = (iou_predictions, low_res_masks)
-            if output_hidden_states:
-                output = output + (vision_hidden_states,)
-
-            if output_attentions:
-                output = output + (vision_attentions, mask_decoder_attentions)
-            return output
-
         return SamHQImageSegmentationOutput(
             iou_scores=iou_predictions,
             pred_masks=low_res_masks,
-            vision_hidden_states=vision_hidden_states,
-            vision_attentions=vision_attentions,
-            mask_decoder_attentions=mask_decoder_attentions,
+            vision_hidden_states=vision_outputs.hidden_states,
+            vision_attentions=vision_outputs.attentions,
         )
 
 
