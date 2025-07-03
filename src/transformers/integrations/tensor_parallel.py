@@ -745,7 +745,8 @@ class GroupedGemmParallel(TensorParallelLayer): # self.experts
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         ep_rank = rank
         global_num_experts = empty_param.shape[0]
-        assert global_num_experts % device_mesh.size() == 0, f"Global number of experts must be divisible by number of devices: {global_num_experts} % {device_mesh.size()} != 0"
+        if global_num_experts % device_mesh.size() != 0:
+            raise ValueError(f"Global number of experts must be divisible by number of devices: {global_num_experts} % {device_mesh.size()} != 0")
         local_num_experts = global_num_experts // device_mesh.size()
         param = param[ep_rank*local_num_experts:(ep_rank+1)*local_num_experts].to(param_casting_dtype)
         if to_contiguous:
