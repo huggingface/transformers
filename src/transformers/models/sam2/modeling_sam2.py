@@ -527,6 +527,7 @@ class Sam2PromptEncoder(nn.Module):
         self.no_mask_embed = nn.Embedding(1, config.hidden_size)
 
         self.image_embedding_size = (config.image_embedding_size, config.image_embedding_size)
+        self.mask_input_size = (4 * config.image_embedding_size, 4 * config.image_embedding_size)
         self.input_image_size = config.image_size
 
         self.point_embed = nn.ModuleList(
@@ -2507,10 +2508,10 @@ class Sam2Model(Sam2PreTrainedModel):
         if input_masks is not None:
             # If mask_inputs is provided, downsize it into low-res mask input if needed
             # and feed it as a dense mask prompt into the SAM mask encoder
-            if input_masks.shape[-2:] != self.prompt_encoder.image_embedding_size:
+            if input_masks.shape[-2:] != self.prompt_encoder.mask_input_size:
                 input_masks = F.interpolate(
                     input_masks.float(),
-                    size=self.prompt_encoder.image_embedding_size,
+                    size=self.prompt_encoder.mask_input_size,
                     align_corners=False,
                     mode="bilinear",
                     antialias=True,  # use antialias for downsampling

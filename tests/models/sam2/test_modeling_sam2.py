@@ -870,47 +870,11 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             rtol=1e-4,
         )
 
-    def test_inference_mask_generation_video_one_point(self):
-        pass
-        # raw_video = prepare_video()
-        # self.processor.init_state(video_path="./videos/bedroom_light")
-
-        # inputs = processor.add_new_points_or_box(
-        #     frame_idx=0,
-        #     obj_id=1,
-        #     points=[[[[210, 350]]]],
-        #     labels=[[[1]]],
-        # )
-
-    # def test_inference_mask_generation_one_point_one_bb(self):
-    #     model = Sam2Model.from_pretrained("../sam2_hf_implem/sam2_tiny_hf")
-    #     processor = SamProcessor.from_pretrained("../sam2_hf_implem/sam2_tiny_hf")
-
-    #     model.to(torch_device)
-    #     model.eval()
-
-    #     raw_image = prepare_image()
-    #     input_boxes = [[[[650, 900, 1000, 1250]]]]
-    #     input_points = [[[[820, 1080]]]]
-
-    #     inputs = processor(
-    #         images=raw_image, input_boxes=input_boxes, input_points=input_points, return_tensors="pt"
-    #     ).to(torch_device)
-
-    #     with torch.no_grad():
-    #         outputs = model(**inputs)
-    #     scores = outputs.iou_scores.squeeze()
-    #     masks = outputs.pred_masks[0, 0, 0, 0, :3]
-    #     self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9566), atol=2e-4))
-    #     self.assertTrue(
-    #         torch.allclose(masks, torch.tensor([-12.7729, -12.3665, -12.6061]).to(torch_device), atol=2e-4)
-    #     )
-
     def test_inference_mask_generation_batched_points_batched_images(self):
         raw_image1 = prepare_image()
         raw_image2 = prepare_dog_img()
         input_points = [[[[500, 375], [10, 10]]], [[[770, 200], [730, 120]]]]
-        input_labels = [[[1, -10]], [[1, 0]]]
+        input_labels = [[[1]], [[1, 0]]]
 
         inputs = self.processor(
             images=[raw_image1, raw_image2], input_points=input_points, input_labels=input_labels, return_tensors="pt"
@@ -951,6 +915,42 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             atol=1e-4,
             rtol=1e-4,
         )
+
+    def test_inference_mask_generation_video_one_point(self):
+        pass
+        # raw_video = prepare_video()
+        # self.processor.init_state(video_path="./videos/bedroom_light")
+
+        # inputs = processor.add_new_points_or_box(
+        #     frame_idx=0,
+        #     obj_id=1,
+        #     points=[[[[210, 350]]]],
+        #     labels=[[[1]]],
+        # )
+
+    # def test_inference_mask_generation_one_point_one_bb(self):
+    #     model = Sam2Model.from_pretrained("../sam2_hf_implem/sam2_tiny_hf")
+    #     processor = SamProcessor.from_pretrained("../sam2_hf_implem/sam2_tiny_hf")
+
+    #     model.to(torch_device)
+    #     model.eval()
+
+    #     raw_image = prepare_image()
+    #     input_boxes = [[[[650, 900, 1000, 1250]]]]
+    #     input_points = [[[[820, 1080]]]]
+
+    #     inputs = processor(
+    #         images=raw_image, input_boxes=input_boxes, input_points=input_points, return_tensors="pt"
+    #     ).to(torch_device)
+
+    #     with torch.no_grad():
+    #         outputs = model(**inputs)
+    #     scores = outputs.iou_scores.squeeze()
+    #     masks = outputs.pred_masks[0, 0, 0, 0, :3]
+    #     self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9566), atol=2e-4))
+    #     self.assertTrue(
+    #         torch.allclose(masks, torch.tensor([-12.7729, -12.3665, -12.6061]).to(torch_device), atol=2e-4)
+    #     )
 
     # def test_inference_mask_generation_one_point_one_bb_zero(self):
     #     model = Sam2Model.from_pretrained("facebook/sam2-vit-base")
