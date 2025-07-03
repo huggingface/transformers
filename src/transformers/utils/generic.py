@@ -982,7 +982,7 @@ class OutputRecorder:
         layer_name (Optional[str]): Name of the submodule to target (if needed), e.g., "transformer.layer.3.attn".
     """
 
-    target_class: "Type[torch.nn.Module]"
+    target_class: "type[torch.nn.Module]"
     index: Optional[int] = 0
     layer_name: Optional[str] = None
 

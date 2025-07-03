@@ -15,6 +15,8 @@
 # limitations under the License.
 from typing import Optional, Union
 
+import torch
+
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer

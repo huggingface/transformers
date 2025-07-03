@@ -36,6 +36,7 @@ from ..sam.modeling_sam import (
     SamVisionAttention,
     SamVisionEncoder,
     SamVisionEncoderOutput,
+    SamVisionLayer,
     SamVisionModel,
 )
 
@@ -149,6 +150,10 @@ class SamHQImageSegmentationOutput(SamImageSegmentationOutput):
 
 
 class SamHQVisionAttention(SamVisionAttention):
+    pass
+
+
+class SamHQVisionLayer(SamVisionLayer):
     pass
 
 
