@@ -16,7 +16,9 @@ rendered properly in your Markdown viewer.
 
 # Serving
 
-Transformer models can be served for inference natively with the `transformers serve` CLI, or with specialized libraries such as Text Generation Inference (TGI) and vLLM. These libraries are specifically designed to optimize performance with LLMs and include many unique optimization features that may not be included in Transformers. If you're looking for experimental features instead, serving natively might be better suited to you.
+Transformer models can be efficiently deployed using libraries such as vLLM, Text Generation Inference (TGI), and others. These libraries are designed for production-grade user-facing services, and can scale to multiple servers and millions of concurrent users.
+
+You can also serve transformer models easily using the `transformers serve` CLI. This is ideal for experimentation purposes, or to run models locally for personal and private use.
 
 ## TGI
 
