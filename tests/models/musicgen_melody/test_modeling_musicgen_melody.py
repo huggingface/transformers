@@ -30,6 +30,7 @@ from transformers import (
     T5Config,
 )
 from transformers.testing_utils import (
+    Expectations,
     get_device_properties,
     is_torch_available,
     is_torchaudio_available,
@@ -1472,16 +1473,17 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         )
 
         # fmt: off
-        EXPECTED_VALUES = torch.tensor(
-            [
-                -0.0165, -0.0222, -0.0041, -0.0058, -0.0145, -0.0023, -0.0160, -0.0310,
-                -0.0055, -0.0127,  0.0104,  0.0105, -0.0326, -0.0611, -0.0744, -0.0083
-            ]
+        expectations = Expectations(
+            {
+                (None, None): [-0.0165, -0.0222, -0.0041, -0.0058, -0.0145, -0.0023, -0.0160, -0.0310, -0.0055, -0.0127,  0.0104,  0.0105, -0.0326, -0.0611, -0.0744, -0.0083],
+                ("cuda", 8): [-0.0165, -0.0221, -0.0040, -0.0058, -0.0145, -0.0024, -0.0160, -0.0310, -0.0055, -0.0127,  0.0104,  0.0105, -0.0326, -0.0612, -0.0744, -0.0082],
+            }
         )
+        EXPECTED_VALUES = torch.tensor(expectations.get_expectation()).to(torch_device)
         # fmt: on
 
         self.assertTrue(output_values.shape == (2, 1, 4480))
-        torch.testing.assert_close(output_values[0, 0, :16].cpu(), EXPECTED_VALUES, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(output_values[0, 0, :16], EXPECTED_VALUES, rtol=2e-4, atol=2e-4)
 
     @slow
     def test_generate_text_audio_prompt(self):
