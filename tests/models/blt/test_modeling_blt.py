@@ -41,9 +41,6 @@ if is_torch_available():
 
     from transformers import (
         BLTForCausalLM,
-        BLTForQuestionAnswering,
-        BLTForSequenceClassification,
-        BLTForTokenClassification,
         BLTModel,
         BLTTokenizer,
     )
@@ -172,9 +169,6 @@ class BLTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         (
             BLTModel,
             BLTForCausalLM,
-            BLTForSequenceClassification,
-            BLTForQuestionAnswering,
-            BLTForTokenClassification,
         )
         if is_torch_available()
         else ()
@@ -443,9 +437,9 @@ class BLTIntegrationTest(unittest.TestCase):
             "the beginning of the end of the absolute monarchy and the rise of the middle class.\n"
         )
 
-        tokenizer = AutoTokenizer.from_pretrained("meta-blt/Meta-BLT-3.1-8B-Instruct")
+        tokenizer = AutoTokenizer.from_pretrained("itazap/blt-1b")
         model = BLTForCausalLM.from_pretrained(
-            "meta-blt/Meta-BLT-3.1-8B-Instruct", device_map="auto", torch_dtype=torch.bfloat16
+            "itazap/blt-1b", device_map="auto", torch_dtype=torch.bfloat16
         )
         input_text = ["Tell me about the french revolution."]
         model_inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
@@ -503,78 +497,6 @@ class BLTIntegrationTest(unittest.TestCase):
             )
         )
 
-    @slow
-    @require_read_token
-    def test_model_7b_logits(self):
-        input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-
-        model = BLTForCausalLM.from_pretrained(
-            "meta-blt/BLT-2-7b-hf", device_map="auto", torch_dtype=torch.float16
-        )
-
-        with torch.no_grad():
-            out = model(torch.tensor([input_ids]).to(torch_device))
-
-        # fmt: off
-        # Expected mean on dim = -1
-        expected_means = Expectations(
-          {
-            ("xpu", 3): torch.tensor([[-6.6544, -4.1259, -4.9840, -3.2456,  0.8261, -3.0124,  1.2971, -3.3641]]),
-            ("cuda", 7): torch.tensor([[-6.6420, -4.1227, -4.9809, -3.2041, 0.8261, -3.0052, 1.2957, -3.3648]]),
-            ("cuda", 8): torch.tensor([[-6.6544, -4.1259, -4.9840, -3.2456,  0.8261, -3.0124,  1.2971, -3.3641]]),
-        })
-
-        expected_mean = expected_means.get_expectation()
-        self.assertTrue(
-            torch.allclose(
-                expected_mean.to(torch_device),
-                out.logits.float().mean(-1),
-                atol=1e-2,
-                rtol=1e-2
-            )
-        )
-
-        # slicing logits[0, 0, 0:15]
-        expected_slices = Expectations(
-            {
-              ("xpu", 3): torch.tensor([-12.8281,  -7.4609,  -0.4668,  -8.0703,  -7.2539,  -8.0078,  -6.4961, -7.7734,  -7.8516,  -7.0352,  -6.2188,  -7.1367,  -1.8564,   1.9922, -8.6328]),
-              ("cuda", 7): torch.tensor([-12.8125, -7.3359, -0.4846, -8.0234, -7.2383, -7.9922, -6.4805, -7.7344, -7.8125, -7.0078, -6.1797, -7.1094, -1.8633, 1.9736, -8.6016]),
-              ("cuda", 8): torch.tensor([-12.8281,  -7.4609,  -0.4668,  -8.0703,  -7.2539,  -8.0078,  -6.4961, -7.7734,  -7.8516,  -7.0352,  -6.2188,  -7.1367,  -1.8564,   1.9922, -8.6328])
-        })
-        # fmt: on
-
-        expected_slice = expected_slices.get_expectation()
-        self.assertTrue(
-            torch.allclose(
-                expected_slice.to(torch_device),
-                out.logits[0, 0, :15].float(),
-                atol=1e-2,
-                rtol=1e-2,
-            )
-        )
-
-    @slow
-    def test_model_7b_dola_generation(self):
-        # ground truth text generated with dola_layers="low", repetition_penalty=1.2
-        EXPECTED_TEXT_COMPLETION = (
-            "Simply put, the theory of relativity states that 1) time and space are relative, and 2) the laws of "
-            "physics are the same for all observers in uniform motion relative to one another.\n\nThe theory of "
-            "relativity was developed by Albert Einstein in the early 20th century, and it revolutionized our "
-            "understanding of space and time."
-        )
-        prompt = "Simply put, the theory of relativity states that "
-        tokenizer = BLTTokenizer.from_pretrained("meta-blt/BLT-2-7b-chat-hf")
-        model = BLTForCausalLM.from_pretrained(
-            "meta-blt/BLT-2-7b-chat-hf", device_map="sequential", torch_dtype=torch.float16
-        )
-        model_inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-
-        # greedy generation outputs
-        generated_ids = model.generate(
-            **model_inputs, max_new_tokens=64, top_p=None, temperature=1, do_sample=False, dola_layers="low"
-        )
-        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @slow
     @require_torch_accelerator
