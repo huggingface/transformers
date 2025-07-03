@@ -215,7 +215,7 @@ def _prepare_fsmt_decoder_inputs(
 
 
 @auto_docstring
-class PretrainedFSMTModel(PreTrainedModel):
+class PreTrainedFSMTModel(PreTrainedModel):
     config_class = FSMTConfig
     base_model_prefix = "model"
 
@@ -908,7 +908,7 @@ def _get_shape(t):
 
 
 @auto_docstring
-class FSMTModel(PretrainedFSMTModel):
+class FSMTModel(PreTrainedFSMTModel):
     _tied_weights_keys = ["decoder.embed_tokens.weight", "decoder.output_projection.weight"]
 
     def __init__(self, config: FSMTConfig):
@@ -1067,7 +1067,7 @@ class FSMTModel(PretrainedFSMTModel):
     The FSMT Model with a language modeling head. Can be used for summarization.
     """
 )
-class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
+class FSMTForConditionalGeneration(PreTrainedFSMTModel, GenerationMixin):
     base_model_prefix = "model"
     _tied_weights_keys = ["decoder.embed_tokens.weight", "decoder.output_projection.weight"]
 
@@ -1285,4 +1285,4 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
         return super().forward(positions)
 
 
-__all__ = ["FSMTForConditionalGeneration", "FSMTModel", "PretrainedFSMTModel"]
+__all__ = ["FSMTForConditionalGeneration", "FSMTModel", "PreTrainedFSMTModel"]
