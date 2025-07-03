@@ -16,12 +16,15 @@ import unittest
 
 from transformers.testing_utils import is_torch_available, require_torch
 
+
 if is_torch_available():
     import torch
-    from transformers import AutoConfig
-    from transformers.masking_utils import create_causal_mask, create_sliding_window_causal_mask
-        
 
+    from transformers import AutoConfig
+    from transformers.masking_utils import create_causal_mask
+
+
+# fmt: off
 EXPECTED_PACKED_MASK = torch.tensor([[[
     [ True, False, False, False, False, False, False, False, False, False],
     [ True,  True, False, False, False, False, False, False, False, False],
@@ -35,7 +38,7 @@ EXPECTED_PACKED_MASK = torch.tensor([[[
     [False, False, False, False, False, False,  True,  True,  True,  True]]],
 
 
-    [[[ True, False, False, False, False, False, False, False, False, False],
+  [[[ True, False, False, False, False, False, False, False, False, False],
     [ True,  True, False, False, False, False, False, False, False, False],
     [ True,  True,  True, False, False, False, False, False, False, False],
     [ True,  True,  True,  True, False, False, False, False, False, False],
@@ -46,13 +49,12 @@ EXPECTED_PACKED_MASK = torch.tensor([[[
     [False, False, False, False, False, False,  True,  True,  True, False],
     [False, False, False, False, False, False,  True,  True,  True,  True]
 ]]], dtype=torch.bool)
+# fmt: on
 
 
 @require_torch
 class MaskTest(unittest.TestCase):
-
     def test_packed_sequence_mask_sdpa(self):
-
         config = AutoConfig.from_pretrained("meta-llama/Llama-3.2-1B")
         config._attn_implementation = "sdpa"
 
@@ -61,7 +63,7 @@ class MaskTest(unittest.TestCase):
         cache_position = torch.arange(sequence_length)
 
         # First batch has 3 packed sequences of 4, 2 and 4 tokens respectively, second has 2 of 6 and 4 tokens
-        position_ids = torch.tensor([[0,1,2,3,0,1,0,1,2,3], [0,1,2,3,4,5,0,1,2,3,]])
+        position_ids = torch.tensor([[0, 1, 2, 3, 0, 1, 0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 0, 1, 2, 3]])
 
         causal_mask = create_causal_mask(
             config=config,
@@ -76,7 +78,6 @@ class MaskTest(unittest.TestCase):
         self.assertEqual(causal_mask, EXPECTED_PACKED_MASK)
 
     def test_packed_sequence_mask_eager(self):
-
         config = AutoConfig.from_pretrained("meta-llama/Llama-3.2-1B")
         config._attn_implementation = "eager"
 
@@ -85,7 +86,7 @@ class MaskTest(unittest.TestCase):
         cache_position = torch.arange(sequence_length)
 
         # First batch has 3 packed sequences of 4, 2 and 4 tokens respectively, second has 2 of 6 and 4 tokens
-        position_ids = torch.tensor([[0,1,2,3,0,1,0,1,2,3], [0,1,2,3,4,5,0,1,2,3,]])
+        position_ids = torch.tensor([[0, 1, 2, 3, 0, 1, 0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 0, 1, 2, 3]])
 
         causal_mask = create_causal_mask(
             config=config,
@@ -98,10 +99,9 @@ class MaskTest(unittest.TestCase):
         )
 
         min_dtype = torch.finfo(torch.float16).min
-        self.assertEqual(causal_mask, torch.where(EXPECTED_PACKED_MASK, 0., min_dtype))
+        self.assertEqual(causal_mask, torch.where(EXPECTED_PACKED_MASK, 0.0, min_dtype))
 
     def test_packed_sequence_mask_flex_attention(self):
-
         config = AutoConfig.from_pretrained("meta-llama/Llama-3.2-1B")
         config._attn_implementation = "flex_attention"
 
@@ -110,7 +110,7 @@ class MaskTest(unittest.TestCase):
         cache_position = torch.arange(sequence_length)
 
         # First batch has 3 packed sequences of 4, 2 and 4 tokens respectively, second has 2 of 6 and 4 tokens
-        position_ids = torch.tensor([[0,1,2,3,0,1,0,1,2,3], [0,1,2,3,4,5,0,1,2,3,]])
+        position_ids = torch.tensor([[0, 1, 2, 3, 0, 1, 0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 0, 1, 2, 3]])
 
         causal_mask = create_causal_mask(
             config=config,
