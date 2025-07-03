@@ -4,18 +4,17 @@ import re
 def normalize_test_line(line):
     line = line.strip()
 
-    if line.startswith("SKIPPED") or line.startswith("XFAIL"):
-        # Normalize: keep only first two tokens (e.g., "SKIPPED [1] path:line")
-        parts = line.split(":", 2)
-        if len(parts) >= 2:
-            return ":".join(parts[:2]).split("test requires")[0].strip()
-        return line
+    # Normalize SKIPPED/XFAIL/etc with path:line and reason
+    match = re.match(r'^(SKIPPED|XFAIL|XPASS|EXPECTEDFAIL)\s+\[?\d*\]?\s*(\S+:\d+)', line)
+    if match:
+        status, location = match.groups()
+        return f"{status} {location}"
 
+    # Normalize ERROR/FAILED lines with optional message
     if line.startswith("ERROR") or line.startswith("FAILED"):
-        # Drop anything after first " - "
-        line = re.split(r"\s+-\s+", line)[0]
+        return re.split(r"\s+-\s+", line)[0].strip()
 
-    return line.strip()
+    return line
 
 def parse_summary_file(file_path):
     test_set = set()
