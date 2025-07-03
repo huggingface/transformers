@@ -90,10 +90,7 @@ class OpenAIMoeExperts(nn.Module):
         batch_size = hidden_states.shape[0]
         hidden_states = hidden_states.reshape(-1, self.hidden_size) # (num_tokens, hidden_size)
         num_experts = routing_weights.shape[0]
-        batch_size = hidden_states.shape[0]
-        hidden_states = hidden_states.reshape(-1, self.hidden_size) # (num_tokens, hidden_size)
-        num_experts = routing_weights.shape[0]
-                expert_mask = torch.nn.functional.one_hot(router_indices, num_classes=num_experts).permute(
+        if self.training:
             next_states = torch.zeros_like(hidden_states, dtype=hidden_states.dtype, device=hidden_states.device)
             with torch.no_grad():
                 expert_mask = torch.nn.functional.one_hot(router_indices, num_classes=num_experts).permute(
@@ -114,14 +111,17 @@ class OpenAIMoeExperts(nn.Module):
                 gated_output = (up + 1) * glu  # (num_tokens, interm_dim)
                 out = (
                     gated_output @ self.down_proj[expert_idx] + self.down_proj_bias[expert_idx]
-            next_states = next_states.view(batch_size, -1, self.hidden_size)
                 )  # (num_tokens, hidden_dim)
-            hidden_states = hidden_states.repeat(num_experts, 1)
-            hidden_states = hidden_states.view(num_experts, -1, self.hidden_size)
+                weighted_output = out * routing_weights[top_x, idx, None]  # (num_tokens, hidden_dim)
+                next_states.index_add_(0, top_x, weighted_output.to(hidden_states.dtype)[0])
             next_states = next_states.view(batch_size, -1, self.hidden_size)
         else:
             hidden_states = hidden_states.repeat(num_experts, 1)
             hidden_states = hidden_states.view(num_experts, -1, self.hidden_size)
+            gate_up = torch.bmm(hidden_states, self.gate_up_proj) + self.gate_up_proj_bias[..., None, :]
+            gate, up = gate_up.chunk(2, dim=-1)  # not supported for DTensors
+            glu = gate * torch.sigmoid(gate * self.alpha)
+            next_states = torch.bmm(((up + 1) * glu), self.down_proj)
             next_states = next_states + self.down_proj_bias[..., None, :]
             next_states = next_states.view(num_experts, batch_size, -1, self.hidden_size) # (num_experts, batch_size, seq_len, hidden_size)
         return next_states, None
@@ -154,30 +154,12 @@ class TokenDispatcher(nn.Module):
         routed_out = routed_out.sum(dim=0) # (batch_size, seq_len, hidden_size)
         return routed_out
 
-class TopKRouter(nn.Linear): # TODO: if i inherit from module it'll be annoying to attach hook to parent module
-    def __init__(self, config):
-        super().__init__(config.hidden_size, config.num_local_experts, bias=True)
-        self.router = TopKRouter(config)
-        # TODO: is it better to define self.weight and self.bias as nn.Parameter instead to keep the same namings: mlp.router.weight instead of mlp.router.router.weight?
-        self.token_dispatcher = TokenDispatcher(config)
-        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
-        router_logits = super().forward(hidden_states) # (seq_len, num_experts)
-        router_scores, router_indices = self.router(hidden_states) # (num_experts, seq_len)
-        routed_out, _ = self.experts(hidden_states, router_indices=router_indices, routing_weights=router_scores) #TODO: router_indices isn't used inside this func
-        hidden_states = self.token_dispatcher(routed_out, router_scores)
-        return hidden_states, router_scores
-        # routed_out is (num_experts, batch_size, seq_len, hidden_size)
-        routed_out = routed_out * routing_weights[:, None, :, None] # we're throwing away computed routed_out for rest of experts
-        routed_out = routed_out.sum(dim=0) # (batch_size, seq_len, hidden_size)
-        return routed_out
-
 class OpenAIMoeMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.router = TopKRouter(config)
         self.experts = OpenAIMoeExperts(config)
-        self.token_dispatcher = TokenDispatcher(config) # TODO: i need this class because TP needs hook right after down_proj_bias, and EP needs hook right after routing_weights
-
+        self.token_dispatcher = TokenDispatcher(config)
     def forward(self, hidden_states):
         # we don't slice weight as its not compile compatible
         router_scores, router_indices = self.router(hidden_states) # (num_experts, seq_len)
