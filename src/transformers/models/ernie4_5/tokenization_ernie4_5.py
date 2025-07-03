@@ -1,4 +1,4 @@
-# Copyright (c) 2025 Baidu, Inc. All Rights Reserved.
+# Copyright (c) 2025 Baidu, Inc. and HuggingFace Inc. team. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,26 +11,27 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""Tokenization classes for Ernie 4.5"""
 
 import os
 from shutil import copyfile
-from typing import Dict, List, Optional, Tuple, Union
-import torch
+from typing import Optional, Union
+
 import numpy as np
 import sentencepiece as spm
+import torch
 
-from transformers.tokenization_utils import PreTrainedTokenizer
-from transformers.tokenization_utils_base import (
+from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_utils_base import (
     PaddingStrategy,
 )
-from transformers.utils import logging
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Ernie4_5_Tokenizer(PreTrainedTokenizer):
-
+class Ernie4_5Tokenizer(PreTrainedTokenizer):
     vocab_files_names = {
         "vocab_file": "tokenizer.model",
     }
@@ -50,8 +51,7 @@ class Ernie4_5_Tokenizer(PreTrainedTokenizer):
         sep_token="<sep>",
         unk_token="<unk>",
         additional_special_tokens=None,
-        split_special_tokens=False,
-        tokenizer_alpha=None,
+        verbose=False,
         **kwargs,
     ):
         """
@@ -68,15 +68,13 @@ class Ernie4_5_Tokenizer(PreTrainedTokenizer):
             unk_token (str, optional): Unknown token. Defaults to "<unk>".
             additional_special_tokens (List[str], optional): Additional special tokens.
                 Defaults to ["<mask:1>", "<mask:7>"].
-            split_special_tokens (bool, optional): Whether to split special tokens. Defaults to False.
-            tokenizer_alpha (float, optional): Alpha parameter for SentencePiece sampling.
+            verbose (bool, optional): Whether to print detailed logs or progress information during execution.
             **kwargs: Additional keyword arguments passed to the parent class.
         """
 
         self.vocab_file = vocab_file
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(vocab_file)
-        self.tokenizer_alpha = tokenizer_alpha
 
         if additional_special_tokens is None:
             additional_special_tokens = ["<mask:1>", "<mask:7>"]
@@ -89,7 +87,7 @@ class Ernie4_5_Tokenizer(PreTrainedTokenizer):
             sep_token=sep_token,
             unk_token=unk_token,
             additional_special_tokens=additional_special_tokens,
-            split_special_tokens=split_special_tokens,
+            verbose=verbose,
             **kwargs,
         )
 
@@ -121,15 +119,7 @@ class Ernie4_5_Tokenizer(PreTrainedTokenizer):
         Returns:
             list: A list of tokens.
         """
-        if self.tokenizer_alpha is not None:
-            return self.sp_model.encode_as_pieces(
-                text,
-                enable_sampling=True,
-                nbest_size=-1,
-                alpha=self.tokenizer_alpha,
-            )
-        else:
-            return self.sp_model.encode_as_pieces(text)
+        return self.sp_model.encode_as_pieces(text)
 
     def _convert_token_to_id(self, token):
         """Convert a token (str) to an ID using the vocabulary.
@@ -167,80 +157,22 @@ class Ernie4_5_Tokenizer(PreTrainedTokenizer):
         """
         current_sub_tokens = []
         out_string = ""
-        prev_is_special = False
         for token in tokens:
             # make sure that special tokens are not decoded using sentencepiece model
             if token in self.all_special_tokens:
-                if not prev_is_special:
-                    out_string += " "
                 out_string += self.sp_model.decode(current_sub_tokens) + token
-                prev_is_special = True
                 current_sub_tokens = []
             else:
                 current_sub_tokens.append(token)
-                prev_is_special = False
         out_string += self.sp_model.decode(current_sub_tokens)
         return out_string
 
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
-        """Build model inputs by adding special tokens to sequences.
+    def prepare_for_model(self, *args, **kwargs):
+        if "add_special_tokens" in kwargs:
+            kwargs.pop("add_special_tokens")
+        return super().prepare_for_model(*args, **kwargs)
 
-        Args:
-            token_ids_0 (List[int]): List of token IDs for the first sequence.
-            token_ids_1 (List[int], optional): List of token IDs for the second sequence.
-
-        Returns:
-            List[int]: List of token IDs with special tokens added.
-        """
-        output = token_ids_0
-        last_cls_index = -1
-        last_sep_index = -1
-        if self.cls_token_id in output:
-            last_cls_index = len(output) - output[::-1].index(self.cls_token_id) - 1
-        if self.sep_token_id in output:
-            last_sep_index = len(output) - output[::-1].index(self.sep_token_id) - 1
-
-        if last_cls_index > last_sep_index:
-            next_token_id = self.sep_token_id
-        elif last_sep_index > last_cls_index:
-            next_token_id = self.cls_token_id
-        else:
-            output = [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
-            next_token_id = self.cls_token_id
-
-        output = [self.bos_token_id] + output
-        # Assume no markup in text if token_ids_1 is given.
-        if token_ids_1 is not None:
-            output = output + token_ids_1 + [next_token_id]
-        return output
-
-    def get_special_tokens_mask(
-        self, token_ids_0, token_ids_1=None, already_has_special_tokens=False
-    ):
-        """Get a mask showing which tokens are special tokens.
-
-        Args:
-            token_ids_0 (List[int]): List of token IDs for the first sequence.
-            token_ids_1 (List[int], optional): List of token IDs for the second sequence.
-            already_has_special_tokens (bool): Whether the tokens already include special tokens.
-
-        Returns:
-            List[int]: A mask where 1 indicates special tokens and 0 indicates regular tokens.
-        """
-        if already_has_special_tokens:
-            return super().get_special_tokens_mask(
-                token_ids_0, token_ids_1, already_has_special_tokens=True
-            )
-
-        # [bos_token, cls_token, tokens_0, sep_token]
-        if token_ids_1 is None:
-            return [1, 1] + ([0] * len(token_ids_0)) + [1]
-        # [bos_token, cls_token, tokens_0, sep_token, tokens_1, cls_token]
-        return [1, 1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
-
-    def save_vocabulary(
-        self, save_directory, filename_prefix: Optional[str] = None
-    ) -> Tuple[str]:
+    def save_vocabulary(self, save_directory, filename_prefix: Optional[str] = None) -> tuple[str]:
         """
         Save the vocabulary and special tokens file to a directory.
 
@@ -259,13 +191,10 @@ class Ernie4_5_Tokenizer(PreTrainedTokenizer):
             return
         out_vocab_file = os.path.join(
             save_directory,
-            (filename_prefix + "-" if filename_prefix else "")
-            + self.vocab_files_names["vocab_file"],
+            (filename_prefix + "-" if filename_prefix else "") + self.vocab_files_names["vocab_file"],
         )
 
-        if os.path.abspath(self.vocab_file) != os.path.abspath(
-            out_vocab_file
-        ) and os.path.isfile(self.vocab_file):
+        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
             copyfile(self.vocab_file, out_vocab_file)
         elif not os.path.isfile(self.vocab_file):
             with open(out_vocab_file, "wb") as fi:
@@ -274,9 +203,19 @@ class Ernie4_5_Tokenizer(PreTrainedTokenizer):
 
         return (out_vocab_file,)
 
+    def _decode(self, *args, **kwargs):
+        kwargs.pop("clean_up_tokenization_spaces", None)
+        kwargs.pop("spaces_between_special_tokens", None)
+        return super()._decode(
+            *args,
+            **kwargs,
+            clean_up_tokenization_spaces=False,
+            spaces_between_special_tokens=False,
+        )
+
     def _pad(
         self,
-        encoded_inputs: Union[Dict],
+        encoded_inputs: Union[dict],
         max_length: Optional[int] = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         pad_to_multiple_of: Optional[int] = None,
@@ -305,37 +244,21 @@ class Ernie4_5_Tokenizer(PreTrainedTokenizer):
             required_input = encoded_inputs[self.model_input_names[0]]
             if padding_strategy == PaddingStrategy.LONGEST:
                 max_length = len(required_input)
-            if (
-                max_length is not None
-                and pad_to_multiple_of is not None
-                and (max_length % pad_to_multiple_of != 0)
-            ):
-                max_length = (
-                    (max_length // pad_to_multiple_of) + 1
-                ) * pad_to_multiple_of
-            needs_to_be_padded = (
-                padding_strategy != PaddingStrategy.DO_NOT_PAD
-                and len(required_input) != max_length
-            )
+            if max_length is not None and pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
+                max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
+            needs_to_be_padded = padding_strategy != PaddingStrategy.DO_NOT_PAD and len(required_input) != max_length
 
-            if (
-                "attention_mask" in encoded_inputs
-                and encoded_inputs["attention_mask"] is not None
-            ):
+            if "attention_mask" in encoded_inputs and encoded_inputs["attention_mask"] is not None:
                 attention_mask = encoded_inputs.pop("attention_mask")
                 if isinstance(attention_mask, torch.Tensor):
                     attention_mask = attention_mask.numpy()
                 elif isinstance(attention_mask, list):
                     attention_mask = np.array(attention_mask)
                 elif not isinstance(attention_mask, np.ndarray):
-                    raise ValueError(
-                        f"Unexpected type {type(attention_mask)} of attention_mask, "
-                    )
+                    raise ValueError(f"Unexpected type {type(attention_mask)} of attention_mask, ")
             else:
                 # Create default attention mask if none provided
-                attention_mask = np.tril(
-                    np.ones((len(required_input), len(required_input)), dtype=np.int64)
-                )
+                attention_mask = np.tril(np.ones((len(required_input), len(required_input)), dtype=np.int64))
                 attention_mask = np.expand_dims(attention_mask, axis=0)
 
             if needs_to_be_padded:
@@ -351,9 +274,7 @@ class Ernie4_5_Tokenizer(PreTrainedTokenizer):
                     else:
                         pad_width = [(0, 0), (difference, 0), (difference, 0)]
                 else:
-                    raise ValueError(
-                        "Invalid padding strategy:" + str(self.padding_side)
-                    )
+                    raise ValueError("Invalid padding strategy:" + str(self.padding_side))
                 attention_mask = np.pad(
                     attention_mask,
                     pad_width=pad_width,
@@ -371,3 +292,6 @@ class Ernie4_5_Tokenizer(PreTrainedTokenizer):
         if return_attention_mask:
             encoded_inputs["attention_mask"] = attention_mask.tolist()
         return encoded_inputs
+
+
+__all__ = ["Ernie4_5Tokenizer"]
