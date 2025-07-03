@@ -772,7 +772,7 @@ def create_causal_mask(
     allow_is_causal_skip = not past_key_values.is_compileable if past_key_values is not None else True
 
     # If we detected packing format
-    if packed_sequence_mask is not None:
+    if packed_sequence_mask is not None and _is_torch_greater_or_equal_than_2_6:
         mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
         allow_is_causal_skip = False
 
@@ -866,7 +866,7 @@ def create_sliding_window_causal_mask(
     allow_is_causal_skip = not past_key_values.is_compileable if past_key_values is not None else True
 
     # If we detected packing format
-    if packed_sequence_mask is not None:
+    if packed_sequence_mask is not None and _is_torch_greater_or_equal_than_2_6:
         mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
         allow_is_causal_skip = False
 
@@ -968,7 +968,7 @@ def create_chunked_causal_mask(
     allow_is_causal_skip = not past_key_values.is_compileable if past_key_values is not None else True
 
     # If we detected packing format
-    if packed_sequence_mask is not None:
+    if packed_sequence_mask is not None and _is_torch_greater_or_equal_than_2_6:
         mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
         allow_is_causal_skip = False
 
