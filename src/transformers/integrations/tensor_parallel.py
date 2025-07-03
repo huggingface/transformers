@@ -18,7 +18,6 @@ import operator
 import os
 import re
 from functools import partial, reduce
-from typing import Optional, Union
 
 import torch
 import torch.distributed as dist
@@ -94,7 +93,7 @@ def initialize_tensor_parallelism(tp_plan, tp_size=None):
     return tp_device, device_map, device_mesh
 
 
-def _blocks_to_block_sizes(total_size: int, blocks: Union[int, list[int]]) -> list[int]:
+def _blocks_to_block_sizes(total_size: int, blocks: int | list[int]) -> list[int]:
     """
     Convert block count or proportions to block sizes.
 
@@ -120,7 +119,7 @@ def _blocks_to_block_sizes(total_size: int, blocks: Union[int, list[int]]) -> li
         return [single_size] * blocks
 
 
-def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str]) -> Optional[str]:
+def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str]) -> str | None:
     """
     Get the TP style for a parameter from the TP plan.
 
@@ -412,8 +411,8 @@ class GatherParallel(TensorParallelLayer):
     def __init__(
         self,
         *,
-        input_layouts: Optional[Placement] = None,
-        output_layouts: Optional[Placement] = None,
+        input_layouts: Placement | None = None,
+        output_layouts: Placement | None = None,
         use_local_output: bool = True,
     ):
         super().__init__()
@@ -506,8 +505,8 @@ class ColwiseParallel(TensorParallelLayer):
     def __init__(
         self,
         *,
-        input_layouts: Optional[Placement] = None,
-        output_layouts: Optional[Placement] = None,
+        input_layouts: Placement | None = None,
+        output_layouts: Placement | None = None,
         use_local_output: bool = True,
         use_dtensor=True,
     ):
@@ -596,8 +595,8 @@ class RowwiseParallel(TensorParallelLayer):
     def __init__(
         self,
         *,
-        input_layouts: Optional[Placement] = None,
-        output_layouts: Optional[Placement] = None,
+        input_layouts: Placement | None = None,
+        output_layouts: Placement | None = None,
         use_local_output: bool = True,
         use_dtensor=True,
     ):
@@ -937,7 +936,7 @@ def shard_and_distribute_module(
     return param
 
 
-def verify_tp_plan(expected_keys: list[str], tp_plan: Optional[dict[str, str]]):
+def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
     """
     Verify the TP plan of the model, log a warning if the layers that were not sharded and the rules that were not applied.
     """
