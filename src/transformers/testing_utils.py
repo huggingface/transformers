@@ -3361,13 +3361,13 @@ class Expectations(UserDict[PackedDeviceProperties, Any]):
                 score += 1
                 if minor is not None and minor == other_minor:
                     score += 1
-        # Semi-matching device type
+        # Semi-matching device type, which carries less importance than the default expectation
         elif device_type in ["cuda", "rocm"] and other_device_type in ["cuda", "rocm"]:
-            score = 0.5
+            score = 0.1
 
         # Default expectation
         if Expectations.is_default(other):
-            score = 0.1
+            score = 0.5
 
         return score
 
