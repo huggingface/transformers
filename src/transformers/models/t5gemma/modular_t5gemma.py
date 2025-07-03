@@ -394,7 +394,6 @@ class T5GemmaDecoderLayer(T5GemmaEncoderLayer):
 
     def __init__(self, config, layer_idx: int):
         super().__init__(config, layer_idx)
-        # cross attention
         self.cross_attn = T5GemmaCrossAttention(config=config, layer_idx=layer_idx)
         self.pre_cross_attn_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_cross_attn_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -645,7 +644,7 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
 
 class T5GemmaDecoder(T5GemmaEncoder):
     _can_record_outputs = {
-        "attention": [OutputRecorder(T5GemmaSelfAttention, index=1), OutputRecorder(T5GemmaCrossAttention, 1)],
+        "attentions": [OutputRecorder(T5GemmaSelfAttention, index=1), OutputRecorder(T5GemmaCrossAttention, index=1)],
         "hidden_states": T5GemmaDecoderLayer,
     }
 
