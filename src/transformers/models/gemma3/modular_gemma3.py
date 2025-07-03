@@ -826,6 +826,7 @@ class Gemma3Model(PaliGemmaModel):
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
+                "position_ids": position_ids,
             }
             if token_type_ids is not None and inputs_embeds.shape[1] != 1:
                 # We need to pass an additional mask function to account for token type ids, and it needs to be an `or`

@@ -127,11 +127,11 @@ def padding_mask_function(padding_mask: torch.Tensor) -> Callable:
 
 def packed_sequence_mask_function(packed_sequence_mask: torch.Tensor) -> Callable:
     """
-    This return the mask_function function corresponding to a 1D packed sequence mask.
+    This return the mask_function function corresponding to a 2D packed sequence mask.
     """
 
     def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
-        return packed_sequence_mask[q_idx] == packed_sequence_mask[kv_idx]
+        return packed_sequence_mask[batch_idx, q_idx] == packed_sequence_mask[batch_idx, kv_idx]
 
     return inner_mask
 
@@ -610,30 +610,26 @@ ALL_MASK_ATTENTION_FUNCTIONS: AttentionMaskInterface = AttentionMaskInterface()
 def find_packed_sequence_indices(position_ids: torch.Tensor) -> Optional[torch.Tensor]:
     """
     Find the indices of the sequence to which each new query token in the sequence belongs when using packed
-    tensor format (i.e. batch size 1, and several sequences packed in the sequence dimension).
+    tensor format (i.e. several sequences packed in the same batch dimension).
 
     Args:
         position_ids (`torch.Tensor`)
             A 2D tensor of shape (batch_size, query_length) indicating the positions of each token in the sequences.
 
     Returns:
-        A tensor where each similar integer indicates that the tokens belong to the same sequence. For example, if we
-        packed 3 sequences of 2, 3 and 1 tokens respectively, this will return [0, 0, 1, 1, 1, 2].
-        If we did not detect packed format, this function simply returns `None`.
+        A 2D tensor where each similar integer indicates that the tokens belong to the same sequence. For example, if we
+        pack 3 sequences of 2, 3 and 1 tokens respectively along a single batch dim, this will return [[0, 0, 1, 1, 1, 2]].
     """
-    # Packed format is always on batch of size 1 so we can early exit if not the case
-    if not position_ids.shape[0] == 1:
-        return None
-
-    position_ids = position_ids.squeeze(0)
     # What separate different sequences is when 2 consecutive positions_ids are separated by more than 1. So
     # taking the diff (by prepending the first value - 1 to keep correct indexing) and applying cumsum to the result
     # gives exactly the sequence indices
-    first_dummy_value = position_ids[:1] - 1  # We just need the diff on this first value to be 1
-    position_diff = torch.diff(position_ids, prepend=first_dummy_value)
-    packed_sequence_mask = (position_diff != 1).cumsum(0)
+    # Note that we assume that a single sequence cannot span several batch dimensions, i.e. 1 single sequence
+    # cannot be part of the end of the first batch dim and the start of the 2nd one for example
+    first_dummy_value = position_ids[:, :1] - 1  # We just need the diff on this first value to be 1
+    position_diff = torch.diff(position_ids, prepend=first_dummy_value, dim=-1)
+    packed_sequence_mask = (position_diff != 1).cumsum(1)
 
-    # Here it would be nice to return None if we did not detect packed sequence format, i.e. if `packed_sequence_mask[-1] == 0`
+    # Here it would be nice to return None if we did not detect packed sequence format, i.e. if `packed_sequence_mask[:, -1] == 0`
     # but it causes issues with export
     return packed_sequence_mask
 
@@ -706,7 +702,7 @@ def _preprocess_mask_arguments(
     else:
         kv_length, kv_offset = input_embeds.shape[1], 0
 
-    # If batch size is 1, we check the position_ids for potential packed sequence format
+    # We check the position_ids for potential packed sequence format (only if the 2D attention mask is explicitly None)
     packed_sequence_mask = None
     if position_ids is not None and attention_mask is None:
         packed_sequence_mask = find_packed_sequence_indices(position_ids)
