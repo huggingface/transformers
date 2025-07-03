@@ -24,6 +24,7 @@ from datasets import Audio, load_dataset
 
 from transformers import AutoProcessor, EncodecConfig
 from transformers.testing_utils import (
+    Expectations,
     is_torch_available,
     require_torch,
     slow,
@@ -459,10 +460,21 @@ class EncodecIntegrationTest(unittest.TestCase):
             "1.5": 0.0025,
             "24.0": 0.0015,
         }
-        expected_codesums = {
-            "1.5": [371955],
-            "24.0": [6659962],
-        }
+
+        expectations = Expectations(
+            {
+                (None, None): {
+                    "1.5": [371955],
+                    "24.0": [6659962],
+                },
+                ("cuda", 8): {
+                    "1.5": [371955],
+                    "24.0": [6655079],
+                },
+            }
+        )
+        expected_codesums = expectations.get_expectation()
+
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         model_id = "facebook/encodec_24khz"
 
@@ -513,10 +525,21 @@ class EncodecIntegrationTest(unittest.TestCase):
             "3.0": 0.001,
             "24.0": 0.0005,
         }
-        expected_codesums = {
-            "3.0": [144259, 146765, 156435, 176871, 161971],
-            "24.0": [1568553, 1294948, 1306190, 1464747, 1663150],
-        }
+
+        expectations = Expectations(
+            {
+                (None, None): {
+                    "3.0": [144259, 146765, 156435, 176871, 161971],
+                    "24.0": [1568553, 1294948, 1306190, 1464747, 1663150],
+                },
+                ("cuda", 8): {
+                    "3.0": [144259, 146765, 156205, 176871, 161971],
+                    "24.0": [1566878, 1300459, 1310165, 1464747, 1663150],
+                },
+            }
+        )
+        expected_codesums = expectations.get_expectation()
+
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         model_id = "facebook/encodec_48khz"
 

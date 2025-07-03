@@ -21,6 +21,8 @@ import pytest
 
 from transformers import FalconH1Config, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
+    get_device_properties,
     require_torch,
     require_torch_gpu,
     slow,
@@ -484,7 +486,7 @@ class FalconH1ModelIntegrationTest(unittest.TestCase):
         """
         An integration test for Falcon-H1.
         """
-        EXPECTED_TEXT = """
+        EXPECTED_TEXT_DEFAULT = """
             user
             Tell me about the french revolution.
             assistant
@@ -503,8 +505,42 @@ class FalconH1ModelIntegrationTest(unittest.TestCase):
             4. **Rise of the Jacobins and Reign of Terror (1793–1794)**: Radical leaders like Maximilien Robespierre sought to purge France of counter-revolutionaries, leading to mass executions and widespread fear.
             5. **Thermidorian Reaction
         """
+
+        EXPECTED_TEXT_A10 = """
+            user
+            Tell me about the french revolution.
+            assistant
+            The French Revolution (1789–1799) was a period of profound social upheaval and radical political change in France that fundamentally transformed the nation and had far-reaching effects on the rest of Europe and the world. Here are the key aspects of the revolution:
+
+            ### **Causes**
+            1. **Economic Crisis**: France was in severe financial trouble due to costly wars (particularly the American Revolution), extravagant spending by the monarchy, and an inefficient tax system.
+            2. **Social Inequality**: The privileged classes (the nobility and clergy) enjoyed immense wealth and power, while the majority of the population (the Third Estate, comprising commoners) faced poverty and lack of representation.
+            3. **Enlightenment Ideas**: Philosophers like Voltaire, Rousseau, and Montesquieu inspired ideas of liberty, equality, and popular sovereignty, which fueled revolutionary fervor.
+            4. **Political Instability**: The absolute monarchy under King Louis XVI proved unable to address the nation's problems, leading to growing discontent.
+
+            ### **Key Events**
+            1. **Estates-General (1789)**: The Third Estate broke away and formed the National Assembly, forcing King Louis XVI to convene the Estates-General, an old legislative body, to address the financial crisis.
+            2. **Storming of the Bastille (July 14, 1789)**: A symbol of royal tyranny, the Bastille fortress was stormed by revolutionaries, sparking widespread rebellion.
+            3. **Declaration of the Rights of Man and of the Citizen (August 1789)**: This foundational document proclaimed liberty, equality, and fraternity as fundamental rights.
+            4. **Abolition of Feudalism (November 1789)**: The National Assembly abolished feudal privileges, redistributing church lands to the people.
+            5. **Tennis Court Oath (May 5, 1789)**: The National Assembly members, meeting on a tennis court, pledged to continue their work until a new constitution was established.
+            6.
+        """
+
+        expected_texts = Expectations(
+            {
+                (None, None): EXPECTED_TEXT_DEFAULT,
+                ("cuda", 8): EXPECTED_TEXT_A10,
+            }
+        )
+        EXPECTED_TEXT = expected_texts.get_expectation()
         # Remove the first char (`\n`) and the consecutive whitespaces caused by the formatting.
         EXPECTED_TEXT = EXPECTED_TEXT.strip().replace(" " * 12, "")
+
+        device_properties = get_device_properties()
+        # For A10, there is an ending " "
+        if device_properties[0] == "cuda" and device_properties[1] == 8:
+            EXPECTED_TEXT = EXPECTED_TEXT + " "
 
         model_id = "tiiuae/Falcon-H1-1.5B-Deep-Instruct"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
