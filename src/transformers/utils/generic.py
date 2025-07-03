@@ -39,6 +39,7 @@ from .import_utils import (
     is_tf_available,
     is_torch_available,
     is_torch_fx_proxy,
+    requires,
 )
 
 
@@ -970,6 +971,7 @@ if is_torch_available():
 
 
 @dataclass
+@requires(backends=("torch",))
 class OutputRecorder:
     """
     Configuration for recording outputs from a model via hooks.
@@ -1044,20 +1046,22 @@ def check_model_inputs(func):
             for key, layer_specs in capture_flags.items():
                 if not recordable_keys.get(f"output_{key}", False):
                     continue
-                if not isinstance(layer_specs, list):
+                if not isinstance(layer_specs, list):  # sometimes you want a single key to match multiple outputs
                     layer_specs = [layer_specs]
                 for specs in layer_specs:
+                    if not isinstance(specs, OutputRecorder):
+                        index = 0 if "hidden_states" in key else 1
+                        specs = OutputRecorder(target_class=specs, index=index)
+
                     capture_tasks.append((key, specs))
 
             for name, module in self.named_modules():
                 for key, specs in capture_tasks:
-                    if not isinstance(specs, OutputRecorder):
-                        specs = OutputRecorder(*specs)  # by default hidden states is 0, attention weights is 1
-                        specs.index = specs.index if specs.index is not None else 0 if "hidden_states" in key else 1
                     if isinstance(module, specs.target_class):
-                        if specs.layer_name is not None and specs.layer_name in name:
-                            hook_fn = make_capture_fn(key, specs.index)
-                            hooks.append(register_hook_if_needed(module, hook_fn))
+                        if specs.layer_name is not None:
+                            if specs.layer_name in name:
+                                hook_fn = make_capture_fn(key, specs.index)
+                                hooks.append(register_hook_if_needed(module, hook_fn))
                         else:
                             hook_fn = make_capture_fn(key, specs.index)
                             hooks.append(register_hook_if_needed(module, hook_fn))
