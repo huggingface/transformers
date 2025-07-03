@@ -19,6 +19,7 @@ import torch.nn as nn
 
 from transformers.activations import ACT2FN
 from transformers.generation import GenerationMixin
+from transformers.masking_utils import create_causal_mask
 from transformers.modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -176,7 +177,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-# llama copy except for the (on the fly) causal mask
+# llama copy
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -194,16 +195,6 @@ def eager_attention_forward(
     if attention_mask is not None:
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
-
-    ###
-    # Causal mask
-    seq_len = attn_weights.size(-1)
-    mask = torch.triu(
-        torch.ones((seq_len, seq_len), dtype=torch.bool, device=attn_weights.device),
-        diagonal=1,
-    )
-    attn_weights = attn_weights.masked_fill(mask, float("-inf"))
-    ###
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -271,6 +262,7 @@ class Ernie4_5Attention(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
+        attention_mask = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Compute attention outputs.
 
@@ -299,6 +291,7 @@ class Ernie4_5Attention(nn.Module):
             value_states=value_states,
             past_key_value=past_key_value,
             use_cache=use_cache,
+            attention_mask=attention_mask,
         )
 
         if not output_attentions:
@@ -313,6 +306,7 @@ class Ernie4_5Attention(nn.Module):
         value_states,
         past_key_value=None,
         use_cache=False,
+        attention_mask=None,
     ):
         """Attention computation with rotary embeddings.
 
@@ -366,7 +360,7 @@ class Ernie4_5Attention(nn.Module):
             query_states,
             key_states,
             value_states,
-            None,
+            attention_mask,
             self.scaling,
         )
 
@@ -405,6 +399,7 @@ class Ernie4_5DecoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         use_cache: Optional[bool] = False,
+        attention_mask = None,
     ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor, torch.Tensor]]]:
         """Forward pass through the decoder layer.
 
@@ -429,6 +424,7 @@ class Ernie4_5DecoderLayer(nn.Module):
             past_key_value=past_key_value,
             output_attentions=output_attentions,
             use_cache=use_cache,
+            attention_mask=attention_mask,
         )
         hidden_states = residual + hidden_states
 
@@ -538,21 +534,20 @@ class Ernie4_5Model(Ernie4_5PretrainedModel):
                 - hidden_states: All hidden states if output_hidden_states=True
                 - attentions: Attention weights if output_attentions=True
         """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
-        # retrieve input_ids and inputs_embeds
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError(
-                "You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time"
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if self.gradient_checkpointing and self.training and use_cache:
+            logger.warning_once(
+                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
             )
-        elif input_ids is not None:
-            _, seq_length = input_ids.shape
-        elif inputs_embeds is not None:
-            _, seq_length, _ = inputs_embeds.shape
-        else:
-            raise ValueError(
-                "You have to specify either decoder_input_ids or decoder_inputs_embeds"
-            )
+            use_cache = False
 
         if past_key_values is None:
             past_key_values = tuple([None] * len(self.layers))
@@ -560,8 +555,20 @@ class Ernie4_5Model(Ernie4_5PretrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
         inputs_embeds = inputs_embeds.to(self.embed_tokens.weight.dtype)
-
         hidden_states = inputs_embeds
+
+        if position_ids is None:
+            position_ids = torch.arange(
+                0, inputs_embeds.shape[1], device=inputs_embeds.device
+            ).unsqueeze(0)
+
+        causal_mask = create_causal_mask(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=position_ids.squeeze(),
+            past_key_values=None,
+        )
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -582,6 +589,7 @@ class Ernie4_5Model(Ernie4_5PretrainedModel):
                 output_attentions,
                 past_key_value,
                 use_cache,
+                causal_mask,
             )
 
             if isinstance(layer_outputs, (tuple, list)):
