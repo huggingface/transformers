@@ -135,7 +135,7 @@ Port forwarding is not Jan-specific: you can use it to connect `transformers ser
 
 ### Usage example 2: apps with external requests (feat. Cursor)
 
-This example shows how to use `transformers serve` as a local LLM provider for [Cursor](https://cursor.com/), the popular IDE. Contrarily to the example above, requests to `transformers serve` will come from an external IP (Cursor's server IPs), which require some additional setup. Furthermore, some of Cursor's requests require [CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS) mechanisms enabled in our local server, and they are disabled by default for security reasons.
+This example shows how to use `transformers serve` as a local LLM provider for [Cursor](https://cursor.com/), the popular IDE. Unlike in the previous example, requests to `transformers serve` will come from an external IP (Cursor's server IPs), which requires some additional setup. Furthermore, some of Cursor's requests require [CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS), which is disabled by default for security reasons.
 
 To launch our server with CORS enabled, run
 
