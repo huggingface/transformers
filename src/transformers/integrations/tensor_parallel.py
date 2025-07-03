@@ -127,7 +127,7 @@ def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str]) -> Opti
     The parameter name can be a generic name with wildcards (e.g. "*.weight") or a specific name (e.g. "layer_1.weight").
     """
     generic_param_name = re.sub(r"\d+", "*", parameter_name)
-    if generic_param_name in tp_plan: # TODO: i can't define hooks for parent modules, only leaf modules who have params
+    if generic_param_name in tp_plan:
         return tp_plan[generic_param_name]
     elif "." in generic_param_name and generic_param_name.rsplit(".", 1)[0] in tp_plan:
         return tp_plan[generic_param_name.rsplit(".", 1)[0]]
