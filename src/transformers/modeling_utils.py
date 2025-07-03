@@ -4640,9 +4640,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 "layers.*.mlp.experts.down_proj": "grouped_gemm",
                 "layers.*.mlp.experts.down_proj_bias": "grouped_gemm", 
                 # TODO: i shouldn't have to do the above, but when removing it, it doesnt partition them
-                'layers.*.mlp.experts': "grouped_gemm",
+                'layers.*.mlp.experts': None,
+                'layers.*.mlp.token_dispatcher': "gather",
+                'layers.*.mlp': "gather",
                 "layers.*.mlp.router": "ep_router",
             })
+            # Remove None values from the tp plan
+            config.base_model_tp_plan = {k: v for k, v in config.base_model_tp_plan.items() if v is not None}
+
+        print(f"using base_model_tp_plan: {config.base_model_tp_plan}")
 
         with ContextManagers(model_init_context):
             # Let's make sure we don't run the init function of buffer modules

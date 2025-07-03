@@ -758,7 +758,9 @@ class GroupedGemmParallel(TensorParallelLayer): # self.experts
 
     @staticmethod
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
-        torch.distributed.all_reduce(outputs, op=torch.distributed.ReduceOp.SUM)
+        if isinstance(outputs, torch.Tensor):
+            raise ValueError("GroupedGemmParallel should not be used with a single tensor, it should be used with a tuple of tensors")
+        torch.distributed.all_reduce(outputs[0], op=torch.distributed.ReduceOp.SUM)
         return outputs
 
 
@@ -939,7 +941,7 @@ def shard_and_distribute_module(
     """
     param_name, param_type = parameter_name.rsplit(".", 1) if "." in parameter_name else parameter_name
     tp_plan = model._tp_plan
-    module_to_tp = model.get_submodule(param_name)
+    module_to_tp = model.get_submodule(param_name) # TODO: can i loop over modules?
     rank = int(rank)
 
     current_shard_plan = _get_parameter_tp_plan(parameter_name, tp_plan)
