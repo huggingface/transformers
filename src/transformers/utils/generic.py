@@ -26,7 +26,7 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, fields, is_dataclass
 from enum import Enum
 from functools import partial, wraps
-from typing import Any, Callable, ContextManager, Optional, Type, TypedDict, Union
+from typing import Any, Callable, ContextManager, Optional, TypedDict
 
 import numpy as np
 from packaging import version
@@ -1061,6 +1061,7 @@ def check_model_inputs(func):
                         else:
                             hook_fn = make_capture_fn(key, specs.index)
                             hooks.append(register_hook_if_needed(module, hook_fn))
+
         outputs = func(self, *args, **kwargs)
         for h in hooks:
             if h is not None:
