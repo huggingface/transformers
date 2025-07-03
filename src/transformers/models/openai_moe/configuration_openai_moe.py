@@ -46,6 +46,21 @@ class OpenAIMoeConfig(PretrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    base_model_ep_plan = {
+        # "layers.*.self_attn.q_proj": "colwise",
+        # "layers.*.self_attn.k_proj": "colwise",
+        # "layers.*.self_attn.v_proj": "colwise",
+        # "layers.*.self_attn.o_proj": "rowwise",
+        # "layers.*.self_attn.sinks": "local_rowwise",
+
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.gate_up_proj_bias": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj_bias": "grouped_gemm", 
+        # TODO: i shouldn't have to do the above, but when removing it, it doesnt partition them
+        'layers.*.mlp.token_dispatcher': "gather",
+        "layers.*.mlp.router": "ep_router",
+    }
 
     def __init__(
         self,

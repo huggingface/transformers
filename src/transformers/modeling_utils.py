@@ -1998,10 +1998,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
     # - `_pp_plan["layers"][PipelineParallel.outputs]`
     _pp_plan = None
 
-    # Whether expert parallelism is enabled for the model. In that case we override
-    # `base_model_tp_plan` with expert parallel plan
-    _enable_expert_parallel = False
-
     # This flag signal that the model can be used as an efficient backend in TGI and vLLM
     # In practice, it means that they support attention interface functions, fully pass the kwargs
     # through all modules up to the Attention layer, can slice logits with Tensor, and have a default TP plan
@@ -4648,21 +4644,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         if distributed_config is not None and distributed_config.enable_expert_parallel:
             # TODO: add proper support for ep_plan independently of tp_plan
-            if config.base_model_tp_plan is None:
-                raise ValueError("base_model_tp_plan is required when enable_expert_parallel is True")
-            # We apply ep on MoE layers
-            config.base_model_tp_plan.update({
-                "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
-                "layers.*.mlp.experts.gate_up_proj_bias": "grouped_gemm",
-                "layers.*.mlp.experts.down_proj": "grouped_gemm",
-                "layers.*.mlp.experts.down_proj_bias": "grouped_gemm", 
-                # TODO: i shouldn't have to do the above, but when removing it, it doesnt partition them
-                'layers.*.mlp.experts': None,
-                'layers.*.mlp.token_dispatcher': "gather",
-                "layers.*.mlp.router": "ep_router",
-            })
-            # Remove None values from the tp plan
-            config.base_model_tp_plan = {k: v for k, v in config.base_model_tp_plan.items() if v is not None}
+            if config.base_model_ep_plan is None:
+                raise ValueError("base_model_ep_plan is required when enable_expert_parallel is True")
+            config.base_model_tp_plan = config.base_model_ep_plan # TODO: hack for now
 
         with ContextManagers(model_init_context):
             # Let's make sure we don't run the init function of buffer modules
