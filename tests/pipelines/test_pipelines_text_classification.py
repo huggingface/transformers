@@ -24,7 +24,6 @@ from transformers.testing_utils import (
     is_pipeline_test,
     is_torch_available,
     nested_simplify,
-    require_tf,
     require_torch,
     require_torch_bf16,
     require_torch_fp16,
@@ -152,31 +151,10 @@ class TextClassificationPipelineTests(unittest.TestCase):
         outputs = text_classifier("This is great !")
         self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_0", "score": 0.504}])
 
-    @require_tf
-    def test_small_model_tf(self):
-        text_classifier = pipeline(
-            task="text-classification", model="hf-internal-testing/tiny-random-distilbert", framework="tf"
-        )
-
-        outputs = text_classifier("This is great !")
-        self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_0", "score": 0.504}])
-
     @slow
     @require_torch
     def test_pt_bert(self):
         text_classifier = pipeline("text-classification")
-
-        outputs = text_classifier("This is great !")
-        self.assertEqual(nested_simplify(outputs), [{"label": "POSITIVE", "score": 1.0}])
-        outputs = text_classifier("This is bad !")
-        self.assertEqual(nested_simplify(outputs), [{"label": "NEGATIVE", "score": 1.0}])
-        outputs = text_classifier("Birds are a type of animal")
-        self.assertEqual(nested_simplify(outputs), [{"label": "POSITIVE", "score": 0.988}])
-
-    @slow
-    @require_tf
-    def test_tf_bert(self):
-        text_classifier = pipeline("text-classification", framework="tf")
 
         outputs = text_classifier("This is great !")
         self.assertEqual(nested_simplify(outputs), [{"label": "POSITIVE", "score": 1.0}])

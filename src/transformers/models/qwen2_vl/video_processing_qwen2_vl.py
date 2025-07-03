@@ -250,8 +250,10 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
                     min_pixels=min_pixels,
                     max_pixels=max_pixels,
                 )
-                stacked_videos = F.resize(
-                    stacked_videos, size=(resized_height, resized_width), interpolation=interpolation
+                stacked_videos = self.resize(
+                    image=stacked_videos,
+                    size=SizeDict(height=resized_height, width=resized_width),
+                    interpolation=interpolation,
                 )
             resized_videos_grouped[shape] = stacked_videos
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)

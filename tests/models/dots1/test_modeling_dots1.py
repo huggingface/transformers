@@ -88,6 +88,10 @@ class Dots1ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Dots1ModelTester
 
     @unittest.skip("dots.llm1's moe is not compatible `token_indices, weight_indices = torch.where(mask)`.")
+    def test_generate_with_static_cache(self):
+        pass
+
+    @unittest.skip("dots.llm1's moe is not compatible `token_indices, weight_indices = torch.where(mask)`.")
     def test_generate_compilation_all_outputs(self):
         pass
 

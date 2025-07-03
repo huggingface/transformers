@@ -36,10 +36,10 @@ from transformers import KyutaiSpeechToTextProcessor, KyutaiSpeechToTextForCondi
 
 # 1. load the model and the processor
 torch_device = "cuda" if torch.cuda.is_available() else "cpu"
-model_id = "kyutai/stt-2.6b-en"
+model_id = "kyutai/stt-2.6b-en-trfs"
 
 processor = KyutaiSpeechToTextProcessor.from_pretrained(model_id)
-model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
+model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(model_id, device_map=torch_device, torch_dtype="auto")
 
 # 2. load audio samples
 ds = load_dataset(
@@ -69,10 +69,10 @@ from transformers import KyutaiSpeechToTextProcessor, KyutaiSpeechToTextForCondi
 
 # 1. load the model and the processor
 torch_device = "cuda" if torch.cuda.is_available() else "cpu"
-model_id = "kyutai/stt-2.6b-en"
+model_id = "kyutai/stt-2.6b-en-trfs"
 
 processor = KyutaiSpeechToTextProcessor.from_pretrained(model_id)
-model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
+model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(model_id, device_map=torch_device, torch_dtype="auto")
 
 # 2. load audio samples
 ds = load_dataset(

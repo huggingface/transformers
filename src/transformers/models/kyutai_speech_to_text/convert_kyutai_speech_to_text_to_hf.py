@@ -190,7 +190,14 @@ def write_model(
     print("Converting the model.")
     os.makedirs(output_dir, exist_ok=True)
 
-    config = KyutaiSpeechToTextConfig()
+    config = KyutaiSpeechToTextConfig(
+        vocab_size=8001,
+        max_position_embeddings=375,
+        num_hidden_layers=16,
+        num_attention_heads=16,
+        num_key_value_heads=16,
+        head_dim=128,
+    )
     config.use_cache = True
     config.codec_config.sliding_window = 250
 
