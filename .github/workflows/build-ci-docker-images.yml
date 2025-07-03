@@ -3,7 +3,7 @@ name: Build pr ci-docker
 on:
   push:
     branches:
-      - fix-dataset-run_object_detection-and-add-torchcodec-disabled
+      - fix-dataset-run_object_detection-and-add-torchcodec
   repository_dispatch:
   workflow_call:
     inputs:
@@ -55,7 +55,7 @@ jobs:
           build-args: |
             REF=${{ github.sha }}
           file: "./docker/${{ matrix.file }}.dockerfile"
-          push: ${{ contains(github.event.head_commit.message, 'ci-image]') ||  github.event_name == 'schedule' }}
+          push: true
           tags: ${{ env.TAG }}
 
   notify:
