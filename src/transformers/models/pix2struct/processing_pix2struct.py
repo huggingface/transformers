@@ -16,7 +16,7 @@
 Processor class for Pix2Struct.
 """
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
@@ -26,7 +26,7 @@ from ...utils import logging
 
 class Pix2StructImagesKwargs(ImagesKwargs, total=False):
     max_patches: Optional[int]
-    header_text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]]
+    header_text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]]
 
 
 class Pix2StructProcessorKwargs(ProcessingKwargs, total=False):
@@ -78,7 +78,7 @@ class Pix2StructProcessor(ProcessorMixin):
     def __call__(
         self,
         images=None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[Pix2StructProcessorKwargs],

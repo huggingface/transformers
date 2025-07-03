@@ -57,11 +57,11 @@ def make_box_first_token_mask(bboxes, words, tokenizer, max_seq_length=512):
 
     box_first_token_mask = np.zeros(max_seq_length, dtype=np.bool_)
 
-    # encode(tokenize) each word from words (List[str])
-    input_ids_list: List[List[int]] = [tokenizer.encode(e, add_special_tokens=False) for e in words]
+    # encode(tokenize) each word from words (list[str])
+    input_ids_list: list[list[int]] = [tokenizer.encode(e, add_special_tokens=False) for e in words]
 
     # get the length of each box
-    tokens_length_list: List[int] = [len(l) for l in input_ids_list]
+    tokens_length_list: list[int] = [len(l) for l in input_ids_list]
 
     box_end_token_indices = np.array(list(itertools.accumulate(tokens_length_list)))
     box_start_token_indices = box_end_token_indices - np.array(tokens_length_list)

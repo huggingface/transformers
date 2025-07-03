@@ -154,7 +154,15 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         pass
 
     @unittest.skip(reason="TimmWrapper initialization is managed on the timm side")
+    def test_can_init_all_missing_weights(self):
+        pass
+
+    @unittest.skip(reason="TimmWrapper initialization is managed on the timm side")
     def test_initialization(self):
+        pass
+
+    @unittest.skip(reason="TimmWrapper initialization is managed on the timm side")
+    def test_mismatched_shapes_have_properly_initialized_weights(self):
         pass
 
     @unittest.skip(reason="Need to use a timm model and there is no tiny model available.")
@@ -236,6 +244,24 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         self.assertEqual(config.num_labels, restored_config.num_labels)
         self.assertEqual(config.id2label, restored_config.id2label)
         self.assertEqual(config.label2id, restored_config.label2id)
+
+    def test_model_init_args(self):
+        # test init from config
+        config = TimmWrapperConfig.from_pretrained(
+            "timm/vit_base_patch32_clip_448.laion2b_ft_in12k_in1k",
+            model_args={"depth": 3},
+        )
+        model = TimmWrapperModel(config)
+        self.assertEqual(len(model.timm_model.blocks), 3)
+
+        cls_model = TimmWrapperForImageClassification(config)
+        self.assertEqual(len(cls_model.timm_model.blocks), 3)
+
+        # test save load
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            restored_model = TimmWrapperModel.from_pretrained(tmpdirname)
+            self.assertEqual(len(restored_model.timm_model.blocks), 3)
 
 
 # We will verify our results on an image of cute cats

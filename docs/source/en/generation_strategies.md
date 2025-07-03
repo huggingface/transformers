@@ -468,8 +468,16 @@ def generate(model, input_ids, generation_config=None, left_padding=None, **kwar
 Follow the recommended practices below to ensure your custom decoding method works as expected.
 - Feel free to reuse the logic for validation and input preparation in the original [`~GenerationMixin.generate`].
 - Pin the `transformers` version in the requirements if you use any private method/attribute in `model`.
-- You can add other files in the `custom_generate` folder, and use relative imports.
 - Consider adding model validation, input validation, or even a separate test file to help users sanity-check your code in their environment.
+
+Your custom `generate` method can relative import code from the `custom_generate` folder. For example, if you have a `utils.py` file, you can import it like this:
+
+```py
+from .utils import some_function
+```
+
+Only relative imports from the same-level `custom_generate` folder are supported. Parent/sibling folder imports are not valid. The `custom_generate` argument also works locally with any directory that contains a `custom_generate` structure. This is the recommended workflow for developing your custom decoding method.
+
 
 #### requirements.txt
 

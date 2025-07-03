@@ -18,7 +18,7 @@ import unittest
 
 from transformers import VitPoseBackboneConfig
 from transformers.testing_utils import require_torch, torch_device
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available
 
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -29,10 +29,6 @@ if is_torch_available():
     import torch
 
     from transformers import VitPoseBackbone
-
-
-if is_vision_available():
-    pass
 
 
 class VitPoseBackboneModelTester:

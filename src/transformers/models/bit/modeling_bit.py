@@ -16,7 +16,7 @@
 
 import collections
 import math
-from typing import Optional, Tuple
+from typing import Optional
 
 import numpy as np
 import torch
@@ -40,7 +40,7 @@ from .configuration_bit import BitConfig
 logger = logging.get_logger(__name__)
 
 
-def get_padding_value(padding=None, kernel_size=7, stride=1, dilation=1) -> Tuple[Tuple, bool]:
+def get_padding_value(padding=None, kernel_size=7, stride=1, dilation=1) -> tuple[tuple, bool]:
     r"""
     Utility function to get the tuple padding value given the kernel_size and padding.
 
@@ -135,7 +135,7 @@ class BitGroupNormActivation(nn.GroupNorm):
     """
 
     def __init__(self, config, num_channels, eps=1e-5, affine=True, apply_activation=True):
-        super(BitGroupNormActivation, self).__init__(config.num_groups, num_channels, eps=eps, affine=affine)
+        super().__init__(config.num_groups, num_channels, eps=eps, affine=affine)
         if apply_activation:
             self.activation = ACT2FN[config.hidden_act]
         else:
@@ -310,7 +310,7 @@ class BitDropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
 def make_div(value, divisor=8):

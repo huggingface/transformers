@@ -15,7 +15,7 @@
 
 import enum
 from collections.abc import Iterable  # pylint: disable=g-importing-member
-from typing import Any, Dict, List, Optional, Union, overload
+from typing import Any, Optional, Union, overload
 
 from ..generation import GenerationConfig
 from ..processing_utils import ProcessingKwargs, Unpack
@@ -56,7 +56,7 @@ class Chat:
     actually a batch of samples rather than messages in the same conversation."""
 
     def __init__(
-        self, messages: Dict, images: Optional[Union[str, List[str], "Image.Image", List["Image.Image"]]] = None
+        self, messages: dict, images: Optional[Union[str, list[str], "Image.Image", list["Image.Image"]]] = None
     ):
         for message in messages:
             if not ("role" in message and "content" in message):
@@ -67,7 +67,7 @@ class Chat:
 
 
 def add_images_to_messages(
-    messages: dict, images: Optional[Union[str, List[str], "Image.Image", List["Image.Image"]]]
+    messages: dict, images: Optional[Union[str, list[str], "Image.Image", list["Image.Image"]]]
 ):
     """
     Retrieve and combine images from the chat and the images passed as input.
@@ -257,37 +257,37 @@ class ImageTextToTextPipeline(Pipeline):
         image: Optional[Union[str, "Image.Image"]] = None,
         text: Optional[str] = None,
         **kwargs: Any,
-    ) -> List[Dict[str, Any]]: ...
+    ) -> list[dict[str, Any]]: ...
 
     @overload
     def __call__(
         self,
-        image: Optional[Union[List[str], List["Image.Image"]]] = None,
-        text: Optional[List[str]] = None,
+        image: Optional[Union[list[str], list["Image.Image"]]] = None,
+        text: Optional[list[str]] = None,
         **kwargs: Any,
-    ) -> List[List[Dict[str, Any]]]: ...
+    ) -> list[list[dict[str, Any]]]: ...
 
     def __call__(
         self,
         images: Optional[
             Union[
                 str,
-                List[str],
-                List[List[str]],
+                list[str],
+                list[list[str]],
                 "Image.Image",
-                List["Image.Image"],
-                List[List["Image.Image"]],
-                List[dict],
+                list["Image.Image"],
+                list[list["Image.Image"]],
+                list[dict],
             ]
         ] = None,
-        text: Optional[Union[str, List[str], List[dict]]] = None,
+        text: Optional[Union[str, list[str], list[dict]]] = None,
         **kwargs,
-    ) -> Union[List[Dict[str, Any]], List[List[Dict[str, Any]]]]:
+    ) -> Union[list[dict[str, Any]], list[list[dict[str, Any]]]]:
         """
         Generate a text given text and the image(s) passed as inputs.
 
         Args:
-            images (`str`, `List[str]`, `PIL.Image, `List[PIL.Image]`, `List[Dict[str, Union[str, PIL.Image]]]`):
+            images (`str`, `list[str]`, `PIL.Image, `list[PIL.Image]`, `list[dict[str, Union[str, PIL.Image]]]`):
                 The pipeline handles three types of images:
 
                 - A string containing a HTTP(s) link pointing to an image
@@ -296,7 +296,7 @@ class ImageTextToTextPipeline(Pipeline):
 
                 The pipeline accepts either a single image or a batch of images. Finally, this pipeline also supports
                 the chat format (see `text`) containing images and text in this argument.
-            text (str, List[str], `List[Dict[str, Union[str, PIL.Image]]]`):
+            text (str, list[str], `list[dict[str, Union[str, PIL.Image]]]`):
                 The text to be used for generation. If a list of strings is passed, the length of the list should be
                 the same as the number of images. Text can also follow the chat format: a list of dictionaries where
                 each dictionary represents a message in a conversation. Each dictionary should have two keys: 'role'

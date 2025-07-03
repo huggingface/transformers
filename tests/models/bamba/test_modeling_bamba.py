@@ -610,22 +610,15 @@ class BambaModelIntegrationTest(unittest.TestCase):
         cls.device_properties = get_device_properties()
 
     def test_simple_generate(self):
+        # fmt: off
         expectations = Expectations(
             {
-                (
-                    "cuda",
-                    8,
-                ): "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are all having a good time.",
-                (
-                    "rocm",
-                    9,
-                ): "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are doing well. I am here",
-                (
-                    "xpu",
-                    3,
-                ): "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are all doing well. Today I",
+                ("cuda", 8): "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are all having a good time.",
+                ("rocm", 9): "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are doing well. I am here",
+                ("xpu", 3): "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are all doing well. I am",
             }
         )
+        # fmt: on
 
         self.model.to(torch_device)
 
@@ -659,6 +652,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
         #
         # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
         # considering differences in hardware processing and potential deviations in generated text.
+        # fmt: off
         EXPECTED_TEXTS = Expectations(
             {
                 ("cuda", 7): [],
@@ -671,11 +665,12 @@ class BambaModelIntegrationTest(unittest.TestCase):
                     "!!!<|begin_of_text|>I am late! I need to be at the airport in 20 minutes! I",
                 ],
                 ("xpu", 3): [
-                    "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are all doing well. Today I",
+                    "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are all doing well. I am",
                     "!!!<|begin_of_text|>I am late! I need to get to work! I have to get to the",
                 ],
             }
         )
+        # fmt: on
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
 
         self.model.to(torch_device)

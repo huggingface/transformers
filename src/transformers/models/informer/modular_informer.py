@@ -14,7 +14,7 @@
 # limitations under the License.
 """PyTorch Informer model."""
 
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -27,6 +27,7 @@ from ...modeling_attn_mask_utils import (
     _prepare_4d_causal_attention_mask,
     _prepare_4d_causal_attention_mask_for_sdpa,
 )
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
 )
@@ -256,12 +257,12 @@ class InformerProbSparseAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         cache_position: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -433,7 +434,7 @@ class InformerProbSparseAttention(nn.Module):
 
 
 # source: https://github.com/zhouhaoyi/Informer2020/blob/main/models/encoder.py
-class InformerConvLayer(nn.Module):
+class InformerConvLayer(GradientCheckpointingLayer):
     def __init__(self, c_in):
         super().__init__()
         self.downConv = nn.Conv1d(
@@ -540,7 +541,7 @@ class InformerEncoder(TimeSeriesTransformerEncoder):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         r"""
         Args:
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -610,27 +611,15 @@ class InformerEncoder(TimeSeriesTransformerEncoder):
             if to_drop:
                 layer_outputs = (None, None)
             else:
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        encoder_layer.__call__,
-                        hidden_states,
-                        attention_mask,
-                        (head_mask[idx] if head_mask is not None else None),
-                        output_attentions,
-                    )
-                    if conv_layer is not None:
-                        output = self._gradient_checkpointing_func(conv_layer, layer_outputs[0])
-                        layer_outputs = (output,) + layer_outputs[1:]
-                else:
-                    layer_outputs = encoder_layer(
-                        hidden_states,
-                        attention_mask,
-                        layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                        output_attentions=output_attentions,
-                    )
-                    if conv_layer is not None:
-                        output = conv_layer(layer_outputs[0])
-                        layer_outputs = (output,) + layer_outputs[1:]
+                layer_outputs = encoder_layer(
+                    hidden_states,
+                    attention_mask,
+                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                    output_attentions=output_attentions,
+                )
+                if conv_layer is not None:
+                    output = conv_layer(layer_outputs[0])
+                    layer_outputs = (output,) + layer_outputs[1:]
 
                 hidden_states = layer_outputs[0]
 

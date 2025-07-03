@@ -14,7 +14,7 @@
 # limitations under the License.
 """TensorFlow ResNet model."""
 
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import tensorflow as tf
 
@@ -419,7 +419,7 @@ class TFResNetMainLayer(keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], TFBaseModelOutputWithPoolingAndNoAttention]:
+    ) -> Union[tuple[tf.Tensor], TFBaseModelOutputWithPoolingAndNoAttention]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -494,7 +494,7 @@ class TFResNetModel(TFResNetPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], TFBaseModelOutputWithPoolingAndNoAttention]:
+    ) -> Union[tuple[tf.Tensor], TFBaseModelOutputWithPoolingAndNoAttention]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -557,7 +557,7 @@ class TFResNetForImageClassification(TFResNetPreTrainedModel, TFSequenceClassifi
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], TFImageClassifierOutputWithNoAttention]:
+    ) -> Union[tuple[tf.Tensor], TFImageClassifierOutputWithNoAttention]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,

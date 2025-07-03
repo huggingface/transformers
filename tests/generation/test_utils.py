@@ -22,6 +22,7 @@ import random
 import tempfile
 import unittest
 import warnings
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -34,6 +35,7 @@ from transformers.testing_utils import (
     is_flaky,
     require_accelerate,
     require_flash_attn,
+    require_flash_attn_3,
     require_optimum_quanto,
     require_read_token,
     require_torch,
@@ -114,27 +116,6 @@ if is_torch_available():
 from unittest.mock import patch
 
 from transformers.utils import is_sklearn_available
-
-
-# TODO: raushan remove this when VLMs start accepting input embeds
-VLM_CLASS_NAMES = [
-    "llava",
-    "idefics2",
-    "idefics3",
-    "mllama",
-    "paligemma",
-    "emu3",
-    "gotocr2",
-    "qwen2vl",
-    "qwen2_5_vl",
-    "ayavision",
-    "janus",
-    "gemma3",
-    "mistral3",
-    "chameleon",
-    "internvl",
-    "qwen2_5omni",  # the file is named `qwen2_5_omni`, but the model class is `Qwen2_5Omni`
-]
 
 
 class GenerationTesterMixin:
@@ -1226,7 +1207,23 @@ class GenerationTesterMixin:
                     "blip2",  # overridden `generate()`
                     "instructblip",
                     "instructblipvideo",
-                    *VLM_CLASS_NAMES,  # shouldn't suggest image tokens
+                    # All models below: shouldn't suggest image tokens. Can be fixed by passing `suppress_ids` to candidate generator: @joaa @raushan
+                    "llava",
+                    "idefics2",
+                    "idefics3",
+                    "mllama",
+                    "paligemma",
+                    "emu3",
+                    "gotocr2",
+                    "qwen2vl",
+                    "qwen2_5_vl",
+                    "ayavision",
+                    "janus",
+                    "gemma3",
+                    "mistral3",
+                    "chameleon",
+                    "internvl",
+                    "qwen2_5omni",  # the file is named `qwen2_5_omni`, but the model class is `Qwen2_5Omni`,
                 ]
             ):
                 self.skipTest(reason="May fix in the future: need model-specific fixes")
@@ -1640,6 +1637,58 @@ class GenerationTesterMixin:
                     self.assertEqual(self_attention_layer_value_cache.shape, all_cache_shapes[i][1])
 
     @pytest.mark.generate
+    def test_generate_from_random_inputs_embeds(self):
+        """
+        Text-only: Tests that different `inputs_embeds` generate different outputs in models with `main_input=="input_ids"`.
+        Some models have 'images' as main input and thus can't generate with random text embeddings.
+        See `test_generate_from_inputs_embeds` for more general checks.
+        """
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+
+            if config.is_encoder_decoder:
+                continue
+            config.is_decoder = True
+
+            model = model_class(config).to(torch_device).eval()
+            if "inputs_embeds" not in inspect.signature(model.prepare_inputs_for_generation).parameters.keys():
+                continue
+
+            #  No easy fix, let's skip the test for now
+            has_complex_embeds_computation = any(
+                model_name in model_class.__name__.lower() for model_name in ["moshi"]
+            )
+
+            if model_class.main_input_name != "input_ids" or has_complex_embeds_computation:
+                self.skipTest(
+                    "The model's main input name in not `input_ids` and we need kwargs from input dict as well."
+                )
+
+            if hasattr(config, "scale_embedding"):
+                config.scale_embedding = False
+
+            generation_kwargs = {
+                "return_dict_in_generate": True,
+                "output_scores": True,
+                "do_sample": False,
+                "max_new_tokens": 5,
+                "min_new_tokens": 5,  # generate exactly 5 tokens
+            }
+
+            input_ids = inputs_dict.pop("input_ids")
+            inputs_embeds = model.get_input_embeddings()(input_ids)
+            outputs_from_embeds = model.generate(input_ids, inputs_embeds=inputs_embeds, **generation_kwargs)
+
+            # If we pass different inputs_embeds, we should get different outputs (the output text may be the
+            # same, but the logits will almost surely be different)
+            random_embeds = torch.rand_like(inputs_embeds)
+            outputs_from_rand_embeds = model.generate(
+                input_ids=input_ids, inputs_embeds=random_embeds, **generation_kwargs
+            )
+            for i in range(len(outputs_from_rand_embeds.scores)):
+                self.assertFalse(torch.allclose(outputs_from_embeds.scores[i], outputs_from_rand_embeds.scores[i]))
+
+    @pytest.mark.generate
     @parameterized.expand([("greedy", 1), ("beam search", 2)])
     def test_generate_from_inputs_embeds(self, _, num_beams):
         """Tests that we can generate from `inputs_embeds` instead of `input_ids` in LLMs, VLMs, etc"""
@@ -1660,34 +1709,22 @@ class GenerationTesterMixin:
                 continue
 
             # There are a few exception patterns in this test:
-            # 1 - Some models can't generate without `input_ids`, when `inputs_embeds` are passed
-            requires_inputs_ids = any(model_name in model_class.__name__.lower() for model_name in ["idefics"])
-            # 2 - Complex `inputs_embeds` computation, i.e. the correct computation of inputs embeds is more complex
+            # 1 - Complex `inputs_embeds` computation, i.e. the correct computation of inputs embeds is more complex
             # than calling the embedding layer with `input_ids`. Subcases of this exception:
-            #   2.A - Ignore `scale_embedding`, if the model supports it (it is controlled by a model-dependent flag)
+            #   1.A - Ignore `scale_embedding`, if the model supports it (it is controlled by a model-dependent flag)
             if hasattr(config, "scale_embedding"):
                 config.scale_embedding = False
-            #   2.B - Some VLMs assume `inputs_embeds` and `pixel_values` are mutually exclusive AND fall in the
-            #   exception above (complex `inputs_embeds` computation). Popping `pixel_values` allow us to run the
-            #   checks without adding test complexity. Ditto for `pixel_values_videos` and `pixel_values_images`
-            pixel_values_is_mutually_exclusive = any(
-                model_name in model_class.__name__.lower() for model_name in VLM_CLASS_NAMES
-            )
-            if pixel_values_is_mutually_exclusive:
-                inputs_dict.pop("pixel_values", None)
-                inputs_dict.pop("pixel_values_videos", None)
-                inputs_dict.pop("pixel_values_images", None)
             # HACK - in the case of granite speech, input_features and inputs_embeds are mutually exclusive;
             # this is similar to VLMs and should likely be standardized for similar audio models in the future,
             # then made generic here.
             if "granitespeech" in model_class.__name__.lower():
                 inputs_dict.pop("input_features", None)
 
-            #   2.C - No easy fix, let's skip the check that compares the outputs from `input_ids` and `inputs_embeds`
+            #   1.B - No easy fix, let's skip the check that compares the outputs from `input_ids` and `inputs_embeds`
             has_complex_embeds_computation = any(
                 model_name in model_class.__name__.lower() for model_name in ["moshi"]
             )
-            # 3 - `inputs_dict` doesn't contain `attention_mask`. When `attention_mask` is not passed to generate,
+            # 2 - `inputs_dict` doesn't contain `attention_mask`. When `attention_mask` is not passed to generate,
             # we infer it from `input_ids`. The last test case will fail if there is a pad token in the original input.
             missing_attention_mask = "attention_mask" not in inputs_dict
 
@@ -1700,31 +1737,23 @@ class GenerationTesterMixin:
                 "do_sample": False,
                 "max_new_tokens": 5,
                 "min_new_tokens": 5,  # generate exactly 5 tokens
+                "use_cache": True,
             }
-            outputs_from_ids = model.generate(input_ids, **generation_kwargs, **inputs_dict)
+            outputs_from_ids = model.generate(input_ids=input_ids, **generation_kwargs, **inputs_dict)
             self.assertEqual(outputs_from_ids.sequences.shape[:2], (input_ids.shape[0], input_ids.shape[1] + 5))
 
             # Same thing, but from input embeddings (`input_ids` is passed so the prompt is present in the output).
             # The output of the two calls should be the same.
             inputs_embeds = model.get_input_embeddings()(input_ids)
             outputs_from_embeds = model.generate(
-                input_ids, inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict
+                input_ids=input_ids, inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict
             )
             if not has_complex_embeds_computation:
                 self._check_similar_generate_outputs(outputs_from_ids, outputs_from_embeds)
 
-            # If we pass different inputs_embeds, we should get different outputs (the output text may be the
-            # same, but the logits will almost surely be different)
-            random_embeds = torch.rand_like(inputs_embeds)
-            outputs_from_rand_embeds = model.generate(
-                input_ids, inputs_embeds=random_embeds, **generation_kwargs, **inputs_dict
-            )
-            for i in range(len(outputs_from_rand_embeds.scores)):
-                self.assertFalse(torch.allclose(outputs_from_embeds.scores[i], outputs_from_rand_embeds.scores[i]))
-
             # input_ids is not a required input on most models -- if we don't pass it, the newly generated tokens will
             # be the same
-            if not (requires_inputs_ids or missing_attention_mask):
+            if not missing_attention_mask:
                 outputs_from_embeds_wo_ids = model.generate(
                     inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict
                 )
@@ -1750,17 +1779,6 @@ class GenerationTesterMixin:
             model = model_class(config).to(torch_device).eval()
             if "inputs_embeds" not in inspect.signature(model.prepare_inputs_for_generation).parameters.keys():
                 self.skipTest(reason="This model does not support `inputs_embeds` in generation")
-
-            #   Some VLMs assume `inputs_embeds` and `pixel_values` are mutually exclusive AND fall in the
-            #   exception above (complex `inputs_embeds` computation). Popping `pixel_values` allow us to run the
-            #   checks without adding test complexity. Ditto for `pixel_values_videos` and `pixel_values_images`
-            pixel_values_is_mutually_exclusive = any(
-                model_name in model_class.__name__.lower() for model_name in VLM_CLASS_NAMES
-            )
-            if pixel_values_is_mutually_exclusive:
-                inputs_dict.pop("pixel_values", None)
-                inputs_dict.pop("pixel_values_videos", None)
-                inputs_dict.pop("pixel_values_images", None)
 
             input_ids = inputs_dict.pop("input_ids")
 
@@ -1922,14 +1940,6 @@ class GenerationTesterMixin:
             outputs = model(**inputs_dict)
             if "past_key_values" not in outputs:
                 self.skipTest(reason="This model doesn't return `past_key_values`")
-
-            pixel_values_is_mutually_exclusive = any(
-                model_name in model_class.__name__.lower() for model_name in VLM_CLASS_NAMES
-            )
-            if pixel_values_is_mutually_exclusive:
-                inputs_dict.pop("pixel_values", None)
-                inputs_dict.pop("pixel_values_videos", None)
-                inputs_dict.pop("pixel_values_images", None)
 
             input_ids = inputs_dict.pop("input_ids")
 
@@ -2292,6 +2302,7 @@ class GenerationTesterMixin:
         support_flag = {
             "sdpa": "_supports_sdpa",
             "flash_attention_2": "_supports_flash_attn_2",
+            "flash_attention_3": "_supports_flash_attn_3",
         }
 
         for model_class in self.all_generative_model_classes:
@@ -2368,6 +2379,14 @@ class GenerationTesterMixin:
     def test_eager_matches_fa2_generate(self):
         """Tests that generate has equivalent outputs with FA2 and eager attention implementations."""
         self._test_attention_implementation("flash_attention_2")
+
+    @pytest.mark.flash_attn_3_test
+    @require_flash_attn_3
+    @require_torch_gpu
+    @slow
+    def test_eager_matches_fa3_generate(self):
+        """Tests that generate has equivalent outputs with FA3 and eager attention implementations."""
+        self._test_attention_implementation("flash_attention_3")
 
     def _check_generate_outputs(self, output, config, use_cache=False, num_return_sequences=1, num_beams=1):
         input_batch_size = int(output.sequences.shape[0] / num_return_sequences)
@@ -3796,7 +3815,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         logits_gen = outputs.logits[0][0]
 
         # assert that unprocessed logits from generate() are same as those from modal eval()
-        self.assertListEqual(logits_fwd.tolist(), logits_gen.tolist())
+        torch.testing.assert_allclose(logits_fwd.tolist(), logits_gen.tolist())
 
     def test_return_unprocessed_logit_scores(self):
         # tell model to generate text and return unprocessed/unwarped logit scores
@@ -4892,7 +4911,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         # If the generate doesn't infer the DECODER device map correctly, this will fail
         _ = model.generate(**inputs, max_new_tokens=2, do_sample=False)
 
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_cpu_offload_doesnt_compile(self):
         """Test that CPU offload doesn't trigger compilation"""
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
@@ -4984,6 +5003,27 @@ class GenerationIntegrationTests(unittest.TestCase):
         model_inputs = tokenizer("Hello, world!", return_tensors="pt").to(model.device)
         with self.assertRaises(ValueError):
             model.generate(**model_inputs, custom_generate="transformers-community/custom_generate_example")
+
+    def test_custom_generate_local_directory(self):
+        """Tests that custom_generate works with local directories containing importable relative modules"""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            custom_generate_dir = Path(tmp_dir) / "custom_generate"
+            custom_generate_dir.mkdir()
+            with open(custom_generate_dir / "generate.py", "w") as f:
+                f.write("from .helper import ret_success\ndef generate(*args, **kwargs):\n    return ret_success()\n")
+            with open(custom_generate_dir / "helper.py", "w") as f:
+                f.write('def ret_success():\n    return "success"\n')
+            model = AutoModelForCausalLM.from_pretrained(
+                "hf-internal-testing/tiny-random-MistralForCausalLM", device_map="auto"
+            )
+            tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+            model_inputs = tokenizer("Hello, world!", return_tensors="pt").to(model.device)
+            value = model.generate(
+                **model_inputs,
+                custom_generate=str(tmp_dir),
+                trust_remote_code=True,
+            )
+            assert value == "success"
 
 
 @require_torch

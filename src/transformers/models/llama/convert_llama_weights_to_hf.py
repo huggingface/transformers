@@ -17,7 +17,6 @@ import json
 import os
 import tempfile
 import warnings
-from typing import List
 
 import torch
 from tokenizers import AddedToken, processors
@@ -560,7 +559,7 @@ def main():
     parser.add_argument(
         "--special_tokens",
         default=None,
-        type=List[str],
+        type=list[str],
         help="The list of special tokens that should be added to the model.",
     )
     parser.add_argument(
