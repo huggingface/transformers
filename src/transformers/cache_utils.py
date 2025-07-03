@@ -1098,6 +1098,10 @@ class StaticCache(Cache):
             Mapping between the layers and its device. This is required when you are manually initializing the cache
             and the model is split between different gpus. You can know which layers mapped to which device by
             checking the associated device_map: `model.hf_device_map`.
+        tp_size (`Optional[int]`, *optional*):
+            The tensor parallel size of the model. This is used to adjust the number of key/value heads in the cache
+            if the model is using tensor parallelism. If not provided, it defaults to `None`, which means that the
+            number of key/value heads will not be adjusted.
 
 
     Example:
