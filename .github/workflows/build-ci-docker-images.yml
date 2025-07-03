@@ -3,7 +3,7 @@ name: Build pr ci-docker
 on:
   push:
     branches:
-      - push-ci-image # for now let's only build on this branch
+      - fix-dataset-run_object_detection-and-add-torchcodec
   repository_dispatch:
   workflow_call:
     inputs:
@@ -22,7 +22,6 @@ jobs:
   build:
     runs-on: ubuntu-22.04
 
-    if: ${{ contains(github.event.head_commit.message, '[build-ci-image]') || contains(github.event.head_commit.message, '[push-ci-image]') && '!cancelled()' || github.event_name == 'schedule' }}
 
     strategy:
       matrix:
@@ -33,13 +32,9 @@ jobs:
       -
         name: Set tag
         run: |
-              if ${{contains(github.event.head_commit.message, '[build-ci-image]')}}; then
-                  echo "TAG=huggingface/transformers-${{ matrix.file }}:dev" >> "$GITHUB_ENV"
-                  echo "setting it to DEV!"
-              else
-                  echo "TAG=huggingface/transformers-${{ matrix.file }}" >> "$GITHUB_ENV"
+          echo "TAG=huggingface/transformers-${{ matrix.file }}:dev" >> "$GITHUB_ENV"
+          echo "setting it to DEV!"
 
-              fi
       -
         name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
