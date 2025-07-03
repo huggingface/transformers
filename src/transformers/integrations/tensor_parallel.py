@@ -741,8 +741,10 @@ class SequenceParallel(TensorParallelLayer):
             parameter = DTensor.from_local(parameter, device_mesh, [Replicate()], run_check=False)
         return nn.Parameter(parameter, requires_grad=parameter.is_floating_point())
 
-class GroupedGemmParallel(TensorParallelLayer): # self.experts
-    # Applies EP to MoE experts
+class GroupedGemmParallel(TensorParallelLayer):
+    """
+    Applies Expert Parallelism to MoE experts by loading the correct experts on each device.
+    """
     def __init__(self):
         super().__init__()
         self.use_dtensor = False
@@ -758,26 +760,10 @@ class GroupedGemmParallel(TensorParallelLayer): # self.experts
             param = param.contiguous()
         return param
 
-    @staticmethod
-    def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
-        if isinstance(outputs, torch.Tensor):
-            raise ValueError("GroupedGemmParallel should not be used with a single tensor, it should be used with a tuple of tensors")
-        torch.distributed.all_reduce(outputs[0], op=torch.distributed.ReduceOp.SUM)
-        return outputs
-
-
-    def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
-        # TODO: need an abstract Parallel class that is different from TensorParallelLayer
-        distribute_module(
-            module,
-            device_mesh,
-            partial(self._prepare_input_fn, None, None),
-            partial(self._prepare_output_fn, None, None),
-        )
-
-
 class RouterParallel(TensorParallelLayer):
-    # applies EP to router
+    """
+    Applies Expert Parallelism to MoE router
+    """
     def __init__(self, *args, **kwargs):
         self.args = args
         self.kwargs = kwargs
@@ -799,6 +785,7 @@ class RouterParallel(TensorParallelLayer):
         return router_scores, router_indices
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
+        # TODO: i'd like for this to be the default
         param = param[...].to(param_casting_dtype)
         if to_contiguous:
             param = param.contiguous()
