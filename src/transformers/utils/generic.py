@@ -956,9 +956,9 @@ def can_return_tuple(func):
     @wraps(func)
     def wrapper(self, *args, **kwargs):
         return_dict = self.config.return_dict if hasattr(self, "config") else True
-        return_dict = kwargs.pop("return_dict", return_dict)
-        if return_dict is None:
-            return_dict = return_dict
+        return_dict_passed = kwargs.pop("return_dict", return_dict)
+        if return_dict_passed is not None:
+            return_dict = return_dict_passed
         output = func(self, *args, **kwargs)
         if not return_dict and not isinstance(output, tuple):
             output = output.to_tuple()

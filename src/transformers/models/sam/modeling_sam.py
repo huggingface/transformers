@@ -33,7 +33,6 @@ from ...processing_utils import Unpack
 from ...utils import (
     ModelOutput,
     auto_docstring,
-    can_return_tuple,
     logging,
 )
 from .configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig

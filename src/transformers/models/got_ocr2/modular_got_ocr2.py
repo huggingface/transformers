@@ -29,10 +29,10 @@ from transformers.models.llava.modeling_llava import (
 )
 from transformers.models.sam.modeling_sam import (
     SamMLPBlock,
+    SamPreTrainedModel,
     SamVisionAttention,
     SamVisionEncoder,
     SamVisionLayer,
-    SamPreTrainedModel,
 )
 
 from ...configuration_utils import PretrainedConfig

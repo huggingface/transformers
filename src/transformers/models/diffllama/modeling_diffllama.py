@@ -249,8 +249,6 @@ class DiffLlamaFlashAttention2(DiffLlamaAttention):
                 "make sure to use `sdpa` in the mean time, and open an issue at https://github.com/huggingface/transformers"
             )
 
-        output_attentions = False
-
         bsz, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)
@@ -365,7 +363,7 @@ class DiffLlamaFlashAttention2(DiffLlamaAttention):
         attn_output = (1 - self.lambda_init) * self.groupnorm(attn_output)
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
+        return attn_output, None
 
 
 class DiffLlamaSdpaAttention(DiffLlamaAttention):
