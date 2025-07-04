@@ -1486,7 +1486,7 @@ if __name__ == "__main__":
     )
 
     current_artifacts = sorted(filter(os.path.isdir, os.listdir()))
-    prev_artifacts = sorted(os.listdir(output_dir))
+    prev_artifacts = sorted(filter(os.path.isdir, output_dir))
 
     print(f"current_artifacts: {current_artifacts}")
     print(f"prev_artifacts: {prev_artifacts}")

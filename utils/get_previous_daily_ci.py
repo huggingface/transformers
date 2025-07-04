@@ -132,6 +132,11 @@ def get_last_daily_ci_reports(
     for artifact_name in downloaded_artifact_names:
         artifact_zip_path = os.path.join(output_dir, f"{artifact_name}.zip")
         if os.path.isfile(artifact_zip_path):
+
+            target_dir = os.path.join(output_dir, artifact_name)
+            with zipfile.ZipFile(artifact_zip_path) as z:
+                z.extractall(target_dir)
+
             results[artifact_name] = {}
             with zipfile.ZipFile(artifact_zip_path) as z:
                 for filename in z.namelist():
