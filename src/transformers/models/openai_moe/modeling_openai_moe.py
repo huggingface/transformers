@@ -66,12 +66,13 @@ class OpenAIMoeExperts(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.intermediate_size = config.intermediate_size
+        self.num_experts = config.num_local_experts
         self.hidden_size = config.hidden_size
         self.expert_dim = self.intermediate_size
-        self.gate_up_proj = nn.Parameter(torch.empty(config.num_local_experts, self.hidden_size, 2 * self.expert_dim))
-        self.gate_up_proj_bias = nn.Parameter(torch.empty(config.num_local_experts, 2 * self.expert_dim))
-        self.down_proj = nn.Parameter(torch.empty((config.num_local_experts, self.expert_dim, self.hidden_size)))
-        self.down_proj_bias = nn.Parameter(torch.empty(config.num_local_experts, self.hidden_size))
+        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_size, 2 * self.expert_dim))
+        self.gate_up_proj_bias = nn.Parameter(torch.empty(self.num_experts, 2 * self.expert_dim))
+        self.down_proj = nn.Parameter(torch.empty((self.num_experts, self.expert_dim, self.hidden_size)))
+        self.down_proj_bias = nn.Parameter(torch.empty(self.num_experts, self.hidden_size))
         self.alpha = 1.702
 
     def forward(self, hidden_states: torch.Tensor, router_indices=None, routing_weights=None) -> torch.Tensor:
@@ -127,7 +128,7 @@ class OpenAIMoeExperts(nn.Module):
             next_states = next_states.view(num_experts, batch_size, -1, self.hidden_size) # (num_experts, batch_size, seq_len, hidden_size)
         return next_states, None
 
-class TopKRouter(nn.Module): # TODO: if i inherit from module it'll be annoying to attach hook to parent module
+class TopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
