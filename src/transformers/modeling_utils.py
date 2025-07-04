@@ -2052,7 +2052,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         self._no_split_modules = self._no_split_modules or []
 
-    def post_init(self):
+    def post_init(self, device_mesh):
         """
         A method executed at the end of each Transformer model initialization, to execute code that needs the model's
         modules properly initialized (such as weight initialization).
@@ -2092,8 +2092,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     )
 
         # loop over named modules and attach hooks. this is necessary when a module doesn't have parameters and thus we never hit
-        # device_mesh = self._device_mesh # TODO: can we attach device_mesh to model
-        device_mesh = torch.distributed.device_mesh.DeviceMesh.from_group(torch.distributed.distributed_c10d._get_default_group(), device_type="cuda") # TODO:
         for name, module in self.named_modules():
             if not getattr(module, "_is_hooked", False): # this adds gather hook to layers.*.mlp.experts and skips the rest
                 from transformers.integrations.tensor_parallel import add_tensor_parallel_hooks_to_module
@@ -4650,6 +4648,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         with ContextManagers(model_init_context):
             # Let's make sure we don't run the init function of buffer modules
+            model_kwargs["device_mesh"] = device_mesh
             model = cls(config, *model_args, **model_kwargs)
 
         # Make sure to tie the weights correctly
