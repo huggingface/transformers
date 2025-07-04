@@ -765,6 +765,11 @@ class TrainingArguments:
 
             May be slower in distributed training as gather operations must be called.
 
+        include_num_input_image_tokens_seen (`bool`, *optional*):
+            Whether or not to track the number of input image tokens seen throughout training.
+
+            May be slower in distributed training as gather operations must be called.
+
         neftune_noise_alpha (`Optional[float]`):
             If not `None`, this will activate NEFTune noise embeddings. This can drastically improve model performance
             for instruction fine-tuning. Check out the [original paper](https://huggingface.co/papers/2310.05914) and the
@@ -1496,6 +1501,13 @@ class TrainingArguments:
         default=False,
         metadata={
             "help": "If set to `True`, will track the number of input tokens seen throughout training. (May be slower in distributed training)"
+        },
+    )
+
+    include_num_input_image_tokens_seen: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "If set to `True`, will track the number of input image tokens seen throughout training. (May be slower in distributed training)"
         },
     )
 

@@ -388,7 +388,7 @@ def total_processes_number(local_rank):
     return 1
 
 
-def speed_metrics(split, start_time, num_samples=None, num_steps=None, num_tokens=None):
+def speed_metrics(split, start_time, num_samples=None, num_steps=None, num_tokens=None, num_image_tokens=None):
     """
     Measure and return speed performance metrics.
 
@@ -401,6 +401,7 @@ def speed_metrics(split, start_time, num_samples=None, num_steps=None, num_token
     - num_samples: number of samples processed
     - num_steps: number of steps processed
     - num_tokens: number of tokens processed
+    - num_image_tokens: number of image tokens processed
     """
     runtime = time.time() - start_time
     result = {f"{split}_runtime": round(runtime, 4)}
@@ -415,6 +416,9 @@ def speed_metrics(split, start_time, num_samples=None, num_steps=None, num_token
     if num_tokens is not None:
         tokens_per_second = num_tokens / runtime
         result[f"{split}_tokens_per_second"] = round(tokens_per_second, 3)
+    if num_image_tokens is not None:
+        image_tokens_per_second = num_image_tokens / runtime
+        result[f"{split}_image_tokens_per_second"] = round(image_tokens_per_second, 3)
     return result
 
 

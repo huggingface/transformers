@@ -102,6 +102,7 @@ class TrainerState:
     train_batch_size: Optional[int] = None
     num_train_epochs: int = 0
     num_input_tokens_seen: int = 0
+    num_input_image_tokens_seen: int = 0
     total_flos: float = 0
     log_history: list[dict[str, float]] = None
     best_metric: Optional[float] = None
