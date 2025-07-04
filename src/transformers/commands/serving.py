@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import functools
 import json
 import re
@@ -86,6 +87,9 @@ if is_pydantic_available() and is_fastapi_available() and is_uvicorn_available()
         # tool_prompt: Optional[str] = None
         # top_logprobs: Optional[int] = None
 
+        # transformers-specific request fields
+        generation_config: Optional[str] = None
+
 
 logger = logging.get_logger(__name__)
 
@@ -110,26 +114,31 @@ def serve_command_factory(args: Namespace):
     return ServeCommand(args)
 
 
-def create_generation_config_from_req(req: "ChatCompletionInput", **kwargs) -> "GenerationConfig":
+def create_generation_config_from_req(
+    req: "ChatCompletionInput", model_generation_config: "GenerationConfig", **kwargs
+) -> "GenerationConfig":
     """
-    Creates a generation config from the parameters of the request. Note that we can pass a `GenerationConfig`
-    (serialized into a `dict`) in `extra_body`, for full `generate` parameterization.
+    Creates a generation config from the parameters of the request. If a generation config is passed in the request,
+    it will be used as a baseline for parameterization. Otherwise, we will use the model's default generation config.
+    Other parameters in the request will be applied on top of the baseline.
 
     Args:
-        req (`ChatCompletionInput`): The request which may optionally contain generation parameters.
+        req (`ChatCompletionInput`):
+            The request which may optionally contain generation parameters.
+        model_generation_config (`GenerationConfig`):
+            The model's default generation config.
 
     Returns:
         The prepared `GenerationConfig` object.
     """
-    if req.extra_body is not None and "generation_config" in req.extra_body:
-        for key in req.extra_body["generation_config"].keys():
-            if key in ChatCompletionInput.base_field_names.keys():
-                raise ValueError("error: Duplicated key in the root request and in the passed generation config.")
-
-    if req.extra_body is not None and "generation_config" in req.extra_body:
-        generation_config = GenerationConfig(**(req.extra_body["generation_config"]), **kwargs)
+    # If there is a generation config in the request, it is a json string serialization from a `GenerationConfig`
+    # object. For simplicity, flags set here take precedence over all other flags.
+    if req.generation_config is not None:
+        generation_config = GenerationConfig(**json.loads(req.generation_config))
     else:
-        generation_config = GenerationConfig(**kwargs)
+        generation_config = copy.deepcopy(model_generation_config)
+
+    generation_config.update(**kwargs)
 
     if req.frequency_penalty is not None:
         generation_config.repetition_penalty = float(req.frequency_penalty)
@@ -380,6 +389,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
             generation_config = create_generation_config_from_req(
                 req,
+                model_generation_config=self.model.generation_config,
                 eos_token_id=self.tokenizer.eos_token_id,
                 pad_token_id=self.tokenizer.pad_token_id,
                 use_cache=False,
@@ -507,7 +517,10 @@ class ServeCommand(BaseTransformersCLICommand):
 
             generation_streamer = TextIteratorStreamer(self.tokenizer, skip_special_tokens=True, skip_prompt=True)
 
-            generation_config = create_generation_config_from_req(req)
+            generation_config = create_generation_config_from_req(
+                req,
+                model_generation_config=self.model.generation_config,
+            )
             max_new_tokens = req.max_tokens or generation_config.max_new_tokens or 1024
             generation_config.max_new_tokens = max_new_tokens
 
