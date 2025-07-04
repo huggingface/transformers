@@ -348,9 +348,9 @@ class Ernie4_5Attention(nn.Module):
         ## rope
         query_states_dtype = query_states.dtype
 
-        kv_seq_len = key_states.shape[-3]
         offset = 0
-        if past_key_value is not None:
+        kv_seq_len = key_states.shape[-3]
+        if past_key_value is not None and not kv_seq_len > 1:
             #offset = past_key_value[0].shape[-3]
             offset = past_key_value.get_seq_length()
             kv_seq_len += offset
