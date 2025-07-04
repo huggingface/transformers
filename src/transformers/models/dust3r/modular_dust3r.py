@@ -45,7 +45,7 @@ from .configuration_dust3r import Dust3RConfig
 logger = logging.get_logger(__name__)
 
 try:
-    from .third_party import RoPE2D  # type: ignore
+    from .third_party import RoPE2D  # type: ignore[import-untyped]
 except (ImportError, ModuleNotFoundError):
 
     class RoPE2D:

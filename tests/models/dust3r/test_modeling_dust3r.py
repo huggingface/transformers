@@ -265,7 +265,9 @@ def prepare_img():
 class Dust3RModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return Dust3RImageProcessor.from_pretrained("google/dust3r-base-patch16-224") if is_vision_available() else None
+        return (
+            Dust3RImageProcessor.from_pretrained("google/dust3r-base-patch16-224") if is_vision_available() else None
+        )
 
     @slow
     def test_inference_image_classification_head(self):
