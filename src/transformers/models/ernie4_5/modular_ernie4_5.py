@@ -13,10 +13,8 @@
 # limitations under the License.
 """PyTorch Ernie 4.5 model"""
 
-import torch
 from torch import nn
 
-from ...modeling_rope_utils import dynamic_rope_update
 from ...utils import auto_docstring, can_return_tuple
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -54,29 +52,7 @@ class Ernie4_5MLP(LlamaMLP):
 
 
 class Ernie4_5RotaryEmbedding(LlamaRotaryEmbedding):
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            # key difference to llama rope happens here to force an even/odd pattern instead
-            freqs = (inv_freq_expanded.float() * position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.stack((freqs, freqs), dim=-1).reshape(*freqs.shape[:2], -1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-
-def rotate_half(x):
-    """Rotates half (in even/odd pattern) the hidden dims of the input."""
-    input_shape = x.shape[:-1]
-    x1 = x[..., 0::2]
-    x2 = x[..., 1::2]
-    return torch.stack((-x2, x1), dim=-1).reshape(*input_shape, -1)
+    pass
 
 
 class Ernie4_5Attention(LlamaAttention):

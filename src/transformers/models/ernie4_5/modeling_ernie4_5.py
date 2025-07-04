@@ -135,13 +135,19 @@ class Ernie4_5RotaryEmbedding(nn.Module):
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            # key difference to llama rope happens here to force an even/odd pattern instead
-            freqs = (inv_freq_expanded.float() * position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.stack((freqs, freqs), dim=-1).reshape(*freqs.shape[:2], -1)
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
             sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
@@ -207,14 +213,6 @@ def eager_attention_forward(
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
-
-
-def rotate_half(x):
-    """Rotates half (in even/odd pattern) the hidden dims of the input."""
-    input_shape = x.shape[:-1]
-    x1 = x[..., 0::2]
-    x2 = x[..., 1::2]
-    return torch.stack((-x2, x1), dim=-1).reshape(*input_shape, -1)
 
 
 class Ernie4_5Attention(nn.Module):
