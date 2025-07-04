@@ -1493,8 +1493,14 @@ if __name__ == "__main__":
     print(f"current_artifacts: {current_artifacts}")
     print(f"prev_artifacts: {prev_artifacts}")
 
+    for d in current_artifacts:
+        print(d)
+        print(os.listdir(d))
+        print("====" * 30)
+
     for d in prev_artifacts:
         d2 = os.path.join(output_dir, d)
+        print(d2)
         print(os.listdir(d2))
         print("====" * 30)
 
