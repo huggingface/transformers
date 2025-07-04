@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Aria model."""
 
-import gc
 import unittest
 
 import requests
@@ -32,7 +31,7 @@ from transformers import (
 from transformers.models.idefics3 import Idefics3VisionConfig
 from transformers.testing_utils import (
     Expectations,
-    backend_empty_cache,
+    cleanup,
     require_bitsandbytes,
     require_torch,
     require_torch_large_accelerator,
@@ -252,14 +251,23 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
         pass
 
 
+SKIP = False
+torch_accelerator_module = getattr(torch, torch_device)
+memory = 23  # skip on T4 / A10
+if hasattr(torch_accelerator_module, "get_device_properties"):
+    if torch_accelerator_module.get_device_properties(0).total_memory / 1024**3 < memory:
+        SKIP = True
+
+
+@unittest.skipIf(SKIP, reason="A10 doesn't have enough GPU memory for this tests")
 @require_torch
 class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("rhymes-ai/Aria")
+        cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
-        gc.collect()
-        backend_empty_cache(torch_device)
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     @require_torch_large_accelerator
