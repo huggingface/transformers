@@ -116,16 +116,16 @@ def get_last_daily_ci_artifacts(
 
 
 def get_last_daily_ci_reports(
-    artifact_names, output_dir, token, workflow_run_id=None, workflow_id=None, commit_sha=None
+    output_dir, token, workflow_run_id=None, workflow_id=None, commit_sha=None, artifact_names=None,
 ):
     """Get the artifacts' content of the last completed workflow run id of the scheduled (daily) CI."""
     downloaded_artifact_names = get_last_daily_ci_artifacts(
-        artifact_names,
         output_dir,
         token,
         workflow_run_id=workflow_run_id,
         workflow_id=workflow_id,
         commit_sha=commit_sha,
+        artifact_names = artifact_names,
     )
 
     results = {}

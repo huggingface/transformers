@@ -1479,7 +1479,7 @@ if __name__ == "__main__":
                 other_ci_artifacts.append((target_workflow_run_id, ci_artifacts))
 
     ci_artifacts = get_last_daily_ci_reports(
-        artifact_names=artifact_names,
+        artifact_names=None,
         output_dir=output_dir,
         token=os.environ["ACCESS_REPO_INFO_TOKEN"],
         workflow_run_id=target_workflow_run_id,
