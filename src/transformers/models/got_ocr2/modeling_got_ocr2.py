@@ -158,7 +158,7 @@ class GotOcr2VisionAttention(nn.Module):
 
         return decomposed_rel_pos
 
-    def forward(self, hidden_states: torch.Tensor, output_attentions=False) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, output_attentions=None) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, height, width, _ = hidden_states.shape
         # qkv with shape (3, batch_size, nHead, height * width, channel)
         qkv = (
@@ -377,14 +377,13 @@ class GotOcr2VisionNeck(nn.Module):
         return hidden_states
 
 
-class GotOcr2VisionEncoder(PreTrainedModel):
+class GotOcr2VisionEncoder(GotOcr2PreTrainedModel):
     _can_record_outputs = {"hidden_states": GotOcr2VisionLayer, "attentions": GotOcr2VisionAttention}
 
     def __init__(self, config: GotOcr2VisionConfig):
         super().__init__(config)
         self.config = config
         self.image_size = config.image_size
-
         self.patch_embed = GotOcr2PatchEmbeddings(config)
 
         self.pos_embed = None
