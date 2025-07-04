@@ -129,9 +129,6 @@ def get_last_daily_ci_reports(
     )
 
     results = {}
-    print(downloaded_artifact_names)
-    os.system(f"ls -la {output_dir}")
-
     for artifact_name in downloaded_artifact_names:
         artifact_zip_path = os.path.join(output_dir, f"{artifact_name}.zip")
         if os.path.isfile(artifact_zip_path):
@@ -139,17 +136,23 @@ def get_last_daily_ci_reports(
             target_dir = os.path.join(output_dir, artifact_name)
             with zipfile.ZipFile(artifact_zip_path) as z:
                 z.extractall(target_dir)
-                print(target_dir)
-                os.system(f"ls -la {target_dir}")
-                print("=====" * 30)
 
             results[artifact_name] = {}
-            with zipfile.ZipFile(artifact_zip_path) as z:
-                for filename in z.namelist():
-                    if not os.path.isdir(filename):
-                        # read the file
-                        with z.open(filename) as f:
-                            content = f.read().decode("UTF-8")
-                            results[artifact_name][filename] = content
+            # with zipfile.ZipFile(artifact_zip_path) as z:
+            #     for filename in z.namelist():
+            #         if not os.path.isdir(filename):
+            #             # read the file
+            #             with z.open(filename) as f:
+            #                 content = f.read().decode("UTF-8")
+            #                 results[artifact_name][filename] = content
+
+            filename = os.listdir(target_dir)
+            for filename in filename:
+                file_path = os.path.join(target_dir, filename)
+                if not os.path.isdir(file_path):
+                    # read the file
+                    with open(file_path) as fp:
+                        content = fp.read()
+                        results[artifact_name][filename] = content
 
     return results
