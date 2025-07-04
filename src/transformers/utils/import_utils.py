@@ -974,7 +974,10 @@ def is_torchdynamo_compiling():
 
             return dynamo.is_compiling()
         except Exception:
-            return False
+            try: 
+                return dynamo.external_utils.is_compiling() # Support for older versions.
+            except Exception:
+                return False
 
 
 def is_torchdynamo_exporting():
