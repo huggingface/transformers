@@ -17,7 +17,7 @@ from typing import Callable, Optional, Union
 import torch
 import torch.nn as nn
 
-from transformers.utils.generic import check_model_inputs
+from transformers.utils.generic import OutputRecorder, check_model_inputs
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
@@ -536,8 +536,8 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
 
     main_input_name = "input_values"
     _can_record_outputs = {
-        "attentions": (MoonshineAttention, 1, "self_attn"),
-        "hidden_states": (MoonshineEncoderLayer,),
+        "attentions": MoonshineAttention,
+        "hidden_states": MoonshineEncoderLayer,
     }
 
     def __init__(self, config: MoonshineConfig):
@@ -635,9 +635,9 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
 class MoonshineDecoder(LlamaModel):
     main_input_name = "input_ids"
     _can_record_outputs = {
-        "attentions": (MoonshineAttention, 1, "self_attn"),
-        "hidden_states": (MoonshineDecoderLayer,),
-        "cross_attentions": (MoonshineAttention, 1, "encoder_attn"),
+        "attentions": OutputRecorder(MoonshineAttention, index=1, layer_name="self_attn"),
+        "hidden_states": MoonshineDecoderLayer,
+        "cross_attentions": OutputRecorder(MoonshineAttention, index=1, layer_name="encoder_attn"),
     }
 
     def __init__(self, config: MoonshineConfig):
@@ -700,26 +700,19 @@ class MoonshineDecoder(LlamaModel):
         )
 
         hidden_states = inputs_embeds
-
-        # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        # attention mask downsampling
         if encoder_attention_mask is not None:
             mask_len = encoder_hidden_states.shape[-2]
             downsample_stride = 64 * 3 * 2  # conv strides
             encoder_attention_mask = encoder_attention_mask[..., ::downsample_stride][..., :mask_len]
             if self.config._attn_implementation == "flash_attention_2":
                 encoder_attention_mask = encoder_attention_mask if (encoder_attention_mask == 0.0).any() else None
-
-            # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
             elif self.config._attn_implementation == "sdpa":
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
                 encoder_attention_mask = _prepare_4d_attention_mask_for_sdpa(
                     encoder_attention_mask, hidden_states.dtype, hidden_states.shape[-2]
                 )
             else:
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
                 encoder_attention_mask = _prepare_4d_attention_mask(
                     encoder_attention_mask, hidden_states.dtype, hidden_states.shape[-2]
                 )
