@@ -473,7 +473,7 @@ class SamHQVisionNeck(nn.Module):
         return hidden_states
 
 
-class SamHQVisionEncoder(PreTrainedModel):
+class SamHQVisionEncoder(SamHQPreTrainedModel):
     _can_record_outputs = {
         "hidden_states": SamHQVisionLayer,
         "attentions": SamHQVisionAttention,

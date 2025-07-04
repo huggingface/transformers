@@ -1025,7 +1025,35 @@ class SamVisionNeck(nn.Module):
         return hidden_states
 
 
-class SamVisionEncoder(PreTrainedModel):
+@auto_docstring
+class SamPreTrainedModel(PreTrainedModel):
+    config_class = SamConfig
+    base_model_prefix = "sam"
+    main_input_name = "pixel_values"
+    _no_split_modules = ["SamVisionAttention"]
+    supports_gradient_checkpointing = True
+    _supports_sdpa = True
+
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, (SamLayerNorm, nn.LayerNorm)):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
+        elif isinstance(module, SamVisionAttention):
+            if module.use_rel_pos:
+                module.rel_pos_h.data.zero_()
+                module.rel_pos_w.data.zero_()
+
+
+class SamVisionEncoder(SamPreTrainedModel):
     _can_record_outputs = {"hidden_states": SamVisionLayer, "attentions": SamVisionAttention}
 
     def __init__(self, config: SamVisionConfig):
@@ -1077,34 +1105,6 @@ class SamVisionEncoder(PreTrainedModel):
         return SamVisionEncoderOutput(
             last_hidden_state=hidden_states,
         )
-
-
-@auto_docstring
-class SamPreTrainedModel(PreTrainedModel):
-    config_class = SamConfig
-    base_model_prefix = "sam"
-    main_input_name = "pixel_values"
-    _no_split_modules = ["SamVisionAttention"]
-    supports_gradient_checkpointing = True
-    _supports_sdpa = True
-
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, (SamLayerNorm, nn.LayerNorm)):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-        elif isinstance(module, SamVisionAttention):
-            if module.use_rel_pos:
-                module.rel_pos_h.data.zero_()
-                module.rel_pos_w.data.zero_()
 
 
 @auto_docstring(
