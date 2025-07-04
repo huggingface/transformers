@@ -199,10 +199,8 @@ def get_packed_weights(param, empty_param, device_mesh, rank, dim):
     slice_dtype = slice_.get_dtype()
     # Handle F8_E4M3 dtype by converting to float16 before slicing
     # Without upcasting, the slicing causes : RuntimeError: "index_cpu" not implemented for 'Float8_e4m3fn'
-    casted = False
     if slice_dtype == "F8_E4M3":
         slice_ = slice_[...].to(torch.float16)
-        casted = True
 
     if dim == 0:
         tensor = slice_[tensors_slices, ...]
@@ -212,11 +210,7 @@ def get_packed_weights(param, empty_param, device_mesh, rank, dim):
         tensor = slice_[..., tensors_slices]
     else:
         raise ValueError(f"Unsupported dim {dim}, only dim 0, 1 or 2 are supported")
-
-    if casted:
-        return tensor
-    else:
-        return tensor.to(str_to_torch_dtype[slice_dtype])
+    return tensor.to(str_to_torch_dtype[slice_dtype])
 
 
 def repack_weights(
@@ -469,19 +463,6 @@ class IsolatedParallel(TensorParallelLayer):
         )
 
 
-class ShardedBias(IsolatedParallel):
-    """
-    This will just partition the tensor to be replicated but scaled by the mesh dim!
-    """
-
-    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
-        param = param[...].to(param_casting_dtype)
-        if to_contiguous:
-            param = param.contiguous()
-        param = param / device_mesh.size()  # TODO should be optionable
-        return param
-
-
 class ReplicateParallel(TensorParallelLayer):
     """
     This class is used to replicate computation in a TP layer (used in SP regions when we don't use sequence parallelism for example)
@@ -580,28 +561,11 @@ class ColwiseParallel(TensorParallelLayer):
 
 
 class PackedColwiseParallel(ColwiseParallel):
-    def __init__(
-        self,
-        *,
-        input_layouts: Optional[Placement] = None,
-        output_layouts: Optional[Placement] = None,
-        use_local_output: bool = True,
-        use_dtensor=True,
-        partition_dim=-2,
-    ):
-        super().__init__()
-        self.partition_dim = partition_dim
-        self.input_layouts = (input_layouts or Replicate(),)
-        self.output_layouts = (output_layouts or Shard(-1),)
-        self.desired_input_layouts = (Replicate(),)
-        self.use_local_output = use_local_output
-        self.use_dtensor = use_dtensor
-
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         # colwise shard weight/bias to Shard(0), weight be Shard(-2) (0 if you have 1 dim only)
         # means Colwise as Linear is input * weight^T + bias, where
         # weight would become Shard(1)
-        parameter = get_packed_weights(param, empty_param, device_mesh, rank, self.partition_dim)
+        parameter = get_packed_weights(param, empty_param, device_mesh, rank, -2)
         parameter = parameter.to(param_casting_dtype)
         if to_contiguous:
             parameter = parameter.contiguous()
@@ -779,6 +743,7 @@ class SequenceParallel(TensorParallelLayer):
         self.use_local_output = use_local_output
         self.use_dtensor = True
         self.sequence_sharding = (Shard(sequence_dim),)
+        self.use_local_output = use_local_output
 
     @staticmethod
     def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
@@ -825,8 +790,6 @@ class ParallelInterface(GeneralInterface):
             "local_packed_rowwise": PackedRowwiseParallel(use_dtensor=False),
             "sequence_parallel": SequenceParallel(),
             "replicate": ReplicateParallel(),
-            "bias": ShardedBias(),
-            "expert_colwise": PackedColwiseParallel(partition_dim=0),
         }
         if is_torch_greater_or_equal("2.5") and _torch_distributed_available
         else {}
@@ -879,9 +842,7 @@ def replace_state_dict_local_with_dtensor(
     return state_dict
 
 
-def add_tensor_parallel_hooks_to_module(
-    model, module, tp_plan, layer_name, current_module_plan, device_mesh, parameter_name=None
-):
+def add_tensor_parallel_hooks_to_module(model, module, tp_plan, layer_name, current_module_plan, device_mesh):
     """
     Add hooks to the module holding the layer. Meaning:
     ```
@@ -908,19 +869,20 @@ def add_tensor_parallel_hooks_to_module(
             print(
                 f"Trying to prepare {layer_name}, but it's not supported. Corresponding module: {module} Fix it's TP plan: {e}"
             )
+        module._hf_tp_plan = current_module_plan
+        module.__repr__ = lambda: f"{module.__repr__()}\nTP Plan: {current_module_plan}"
 
     # 2. We add hooks to the parent module if needed
-    if "." in layer_name and current_module_plan != "replicate":
-        parent_layer_name = parameter_name.rsplit(".", 1)[0]
+    if "." in layer_name:
+        parent_layer_name = layer_name.rsplit(".", 1)[0]
         generic_name = re.sub(r"\d+", "*", parent_layer_name)
         # The module itself needs hooks
         if module_plan := tp_plan.get(generic_name, False):
             tp_layer = ALL_PARALLEL_STYLES[module_plan]
             module_to_tp_ = model.get_submodule(parent_layer_name)
-            if not getattr(module_to_tp_, "_hf_tp_plan", False):
-                tp_layer.prepare_module_tp(module_to_tp_, device_mesh)
-                module_to_tp_._hf_tp_plan = current_module_plan
-                module_to_tp_.__repr__ = lambda: f"{module_to_tp_.__repr__()}\nTP Plan: {current_module_plan}"
+            tp_layer.prepare_module_tp(module_to_tp_, device_mesh)
+            module_to_tp_._hf_tp_plan = current_module_plan
+            module_to_tp_.__repr__ = lambda: f"{module_to_tp_.__repr__()}\nTP Plan: {current_module_plan}"
 
 
 def shard_and_distribute_module(
@@ -940,40 +902,36 @@ def shard_and_distribute_module(
     module_to_tp = model.get_submodule(param_name)
     rank = int(rank)
 
-    current_shard_plan = _get_parameter_tp_plan(parameter_name, tp_plan)
+    current_module_plan = _get_parameter_tp_plan(parameter_name, tp_plan)
 
-    if current_shard_plan is None:
+    if current_module_plan is None:
+        current_module_plan = "replicate"
         if dist.get_rank() == 0:
-            logger.info(f"Tensor sharding plan for {param_name} not found, using default 'replicate' plan.")
+            logger.info(f"Tensor parallel plan for {param_name} not found, using default 'replicate' plan.")
     else:
         if dist.get_rank() == 0:
-            logger.info(f"Tensor sharding plan for {param_name}: {current_shard_plan}")
+            logger.info(f"Tensor parallel plan for {param_name}: {current_module_plan}")
 
     # Add hooks to the module if not done yet
     # add_tensor_parallel_hooks_to_module(model, module_to_tp, tp_plan, param_name, current_module_plan, device_mesh)
     if not getattr(module_to_tp, "_is_hooked", False):
-        add_tensor_parallel_hooks_to_module(
-            model, module_to_tp, tp_plan, param_name, current_shard_plan, device_mesh, parameter_name
-        )
+        add_tensor_parallel_hooks_to_module(model, module_to_tp, tp_plan, param_name, current_module_plan, device_mesh)
         module_to_tp._is_hooked = True
 
-    if current_shard_plan is not None:
-        try:
-            tp_layer = ALL_PARALLEL_STYLES[current_shard_plan]
-            param = tp_layer.partition_tensor(
-                param, empty_param, param_type, param_casting_dtype, is_contiguous, rank, device_mesh
-            )
-        except NotImplementedError as e:
-            print(
-                f"Trying to prepare {parameter_name}, but it's not supported. Corresponding module: {module_to_tp} Fix it's TP plan, current layer: {tp_layer} : {e}"
-            )
-    else:
-        param = param[:].to(param_casting_dtype)
+    try:
+        tp_layer = ALL_PARALLEL_STYLES[current_module_plan]
+        param = tp_layer.partition_tensor(
+            param, empty_param, param_type, param_casting_dtype, is_contiguous, rank, device_mesh
+        )
+    except NotImplementedError as e:
+        print(
+            f"Trying to prepare {parameter_name}, but it's not supported. Corresponding module: {module_to_tp} Fix it's TP plan, current layer: {tp_layer} : {e}"
+        )
 
     # SUPER IMPORTANT we have to use setattr
     # otherwise loading is crazy slow
     if not isinstance(param, torch.nn.Parameter):
-        param = torch.nn.Parameter(param, requires_grad=empty_param.is_floating_point())
+        param = torch.nn.Parameter(param, requires_grad=param.is_floating_point())
     setattr(module_to_tp, param_type, param)
     # module_to_tp.load_state_dict({param_type: param}, strict=False, assign=True)
     return param
