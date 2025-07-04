@@ -473,6 +473,37 @@ class SamHQVisionNeck(nn.Module):
         return hidden_states
 
 
+@auto_docstring
+class SamHQPreTrainedModel(PreTrainedModel):
+    config_class = SamHQConfig
+    base_model_prefix = "sam_hq"
+    main_input_name = "pixel_values"
+    _no_split_modules = ["SamHQVisionAttention"]
+    supports_gradient_checkpointing = True
+    _supports_sdpa = True
+
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, (SamHQLayerNorm, nn.LayerNorm)):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
+        elif isinstance(module, SamHQVisionAttention):
+            if module.use_rel_pos:
+                module.rel_pos_h.data.zero_()
+                module.rel_pos_w.data.zero_()
+        if isinstance(module, SamHQVisionEncoder):
+            if module.pos_embed is not None:
+                module.pos_embed.data.zero_()
+
+
 class SamHQVisionEncoder(SamHQPreTrainedModel):
     _can_record_outputs = {
         "hidden_states": SamHQVisionLayer,
@@ -1037,37 +1068,6 @@ class SamHQMaskDecoder(nn.Module):
             masks = masks_sam + masks_hq
 
         return masks, iou_pred
-
-
-@auto_docstring
-class SamHQPreTrainedModel(PreTrainedModel):
-    config_class = SamHQConfig
-    base_model_prefix = "sam_hq"
-    main_input_name = "pixel_values"
-    _no_split_modules = ["SamHQVisionAttention"]
-    supports_gradient_checkpointing = True
-    _supports_sdpa = True
-
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, (SamHQLayerNorm, nn.LayerNorm)):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-        elif isinstance(module, SamHQVisionAttention):
-            if module.use_rel_pos:
-                module.rel_pos_h.data.zero_()
-                module.rel_pos_w.data.zero_()
-        if isinstance(module, SamHQVisionEncoder):
-            if module.pos_embed is not None:
-                module.pos_embed.data.zero_()
 
 
 @auto_docstring(
