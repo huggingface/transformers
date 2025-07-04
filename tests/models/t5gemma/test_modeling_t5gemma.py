@@ -224,7 +224,6 @@ class T5GemmaModelTester:
             lm_labels,
         )
 
-    # Copied from tests.models.t5.test_modeling_t5.T5ModelTester.prepare_config_and_inputs_for_common
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -613,7 +612,6 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             num_hidden_layers=self.model_tester.num_hidden_layers,
         )
 
-    # Copied from tests.models.t5.test_modeling_t5.T5ModelTest.is_pipeline_test_to_skip
     def is_pipeline_test_to_skip(
         self,
         pipeline_test_case_name,
@@ -631,16 +629,13 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         return False
 
-    # Copied from tests.models.t5.test_modeling_t5.T5ModelTest.test_config
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    # Copied from tests.models.t5.test_modeling_t5.T5ModelTest.test_shift_right
     def test_shift_right(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_prepare_lm_labels_via_shift_left(*config_and_inputs)
 
-    # Copied from tests.models.t5.test_modeling_t5.T5ModelTest.test_model
     @unittest.skip("This was not properly written, submodules need the attribute to be overwritten")
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -676,7 +671,6 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             with torch.no_grad():
                 model(**inputs)[0]
 
-    # Copied from tests.models.t5.test_modeling_t5.T5ModelTest.test_config_and_model_silu_gated
     @unittest.skip("This was not properly written, submodules need the attribute to be overwritten")
     def test_config_and_model_silu_gated(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -684,12 +678,10 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config.feed_forward_proj = "gated-silu"
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    # Copied from tests.models.t5.test_modeling_t5.T5ModelTest.test_with_lm_head
     def test_with_lm_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_with_lm_head(*config_and_inputs)
 
-    # Copied from tests.models.t5.test_modeling_t5.T5ModelTest.test_with_sequence_classification_head
     def test_with_sequence_classification_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_with_sequence_classification_head(*config_and_inputs)
@@ -708,13 +700,11 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             *config_and_inputs, is_encoder_decoder
         )
 
-    # Copied from tests.models.t5.test_modeling_t5.T5ModelTest.test_decoder_model_past
     @unittest.skip("This was not properly written, submodules need the attribute to be overwritten")
     def test_decoder_model_past(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past(*config_and_inputs)
 
-    # Copied from tests.models.t5.test_modeling_t5.T5ModelTest.test_decoder_model_past_with_attn_mask
     def test_decoder_model_past_with_attn_mask(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
@@ -748,18 +738,15 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             lm_labels,
         )
 
-    # Copied from tests.models.t5.test_modeling_t5.T5ModelTest.test_decoder_model_past_with_large_inputs
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
-    # Copied from tests.models.t5.test_modeling_t5.T5ModelTest.test_generate_with_past_key_values
     def test_generate_with_past_key_values(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_generate_with_past_key_values(*config_and_inputs)
 
     @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
-    # Copied from tests.models.t5.test_modeling_t5.T5ModelTest.test_model_fp16_forward
     def test_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
