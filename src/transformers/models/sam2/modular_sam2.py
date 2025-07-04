@@ -743,8 +743,8 @@ class Sam2MaskDecoder(nn.Module):
         best_scores_inds = torch.argmax(multimask_iou_scores, dim=-1)
         batch_inds = torch.arange(multimask_iou_scores.size(0), device=all_iou_scores.device)
         point_batch_inds = torch.arange(multimask_iou_scores.size(1), device=all_iou_scores.device)
-        best_multimask_logits = multimask_logits[batch_inds, point_batch_inds, best_scores_inds]
-        best_multimask_iou_scores = multimask_iou_scores[batch_inds, point_batch_inds, best_scores_inds]
+        best_multimask_logits = multimask_logits[batch_inds, point_batch_inds, best_scores_inds].unsqueeze(2)
+        best_multimask_iou_scores = multimask_iou_scores[batch_inds, point_batch_inds, best_scores_inds].unsqueeze(2)
 
         # The mask from singlemask output token 0 and its stability score
         singlemask_logits = all_mask_logits[:, :, 0:1, :, :]
@@ -2190,7 +2190,7 @@ class Sam2Model(Sam2PreTrainedModel):
         if input_points is not None and input_labels is None:
             input_labels = torch.ones_like(input_points[:, :, :, 0], dtype=torch.int, device=input_points.device)
 
-        if input_points is None:
+        if input_points is None and input_boxes is None:
             # If no points are provide, pad with an empty point (with label -1)
             input_points = torch.zeros(batch_size, point_batch_size, 1, 2, device=image_embeddings[-1].device)
             input_labels = -torch.ones(

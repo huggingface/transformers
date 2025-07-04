@@ -70,6 +70,7 @@ class Sam2Processor(ProcessorMixin):
         input_points=None,
         input_labels=None,
         input_boxes=None,
+        original_sizes=None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> BatchEncoding:
@@ -77,18 +78,22 @@ class Sam2Processor(ProcessorMixin):
         This method uses [`SamImageProcessor.__call__`] method to prepare image(s) for the model. It also prepares 2D
         points and bounding boxes for the model if they are provided.
         """
-        encoding_image_processor = self.image_processor(
-            images,
-            segmentation_maps=segmentation_maps,
-            return_tensors=return_tensors,
-            **kwargs,
-        )
+        if images is not None:
+            encoding_image_processor = self.image_processor(
+                images,
+                segmentation_maps=segmentation_maps,
+                return_tensors=return_tensors,
+                **kwargs,
+            )
+        elif original_sizes is not None:
+            if isinstance(original_sizes, torch.Tensor):
+                original_sizes = original_sizes.cpu().tolist()
+            encoding_image_processor = BatchEncoding({"original_sizes": original_sizes}, tensor_type=return_tensors)
+        else:
+            raise ValueError("Either images or original_sizes must be provided")
 
         # pop arguments that are not used in the foward but used nevertheless
         original_sizes = encoding_image_processor["original_sizes"]
-
-        if hasattr(original_sizes, "numpy"):  # Checks if Torch or TF tensor
-            original_sizes = original_sizes.numpy()
 
         input_points, input_labels, input_boxes = self._check_and_preprocess_points(
             input_points=input_points,
@@ -153,14 +158,18 @@ class Sam2Processor(ProcessorMixin):
                     for point, original_size in zip(input_points, original_sizes)
                 ]
             # check that all arrays have the same shape
-            if not all(point.shape == input_points[0].shape for point in input_points):
+            if not all(point.shape[-2] == input_points[0].shape[-2] for point in input_points):
                 if input_labels is not None:
                     input_points, input_labels = self._pad_points_and_labels(input_points, input_labels)
 
-            input_points = np.array(input_points)
+            input_points = torch.stack(input_points)
+            input_points = input_points.unsqueeze(1) if len(input_points.shape) != 4 else input_points
+            encoding_image_processor.update({"input_points": input_points})
 
         if input_labels is not None:
-            input_labels = np.array(input_labels)
+            input_labels = torch.stack(input_labels)
+            input_labels = input_labels.unsqueeze(1) if len(input_labels.shape) != 3 else input_labels
+            encoding_image_processor.update({"input_labels": input_labels})
 
         if input_boxes is not None:
             if len(original_sizes) != len(input_boxes):
@@ -173,27 +182,9 @@ class Sam2Processor(ProcessorMixin):
                     self._normalize_coordinates(self.target_size, box, original_size, is_bounding_box=True)
                     for box, original_size in zip(input_boxes, original_sizes)
                 ]
-            input_boxes = np.array(input_boxes)
-
-        if input_boxes is not None:
-            if return_tensors == "pt":
-                input_boxes = torch.from_numpy(input_boxes)
-                # boxes batch size of 1 by default
-                input_boxes = input_boxes.unsqueeze(1) if len(input_boxes.shape) != 3 else input_boxes
-
+            input_boxes = torch.stack(input_boxes)
+            input_boxes = input_boxes.unsqueeze(1) if len(input_boxes.shape) != 3 else input_boxes
             encoding_image_processor.update({"input_boxes": input_boxes})
-        if input_points is not None:
-            if return_tensors == "pt":
-                input_points = torch.from_numpy(input_points)
-                # point batch size of 1 by default
-                input_points = input_points.unsqueeze(1) if len(input_points.shape) != 4 else input_points
-            encoding_image_processor.update({"input_points": input_points})
-        if input_labels is not None:
-            if return_tensors == "pt":
-                input_labels = torch.from_numpy(input_labels)
-                # point batch size of 1 by default
-                input_labels = input_labels.unsqueeze(1) if len(input_labels.shape) != 3 else input_labels
-            encoding_image_processor.update({"input_labels": input_labels})
 
         return encoding_image_processor
 
@@ -201,31 +192,43 @@ class Sam2Processor(ProcessorMixin):
         r"""
         The method pads the 2D points and labels to the maximum number of points in the batch.
         """
-        expected_nb_points = max([point.shape[0] for point in input_points])
+        expected_nb_points = max([point.shape[-2] for point in input_points])
         processed_input_points = []
         for i, point in enumerate(input_points):
-            if point.shape[0] != expected_nb_points:
-                point = np.concatenate(
-                    [point, np.zeros((expected_nb_points - point.shape[0], 2)) + self.point_pad_value], axis=0
+            if point.shape[-2] != expected_nb_points:
+                shape_point = point.shape[:-2]
+                shape_label = input_labels[i].shape[:-1]
+                point = torch.cat(
+                    [
+                        point,
+                        torch.zeros((*shape_point, expected_nb_points - point.shape[-2], 2)) + self.point_pad_value,
+                    ],
+                    axis=-2,
                 )
-                input_labels[i] = np.append(input_labels[i], [self.point_pad_value])
+                input_labels[i] = torch.cat(
+                    [
+                        input_labels[i],
+                        torch.zeros((*shape_label, expected_nb_points - input_labels[i].shape[-1]))
+                        + self.point_pad_value,
+                    ],
+                    axis=-1,
+                )
             processed_input_points.append(point)
         input_points = processed_input_points
         return input_points, input_labels
 
     def _normalize_coordinates(
-        self, target_size: int, coords: np.ndarray, original_size, is_bounding_box=False
-    ) -> np.ndarray:
+        self, target_size: int, coords: "torch.Tensor", original_size, is_bounding_box=False
+    ) -> "torch.Tensor":
         """
         Expects a numpy array of length 2 in the final dimension. Requires the original image size in (H, W) format.
         """
         old_h, old_w = original_size
         new_h, new_w = target_size, target_size
-        coords = deepcopy(coords).astype(float)
+        coords = deepcopy(coords).float()
 
         if is_bounding_box:
             coords = coords.reshape(-1, 2, 2)
-
         coords[..., 0] = coords[..., 0] * (new_w / old_w)
         coords[..., 1] = coords[..., 1] * (new_h / old_h)
 
@@ -248,26 +251,32 @@ class Sam2Processor(ProcessorMixin):
         if input_points is not None:
             if hasattr(input_points, "numpy"):  # Checks for TF or Torch tensor
                 input_points = input_points.numpy().tolist()
+            elif hasattr(input_points, "tolist"):
+                input_points = input_points.tolist()
 
             if not isinstance(input_points, list) or not isinstance(input_points[0], list):
                 raise ValueError("Input points must be a list of list of floating points.")
-            input_points = [np.array(input_point) for input_point in input_points]
+            input_points = [torch.tensor(input_point) for input_point in input_points]
         else:
             input_points = None
 
         if input_labels is not None:
             if hasattr(input_labels, "numpy"):
                 input_labels = input_labels.numpy().tolist()
+            elif hasattr(input_labels, "tolist"):
+                input_labels = input_labels.tolist()
 
             if not isinstance(input_labels, list) or not isinstance(input_labels[0], list):
                 raise ValueError("Input labels must be a list of list integers.")
-            input_labels = [np.array(label) for label in input_labels]
+            input_labels = [torch.tensor(label) for label in input_labels]
         else:
             input_labels = None
 
         if input_boxes is not None:
             if hasattr(input_boxes, "numpy"):
                 input_boxes = input_boxes.numpy().tolist()
+            elif hasattr(input_boxes, "tolist"):
+                input_boxes = input_boxes.tolist()
 
             if (
                 not isinstance(input_boxes, list)
@@ -275,7 +284,7 @@ class Sam2Processor(ProcessorMixin):
                 or not isinstance(input_boxes[0][0], list)
             ):
                 raise ValueError("Input boxes must be a list of list of list of floating points.")
-            input_boxes = [np.array(box).astype(np.float32) for box in input_boxes]
+            input_boxes = [torch.tensor(box).float() for box in input_boxes]
         else:
             input_boxes = None
 

@@ -815,14 +815,6 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         inputs = self.processor(
             images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt"
         ).to(torch_device)
-        # to_tensor = ToTensor()
-        # transforms = torch.jit.script(
-        #     nn.Sequential(
-        #         Resize((1024, 1024)),
-        #         Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-        #     )
-        # )
-        # inputs["pixel_values"] = transforms(to_tensor(raw_image)).unsqueeze(0).to("cuda")
 
         with torch.no_grad():
             outputs = self.model(**inputs)
@@ -873,7 +865,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
     def test_inference_mask_generation_batched_points_batched_images(self):
         raw_image1 = prepare_image()
         raw_image2 = prepare_dog_img()
-        input_points = [[[[500, 375], [10, 10]]], [[[770, 200], [730, 120]]]]
+        input_points = [[[[500, 375]]], [[[770, 200], [730, 120]]]]
         input_labels = [[[1]], [[1, 0]]]
 
         inputs = self.processor(
@@ -911,6 +903,79 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             masks_logits2,
             torch.tensor(
                 [[-13.1202, -17.3222, -14.9687], [-16.2375, -12.7737, -17.6353], [-13.5025, -17.1528, -15.6627]]
+            ).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
+
+    def test_inference_mask_generation_from_existing_points_and_mask(self):
+        raw_image = prepare_image()
+        input_points = [[[[500, 375]]]]
+        input_labels = [[[1]]]
+        original_inputs = self.processor(
+            images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt"
+        ).to(torch_device)
+        with torch.no_grad():
+            outputs = self.model(**original_inputs)
+
+        # best mask to use as input for new points
+        mask_input = outputs.low_res_masks[:, :, torch.argmax(outputs.iou_scores)]
+
+        new_input_points = [[[500, 375], [1125, 625]]]
+        new_input_labels = [[1, 1]]
+        inputs = self.processor(
+            input_points=new_input_points,
+            input_labels=new_input_labels,
+            original_sizes=original_inputs["original_sizes"],
+            return_tensors="pt",
+        ).to(torch_device)
+        with torch.no_grad():
+            outputs = self.model(
+                **inputs,
+                input_masks=mask_input,
+                image_embeddings=outputs.image_embeddings,
+                multimask_output=False,
+            )
+
+        self.assertEqual(outputs.iou_scores.shape, (1, 1, 1))
+        self.assertEqual(outputs.low_res_masks.shape, (1, 1, 1, 256, 256))
+        scores = outputs.iou_scores.squeeze((0, 1))
+        masks_logits = outputs.low_res_masks.squeeze((0, 1))[0, :3, :3]
+        torch.testing.assert_close(scores, torch.tensor([0.9736]).to(torch_device), atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(
+            masks_logits,
+            torch.tensor([[-5.4097, -9.7417, -8.4445], [-5.5585, -8.8216, -8.2644], [-5.6046, -9.8751, -9.0067]]).to(
+                torch_device
+            ),
+            atol=1e-4,
+            rtol=1e-4,
+        )
+
+        # with negative point
+        new_input_points = [[[500, 375], [1125, 625]]]
+        new_input_labels = [[1, 0]]
+        inputs = self.processor(
+            input_points=new_input_points,
+            input_labels=new_input_labels,
+            original_sizes=original_inputs["original_sizes"],
+            return_tensors="pt",
+        ).to(torch_device)
+        with torch.no_grad():
+            outputs = self.model(
+                **inputs,
+                input_masks=mask_input,
+                image_embeddings=outputs.image_embeddings,
+                multimask_output=False,
+            )
+        self.assertEqual(outputs.iou_scores.shape, (1, 1, 1))
+        self.assertEqual(outputs.low_res_masks.shape, (1, 1, 1, 256, 256))
+        scores = outputs.iou_scores.squeeze((0, 1))
+        masks_logits = outputs.low_res_masks.squeeze((0, 1))[0, :3, :3]
+        torch.testing.assert_close(scores, torch.tensor([0.9720]).to(torch_device), atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(
+            masks_logits,
+            torch.tensor(
+                [[-15.5743, -21.8550, -18.0607], [-17.5526, -17.4155, -23.6521], [-14.4471, -19.4647, -18.6332]]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
