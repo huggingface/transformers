@@ -967,7 +967,9 @@ class T5GemmaModel(T5GemmaPreTrainedModel):
         return Seq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
             past_key_values=decoder_outputs.past_key_values,
-            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_hidden_states=decoder_outputs.hidden_states
+            if kwargs.get("output_hidden_states", False)
+            else (decoder_outputs.last_hidden_state,),
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
