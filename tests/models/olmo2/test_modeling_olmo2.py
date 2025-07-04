@@ -23,6 +23,7 @@ from transformers.generation.configuration_utils import GenerationConfig
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.testing_utils import (
     Expectations,
+    cleanup,
     require_tokenizers,
     require_torch,
     slow,
@@ -233,6 +234,12 @@ class Olmo2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
 @require_torch
 class Olmo2IntegrationTest(unittest.TestCase):
+    def setUp(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
     @slow
     def test_model_1b_logits_bfloat16(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
