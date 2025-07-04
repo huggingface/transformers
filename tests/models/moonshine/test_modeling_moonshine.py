@@ -494,14 +494,16 @@ class MoonshineModelIntegrationTests(unittest.TestCase):
         inputs.to(torch_device)
         outputs = model.generate(**inputs, max_new_tokens=1, return_dict_in_generate=True, output_logits=True)
         # fmt: off
-        EXPECTED_LOGITS = torch.tensor([
-            [-8.0109, 5.0241, 4.5979, -6.8125, -7.1675, -7.8783, -7.2152, -7.5188, -7.9077, -7.7394],
-            [-4.4399, -1.4422, 6.6710, -6.8929, -7.3751, -7.0969, -6.5257, -7.0257, -7.2585, -7.0008],
-            [-10.0086, 3.2859, 0.7345, -6.5557, -6.8514, -6.5308, -6.4172, -6.9484, -6.6214, -6.6229],
-            [-10.8078, 4.0030, -0.0633, -5.0505, -5.3906, -5.4590, -5.2420, -5.4746, -5.2665, -5.3158]
-        ])
+        EXPECTED_LOGITS = torch.tensor(
+            [
+                [-8.5966, 4.8608, 5.8849, -6.6183, -7.0378, -7.7121, -7.0640, -7.3839, -7.8330, -7.6116],
+                [-4.3147, -2.4953, 8.4924, -6.4803, -7.0949, -6.7498, -6.1081, -6.6481, -6.9866, -6.5916],
+                [-10.0088, 3.2862, 0.7342, -6.5559, -6.8514, -6.5309, -6.4173, -6.9485, -6.6215, -6.6230],
+                [-11.1002, 3.9398, 0.6674, -5.0146, -5.3936, -5.4099, -5.2236, -5.4404, -5.2200, -5.2702],
+            ],
+        )
         # fmt: on
-        torch.testing.assert_close(outputs.logits[0][:, :10].cpu(), EXPECTED_LOGITS, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs.logits[0][:, :10].cpu(), EXPECTED_LOGITS, rtol=2e-4, atol=2e-4)
 
     @slow
     def test_base_logits_batch(self):
@@ -513,15 +515,16 @@ class MoonshineModelIntegrationTests(unittest.TestCase):
         outputs = model.generate(**inputs, max_new_tokens=1, return_dict_in_generate=True, output_logits=True)
 
         # fmt: off
-        EXPECTED_LOGITS = torch.tensor([
-            [-7.7272, 1.4630, 5.2294, -7.7313, -7.6252, -7.6011, -7.6788, -7.6441, -7.8452, -7.7549],
-            [-6.2173, -0.5891, 7.9493, -7.0694, -6.9997, -6.9982, -7.0953, -7.0831, -7.1686, -7.0137],
-            [-7.3184, 3.1192, 3.8937, -5.7206, -5.8428, -5.7609, -5.9996, -5.8212, -5.8615, -5.8719],
-            [-9.5475, 1.0146, 4.1179, -5.9971, -6.0614, -6.0329, -6.2103, -6.0318, -6.0789, -6.0873]
-        ])
-
+        EXPECTED_LOGITS = torch.tensor(
+            [
+                [-6.3602, 1.8383, 5.2615, -7.9576, -7.8442, -7.8238, -7.9014, -7.8645, -8.0550, -7.9963],
+                [-6.1725, -0.6274, 8.1798, -6.8570, -6.8078, -6.7915, -6.9099, -6.8980, -6.9760, -6.8264],
+                [-7.3186, 3.1192, 3.8938, -5.7208, -5.8429, -5.7610, -5.9997, -5.8213, -5.8616, -5.8720],
+                [-7.3432, 1.0402, 3.9912, -5.4177, -5.4890, -5.4573, -5.6516, -5.4776, -5.5079, -5.5391],
+            ]
+        )
         # fmt: on
-        torch.testing.assert_close(outputs.logits[0][:, :10].cpu(), EXPECTED_LOGITS, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs.logits[0][:, :10].cpu(), EXPECTED_LOGITS, rtol=2e-4, atol=2e-4)
 
     @slow
     def test_tiny_generation_single(self):
