@@ -47,6 +47,7 @@ from torch.utils.checkpoint import checkpoint
 
 from transformers.utils import is_torchao_available
 
+
 if is_torchao_available():
     from torchao.quantization import Int4WeightOnlyConfig
 
@@ -2090,22 +2091,23 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     raise ValueError(
                         f"Unsupported tensor parallel style {v}. Supported styles are {ALL_PARALLEL_STYLES}"
                     )
-
-        # loop over named modules and attach hooks. this is necessary when a module doesn't have parameters and thus we never hit
-        device_mesh = self.config.device_mesh
-        for name, module in self.named_modules():
-            if not getattr(module, "_is_hooked", False):
-                from transformers.integrations.tensor_parallel import add_tensor_parallel_hooks_to_module
-                add_tensor_parallel_hooks_to_module(
-                    model=self,
-                    module=module,
-                    tp_plan=self._tp_plan,
-                    layer_name="", # TODO: make this optional?
-                    current_module_plan=_get_parameter_tp_plan(parameter_name=name, tp_plan=self._tp_plan),
-                    device_mesh=device_mesh,
-                    parameter_name=None
-                )
-            module._is_hooked = True
+                
+        if hasattr(self.config, "attach_module_hooks") and self.config.attach_module_hooks:
+            # loop over named modules and attach hooks. this is necessary when a module doesn't have parameters and thus we never hit
+            device_mesh = self.config.device_mesh
+            for name, module in self.named_modules():
+                if not getattr(module, "_is_hooked", False):
+                    from transformers.integrations.tensor_parallel import add_tensor_parallel_hooks_to_module
+                    add_tensor_parallel_hooks_to_module(
+                        model=self,
+                        module=module,
+                        tp_plan=self._tp_plan,
+                        layer_name="", # TODO: make this optional?
+                        current_module_plan=_get_parameter_tp_plan(parameter_name=name, tp_plan=self._tp_plan),
+                        device_mesh=device_mesh,
+                        parameter_name=None
+                    )
+                module._is_hooked = True
 
     def dequantize(self):
         """
@@ -4646,6 +4648,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             if config.base_model_ep_plan is None:
                 raise ValueError("base_model_ep_plan is required when enable_expert_parallel is True")
             config.base_model_tp_plan = config.base_model_ep_plan # TODO: hack for now
+            config.attach_module_hooks = True # TODO: hack for now
 
         config.device_mesh = device_mesh # Used in post_init
 
