@@ -98,7 +98,6 @@ class DiffLlamaAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
-        output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
@@ -151,12 +150,7 @@ class DiffLlamaAttention(nn.Module):
         attn_output = (1 - self.lambda_init) * self.groupnorm(attn_output)
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.reshape(bsz, q_len, -1)
-
         attn_output = self.o_proj(attn_output)
-
-        if not output_attentions:
-            attn_weights = None
-
         return attn_output, attn_weights
 
 
@@ -182,7 +176,6 @@ class DiffLlamaFlashAttention2(DiffLlamaAttention):
         attention_mask: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
-        output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
@@ -308,10 +301,6 @@ class DiffLlamaFlashAttention2(DiffLlamaAttention):
         attn_output = (1 - self.lambda_init) * self.groupnorm(attn_output)
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-
-        if not output_attentions:
-            attn_weights = None
-
         return attn_output, attn_weights
 
 
@@ -330,7 +319,6 @@ class DiffLlamaSdpaAttention(DiffLlamaAttention):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
-        output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
@@ -397,7 +385,6 @@ class DiffLlamaSdpaAttention(DiffLlamaAttention):
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.view(bsz, q_len, -1)
         attn_output = self.o_proj(attn_output)
-
         return attn_output, None
 
 
