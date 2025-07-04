@@ -221,10 +221,10 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
                 ("cpu", None): [
                     "What is Deep learning ?\n\nWhat is Deep Learning\n\nYou will be hearing a lot about Deep learning in the coming time. Today, Deep learning is at the pinnacle and is making history"
                 ],
-                ("xpu", 8): [
+                ("xpu", 3): [
                     "What is Deep learning ?\n\nDeep learning is the next frontier in computer vision. It is an Artificial Intelligence (AI) discipline that is rapidly being adopted across industries. The success of Deep"
                 ],
-                ("cuda", 7): [
+                ("cuda", 8): [
                     "What is Deep learning ?\n\nDeep learning is the next frontier in computer vision. It is an Artificial Intelligence-derived technique allowing machines to perform actions typically performed only by humans. Deep learning"
                 ],
             }
