@@ -43,6 +43,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 class MPNetPreTrainedModel(PreTrainedModel):
+    config: MPNetConfig
     config_class = MPNetConfig
     base_model_prefix = "mpnet"
 

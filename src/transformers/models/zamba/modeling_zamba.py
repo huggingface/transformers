@@ -781,6 +781,7 @@ class ZambaHybridLayer(nn.Module):
 
 @auto_docstring
 class ZambaPreTrainedModel(PreTrainedModel):
+    config: ZambaConfig
     config_class = ZambaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True

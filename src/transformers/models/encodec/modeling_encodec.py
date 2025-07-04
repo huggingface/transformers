@@ -446,6 +446,7 @@ class EncodecResidualVectorQuantizer(nn.Module):
 
 @auto_docstring
 class EncodecPreTrainedModel(PreTrainedModel):
+    config: EncodecConfig
     config_class = EncodecConfig
     base_model_prefix = "encodec"
     main_input_name = "input_values"

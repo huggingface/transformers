@@ -534,6 +534,7 @@ class Phi4MultimodalVisionEncoder(SiglipEncoder):
 
 
 class Phi4MultimodalVisionPreTrainedModel(SiglipPreTrainedModel):
+    config: Phi4MultimodalVisionConfig
     config_class = Phi4MultimodalVisionConfig
     base_model_prefix = "phi4_vision"
     supports_gradient_checkpointing = True
@@ -648,6 +649,7 @@ class Phi4MultimodalVisionMultiheadAttentionPoolingHead(SiglipMultiheadAttention
 
 
 class Phi4MultimodalVisionModel(Phi4MultimodalVisionPreTrainedModel):
+    config: Phi4MultimodalVisionConfig
     config_class = Phi4MultimodalVisionConfig
     main_input_name = "pixel_values"
 
@@ -1116,6 +1118,7 @@ class Phi4MultimodalAudioMeanVarianceNormLayer(nn.Module):
 
 @auto_docstring
 class Phi4MultimodalAudioPreTrainedModel(PreTrainedModel):
+    config: Phi4MultimodalAudioConfig
     config_class = Phi4MultimodalAudioConfig
     supports_gradient_checkpointing = True
     _no_split_modules = ["Phi4MultimodalAudioConformerEncoderLayer"]

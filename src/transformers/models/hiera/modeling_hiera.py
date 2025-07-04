@@ -791,6 +791,7 @@ def unroll(
 
 @auto_docstring
 class HieraPreTrainedModel(PreTrainedModel):
+    config: HieraConfig
     config_class = HieraConfig
     base_model_prefix = "hiera"
     main_input_name = "pixel_values"

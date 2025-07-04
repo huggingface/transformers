@@ -464,6 +464,7 @@ class MarianDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class MarianPreTrainedModel(PreTrainedModel):
+    config: MarianConfig
     config_class = MarianConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True

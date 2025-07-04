@@ -125,6 +125,7 @@ class VideoLlavaMultiModalProjector(nn.Module):
 
 @auto_docstring
 class VideoLlavaPreTrainedModel(PreTrainedModel):
+    config: VideoLlavaConfig
     config_class = VideoLlavaConfig
     base_model_prefix = ""
     supports_gradient_checkpointing = True

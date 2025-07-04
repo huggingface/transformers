@@ -1350,6 +1350,7 @@ class LongformerLMHead(nn.Module):
 
 @auto_docstring
 class LongformerPreTrainedModel(PreTrainedModel):
+    config: LongformerConfig
     config_class = LongformerConfig
     base_model_prefix = "longformer"
     supports_gradient_checkpointing = True

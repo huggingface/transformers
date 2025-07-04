@@ -376,6 +376,7 @@ class XGLMDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class XGLMPreTrainedModel(PreTrainedModel):
+    config: XGLMConfig
     config_class = XGLMConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True

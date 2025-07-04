@@ -190,6 +190,7 @@ class Qwen2_5_VLPreTrainedModel(Qwen2VLPreTrainedModel):
 
 
 class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
+    config: Qwen2_5_VLVisionConfig
     config_class = Qwen2_5_VLVisionConfig
     _no_split_modules = ["Qwen2_5_VLVisionBlock"]
 
@@ -376,6 +377,7 @@ class Qwen2_5_VLModelOutputWithPast(Qwen2VLModelOutputWithPast):
 
 
 class Qwen2_5_VLModel(Qwen2VLModel):
+    config: Qwen2_5_VLConfig
     config_class = Qwen2_5_VLConfig
     base_model_prefix = ""
     _no_split_modules = ["Qwen2_5_VLDecoderLayer", "Qwen2_5_VLVisionBlock"]

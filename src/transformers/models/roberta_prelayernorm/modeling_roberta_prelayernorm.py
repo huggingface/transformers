@@ -552,6 +552,7 @@ class RobertaPreLayerNormPooler(nn.Module):
 
 @auto_docstring
 class RobertaPreLayerNormPreTrainedModel(PreTrainedModel):
+    config: RobertaPreLayerNormConfig
     config_class = RobertaPreLayerNormConfig
     base_model_prefix = "roberta_prelayernorm"
     supports_gradient_checkpointing = True

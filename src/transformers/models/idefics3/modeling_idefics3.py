@@ -468,6 +468,7 @@ class Idefics3Connector(nn.Module):
 
 @auto_docstring
 class Idefics3PreTrainedModel(PreTrainedModel):
+    config: Idefics3Config
     config_class = Idefics3Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
@@ -503,6 +504,7 @@ class Idefics3PreTrainedModel(PreTrainedModel):
     """
 )
 class Idefics3VisionTransformer(Idefics3PreTrainedModel):
+    config: Idefics3VisionConfig
     config_class = Idefics3VisionConfig
     _supports_sdpa = True
     _supports_flash_attention_2 = True

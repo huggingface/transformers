@@ -525,6 +525,7 @@ class M2M100DecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class M2M100PreTrainedModel(PreTrainedModel):
+    config: M2M100Config
     config_class = M2M100Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True

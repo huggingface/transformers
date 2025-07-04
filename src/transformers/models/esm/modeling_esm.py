@@ -734,6 +734,7 @@ class EsmPooler(nn.Module):
 
 @auto_docstring
 class EsmPreTrainedModel(PreTrainedModel):
+    config: EsmConfig
     config_class = EsmConfig
     base_model_prefix = "esm"
     supports_gradient_checkpointing = True

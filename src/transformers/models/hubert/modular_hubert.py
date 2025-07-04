@@ -125,6 +125,7 @@ class HubertEncoderStableLayerNorm(Wav2Vec2EncoderStableLayerNorm):
 
 @auto_docstring
 class HubertPreTrainedModel(PreTrainedModel):
+    config: HubertConfig
     config_class = HubertConfig
     base_model_prefix = "hubert"
     main_input_name = "input_values"

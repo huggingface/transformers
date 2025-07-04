@@ -882,6 +882,7 @@ def _get_clones(partial_module, N):
 
 @auto_docstring
 class DFinePreTrainedModel(PreTrainedModel):
+    config: DFineConfig
     config_class = DFineConfig
     base_model_prefix = "d_fine"
     main_input_name = "pixel_values"

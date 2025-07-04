@@ -451,6 +451,7 @@ class Idefics2Encoder(nn.Module):
 
 @auto_docstring
 class Idefics2PreTrainedModel(PreTrainedModel):
+    config: Idefics2Config
     config_class = Idefics2Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
@@ -492,6 +493,7 @@ class Idefics2PreTrainedModel(PreTrainedModel):
     """
 )
 class Idefics2VisionTransformer(Idefics2PreTrainedModel):
+    config: Idefics2VisionConfig
     config_class = Idefics2VisionConfig
     _supports_sdpa = True
     _supports_flash_attention_2 = True
@@ -779,6 +781,7 @@ class Idefics2PerceiverLayer(nn.Module):
     """
 )
 class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
+    config: Idefics2PerceiverConfig
     config_class = Idefics2PerceiverConfig
     _supports_sdpa = True
     _supports_flash_attention_2 = True

@@ -80,6 +80,7 @@ class Qwen2RMSNorm(nn.Module):
 
 @auto_docstring
 class Qwen2_5OmniPreTrainedModel(PreTrainedModel):
+    config: Qwen2_5OmniConfig
     config_class = Qwen2_5OmniConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
@@ -743,6 +744,7 @@ class SinusoidsPositionEmbedding(nn.Module):
     """
 )
 class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
+    config: Qwen2_5OmniAudioEncoderConfig
     config_class = Qwen2_5OmniAudioEncoderConfig
     main_input_name = "input_features"
     _no_split_modules = ["Qwen2_5OmniAudioEncoderLayer"]
@@ -1092,6 +1094,7 @@ class Qwen2_5OmniPatchMerger(nn.Module):
 
 
 class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
+    config: Qwen2_5OmniVisionEncoderConfig
     config_class = Qwen2_5OmniVisionEncoderConfig
     _no_split_modules = ["Qwen2_5OmniVisionBlock"]
 
@@ -1541,6 +1544,7 @@ class Qwen2_5OmniDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class Qwen2_5OmniThinkerTextModel(Qwen2_5OmniPreTrainedModel):
+    config: Qwen2_5OmniTextConfig
     config_class = Qwen2_5OmniTextConfig
     _no_split_modules = ["Qwen2_5OmniDecoderLayer"]
 
@@ -1697,6 +1701,7 @@ class Qwen2_5OmniThinkerTextModel(Qwen2_5OmniPreTrainedModel):
     """
 )
 class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration, GenerationMixin):
+    config: Qwen2_5OmniThinkerConfig
     config_class = Qwen2_5OmniThinkerConfig
     base_model_prefix = "thinker"
     _no_split_modules = ["Qwen2_5OmniAudioEncoder", "Qwen2_5OmniVisionEncoder"]
@@ -2103,6 +2108,7 @@ class Qwen2_5OmniTalkerCausalLMOutputWithPast(ModelOutput):
 
 @auto_docstring
 class Qwen2_5OmniTalkerModel(Qwen2_5OmniPreTrainedModel):
+    config: Qwen2_5OmniTalkerConfig
     config_class = Qwen2_5OmniTalkerConfig
     _no_split_modules = ["Qwen2_5OmniTalkerDecoderLayer"]
 
@@ -2253,6 +2259,7 @@ class Qwen2_5OmniTalkerModel(Qwen2_5OmniPreTrainedModel):
 
 
 class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration, GenerationMixin):
+    config: Qwen2_5OmniTalkerConfig
     config_class = Qwen2_5OmniTalkerConfig
     base_model_prefix = "talker"
 
@@ -3357,6 +3364,7 @@ class AMPBlock(torch.nn.Module):
     """
 )
 class Qwen2_5OmniToken2WavBigVGANModel(Qwen2_5OmniPreTrainedModel):
+    config: Qwen2_5OmniBigVGANConfig
     config_class = Qwen2_5OmniBigVGANConfig
 
     def __init__(self, config: Qwen2_5OmniBigVGANConfig):
@@ -3492,6 +3500,7 @@ class RungeKutta4ODESolver:
     """
 )
 class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
+    config: Qwen2_5OmniDiTConfig
     config_class = Qwen2_5OmniDiTConfig
     _no_split_modules = ["DiTDecoderLayer"]
 
@@ -3647,6 +3656,7 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
     """
 )
 class Qwen2_5OmniToken2WavModel(Qwen2_5OmniPreTrainedModel):
+    config: Qwen2_5OmniToken2WavConfig
     config_class = Qwen2_5OmniToken2WavConfig
     base_model_prefix = "model"
     _no_split_modules = ["Qwen2_5OmniToken2WavDiTModel", "Qwen2_5OmniToken2WavBigVGANModel"]
@@ -3715,6 +3725,7 @@ class Qwen2_5OmniToken2WavModel(Qwen2_5OmniPreTrainedModel):
     """
 )
 class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, GenerationMixin):
+    config: Qwen2_5OmniConfig
     config_class = Qwen2_5OmniConfig
     _no_split_modules = [
         "Qwen2_5OmniTalkerForConditionalGeneration",

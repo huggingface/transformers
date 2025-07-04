@@ -780,6 +780,7 @@ class EntityPredictionHead(nn.Module):
 
 @auto_docstring
 class LukePreTrainedModel(PreTrainedModel):
+    config: LukeConfig
     config_class = LukeConfig
     base_model_prefix = "luke"
     supports_gradient_checkpointing = True

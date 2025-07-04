@@ -848,6 +848,7 @@ class SwinEncoder(nn.Module):
 
 @auto_docstring
 class SwinPreTrainedModel(PreTrainedModel):
+    config: SwinConfig
     config_class = SwinConfig
     base_model_prefix = "swin"
     main_input_name = "pixel_values"

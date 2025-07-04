@@ -596,6 +596,7 @@ def caffe2_msra_fill(module: nn.Module) -> None:
 
 @auto_docstring
 class VitDetPreTrainedModel(PreTrainedModel):
+    config: VitDetConfig
     config_class = VitDetConfig
     base_model_prefix = "vitdet"
     main_input_name = "pixel_values"

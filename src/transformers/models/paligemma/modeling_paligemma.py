@@ -101,6 +101,7 @@ class PaliGemmaMultiModalProjector(nn.Module):
 
 @auto_docstring
 class PaliGemmaPreTrainedModel(PreTrainedModel):
+    config: PaliGemmaConfig
     config_class = PaliGemmaConfig
     base_model_prefix = ""
     supports_gradient_checkpointing = True

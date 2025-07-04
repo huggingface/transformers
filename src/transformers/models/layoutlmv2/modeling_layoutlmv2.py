@@ -472,6 +472,7 @@ class LayoutLMv2Encoder(nn.Module):
 
 @auto_docstring
 class LayoutLMv2PreTrainedModel(PreTrainedModel):
+    config: LayoutLMv2Config
     config_class = LayoutLMv2Config
     base_model_prefix = "layoutlmv2"
 

@@ -313,6 +313,7 @@ class GemmaDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class GemmaPreTrainedModel(PreTrainedModel):
+    config: GemmaConfig
     config_class = GemmaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True

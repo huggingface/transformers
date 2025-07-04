@@ -809,6 +809,7 @@ class DabDetrMLP(nn.Module):
 # Modified from transformers.models.detr.modeling_detr.DetrPreTrainedModel with Detr->DabDetr
 @auto_docstring
 class DabDetrPreTrainedModel(PreTrainedModel):
+    config: DabDetrConfig
     config_class = DabDetrConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"

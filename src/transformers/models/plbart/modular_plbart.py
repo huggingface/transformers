@@ -58,6 +58,7 @@ class PLBartScaledWordEmbedding(BartScaledWordEmbedding):
 
 @auto_docstring
 class PLBartPreTrainedModel(PreTrainedModel):
+    config: PLBartConfig
     config_class = PLBartConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True

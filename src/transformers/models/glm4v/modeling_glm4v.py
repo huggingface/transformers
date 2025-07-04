@@ -378,6 +378,7 @@ class Glm4vVisionBlock(GradientCheckpointingLayer):
 
 @auto_docstring
 class Glm4vPreTrainedModel(PreTrainedModel):
+    config: Glm4vConfig
     config_class = Glm4vConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
@@ -407,6 +408,7 @@ class Glm4vPreTrainedModel(PreTrainedModel):
 
 
 class Glm4vVisionModel(Glm4vPreTrainedModel):
+    config: Glm4vVisionConfig
     config_class = Glm4vVisionConfig
     _no_split_modules = ["Glm4vVisionBlock"]
 
@@ -822,6 +824,7 @@ class Glm4vModelOutputWithPast(ModelOutput):
 
 @auto_docstring
 class Glm4vTextModel(Glm4vPreTrainedModel):
+    config: Glm4vTextConfig
     config_class = Glm4vTextConfig
 
     def __init__(self, config: Glm4vTextConfig):
@@ -953,6 +956,7 @@ class Glm4vTextModel(Glm4vPreTrainedModel):
 class Glm4vModel(Glm4vPreTrainedModel):
     base_model_prefix = ""
     _checkpoint_conversion_mapping = None
+    config: Glm4vConfig
     config_class = Glm4vConfig
     _no_split_modules = ["Glm4vTextDecoderLayer", "Glm4vVisionBlock"]
 

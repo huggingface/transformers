@@ -805,6 +805,7 @@ class BambaDecoderLayer(JambaAttentionDecoderLayer):
 
 @auto_docstring
 class BambaPreTrainedModel(PreTrainedModel):
+    config: BambaConfig
     config_class = BambaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True

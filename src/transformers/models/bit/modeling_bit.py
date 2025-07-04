@@ -631,6 +631,7 @@ class BitEncoder(nn.Module):
 
 @auto_docstring
 class BitPreTrainedModel(PreTrainedModel):
+    config: BitConfig
     config_class = BitConfig
     base_model_prefix = "bit"
     main_input_name = "pixel_values"

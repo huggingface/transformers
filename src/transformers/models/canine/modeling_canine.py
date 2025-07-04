@@ -867,6 +867,7 @@ class CanineOnlyMLMHead(nn.Module):
 
 @auto_docstring
 class CaninePreTrainedModel(PreTrainedModel):
+    config: CanineConfig
     config_class = CanineConfig
     load_tf_weights = load_tf_weights_in_canine
     base_model_prefix = "canine"

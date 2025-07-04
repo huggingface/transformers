@@ -246,6 +246,7 @@ class ResNetEncoder(nn.Module):
 
 @auto_docstring
 class ResNetPreTrainedModel(PreTrainedModel):
+    config: ResNetConfig
     config_class = ResNetConfig
     base_model_prefix = "resnet"
     main_input_name = "pixel_values"

@@ -1158,6 +1158,7 @@ class SamVisionEncoder(nn.Module):
 
 @auto_docstring
 class SamPreTrainedModel(PreTrainedModel):
+    config: SamConfig
     config_class = SamConfig
     base_model_prefix = "sam"
     main_input_name = "pixel_values"
@@ -1190,6 +1191,7 @@ class SamPreTrainedModel(PreTrainedModel):
     """
 )
 class SamVisionModel(SamPreTrainedModel):
+    config: SamVisionConfig
     config_class = SamVisionConfig
     main_input_name = "pixel_values"
 

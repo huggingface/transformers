@@ -718,6 +718,7 @@ class Swin2SREncoder(nn.Module):
 
 @auto_docstring
 class Swin2SRPreTrainedModel(PreTrainedModel):
+    config: Swin2SRConfig
     config_class = Swin2SRConfig
     base_model_prefix = "swin2sr"
     main_input_name = "pixel_values"

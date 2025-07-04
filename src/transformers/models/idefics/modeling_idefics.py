@@ -879,6 +879,7 @@ class IdeficsGatedCrossAttentionLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class IdeficsPreTrainedModel(PreTrainedModel):
+    config: IdeficsConfig
     config_class = IdeficsConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True

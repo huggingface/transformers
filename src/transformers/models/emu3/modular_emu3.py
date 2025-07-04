@@ -698,6 +698,7 @@ class Emu3VQVAEDecoder(nn.Module):
     """
 )
 class Emu3VQVAE(PreTrainedModel):
+    config: Emu3VQVAEConfig
     config_class = Emu3VQVAEConfig
     base_model_prefix = "emuvideovq"
     main_input_name = "pixel_values"
@@ -892,6 +893,7 @@ class Emu3TextModel(LlamaModel, Emu3PreTrainedModel):
 
 
 class Emu3ForCausalLM(LlamaForCausalLM, Emu3PreTrainedModel, GenerationMixin):
+    config: Emu3TextConfig
     config_class = Emu3TextConfig
 
     def __init__(self, config):

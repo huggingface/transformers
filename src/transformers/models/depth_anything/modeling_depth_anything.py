@@ -211,6 +211,7 @@ class DepthAnythingFeatureFusionStage(nn.Module):
 # avoiding sdpa and flash_attn_2 support, it's done in the backend
 @auto_docstring
 class DepthAnythingPreTrainedModel(PreTrainedModel):
+    config: DepthAnythingConfig
     config_class = DepthAnythingConfig
     base_model_prefix = "depth_anything"
     main_input_name = "pixel_values"

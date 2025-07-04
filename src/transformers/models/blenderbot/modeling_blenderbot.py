@@ -460,6 +460,7 @@ class BlenderbotDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class BlenderbotPreTrainedModel(PreTrainedModel):
+    config: BlenderbotConfig
     config_class = BlenderbotConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True

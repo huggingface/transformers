@@ -419,6 +419,7 @@ class Qwen3MoeRotaryEmbedding(nn.Module):
 
 @auto_docstring
 class Qwen3MoePreTrainedModel(PreTrainedModel):
+    config: Qwen3MoeConfig
     config_class = Qwen3MoeConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True

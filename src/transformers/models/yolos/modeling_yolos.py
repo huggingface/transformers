@@ -512,6 +512,7 @@ class YolosEncoder(nn.Module):
 
 @auto_docstring
 class YolosPreTrainedModel(PreTrainedModel):
+    config: YolosConfig
     config_class = YolosConfig
     base_model_prefix = "vit"
     main_input_name = "pixel_values"

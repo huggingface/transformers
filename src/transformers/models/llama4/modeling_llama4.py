@@ -430,6 +430,7 @@ class Llama4TextDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class Llama4PreTrainedModel(PreTrainedModel):
+    config: Llama4Config
     config_class = Llama4Config
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = ["past_key_values"]
@@ -472,6 +473,7 @@ class Llama4PreTrainedModel(PreTrainedModel):
 class Llama4TextModel(Llama4PreTrainedModel):
     _no_split_modules = ["Llama4TextDecoderLayer"]
     base_model_prefix = "model"
+    config: Llama4TextConfig
     config_class = Llama4TextConfig
 
     def __init__(self, config: Llama4TextConfig):
@@ -612,6 +614,7 @@ class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
     base_model_prefix = "language_model"
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
+    config: Llama4TextConfig
     config_class = Llama4TextConfig
 
     def __init__(self, config: Llama4TextConfig):
@@ -1080,6 +1083,7 @@ class Llama4VisionRotaryEmbedding(nn.Module):
 class Llama4VisionModel(Llama4PreTrainedModel):
     base_model_prefix = "vision_model"
     _no_split_modules = ["Llama4VisionEncoderLayer"]
+    config: Llama4VisionConfig
     config_class = Llama4VisionConfig
 
     def __init__(self, config: Llama4VisionConfig):
@@ -1215,6 +1219,7 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
     _no_split_modules = ["Llama4TextDecoderLayer", "Llama4VisionEncoderLayer"]
     _tp_plan = {}
     base_model_prefix = ""
+    config: Llama4Config
     config_class = Llama4Config
 
     def __init__(self, config: Llama4Config):

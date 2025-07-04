@@ -1105,6 +1105,7 @@ class LEDClassificationHead(nn.Module):
 
 @auto_docstring
 class LEDPreTrainedModel(PreTrainedModel):
+    config: LEDConfig
     config_class = LEDConfig
     base_model_prefix = "led"
     supports_gradient_checkpointing = True

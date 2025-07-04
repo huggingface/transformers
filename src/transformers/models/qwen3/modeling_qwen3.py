@@ -287,6 +287,7 @@ class Qwen3DecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class Qwen3PreTrainedModel(PreTrainedModel):
+    config: Qwen3Config
     config_class = Qwen3Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True

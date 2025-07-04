@@ -504,6 +504,7 @@ class UMT5ClassificationHead(nn.Module):
 
 @auto_docstring
 class UMT5PreTrainedModel(PreTrainedModel):
+    config: UMT5Config
     config_class = UMT5Config
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
@@ -968,6 +969,7 @@ class UMT5Model(UMT5PreTrainedModel):
     ```"""
 
     model_type = "umt5"
+    config: UMT5Config
     config_class = UMT5Config
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 

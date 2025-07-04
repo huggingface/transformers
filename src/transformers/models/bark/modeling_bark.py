@@ -353,6 +353,7 @@ class BarkBlock(GradientCheckpointingLayer):
 
 @auto_docstring
 class BarkPreTrainedModel(PreTrainedModel):
+    config: BarkConfig
     config_class = BarkConfig
     supports_gradient_checkpointing = False
     _supports_flash_attn_2 = True
@@ -399,6 +400,7 @@ class BarkPreTrainedModel(PreTrainedModel):
 
 # GPT2-like autoregressive model
 class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
+    config: BarkSubModelConfig
     config_class = BarkSubModelConfig
 
     def __init__(self, config):
@@ -658,6 +660,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
 )
 class BarkSemanticModel(BarkCausalModel):
     base_model_prefix = "semantic"
+    config: BarkSemanticConfig
     config_class = BarkSemanticConfig
 
     def generate(
@@ -769,6 +772,7 @@ class BarkSemanticModel(BarkCausalModel):
 )
 class BarkCoarseModel(BarkCausalModel):
     base_model_prefix = "coarse_acoustics"
+    config: BarkCoarseConfig
     config_class = BarkCoarseConfig
 
     def preprocess_histories(
@@ -990,6 +994,7 @@ class BarkCoarseModel(BarkCausalModel):
 )
 class BarkFineModel(BarkPreTrainedModel):
     base_model_prefix = "fine_acoustics"
+    config: BarkFineConfig
     config_class = BarkFineConfig
     main_input_name = "codebook_idx"
 
@@ -1422,6 +1427,7 @@ class BarkFineModel(BarkPreTrainedModel):
     """
 )
 class BarkModel(BarkPreTrainedModel):
+    config: BarkConfig
     config_class = BarkConfig
 
     def __init__(self, config):

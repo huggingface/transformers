@@ -374,6 +374,7 @@ class MambaBlock(GradientCheckpointingLayer):
 
 @auto_docstring
 class MambaPreTrainedModel(PreTrainedModel):
+    config: MambaConfig
     config_class = MambaConfig
     base_model_prefix = "backbone"
     _no_split_modules = ["MambaBlock", "MambaMixer"]

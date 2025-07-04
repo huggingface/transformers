@@ -571,6 +571,7 @@ class Transformer(nn.Module):
 # INTERFACE FOR ENCODER AND TASK SPECIFIC MODEL #
 @auto_docstring
 class DistilBertPreTrainedModel(PreTrainedModel):
+    config: DistilBertConfig
     config_class = DistilBertConfig
     load_tf_weights = None
     base_model_prefix = "distilbert"

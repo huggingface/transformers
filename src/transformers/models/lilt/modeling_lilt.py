@@ -559,6 +559,7 @@ class LiltPooler(nn.Module):
 
 @auto_docstring
 class LiltPreTrainedModel(PreTrainedModel):
+    config: LiltConfig
     config_class = LiltConfig
     base_model_prefix = "lilt"
     supports_gradient_checkpointing = True

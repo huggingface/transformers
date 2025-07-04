@@ -2085,6 +2085,7 @@ class Mask2FormerTransformerModule(nn.Module):
 
 @auto_docstring
 class Mask2FormerPreTrainedModel(PreTrainedModel):
+    config: Mask2FormerConfig
     config_class = Mask2FormerConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"

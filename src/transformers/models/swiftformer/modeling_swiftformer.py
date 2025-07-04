@@ -388,6 +388,7 @@ class SwiftFormerEncoder(nn.Module):
 
 @auto_docstring
 class SwiftFormerPreTrainedModel(PreTrainedModel):
+    config: SwiftFormerConfig
     config_class = SwiftFormerConfig
     base_model_prefix = "swiftformer"
     main_input_name = "pixel_values"

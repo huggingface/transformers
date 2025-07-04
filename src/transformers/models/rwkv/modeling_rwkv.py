@@ -381,6 +381,7 @@ class RwkvBlock(GradientCheckpointingLayer):
 
 @auto_docstring
 class RwkvPreTrainedModel(PreTrainedModel):
+    config: RwkvConfig
     config_class = RwkvConfig
     base_model_prefix = "rwkv"
     _no_split_modules = ["RwkvBlock"]

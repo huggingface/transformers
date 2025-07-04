@@ -684,6 +684,7 @@ class PatchTSMixerLinearHead(nn.Module):
 @auto_docstring
 class PatchTSMixerPreTrainedModel(PreTrainedModel):
     # Weight initialization
+    config: PatchTSMixerConfig
     config_class = PatchTSMixerConfig
     base_model_prefix = "model"
     main_input_name = "past_values"

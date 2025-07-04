@@ -913,6 +913,7 @@ class Gemma3nAudioConformerBlock(nn.Module):
 class Gemma3nAudioEncoder(PreTrainedModel):
     """An audio encoder based on the [Universal Speech Model](https://arxiv.org/abs/2303.01037) architecture."""
 
+    config: Gemma3nAudioConfig
     config_class = Gemma3nAudioConfig
 
     main_input_name = "audio_mel"
@@ -1480,6 +1481,7 @@ class Gemma3nTextDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class Gemma3nPreTrainedModel(PreTrainedModel):
+    config: Gemma3nConfig
     config_class = Gemma3nConfig
     base_model_prefix = ""
     supports_gradient_checkpointing = True
@@ -1520,6 +1522,7 @@ class Gemma3nPreTrainedModel(PreTrainedModel):
 
 @auto_docstring(custom_intro="The base Gemma 3n language model without a language modeling head.")
 class Gemma3nTextModel(Gemma3nPreTrainedModel):
+    config: Gemma3nTextConfig
     config_class = Gemma3nTextConfig
 
     def __init__(self, config: Gemma3nTextConfig):
@@ -1777,6 +1780,7 @@ class Gemma3nForCausalLM(Gemma3nPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    config: Gemma3nTextConfig
     config_class = Gemma3nTextConfig
     base_model_prefix = "model"
     _checkpoint_conversion_mapping = {"model.language_model": "model"}

@@ -56,6 +56,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 class DiaPreTrainedModel(PreTrainedModel):
+    config: DiaConfig
     config_class = DiaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True

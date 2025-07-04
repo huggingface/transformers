@@ -493,6 +493,7 @@ class MBartClassificationHead(nn.Module):
 
 @auto_docstring
 class MBartPreTrainedModel(PreTrainedModel):
+    config: MBartConfig
     config_class = MBartConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True

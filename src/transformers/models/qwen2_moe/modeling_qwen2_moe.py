@@ -740,6 +740,7 @@ class Qwen2MoeDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class Qwen2MoePreTrainedModel(PreTrainedModel):
+    config: Qwen2MoeConfig
     config_class = Qwen2MoeConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True

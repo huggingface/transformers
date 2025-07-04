@@ -759,6 +759,7 @@ class ModernBertEncoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class ModernBertPreTrainedModel(PreTrainedModel):
+    config: ModernBertConfig
     config_class = ModernBertConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True

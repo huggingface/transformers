@@ -221,6 +221,7 @@ class SmolLM3RMSNorm(nn.Module):
 
 @auto_docstring
 class SmolLM3PreTrainedModel(PreTrainedModel):
+    config: SmolLM3Config
     config_class = SmolLM3Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True

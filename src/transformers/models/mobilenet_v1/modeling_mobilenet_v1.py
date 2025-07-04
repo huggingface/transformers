@@ -229,6 +229,7 @@ class MobileNetV1ConvLayer(nn.Module):
 
 @auto_docstring
 class MobileNetV1PreTrainedModel(PreTrainedModel):
+    config: MobileNetV1Config
     config_class = MobileNetV1Config
     load_tf_weights = load_tf_weights_in_mobilenet_v1
     base_model_prefix = "mobilenet_v1"
