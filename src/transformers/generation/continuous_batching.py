@@ -192,7 +192,7 @@ class PagedAttentionCache:
         self.sliding_window = getattr(config, "sliding_window", None)
         if self.sliding_window is not None and self.sliding_window < 0:
             raise ValueError(f"'sliding_window' must be a non-negative integer, got: {self.sliding_window}")
-        self.layer_types: list[str] = getattr(config, "layer_types", None)
+        self.layer_types: Optional[list[str]] = getattr(config, "layer_types", None)
 
         # Calculate optimal block size and number if not provided
         num_blocks = getattr(generation_config, "num_blocks", None)
@@ -841,8 +841,11 @@ class ContinuousBatchProcessor:
         )
         self.cumulative_seqlens_q = torch.zeros((T + 1,), **tensor_metadata)
         self.cumulative_seqlens_k = torch.zeros((T + 1,), **tensor_metadata)
-        self.write_index = torch.zeros((T,), **tensor_metadata)
+        self.cache_index = {}
         self.read_index = torch.zeros((max_token_budget,), **tensor_metadata)
+        self.read_sliding_index = torch.zeros((max_token_budget,), **tensor_metadata)
+        self.write_index = torch.zeros((T,), **tensor_metadata)
+        self.write_sliding_index = torch.zeros((T,), **tensor_metadata)
         self.logits_indices = torch.full((T,), -1, **tensor_metadata)
         self.max_seqlen_q = 0
         self.max_seqlen_k = 0
@@ -873,8 +876,7 @@ class ContinuousBatchProcessor:
             "attention_mask": self.attention_mask,
             "cumulative_seqlens_q": self.cumulative_seqlens_q,
             "cumulative_seqlens_k": self.cumulative_seqlens_k,
-            "write_index": self.write_index,
-            "read_index": self.read_index,
+            "cache_index": self.cache_index,
             "logits_indices": self.logits_indices,
             "max_seqlen_q": self.max_seqlen_q,
             "max_seqlen_k": self.max_seqlen_k,
@@ -962,10 +964,6 @@ class ContinuousBatchProcessor:
             sliding_read_indices, sliding_write_indices = self.cache._get_physical_sliding_indices(
                 state, cache_index, query_length
             )
-            cache_index = {
-                "full_attention": (read_indices, write_indices),
-                "sliding_window": (sliding_read_indices, sliding_write_indices),
-            }
 
             position_ids.extend(positions_to_add)
             read_index.extend(read_indices)
@@ -985,7 +983,9 @@ class ContinuousBatchProcessor:
             input_ids,
             position_ids,
             read_index,
+            sliding_read_indices,
             write_index,
+            sliding_write_indices,
             cumulative_seqlens_q,
             cumulative_seqlens_k,
             logits_indices,
@@ -999,7 +999,9 @@ class ContinuousBatchProcessor:
         input_ids,
         position_ids,
         read_index,
+        read_sliding_index,
         write_index,
+        write_sliding_index,
         cumulative_seqlens_q,
         cumulative_seqlens_k,
         logits_indices,
@@ -1007,8 +1009,15 @@ class ContinuousBatchProcessor:
         to_tensor = partial(torch.tensor, **self.tensor_metadata)
         self.input_ids[:, : len(input_ids)] = to_tensor(input_ids)
         self.position_ids[:, : len(position_ids)] = to_tensor(position_ids)
-        self.write_index[: len(write_index)] = to_tensor(write_index)
         self.read_index[: len(read_index)] = to_tensor(read_index)
+        self.read_sliding_index[: len(read_sliding_index)] = to_tensor(read_sliding_index)
+        self.write_index[: len(write_index)] = to_tensor(write_index)
+        self.write_sliding_index[: len(write_sliding_index)] = to_tensor(write_sliding_index)
+        self.cache_index = {
+            "full_attention": (self.read_index, self.write_index),
+            "sliding_window": (self.read_sliding_index, self.write_sliding_index),
+        }
+
         self.cumulative_seqlens_q[: len(cumulative_seqlens_q)] = to_tensor(cumulative_seqlens_q)
         self.cumulative_seqlens_k[: len(cumulative_seqlens_k)] = to_tensor(cumulative_seqlens_k)
         self.logits_indices[: len(logits_indices)] = to_tensor(logits_indices)
