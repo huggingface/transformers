@@ -641,6 +641,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.model_tester.check_prepare_lm_labels_via_shift_left(*config_and_inputs)
 
     # Copied from tests.models.t5.test_modeling_t5.T5ModelTest.test_model
+    @unittest.skip("This was not properly written, submodules need the attribute to be overwritten")
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
