@@ -1544,8 +1544,8 @@ class ProcessorMixin(PushToHubMixin):
                         for key in ["image", "url", "path", "base64"]
                         if key in vision_info and vision_info["type"] == "image"
                     ]
-                    video_fnames = [
-                        vision_info[key]
+                    video_infos = [
+                        self._handle_video_content(key, vision_info[key])
                         for vision_info in visuals
                         for key in ["video", "url", "path"]
                         if key in vision_info and vision_info["type"] == "video"
@@ -1700,6 +1700,27 @@ class ProcessorMixin(PushToHubMixin):
                     f"Mismatch in `{modality}` token count between text and `input_ids`. Got ids={ids_count} and text={text_count}. "
                     "Likely due to `truncation='max_length'`. Please disable truncation or increase `max_length`."
                 )
+    
+    def _handle_video_content(self, source:str, data: Union[str, dict]) -> dict:
+        """
+        Handle video content of the chat template (i.e., message content with type video).
+        Args:
+            source (`str`): The source of the video (e.g., "video", "url", "path").
+            data (`Union[str, dict]`): The video data, which can be a file path, URL, or a dictionary with video frames and metadata.
+        Returns:
+            `dict`: A dictionary containing the source and video data.
+        """
+        if isinstance(data, str):
+            return {"source": source, "data": data}
+        elif isinstance(data, (list, str)):
+            return {"source": source, "data": data}
+        elif isinstance(data, dict):
+            if "fps" not in data and "duration" not in data and "metadata" not in data:
+                logger.warning("Missing video metadata: 'fps', 'duration', or 'metadata' must be present. Otherwise, the whole video will be loaded.")
+                # raise ValueError("Missing video metadata: 'fps' or 'duration' must be present.")
+            return {"source": source, "data": data.get("video", data.get("url", data.get("path")))}
+        else:
+            raise ValueError(f"Unsupported video data type: {type(data)}")
 
 
 ProcessorMixin.push_to_hub = copy_func(ProcessorMixin.push_to_hub)
