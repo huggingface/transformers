@@ -145,12 +145,13 @@ class Ernie4_5RotaryEmbedding(nn.Module):
 
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
+    input_shape = x.shape[:-1]
+    x1 = x[..., 0::2]
+    x2 = x[..., 1::2]
+    return torch.stack((-x2, x1), dim=-1).reshape(*input_shape, -1)
 
 
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+def apply_rotary_pos_emb(q, k, cos, sin):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -158,51 +159,12 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
     Returns:
         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
-
-
-def apply_rotary_2(q, k, cos, sin):
-    """
-    Apply rotary position embeddings to queries and keys.
-
-    Args:
-        q (Tensor): Query tensor [batch, heads, seq_len, dim]
-        k (Tensor): Key tensor [batch, heads, seq_len, dim]
-
-    Returns:
-        Tuple[Tensor, Tensor]: Rotated queries and keys
-    """
-    # rotate_half_query_layer [-q1,q0,-q3,q2......,-qd-1,qd-2]
-    rotate_half_q = torch.stack(
-        [-q[:, :, :, 1::2], q[:, :, :, 0::2]], dim=-1
-    ).reshape(q.shape)
-    query = (q.to(torch.float32) * cos) + (
-        rotate_half_q.to(torch.float32) * sin
-    )
-    # rotate_half_key_layer [-k1,k0,-k3,k2......,-kd-1,kd-2]
-    rotate_half_k = torch.stack(
-        [-k[:, :, :, 1::2], k[:, :, :, 0::2]], dim=-1
-    ).reshape(k.shape)
-    key = (k.to(torch.float32) * cos) + (
-        rotate_half_k.to(torch.float32) * sin
-    )
-    return query, key
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -282,7 +244,7 @@ class Ernie4_5Attention(nn.Module):
         cos, sin = position_embeddings
         cos = cos.view(-1, input_shape[1], 1, self.head_dim)
         sin = sin.view(-1, input_shape[1], 1, self.head_dim)
-        query_states, key_states = apply_rotary_2(
+        query_states, key_states = apply_rotary_pos_emb(
             query_states, key_states, cos, sin
         )
         ## rope
