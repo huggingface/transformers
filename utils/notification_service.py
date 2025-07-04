@@ -1488,10 +1488,15 @@ if __name__ == "__main__":
     current_artifacts = sorted([d for d in os.listdir() if os.path.isdir(d) and d.endswith("_test_reports")])
 
     print(os.listdir(output_dir))
-    prev_artifacts = sorted([d for d in os.listdir(output_dir) if os.path.isdir(d) and d.endswith("_test_reports")])
+    prev_artifacts = sorted([d for d in os.listdir(output_dir) if os.path.isdir(os.path.join(output_dir, d)) and d.endswith("_test_reports")])
 
     print(f"current_artifacts: {current_artifacts}")
     print(f"prev_artifacts: {prev_artifacts}")
+
+    for d in prev_artifacts:
+        d2 = os.path.join(output_dir, d)
+        print(os.listdir(d2))
+        print("====" * 30)
 
     ci_name_in_report = ""
     if job_name in job_to_test_map:
