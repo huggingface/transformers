@@ -1098,6 +1098,10 @@ class StaticCache(Cache):
             Mapping between the layers and its device. This is required when you are manually initializing the cache
             and the model is split between different gpus. You can know which layers mapped to which device by
             checking the associated device_map: `model.hf_device_map`.
+        tp_size (`Optional[int]`, *optional*):
+            The tensor parallel size of the model. This is used to adjust the number of key/value heads in the cache
+            if the model is using tensor parallelism. If not provided, it defaults to `None`, which means that the
+            number of key/value heads will not be adjusted.
 
 
     Example:
@@ -1130,6 +1134,7 @@ class StaticCache(Cache):
         device: Union[torch.device, str, None] = None,
         dtype: torch.dtype = torch.float32,
         layer_device_map: Optional[dict[int, Union[str, torch.device, int]]] = None,
+        tp_size: Optional[int] = None,
     ) -> None:
         super().__init__()
         self.max_batch_size = max_batch_size
@@ -1144,6 +1149,12 @@ class StaticCache(Cache):
             if getattr(config, "num_key_value_heads", None) is None
             else config.num_key_value_heads
         )
+        if tp_size is not None and tp_size > 1:
+            assert self.num_key_value_heads % tp_size == 0, (
+                f"Number of key value heads {self.num_key_value_heads} must be divisible by tensor parallel size {tp_size}."
+            )
+            # If the model is using tensor parallelism, we need to adjust the number of heads accordingly.
+            self.num_key_value_heads //= tp_size
 
         self.key_cache: list[torch.Tensor] = []
         self.value_cache: list[torch.Tensor] = []
