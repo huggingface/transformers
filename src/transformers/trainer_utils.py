@@ -223,6 +223,17 @@ def get_last_checkpoint(folder):
         return
     return os.path.join(folder, max(checkpoints, key=lambda x: int(_re_checkpoint.search(x).groups()[0])))
 
+def try_get_base_model(model):
+    """
+    Tries to extract the underlying Hugging Face model from a PEFT-wrapped model.
+    Works with both standard PeftModel and PeftMixedModel.
+    """
+    if hasattr(model, "get_base_model"):
+        return model.get_base_model()
+    elif hasattr(model, "base_model") and hasattr(model.base_model, "model"):
+        return model.base_model.model
+    else:
+        raise AttributeError("Cannot extract base model safely from this PEFT wrapper.")
 
 class IntervalStrategy(ExplicitEnum):
     NO = "no"
