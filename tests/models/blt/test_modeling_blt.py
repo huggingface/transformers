@@ -16,9 +16,8 @@
 import unittest
 
 from packaging import version
-from parameterized import parameterized
 
-from transformers import AutoTokenizer, BLTConfig, StaticCache, is_torch_available, set_seed
+from transformers import AutoTokenizer, StaticCache, is_torch_available
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     Expectations,
@@ -30,141 +29,39 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
-from ...test_pipeline_mixin import PipelineTesterMixin
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 if is_torch_available():
     import torch
 
     from transformers import (
+        BLTConfig,
         BLTForCausalLM,
         BLTModel,
-        BLTTokenizer,
+        BLTTokenizer
     )
     from transformers.models.blt.modeling_blt import BLTRotaryEmbedding
 
+# import os
+# import gc
+# gc.collect()
+# torch.cuda.empty_cache()
 
-class BLTModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_token_type_ids=False,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
-        pad_token_id=0,
-        scope=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.pad_token_id = pad_token_id
-        self.scope = scope
 
-    def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+# os.environ["BLT_SUPPRESS_ATTN_ERROR"] = "1"
+# os.environ["TORCH_USE_CUDA_DSA"] = "1"
 
-        input_mask = None
-        if self.use_input_mask:
-            input_mask = torch.tril(torch.ones_like(input_ids).to(torch_device))
 
-        token_type_ids = None
-        if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
-
-        sequence_labels = None
-        token_labels = None
-        choice_labels = None
-        if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-            choice_labels = ids_tensor([self.batch_size], self.num_choices)
-
-        config = self.get_config()
-
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-
-    def get_config(self):
-        return BLTConfig(
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            intermediate_size=self.intermediate_size,
-            hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            max_position_embeddings=self.max_position_embeddings,
-            type_vocab_size=self.type_vocab_size,
-            is_decoder=False,
-            initializer_range=self.initializer_range,
-            pad_token_id=self.pad_token_id,
-        )
-
-    def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        model = BLTModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask)
-        result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
-        return config, inputs_dict
+class BLTModelTester(CausalLMModelTester):
+    if is_torch_available():
+        config_class = BLTConfig
+        base_model_class = BLTModel
+        causal_lm_class = BLTForCausalLM
 
 
 @require_torch
-class BLTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class BLTModelTest(CausalLMModelTest, unittest.TestCase):
     all_model_classes = (
         (
             BLTModel,
@@ -173,9 +70,19 @@ class BLTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         if is_torch_available()
         else ()
     )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": BLTModel,
+            "text-generation": BLTForCausalLM,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_headmasking = False
     test_pruning = False
-    fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
+    fx_compatible = False
+    model_tester_class = BLTModelTester
+    rotary_embedding_layer = BLTRotaryEmbedding  # Enables RoPE tests if set
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
@@ -184,232 +91,8 @@ class BLTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = BLTForCausalLM if is_torch_available() else None
 
-    def setUp(self):
-        self.model_tester = BLTModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BLTConfig, hidden_size=37)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_blt_sequence_classification_model(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = BLTForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    def test_blt_sequence_classification_model_for_single_label(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        config.problem_type = "single_label_classification"
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = BLTForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    def test_blt_sequence_classification_model_for_multi_label(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        config.problem_type = "multi_label_classification"
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor(
-            [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
-        ).to(torch.float)
-        model = BLTForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    def test_blt_token_classification_model(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        token_labels = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.num_labels)
-        model = BLTForTokenClassification(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=token_labels)
-        self.assertEqual(
-            result.logits.shape,
-            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
-        )
-
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    def test_model_rope_scaling_from_config(self, scaling_type):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        short_input = ids_tensor([1, 10], config.vocab_size)
-        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
-
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        original_model = BLTModel(config)
-        original_model.to(torch_device)
-        original_model.eval()
-        original_short_output = original_model(short_input).last_hidden_state
-        original_long_output = original_model(long_input).last_hidden_state
-
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        config.rope_scaling = {"type": scaling_type, "factor": 10.0}
-        scaled_model = BLTModel(config)
-        scaled_model.to(torch_device)
-        scaled_model.eval()
-        scaled_short_output = scaled_model(short_input).last_hidden_state
-        scaled_long_output = scaled_model(long_input).last_hidden_state
-
-        # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
-        # maximum sequence length, so the outputs for the short input should match.
-        if scaling_type == "dynamic":
-            torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
-        else:
-            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
-
-        # The output should be different for long inputs
-        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
-
-    def test_model_rope_scaling(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        scaling_factor = 10
-        short_input_length = 10
-        long_input_length = int(config.max_position_embeddings * 1.5)
-
-        # Inputs
-        x = torch.randn(
-            1, dtype=torch.float32, device=torch_device
-        )  # used exclusively to get the dtype and the device
-        position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
-        position_ids_short = position_ids_short.unsqueeze(0)
-        position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
-        position_ids_long = position_ids_long.unsqueeze(0)
-
-        # Sanity check original RoPE
-        original_rope = BLTRotaryEmbedding(config=config).to(torch_device)
-        original_cos_short, original_sin_short = original_rope(x, position_ids_short)
-        original_cos_long, original_sin_long = original_rope(x, position_ids_long)
-        torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(original_sin_short, original_sin_long[:, :short_input_length, :])
-
-        # Sanity check linear RoPE scaling
-        # New position "x" should match original position with index "x/scaling_factor"
-        config.rope_scaling = {"type": "linear", "factor": scaling_factor}
-        linear_scaling_rope = BLTRotaryEmbedding(config=config).to(torch_device)
-        linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short)
-        linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long)
-        torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(linear_sin_short, linear_sin_long[:, :short_input_length, :])
-        for new_position in range(0, long_input_length, scaling_factor):
-            original_position = int(new_position // scaling_factor)
-            torch.testing.assert_close(linear_cos_long[:, new_position, :], original_cos_long[:, original_position, :])
-            torch.testing.assert_close(linear_sin_long[:, new_position, :], original_sin_long[:, original_position, :])
-
-        # Sanity check Dynamic NTK RoPE scaling
-        # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
-        # with scaling_factor (or that `inv_freq` decreases)
-        config.rope_scaling = {"type": "dynamic", "factor": scaling_factor}
-        ntk_scaling_rope = BLTRotaryEmbedding(config=config).to(torch_device)
-        ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short)
-        ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long)
-        torch.testing.assert_close(ntk_cos_short, original_cos_short)
-        torch.testing.assert_close(ntk_sin_short, original_sin_short)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(ntk_cos_long, original_cos_long)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(ntk_sin_long, original_sin_long)
-        self.assertTrue((ntk_scaling_rope.inv_freq <= original_rope.inv_freq).all())
-
-        # Sanity check Yarn RoPE scaling
-        # Scaling should be over the entire input
-        config.rope_scaling = {"type": "yarn", "factor": scaling_factor}
-        yarn_scaling_rope = BLTRotaryEmbedding(config=config).to(torch_device)
-        yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short)
-        yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long)
-        torch.testing.assert_close(yarn_cos_short, yarn_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(yarn_sin_short, yarn_sin_long[:, :short_input_length, :])
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(yarn_cos_short, original_cos_short)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(yarn_sin_short, original_sin_short)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(yarn_cos_long, original_cos_long)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(yarn_sin_long, original_sin_long)
-
-    def test_model_loading_old_rope_configs(self):
-        def _reinitialize_config(base_config, new_kwargs):
-            # Reinitialize the config with the new kwargs, forcing the config to go through its __init__ validation
-            # steps.
-            base_config_dict = base_config.to_dict()
-            new_config = BLTConfig.from_dict(config_dict={**base_config_dict, **new_kwargs})
-            return new_config
-
-        # from untouched config -> ✅
-        base_config, model_inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        original_model = BLTForCausalLM(base_config).to(torch_device)
-        original_model(**model_inputs)
-
-        # from a config with the expected rope configuration -> ✅
-        config = _reinitialize_config(base_config, {"rope_scaling": {"rope_type": "linear", "factor": 10.0}})
-        original_model = BLTForCausalLM(config).to(torch_device)
-        original_model(**model_inputs)
-
-        # from a config with the old rope configuration ('type' instead of 'rope_type')  -> ✅ we gracefully handle BC
-        config = _reinitialize_config(base_config, {"rope_scaling": {"type": "linear", "factor": 10.0}})
-        original_model = BLTForCausalLM(config).to(torch_device)
-        original_model(**model_inputs)
-
-        # from a config with both 'type' and 'rope_type'  -> ✅ they can coexist (and both are present in the config)
-        config = _reinitialize_config(
-            base_config, {"rope_scaling": {"type": "linear", "rope_type": "linear", "factor": 10.0}}
-        )
-        self.assertTrue(config.rope_scaling["type"] == "linear")
-        self.assertTrue(config.rope_scaling["rope_type"] == "linear")
-        original_model = BLTForCausalLM(config).to(torch_device)
-        original_model(**model_inputs)
-
-        # from a config with parameters in a bad range ('factor' should be >= 1.0) -> ⚠️ throws a warning
-        with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
-            config = _reinitialize_config(base_config, {"rope_scaling": {"rope_type": "linear", "factor": -999.0}})
-            original_model = BLTForCausalLM(config).to(torch_device)
-            original_model(**model_inputs)
-            self.assertEqual(len(logs.output), 1)
-            self.assertIn("factor field", logs.output[0])
-
-        # from a config with unknown parameters ('foo' isn't a rope option) -> ⚠️ throws a warning
-        with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
-            config = _reinitialize_config(
-                base_config, {"rope_scaling": {"rope_type": "linear", "factor": 10.0, "foo": "bar"}}
-            )
-            original_model = BLTForCausalLM(config).to(torch_device)
-            original_model(**model_inputs)
-            self.assertEqual(len(logs.output), 1)
-            self.assertIn("Unrecognized keys", logs.output[0])
-
-        # from a config with specific rope type but missing one of its mandatory parameters -> ❌ throws exception
-        with self.assertRaises(KeyError):
-            config = _reinitialize_config(base_config, {"rope_scaling": {"rope_type": "linear"}})  # missing "factor"
-
-
-@require_torch_accelerator
+# @require_torch_accelerator
 class BLTIntegrationTest(unittest.TestCase):
     def tearDown(self):
         # TODO (joao): automatic compilation, i.e. compilation when `cache_implementation="static"` is used, leaves
@@ -420,433 +103,54 @@ class BLTIntegrationTest(unittest.TestCase):
 
     @slow
     @require_read_token
-    def test_blt_3_1_hard(self):
-        """
-        An integration test for blt 3.1. It tests against a long output to ensure the subtle numerical differences
-        from blt 3.1.'s RoPE can be detected
-        """
-        # diff on `EXPECTED_TEXT`:
-        # 2024-08-26: updating from torch 2.3.1 to 2.4.0 slightly changes the results.
-        EXPECTED_TEXT = (
-            "Tell me about the french revolution. The french revolution was a period of radical political and social "
-            "upheaval in France that lasted from 1789 until 1799. It was a time of great change and upheaval, marked "
-            "by the overthrow of the monarchy, the rise of the middle class, and the eventual establishment of the "
-            "First French Republic.\nThe revolution began in 1789 with the Estates-General, a representative "
-            "assembly that had not met since 1614. The Third Estate, which represented the common people, "
-            "demanded greater representation and eventually broke away to form the National Assembly. This marked "
-            "the beginning of the end of the absolute monarchy and the rise of the middle class.\n"
+    def test_blt(self):
+        prompt = "my name is"
+
+        EXPECTED_TEXT = " alex and i am a student at the university of michigan. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan math club and the michigan computer s"
+
+        model = BLTForCausalLM.from_pretrained(
+            "itazap/blt-1b", device_map="auto" #, torch_dtype=torch.bfloat16
         )
 
         tokenizer = AutoTokenizer.from_pretrained("itazap/blt-1b")
-        model = BLTForCausalLM.from_pretrained(
-            "itazap/blt-1b", device_map="auto", torch_dtype=torch.bfloat16
-        )
-        input_text = ["Tell me about the french revolution."]
-        model_inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
 
-        generated_ids = model.generate(**model_inputs, max_new_tokens=128, do_sample=False)
-        generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(generated_text, EXPECTED_TEXT)
+        input_ids = torch.tensor([tokenizer.encode(prompt, add_eos=False)]).to(torch_device)
+
+        output_ids = model.generate(
+            input_ids, 
+            max_new_tokens=200
+        )
+
+        generated_ids = output_ids[0][len(input_ids[0]):]
+        output_text = tokenizer.decode(generated_ids.tolist())
+        
+        print(f'Prompt: "{prompt}"')
+        print(f'Completion: "{output_text}"')
+        print('here')
+
+        self.assertEqual(output_text, EXPECTED_TEXT)
 
     @slow
     @require_read_token
-    def test_model_7b_logits_bf16(self):
-        input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
+    def test_model_logits(self):
+        input_ids = [1, 42, 21, 12, 43, 23, 1, 4]
 
         model = BLTForCausalLM.from_pretrained(
-            "meta-blt/BLT-2-7b-hf", device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="eager"
+            "itazap/blt-1b", device_map="auto"
         )
 
         with torch.no_grad():
-            out = model(torch.tensor([input_ids]).to(torch_device))
-        # Expected mean on dim = -1
+            output = model(torch.tensor([input_ids]).to(torch_device))[0] 
 
-        # fmt: off
-        expected_means = Expectations(
-            {
-            ("xpu", 3): torch.tensor([[-6.5208, -4.1218, -4.9377, -3.2536,  0.8127, -2.9811,  1.2918, -3.3848]]),
-            ("cuda", 7): torch.tensor([[-6.5061, -4.1147, -4.9669, -3.2038, 0.8069, -2.9694, 1.2864, -3.3786]]),
-            ("cuda", 8): torch.tensor([[-6.5208, -4.1218, -4.9377, -3.2536,  0.8127, -2.9811,  1.2918, -3.3848]])
-         })
-
-        expected_mean = expected_means.get_expectation()
-        self.assertTrue(
-            torch.allclose(
-                expected_mean.to(torch_device),
-                out.logits.float().mean(-1),
-                atol=1e-2,
-                rtol=1e-2
-            )
-        )
-
-        # slicing logits[0, 0, 0:15]
-        expected_slices = Expectations(
-            {
-            ("xpu", 3): torch.tensor([[-12.5625,  -7.1250,  -0.6289,  -7.8750,  -6.9688,  -7.8125,  -6.5000, -7.4375,  -7.6562,  -6.9688,  -6.0312,  -7.0312,  -1.8203,   1.8750, -8.5000]]),
-            ("cuda", 7): torch.tensor([[-12.5000, -7.0625, -0.6289, -7.8750, -6.9688, -7.8125, -6.4688, -7.4375, -7.6875, -6.9375, -6.0312, -7.0000, -1.8594, 1.8438, -8.5000]]),
-            ("cuda", 8): torch.tensor([[-12.5625,  -7.1250,  -0.6289,  -7.8750,  -6.9688,  -7.8125,  -6.5000, -7.4375,  -7.6562,  -6.9688,  -6.0312,  -7.0312,  -1.8203,   1.8750, -8.5000]])
-        })
-        # fmt: on
-        expected_slice = expected_slices.get_expectation()
-        self.assertTrue(
-            torch.allclose(
-                expected_slice.to(torch_device),
-                out.logits[0, 0, :15].float(),
-                atol=1e-2,
-                rtol=1e-2,
-            )
-        )
-
-
-    @slow
-    @require_torch_accelerator
-    @require_read_token
-    def test_compile_static_cache(self):
-        # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
-        # work as intended. See https://github.com/pytorch/pytorch/issues/121943
-        if version.parse(torch.__version__) < version.parse("2.3.0"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
-
-        NUM_TOKENS_TO_GENERATE = 40
-        # Note on `EXPECTED_TEXT_COMPLETION`'s diff: the current value matches the original test if the original test
-        # was changed to have a cache of 53 tokens (as opposed to 4096), on Ampere GPUs.
-        EXPECTED_TEXT_COMPLETION = [
-            "Simply put, the theory of relativity states that 1) the speed of light is constant in all inertial "
-            "reference frames, and 2) the laws of physics are the same for all inertial reference frames.\nThe "
-            "theory of relativ",
-            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, "
-            "my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
-        ]
-
-        prompts = [
-            "Simply put, the theory of relativity states that ",
-            "My favorite all time favorite condiment is ketchup.",
-        ]
-        tokenizer = BLTTokenizer.from_pretrained("meta-blt/BLT-2-7b-hf", pad_token="</s>", padding_side="right")
-        model = BLTForCausalLM.from_pretrained(
-            "meta-blt/BLT-2-7b-hf", device_map=torch_device, torch_dtype=torch.float16
-        )
-        inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
-
-        # Dynamic Cache
-        generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
-        dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, dynamic_text)
-
-        # Static Cache + compile (`generate()` internally compiles each decoding step when static cache is used)
-        generated_ids = model.generate(
-            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
-        )
-        static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
-
-    @slow
-    @require_read_token
-    def test_export_static_cache(self):
-        if version.parse(torch.__version__) < version.parse("2.4.0"):
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
-
-        from transformers.integrations.executorch import (
-            TorchExportableModuleWithStaticCache,
-            convert_and_export_with_cache,
-        )
-
-        blt_models = {
-            "meta-blt/BLT-3.2-1B": [
-                "Simply put, the theory of relativity states that 1) the speed of light is the same for all "
-                "observers, regardless of their location, and 2) the laws of physics are the same for all observers"
-            ],
-        }
-
-        for blt_model_ckp, EXPECTED_TEXT_COMPLETION in blt_models.items():
-            # Load tokenizer
-            tokenizer = AutoTokenizer.from_pretrained(blt_model_ckp, pad_token="</s>", padding_side="right")
-            max_generation_length = tokenizer(EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True)[
-                "input_ids"
-            ].shape[-1]
-
-            # Load model
-            device = "cpu"
-            dtype = torch.bfloat16
-            cache_implementation = "static"
-            attn_implementation = "sdpa"
-            batch_size = 1
-            model = BLTForCausalLM.from_pretrained(
-                blt_model_ckp,
-                device_map=device,
-                torch_dtype=dtype,
-                attn_implementation=attn_implementation,
-                generation_config=GenerationConfig(
-                    use_cache=True,
-                    cache_implementation=cache_implementation,
-                    max_length=max_generation_length,
-                    cache_config={
-                        "batch_size": batch_size,
-                        "max_cache_len": max_generation_length,
-                        "device": device,
-                    },
-                ),
-            )
-
-            prompts = ["Simply put, the theory of relativity states that "]
-            prompt_tokens = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
-            prompt_token_ids = prompt_tokens["input_ids"]
-            max_new_tokens = max_generation_length - prompt_token_ids.shape[-1]
-
-            # Static Cache + export
-            exported_program = convert_and_export_with_cache(model)
-            ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
-                exported_program=exported_program, prompt_token_ids=prompt_token_ids, max_new_tokens=max_new_tokens
-            )
-            ep_generated_text = tokenizer.batch_decode(ep_generated_ids, skip_special_tokens=True)
-            self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
-
-
-@slow
-@require_torch_accelerator
-class Mask4DTestHard(unittest.TestCase):
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def setUp(self):
-        cleanup(torch_device, gc_collect=True)
-        model_name = "TinyBLT/TinyBLT-1.1B-Chat-v1.0"
-        self.model_dtype = torch.float32
-        self.tokenizer = BLTTokenizer.from_pretrained(model_name)
-        self.model = BLTForCausalLM.from_pretrained(model_name, torch_dtype=self.model_dtype).to(torch_device)
-
-    def get_test_data(self):
-        template = "my favorite {}"
-        items = ("pet is a", "artist plays a", "name is L")  # same number of tokens in each item
-
-        batch_separate = [template.format(x) for x in items]  # 3 separate lines
-        batch_shared_prefix = template.format(" ".join(items))  # 1 line with options concatenated
-
-        input_ids = self.tokenizer(batch_separate, return_tensors="pt").input_ids.to(torch_device)
-        input_ids_shared_prefix = self.tokenizer(batch_shared_prefix, return_tensors="pt").input_ids.to(torch_device)
-
-        mask_shared_prefix = torch.tensor(
-            [
-                [
-                    [
-                        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                        [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                        [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                        [1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
-                        [1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
-                        [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
-                        [1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-                        [1, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0],
-                        [1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0],
-                        [1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0],
-                        [1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0],
-                        [1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1],
-                    ]
-                ]
-            ],
-            device=torch_device,
-        )
-
-        position_ids = torch.arange(input_ids.shape[1]).tile(input_ids.shape[0], 1).to(torch_device)
-
-        # building custom positions ids based on custom mask
-        position_ids_shared_prefix = (mask_shared_prefix.sum(dim=-1) - 1).reshape(1, -1)
-        # effectively: position_ids_shared_prefix = torch.tensor([[0, 1, 2, 3, 4, 5, 3, 4, 5, 3, 4, 5]]).to(device)
-
-        # inverting the mask
-        min_dtype = torch.finfo(self.model_dtype).min
-        mask_shared_prefix = (mask_shared_prefix.eq(0.0)).to(dtype=self.model_dtype) * min_dtype
-
-        return input_ids, position_ids, input_ids_shared_prefix, mask_shared_prefix, position_ids_shared_prefix
-
-    def test_stacked_causal_mask(self):
-        (
-            input_ids,
-            position_ids,
-            input_ids_shared_prefix,
-            mask_shared_prefix,
-            position_ids_shared_prefix,
-        ) = self.get_test_data()
-
-        # regular batch
-        logits = self.model.forward(input_ids, position_ids=position_ids).logits
-        logits_last = logits[:, -1, :]  # last tokens in each batch line
-        decoded = [self.tokenizer.decode(t) for t in logits_last.argmax(dim=-1)]
-
-        # single forward run with 4D custom mask
-        logits_shared_prefix = self.model.forward(
-            input_ids_shared_prefix, attention_mask=mask_shared_prefix, position_ids=position_ids_shared_prefix
-        ).logits
-        logits_shared_prefix_last = logits_shared_prefix[
-            0, torch.where(position_ids_shared_prefix == position_ids_shared_prefix.max())[1], :
-        ]  # last three tokens
-        decoded_shared_prefix = [self.tokenizer.decode(t) for t in logits_shared_prefix_last.argmax(dim=-1)]
-
-        self.assertEqual(decoded, decoded_shared_prefix)
-
-    def test_partial_stacked_causal_mask(self):
-        # Same as the test above, but the input is passed in two groups. It tests that we can pass partial 4D attention masks
-
-        (
-            input_ids,
-            position_ids,
-            input_ids_shared_prefix,
-            mask_shared_prefix,
-            position_ids_shared_prefix,
-        ) = self.get_test_data()
-
-        # regular batch
-        logits = self.model.forward(input_ids, position_ids=position_ids).logits
-        logits_last = logits[:, -1, :]  # last tokens in each batch line
-        decoded = [self.tokenizer.decode(t) for t in logits_last.argmax(dim=-1)]
-
-        # 2 forward runs with custom 4D masks
-        part_a = 3  # split point
-
-        input_1a = input_ids_shared_prefix[:, :part_a]
-        position_ids_1a = position_ids_shared_prefix[:, :part_a]
-        mask_1a = mask_shared_prefix[:, :, :part_a, :part_a]
-
-        outs_1a = self.model.forward(input_1a, attention_mask=mask_1a, position_ids=position_ids_1a)
-        past_key_values_a = outs_1a["past_key_values"]
-
-        # Case 1: we pass a 4D attention mask regarding the current sequence length (i.e. [..., seq_len, full_len])
-        input_1b = input_ids_shared_prefix[:, part_a:]
-        position_ids_1b = position_ids_shared_prefix[:, part_a:]
-        mask_1b = mask_shared_prefix[:, :, part_a:, :]
-        outs_1b = self.model.forward(
-            input_1b,
-            attention_mask=mask_1b,
-            position_ids=position_ids_1b,
-            past_key_values=past_key_values_a,
-        )
-        decoded_1b = [
-            self.tokenizer.decode(t)
-            for t in outs_1b.logits.argmax(-1)[
-                0, torch.where(position_ids_shared_prefix == position_ids_shared_prefix.max())[1] - part_a
-            ]
-        ]
-        self.assertEqual(decoded, decoded_1b)
-
-    def test_stacked_causal_mask_static_cache(self):
-        """same as above but with StaticCache"""
-        (
-            input_ids,
-            position_ids,
-            input_ids_shared_prefix,
-            mask_shared_prefix,
-            position_ids_shared_prefix,
-        ) = self.get_test_data()
-
-        # regular batch
-        logits = self.model.forward(input_ids, position_ids=position_ids).logits
-        logits_last = logits[:, -1, :]  # last tokens in each batch line
-        decoded = [self.tokenizer.decode(t) for t in logits_last.argmax(dim=-1)]
-
-        # upgrade the model with StaticCache
-        max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
-        past_key_values = StaticCache(
-            config=self.model.config,
-            max_batch_size=1,
-            max_cache_len=max_cache_len,
-            device=torch_device,
-            dtype=self.model.dtype,
-        )
-
-        padded_attention_mask = torch.nn.functional.pad(
-            input=mask_shared_prefix,
-            pad=(0, max_cache_len - mask_shared_prefix.shape[-1]),
-            mode="constant",
-            value=torch.finfo(self.model_dtype).min,
-        )
-
-        # single forward run with 4D custom mask
-        logits_shared_prefix = self.model.forward(
-            input_ids_shared_prefix,
-            attention_mask=padded_attention_mask,
-            position_ids=position_ids_shared_prefix,
-            cache_position=torch.arange(input_ids_shared_prefix.shape[-1], device=torch_device),
-            past_key_values=past_key_values,
-        ).logits
-        logits_shared_prefix_last = logits_shared_prefix[
-            0, torch.where(position_ids_shared_prefix == position_ids_shared_prefix.max())[1], :
-        ]  # last three tokens
-        decoded_shared_prefix = [self.tokenizer.decode(t) for t in logits_shared_prefix_last.argmax(dim=-1)]
-
-        self.assertEqual(decoded, decoded_shared_prefix)
-
-    def test_partial_stacked_causal_mask_static_cache(self):
-        # Same as the test above, but the input is passed in two groups. It tests that we can pass partial 4D attention masks
-        # we pass a 4D attention mask shaped [..., seq_len, full_static_cache_len])
-        (
-            input_ids,
-            position_ids,
-            input_ids_shared_prefix,
-            mask_shared_prefix,
-            position_ids_shared_prefix,
-        ) = self.get_test_data()
-
-        # regular batch
-        logits = self.model.forward(input_ids, position_ids=position_ids).logits
-        logits_last = logits[:, -1, :]  # last tokens in each batch line
-        decoded = [self.tokenizer.decode(t) for t in logits_last.argmax(dim=-1)]
-
-        # upgrade the model with StaticCache
-        max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
-        past_key_values = StaticCache(
-            config=self.model.config,
-            max_batch_size=1,
-            max_cache_len=max_cache_len,
-            device=torch_device,
-            dtype=self.model.dtype,
-        )
-
-        # forward run for the first part of input
-        part_a = 3  # split point
-
-        input_1a = input_ids_shared_prefix[:, :part_a]
-        position_ids_1a = position_ids_shared_prefix[:, :part_a]
-        mask_1a = mask_shared_prefix[:, :, :part_a, :part_a]
-
-        padded_mask_1a = torch.nn.functional.pad(
-            input=mask_1a,
-            pad=(0, max_cache_len - mask_1a.shape[-1]),
-            mode="constant",
-            value=torch.finfo(self.model_dtype).min,
-        )
-
-        _ = self.model.forward(
-            input_1a,
-            attention_mask=padded_mask_1a,
-            position_ids=position_ids_1a,
-            cache_position=torch.arange(part_a, device=torch_device),
-            past_key_values=past_key_values,
-        )
-
-        # forward run for the second part of input
-        input_1b = input_ids_shared_prefix[:, part_a:]
-        position_ids_1b = position_ids_shared_prefix[:, part_a:]
-        mask_1b = mask_shared_prefix[:, :, part_a:, :]
-
-        padded_mask_1b = torch.nn.functional.pad(
-            input=mask_1b, pad=(0, max_cache_len - mask_1b.shape[-1]), mode="constant", value=0
-        )
-
-        outs_1b = self.model.forward(
-            input_1b,
-            attention_mask=padded_mask_1b,
-            position_ids=position_ids_1b,
-            cache_position=torch.arange(
-                part_a,
-                input_ids_shared_prefix.shape[-1],
-                device=torch_device,
-            ),
-            past_key_values=past_key_values,
-        )
-        decoded_1b = [
-            self.tokenizer.decode(t)
-            for t in outs_1b.logits.argmax(-1)[
-                0, torch.where(position_ids_shared_prefix == position_ids_shared_prefix.max())[1] - part_a
-            ]
-        ]
-        self.assertEqual(decoded, decoded_1b)
+        EXPECTED_OUTPUT = torch.tensor([[-10.4948, -10.7065,  -6.1813, -10.5545, -10.3428,  -9.1493,  -8.4937,
+          -8.6382,  -9.2159,  -9.5907,  -9.3679,  -8.4184,  -9.0655,  -3.4436,
+           2.9616, -10.3157,  -6.3723,  -6.0133,  -9.7100,  -9.2128,  -8.8064,
+          -9.8179,  -9.7516,  -9.4681,  -9.7715,  -9.4897,  -9.0491,  -9.8098,
+          -9.4648,  -9.3294],
+        [-13.3010, -13.1910,  -5.7230, -13.2895, -13.4864,  -8.7140,  -7.0275,
+          -7.0182, -10.1362, -10.3762,  -9.9086,  -7.8049,  -8.8660,  -5.2711,
+          -3.5778, -12.5346,  -9.1609,  -6.7925, -10.3717,  -9.2650, -10.6393,
+         -11.4807, -11.2128, -10.9615, -10.5806, -10.8873, -11.0651, -11.3471,
+         -10.5437,  -9.9688]]).to(torch_device) 
+        
+        torch.testing.assert_close(EXPECTED_OUTPUT, output[0, :2, :30], rtol=1e-4, atol=1e-4)
