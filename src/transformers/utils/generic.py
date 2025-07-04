@@ -1011,7 +1011,12 @@ def check_model_inputs(func):
         capture_flags = _CAN_RECORD_REGISTRY[self]  # there is a weak ref for executorch
         recordable_keys = {
             f"output_{k}": all_args.get(
-                f"output_{k}", getattr(self.config, f"output_{k}", all_args.get("output_attentions", False))
+                f"output_{k}",
+                getattr(
+                    self.config,
+                    f"output_{k}",
+                    all_args.get("output_attentions", getattr(self.config, "output_attentions", False)),
+                ),
             )
             for k in capture_flags
         }
@@ -1082,7 +1087,6 @@ def check_model_inputs(func):
                     outputs[key] = collected_outputs[key]
             else:
                 outputs[key] = collected_outputs[key]
-
         if return_dict is False:
             outputs = outputs.to_tuple()
         return outputs
