@@ -27,7 +27,13 @@ from transformers.models.llava.modeling_llava import (
     LlavaPreTrainedModel,
     TransformersKwargs,
 )
-from transformers.models.sam.modeling_sam import SamMLPBlock, SamVisionAttention, SamVisionEncoder, SamVisionLayer
+from transformers.models.sam.modeling_sam import (
+    SamMLPBlock,
+    SamVisionAttention,
+    SamVisionEncoder,
+    SamVisionLayer,
+    SamPreTrainedModel,
+)
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -241,7 +247,11 @@ class GotOcr2VisionLayer(SamVisionLayer):
         self.window_size = window_size
 
 
-class GotOcr2VisionEncoder(SamVisionEncoder):
+class GotOcr2PreTrainedModel(SamPreTrainedModel):
+    pass
+
+
+class GotOcr2VisionEncoder(SamVisionEncoder, GotOcr2PreTrainedModel):
     pass
 
 
