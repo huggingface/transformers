@@ -476,7 +476,7 @@ class SamHQVisionNeck(nn.Module):
 class SamHQVisionEncoder(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": SamHQVisionLayer,
-        "attentions": OutputRecorder(SamHQVisionAttention, index=1),
+        "attentions": SamHQVisionAttention,
     }
 
     def __init__(self, config: SamHQVisionConfig):

@@ -160,7 +160,7 @@ class SamHQVisionLayer(SamVisionLayer):
 class SamHQVisionEncoder(SamVisionEncoder):
     _can_record_outputs = {
         "hidden_states": SamHQVisionLayer,
-        "attentions": OutputRecorder(SamHQVisionAttention, index=1),
+        "attentions": SamHQVisionAttention,
     }
 
     @check_model_inputs
