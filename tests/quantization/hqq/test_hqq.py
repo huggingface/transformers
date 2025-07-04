@@ -15,6 +15,8 @@
 import gc
 import unittest
 
+import accelerate
+
 from transformers import AutoModelForCausalLM, AutoTokenizer, HqqConfig
 from transformers.testing_utils import (
     backend_empty_cache,
@@ -42,7 +44,6 @@ class HQQLLMRunner:
             torch_dtype=compute_dtype,
             device_map=device,
             quantization_config=quant_config,
-            low_cpu_mem_usage=True,
             cache_dir=cache_dir,
         )
         self.tokenizer = AutoTokenizer.from_pretrained(model_id, cache_dir=cache_dir)
@@ -119,6 +120,41 @@ class HQQTest(unittest.TestCase):
 
         check_hqqlayer(self, hqq_runner.model.model.layers[0].self_attn.v_proj)
         check_forward(self, hqq_runner.model)
+
+    def test_quantized_model_to_new_device_and_new_dtype(self):
+        """
+        Simple LLM model testing different devices and dtypes
+        """
+        quant_config = HqqConfig(nbits=8, group_size=64)
+
+        hqq_runner = HQQLLMRunner(
+            model_id=MODEL_ID, quant_config=quant_config, compute_dtype=torch.float16, device=torch_device
+        )
+
+        original_device = hqq_runner.model.model.layers[0].self_attn.v_proj.device
+        check_hqqlayer(self, hqq_runner.model.model.layers[0].self_attn.v_proj)
+        check_forward(self, hqq_runner.model)
+
+        # Remove `accelerate` hooks to enable move the model to a new device
+        accelerate.hooks.remove_hook_from_module(hqq_runner.model, recurse=True)
+
+        hqq_runner.model.to("cpu", torch.bfloat16)
+        check_hqqlayer(self, hqq_runner.model.model.layers[0].self_attn.v_proj)
+        check_forward(self, hqq_runner.model)
+
+        hqq_runner.model.cuda(original_device)
+        check_hqqlayer(self, hqq_runner.model.model.layers[0].self_attn.v_proj)
+        check_forward(self, hqq_runner.model)
+
+    def test_quantized_model_fake_weight_dtype(self):
+        quant_config = HqqConfig(nbits=8, group_size=64)
+
+        hqq_runner = HQQLLMRunner(
+            model_id=MODEL_ID, quant_config=quant_config, compute_dtype=torch.float16, device=torch_device
+        )
+
+        # We use a hack to inject a fake weight to HQQLinear. Check that it works
+        self.assertEqual(hqq_runner.model.model.layers[0].self_attn.v_proj.weight.dtype, torch.float16)
 
 
 @slow
@@ -233,7 +269,9 @@ class HQQSerializationTest(unittest.TestCase):
 
         # Load and check if the logits match
         model_loaded = AutoModelForCausalLM.from_pretrained(
-            "quant_model", torch_dtype=torch.float16, device_map=torch_device, low_cpu_mem_usage=True
+            "quant_model",
+            torch_dtype=torch.float16,
+            device_map=torch_device,
         )
 
         with torch.no_grad():

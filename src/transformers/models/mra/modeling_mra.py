@@ -16,7 +16,7 @@
 
 import math
 from pathlib import Path
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -25,6 +25,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch.utils.cpp_extension import load
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithCrossAttentions,
     MaskedLMOutput,
@@ -35,7 +36,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import auto_docstring, is_ninja_available, is_torch_cuda_available, logging
+from ...utils import auto_docstring, is_cuda_platform, is_ninja_available, is_torch_cuda_available, logging
 from .configuration_mra import MraConfig
 
 
@@ -528,7 +529,7 @@ class MraSelfAttention(nn.Module):
             )
 
         kernel_loaded = mra_cuda_kernel is not None
-        if is_torch_cuda_available() and is_ninja_available() and not kernel_loaded:
+        if is_torch_cuda_available() and is_cuda_platform() and is_ninja_available() and not kernel_loaded:
             try:
                 load_cuda_kernels()
             except Exception as e:
@@ -688,7 +689,7 @@ class MraOutput(nn.Module):
         return hidden_states
 
 
-class MraLayer(nn.Module):
+class MraLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -738,14 +739,7 @@ class MraEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, attention_mask)
+            layer_outputs = layer_module(hidden_states, attention_mask)
 
             hidden_states = layer_outputs[0]
 
@@ -874,7 +868,7 @@ class MraModel(MraPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithCrossAttentions]:
+    ) -> Union[tuple, BaseModelOutputWithCrossAttentions]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -973,7 +967,7 @@ class MraForMaskedLM(MraPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, MaskedLMOutput]:
+    ) -> Union[tuple, MaskedLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1063,7 +1057,7 @@ class MraForSequenceClassification(MraPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SequenceClassifierOutput]:
+    ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1144,7 +1138,7 @@ class MraForMultipleChoice(MraPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, MultipleChoiceModelOutput]:
+    ) -> Union[tuple, MultipleChoiceModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -1249,7 +1243,7 @@ class MraForTokenClassification(MraPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, TokenClassifierOutput]:
+    ) -> Union[tuple, TokenClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1325,7 +1319,7 @@ class MraForQuestionAnswering(MraPreTrainedModel):
         end_positions: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, QuestionAnsweringModelOutput]:
+    ) -> Union[tuple, QuestionAnsweringModelOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.mra(

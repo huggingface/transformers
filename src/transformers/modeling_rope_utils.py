@@ -228,7 +228,7 @@ def _compute_yarn_parameters(
 ) -> tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies with NTK scaling. Please refer to the
-    [original paper](https://arxiv.org/abs/2309.00071)
+    [original paper](https://huggingface.co/papers/2309.00071)
     Args:
         config ([`~transformers.PretrainedConfig`]):
             The model configuration.

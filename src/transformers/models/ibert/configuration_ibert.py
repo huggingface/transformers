@@ -17,7 +17,7 @@
 """I-BERT configuration"""
 
 from collections import OrderedDict
-from typing import Mapping
+from collections.abc import Mapping
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
@@ -68,9 +68,9 @@ class IBertConfig(PretrainedConfig):
         position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
             Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
             positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
+            [Self-Attention with Relative Position Representations (Shaw et al.)](https://huggingface.co/papers/1803.02155).
             For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
+            with Better Relative Position Embeddings (Huang et al.)](https://huggingface.co/papers/2009.13658).
         quant_mode (`bool`, *optional*, defaults to `False`):
             Whether to quantize the model or not.
         force_dequant (`str`, *optional*, defaults to `"none"`):

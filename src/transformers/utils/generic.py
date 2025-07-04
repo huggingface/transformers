@@ -26,7 +26,7 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import fields, is_dataclass
 from enum import Enum
 from functools import partial, wraps
-from typing import Any, Callable, ContextManager, List, Optional, TypedDict
+from typing import Any, Callable, ContextManager, Optional, TypedDict
 
 import numpy as np
 from packaging import version
@@ -853,12 +853,12 @@ class LossKwargs(TypedDict, total=False):
     Keyword arguments to be passed to the loss function
 
     Attributes:
-        num_items_in_batch (`int`, *optional*):
+        num_items_in_batch (`Optional[torch.Tensor]`, *optional*):
             Number of items in the batch. It is recommended to pass it when
             you are doing gradient accumulation.
     """
 
-    num_items_in_batch: Optional[int]
+    num_items_in_batch: Optional["torch.Tensor"]
 
 
 def is_timm_config_dict(config_dict: dict[str, Any]) -> bool:
@@ -990,5 +990,5 @@ class GeneralInterface(MutableMapping):
     def register(cls, key: str, value: Callable):
         cls._global_mapping.update({key: value})
 
-    def valid_keys(self) -> List[str]:
+    def valid_keys(self) -> list[str]:
         return list(self.keys())

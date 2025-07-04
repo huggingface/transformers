@@ -4,7 +4,7 @@ import io
 import json
 import os
 import re
-from typing import List, Optional
+from typing import Optional
 
 import torch
 from tokenizers import AddedToken, processors
@@ -421,7 +421,7 @@ def write_model(
                 tqdm.write(f"Processing: {key.ljust(50)}  ->\t {v}, {values.shape}")
                 state_dict[v] = values
             elif _OFFLINE_QUANT_COMPATIBLE and "feed_forward.experts." in new_key:
-                # for experts, we need to split expert for offline quantiation purpose and don't need to fuse
+                # for experts, we need to split expert for offline quantization purpose and don't need to fuse
                 expert_lists = []
                 for k in current_parameter:
                     expert_lists.append(
@@ -621,7 +621,7 @@ class Llama4Converter(TikTokenConverter):
     def __init__(
         self,
         vocab_file,
-        special_tokens: List[str],
+        special_tokens: list[str],
         pattern: str,
         model_max_length: int = 0,
         chat_template: Optional[str] = None,
@@ -710,7 +710,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--special_tokens",
         default=None,
-        type=List[str],
+        type=list[str],
         help="The list of special tokens that should be added to the model.",
     )
     parser.add_argument(

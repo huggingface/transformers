@@ -118,7 +118,7 @@ FROM_PRETRAINED_TORCH_DOCSTRING = """
                       save directory.
                     - The model is loaded by supplying a local directory as `pretrained_model_name_or_path` and a
                       configuration JSON file named *config.json* is found in the directory.
-            state_dict (*Dict[str, torch.Tensor]*, *optional*):
+            state_dict (*dict[str, torch.Tensor]*, *optional*):
                 A state dictionary to use instead of a state dictionary loaded from saved weights file.
 
                 This option can be used if you want to create a model from a pretrained configuration but load your own
@@ -136,7 +136,7 @@ FROM_PRETRAINED_TORCH_DOCSTRING = """
             resume_download:
                 Deprecated and ignored. All downloads are now resumed by default when possible.
                 Will be removed in v5 of Transformers.
-            proxies (`Dict[str, str]`, *optional*):
+            proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             output_loading_info(`bool`, *optional*, defaults to `False`):
@@ -235,7 +235,7 @@ FROM_PRETRAINED_TF_DOCSTRING = """
             resume_download:
                 Deprecated and ignored. All downloads are now resumed by default when possible.
                 Will be removed in v5 of Transformers.
-            proxies (`Dict[str, str]`, *optional*):
+            proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             output_loading_info(`bool`, *optional*, defaults to `False`):
@@ -334,7 +334,7 @@ FROM_PRETRAINED_FLAX_DOCSTRING = """
             resume_download:
                 Deprecated and ignored. All downloads are now resumed by default when possible.
                 Will be removed in v5 of Transformers.
-            proxies (`Dict[str, str]`, *optional*):
+            proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             output_loading_info(`bool`, *optional*, defaults to `False`):
@@ -415,7 +415,7 @@ class _BaseAutoModelClass:
     _model_mapping = None
 
     def __init__(self, *args, **kwargs) -> None:
-        raise EnvironmentError(
+        raise OSError(
             f"{self.__class__.__name__} is designed to be instantiated "
             f"using the `{self.__class__.__name__}.from_pretrained(pretrained_model_name_or_path)` or "
             f"`{self.__class__.__name__}.from_config(config)` methods."
@@ -442,8 +442,12 @@ class _BaseAutoModelClass:
             else:
                 repo_id = config.name_or_path
             model_class = get_class_from_dynamic_module(class_ref, repo_id, **kwargs)
-            model_class.register_for_auto_class(auto_class=cls)
-            cls.register(config.__class__, model_class, exist_ok=True)
+            # This block handles the case where the user is loading a model with `trust_remote_code=True`
+            # but a library model exists with the same name. We don't want to override the autoclass
+            # mappings in this case, or all future loads of that model will be the remote code model.
+            if not has_local_code:
+                cls.register(config.__class__, model_class, exist_ok=True)
+                model_class.register_for_auto_class(auto_class=cls)
             _ = kwargs.pop("code_revision", None)
             model_class = add_generation_mixin_to_remote_model(model_class)
             return model_class._from_config(config, **kwargs)
@@ -579,8 +583,12 @@ class _BaseAutoModelClass:
                 class_ref, pretrained_model_name_or_path, code_revision=code_revision, **hub_kwargs, **kwargs
             )
             _ = hub_kwargs.pop("code_revision", None)
-            cls.register(config.__class__, model_class, exist_ok=True)
-            model_class.register_for_auto_class(auto_class=cls)
+            # This block handles the case where the user is loading a model with `trust_remote_code=True`
+            # but a library model exists with the same name. We don't want to override the autoclass
+            # mappings in this case, or all future loads of that model will be the remote code model.
+            if not has_local_code:
+                cls.register(config.__class__, model_class, exist_ok=True)
+                model_class.register_for_auto_class(auto_class=cls)
             model_class = add_generation_mixin_to_remote_model(model_class)
             return model_class.from_pretrained(
                 pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
