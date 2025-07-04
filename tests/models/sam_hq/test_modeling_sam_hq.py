@@ -646,6 +646,7 @@ class SamHQModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
             config.output_attentions = True
+            config.vision_config.output_attentions = True
             model = model_class(config)
             model.to(torch_device)
             model.eval()
