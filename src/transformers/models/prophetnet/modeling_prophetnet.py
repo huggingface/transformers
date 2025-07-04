@@ -1657,6 +1657,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMi
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, ProphetNetSeq2SeqLMOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1876,6 +1877,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, ProphetNetDecoderLMOutput]:
         r"""
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):

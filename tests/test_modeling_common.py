@@ -590,7 +590,7 @@ class ModelTesterMixin:
                 for k, v in inputs_dict.items()
             }
         elif model_class.__name__ in get_values(MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES):
-            inputs_dict.pop("attention_mask")
+            inputs_dict.pop("attention_mask", None)
         elif model_class.__name__ == MODEL_FOR_PRETRAINING_MAPPING_NAMES["hiera"]:
             config = self.model_tester.get_config()
             mask_spatial_shape = [
@@ -1779,6 +1779,7 @@ class ModelTesterMixin:
 
             inputs_dict["output_attentions"] = True
             config.output_hidden_states = False
+            config._attn_implementation = "eager"
             model = model_class(config=config)
             model.to(torch_device)
             model.eval()
@@ -1812,6 +1813,7 @@ class ModelTesterMixin:
 
             inputs_dict["output_attentions"] = True
             config.output_hidden_states = False
+            config._attn_implementation = "eager"
             model = model_class(config=config)
             model.to(torch_device)
             model.eval()
@@ -1823,7 +1825,7 @@ class ModelTesterMixin:
 
             with tempfile.TemporaryDirectory() as temp_dir_name:
                 model.save_pretrained(temp_dir_name)
-                model = model_class.from_pretrained(temp_dir_name)
+                model = model_class.from_pretrained(temp_dir_name, attn_implementation="eager")
                 model.to(torch_device)
 
             with torch.no_grad():
@@ -1849,6 +1851,7 @@ class ModelTesterMixin:
 
             inputs_dict["output_attentions"] = True
             config.output_hidden_states = False
+            config._attn_implementation = "eager"
 
             heads_to_prune = {
                 0: list(range(1, self.model_tester.num_attention_heads)),
@@ -1884,6 +1887,7 @@ class ModelTesterMixin:
 
             inputs_dict["output_attentions"] = True
             config.output_hidden_states = False
+            config._attn_implementation = "eager"
 
             heads_to_prune = {1: [1, 2]}
             config.pruned_heads = heads_to_prune
@@ -1901,7 +1905,7 @@ class ModelTesterMixin:
 
             with tempfile.TemporaryDirectory() as temp_dir_name:
                 model.save_pretrained(temp_dir_name)
-                model = model_class.from_pretrained(temp_dir_name)
+                model = model_class.from_pretrained(temp_dir_name, attn_implementation="eager")
                 model.to(torch_device)
 
             with torch.no_grad():
@@ -3502,14 +3506,22 @@ class ModelTesterMixin:
                     else:
                         dummy_attention_mask[:, :-1] = 1
                         dummy_attention_mask[:, -1:] = 0
-                if model.config.is_encoder_decoder:
-                    decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[:1]
 
-                    outputs = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
-                    outputs_fa = model_fa(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
-                else:
-                    outputs = model(dummy_input, output_hidden_states=True)
-                    outputs_fa = model_fa(dummy_input, output_hidden_states=True)
+                # no attention mask
+                processed_inputs = {
+                    model.main_input_name: dummy_input,
+                    "output_hidden_states": True,
+                }
+                if model.config.is_encoder_decoder:
+                    processed_inputs["decoder_input_ids"] = inputs_dict.get("decoder_input_ids", dummy_input)[:1]
+
+                prepared_inputs = self._prepare_for_class(processed_inputs, model_class)
+                prepared_inputs = {
+                    k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in prepared_inputs.items()
+                }
+
+                outputs = model(**prepared_inputs)
+                outputs_fa = model_fa(**prepared_inputs)
 
                 logits = (
                     outputs.hidden_states[-1]
@@ -3524,26 +3536,19 @@ class ModelTesterMixin:
 
                 assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
 
-                if model.config.is_encoder_decoder:
-                    other_inputs = {
-                        "decoder_input_ids": decoder_input_ids,
-                        "decoder_attention_mask": dummy_attention_mask,
-                        "output_hidden_states": True,
-                    }
-                    if dummy_attention_mask is not None:
-                        other_inputs["attention_mask"] = dummy_attention_mask
+                # with attention mask
+                if dummy_attention_mask is not None:
+                    processed_inputs["attention_mask"] = dummy_attention_mask
+                    if model.config.is_encoder_decoder:
+                        processed_inputs["decoder_attention_mask"] = dummy_attention_mask
 
-                    outputs = model(dummy_input, **other_inputs)
-                    outputs_fa = model_fa(dummy_input, **other_inputs)
-                else:
-                    other_inputs = {
-                        "output_hidden_states": True,
-                    }
-                    if dummy_attention_mask is not None:
-                        other_inputs["attention_mask"] = dummy_attention_mask
+                prepared_inputs = self._prepare_for_class(processed_inputs, model_class)
+                prepared_inputs = {
+                    k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in prepared_inputs.items()
+                }
 
-                    outputs = model(dummy_input, **other_inputs)
-                    outputs_fa = model_fa(dummy_input, **other_inputs)
+                outputs = model(**prepared_inputs)
+                outputs_fa = model_fa(**prepared_inputs)
 
                 logits = (
                     outputs.hidden_states[-1]
@@ -3561,7 +3566,7 @@ class ModelTesterMixin:
 
                     # check with inference + dropout
                     model.train()
-                    _ = model_fa(dummy_input, **other_inputs)
+                    _ = model_fa(**prepared_inputs)
                 else:
                     assert torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
 
