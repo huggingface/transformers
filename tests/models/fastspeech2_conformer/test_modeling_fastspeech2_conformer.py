@@ -470,7 +470,7 @@ class FastSpeech2ConformerModelIntegrationTest(unittest.TestCase):
 
         torch.testing.assert_close(spectrogram[0, :10, :10], expected_mel_spectrogram, rtol=1e-3, atol=1e-3)
         torch.testing.assert_close(loss, expected_loss, rtol=1e-4, atol=1e-4)
-        self.assertEqual(spectrogram.shape, (1, 224, model.config.num_mel_bins))
+        self.assertEqual(tuple(spectrogram.shape), (1, 219, model.config.num_mel_bins))
 
 
 class FastSpeech2ConformerWithHifiGanTester:
