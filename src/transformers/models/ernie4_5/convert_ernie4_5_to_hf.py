@@ -57,7 +57,10 @@ if __name__ == "__main__":
         "--checkpoint_path", type=str, default="baidu/ERNIE-4.5-0.3B-PT", help="Path to the checkpoint"
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default="AntonV/ERNIE-4.5-0.3B-PT", type=str, help="Path to the output PyTorch model."
+        "--pytorch_dump_folder_path",
+        default="AntonV/ERNIE-4.5-0.3B-PT",
+        type=str,
+        help="Path to the output PyTorch model.",
     )
     parser.add_argument(
         "--convert_tokenizer",
