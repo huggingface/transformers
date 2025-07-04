@@ -36,7 +36,7 @@ from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils import auto_docstring, logging
 from .configuration_sam_hq import SamHQConfig, SamHQMaskDecoderConfig, SamHQPromptEncoderConfig, SamHQVisionConfig
 
 
@@ -225,7 +225,7 @@ class SamHQVisionAttention(nn.Module):
 
         return decomposed_rel_pos
 
-    def forward(self, hidden_states: torch.Tensor, output_attentions=False) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, output_attentions=None) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, height, width, _ = hidden_states.shape
         # qkv with shape (3, batch_size, nHead, height * width, channel)
         qkv = (
@@ -483,7 +483,6 @@ class SamHQVisionEncoder(PreTrainedModel):
         super().__init__(config)
         self.config = config
         self.image_size = config.image_size
-
         self.patch_embed = SamHQPatchEmbeddings(config)
 
         self.pos_embed = None
@@ -1274,6 +1273,7 @@ class SamHQPromptEncoder(nn.Module):
 class SamHQModel(SamHQPreTrainedModel):
     _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
     _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
+    _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(SamHQTwoWayAttentionBlock, index=2)}
 
     def __init__(self, config):
         super().__init__(config)
@@ -1356,7 +1356,7 @@ class SamHQModel(SamHQPreTrainedModel):
         )
         return prompt_output
 
-    @can_return_tuple
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
