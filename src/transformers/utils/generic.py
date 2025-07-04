@@ -1008,7 +1008,7 @@ def check_model_inputs(func):
             for k, v in all_args["kwargs"].items():
                 all_args[k] = v
 
-        capture_flags = _CAN_RECORD_REGISTRY[self]  # there is a weak ref for executorch
+        capture_flags = _CAN_RECORD_REGISTRY[self] or []  # there is a weak ref for executorch
         recordable_keys = {
             f"output_{k}": all_args.get(
                 f"output_{k}",
@@ -1020,7 +1020,6 @@ def check_model_inputs(func):
             )
             for k in capture_flags
         }
-
         collected_outputs = defaultdict(tuple)
         monkey_patched_layers = []
 

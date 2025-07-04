@@ -23,7 +23,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from transformers.utils.generic import TransformersKwargs, check_model_inputs
+from transformers.utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs
 
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
@@ -447,11 +447,9 @@ class SamFeedForward(nn.Module):
         return hidden_states
 
 
-class SamMaskDecoder(PreTrainedModel):
-    _can_return_tuple = {"attentions": (SamTwoWayAttentionBlock, 2)}
-
+class SamMaskDecoder(nn.Module):
     def __init__(self, config: SamMaskDecoderConfig):
-        super().__init__(config)
+        super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
 
@@ -487,7 +485,6 @@ class SamMaskDecoder(PreTrainedModel):
         multimask_output: bool,
         attention_similarity: Optional[torch.Tensor] = None,
         target_embedding: Optional[torch.Tensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Predict masks given image and prompt embeddings.
@@ -829,7 +826,7 @@ class SamVisionAttention(nn.Module):
 
         return decomposed_rel_pos
 
-    def forward(self, hidden_states: torch.Tensor, output_attentions=False) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, output_attentions=None) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, height, width, _ = hidden_states.shape
         # qkv with shape (3, batch_size, nHead, height * width, channel)
         qkv = (
@@ -1035,7 +1032,6 @@ class SamVisionEncoder(PreTrainedModel):
         super().__init__(config)
         self.config = config
         self.image_size = config.image_size
-
         self.patch_embed = SamPatchEmbeddings(config)
 
         self.pos_embed = None
@@ -1146,6 +1142,7 @@ class SamModel(SamPreTrainedModel):
     _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
     # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
     _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
+    _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(SamTwoWayAttentionBlock, index=2)}
 
     def __init__(self, config):
         super().__init__(config)
@@ -1231,7 +1228,7 @@ class SamModel(SamPreTrainedModel):
         )
         return prompt_output
 
-    @can_return_tuple
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -1389,7 +1386,6 @@ class SamModel(SamPreTrainedModel):
             multimask_output=multimask_output,
             attention_similarity=attention_similarity,
             target_embedding=target_embedding,
-            **kwargs,
         )
 
         return SamImageSegmentationOutput(

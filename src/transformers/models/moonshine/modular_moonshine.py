@@ -549,14 +549,12 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         self.conv2 = nn.Conv1d(embed_dim, 2 * embed_dim, kernel_size=7, stride=3)
         self.conv3 = nn.Conv1d(2 * embed_dim, embed_dim, kernel_size=3, stride=2)
         self.groupnorm = nn.GroupNorm(num_groups=1, num_channels=embed_dim, eps=1e-5)
-
         self.rotary_emb = MoonshineRotaryEmbedding(config=config)
 
         self.layers = nn.ModuleList(
             [MoonshineEncoderLayer(config, idx) for idx in range(config.encoder_num_hidden_layers)]
         )
         self.layer_norm = nn.LayerNorm(embed_dim, bias=False)
-
         self.gradient_checkpointing = False
         self.post_init()
 
@@ -587,7 +585,6 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
                 - 0 for tokens that are **masked**.
                 [What are attention masks?](../glossary#attention-mask)
         """
-        # conv downsampling
         input_values = input_values.unsqueeze(1)
         hidden_states = nn.functional.tanh(self.conv1(input_values))
         hidden_states = self.groupnorm(hidden_states)
@@ -602,18 +599,12 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
             attention_mask = attention_mask[..., ::downsample_stride][..., :mask_len]
             if self.config._attn_implementation == "flash_attention_2":
                 attention_mask = attention_mask if (attention_mask == 0.0).any() else None
-
-            # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
             elif self.config._attn_implementation == "sdpa":
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
                 attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, hidden_states.dtype)
             else:
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
                 attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
 
         position_ids = torch.arange(0, hidden_states.shape[1], device=hidden_states.device).unsqueeze(0)
-
-        # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for encoder_layer in self.layers:
