@@ -1597,7 +1597,7 @@ class CompileConfig:
     ```
     """
 
-    fullgraph: bool = False
+    fullgraph: bool = True
     dynamic: Optional[bool] = None
     backend: Union[str, Callable] = "inductor"
     mode: str = "reduce-overhead"

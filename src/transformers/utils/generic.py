@@ -963,13 +963,8 @@ def can_return_tuple(func):
     return wrapper
 
 
-if is_torch_available():
-
-    @torch._dynamo.disable
-    def register_hook_if_needed(layer, capture_outputs):
-        return layer.register_forward_hook(capture_outputs)
-
-
+# if is_torch_available():
+# @torch._dynamo.disable
 @dataclass
 @requires(backends=("torch",))
 class OutputRecorder:
@@ -989,51 +984,31 @@ class OutputRecorder:
 
 def check_model_inputs(func):
     """
-    Decorator to check if the model inputs are valid before calling the function.
-    It raises a ValueError if the inputs are not valid.
-
-    BIG BIG TODO:
-    - if fullgraph compilation, just execute the fonction and don't add hooks
-      or anything!
-
-    `nn.Module.named_modules()` will output the name of the layer, along with the class.
-    We use this to separate which instance should get hooks or not!
+    Decorator to intercept specific layer outputs without using hooks.
+    Compatible with torch.compile (Dynamo tracing).
     """
 
     @wraps(func)
     def wrapper(self, *args, **kwargs):
         use_cache = kwargs.get("use_cache", getattr(self.config, "use_cache", False))
-        return_dict = self.config.return_dict if hasattr(self, "config") else True
-        return_dict = kwargs.pop("return_dict", return_dict)
-        if return_dict is None:
-            return_dict = True
+        return_dict = kwargs.pop("return_dict", getattr(self.config, "return_dict", True))
+
         sig = inspect.signature(func)
         bound = sig.bind_partial(self, *args, **kwargs)
         bound.apply_defaults()
         all_args = bound.arguments
+
         if getattr(self, "gradient_checkpointing", False) and self.training and use_cache:
             logger.warning_once(
                 "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
             )
             kwargs["use_cache"] = False
 
-        hooks = []
-        collected_outputs = defaultdict(tuple)
-
-        def make_capture_fn(key, index):
-            def capture_fn(_, __, output):
-                if not isinstance(output, tuple):
-                    collected_outputs[key] += (output,)
-                elif output[index] is not None:
-                    collected_outputs[key] += (output[index],)
-
-            return capture_fn
-
-        capture_flags = self._can_record_outputs
         if "kwargs" in all_args:
-            for k, v in all_args["kwargs"].items():  # we do this for dynamo compile
+            for k, v in all_args["kwargs"].items():
                 all_args[k] = v
 
+        capture_flags = self.can_record_outputs
         recordable_keys = {
             f"output_{k}": all_args.get(
                 f"output_{k}", getattr(self.config, f"output_{k}", all_args.get("output_attentions", False))
@@ -1041,35 +1016,51 @@ def check_model_inputs(func):
             for k in capture_flags
         }
 
+        collected_outputs = defaultdict(tuple)
+        monkey_patched_layers = []
+
+        def make_capture_wrapper(orig_forward, key, index):
+            @wraps(orig_forward)
+            def wrapped_forward(*args, **kwargs):
+                output = orig_forward(*args, **kwargs)
+                if not isinstance(output, tuple):
+                    collected_outputs[key] += (output,)
+                elif output[index] is not None:
+                    collected_outputs[key] += (output[index],)
+                return output
+
+            return wrapped_forward
+
         if any(recordable_keys.values()):
             capture_tasks = []
             for key, layer_specs in capture_flags.items():
                 if not recordable_keys.get(f"output_{key}", False):
                     continue
-                if not isinstance(layer_specs, list):  # sometimes you want a single key to match multiple outputs
+                if not isinstance(layer_specs, list):
                     layer_specs = [layer_specs]
                 for specs in layer_specs:
                     if not isinstance(specs, OutputRecorder):
                         index = 0 if "hidden_states" in key else 1
                         specs = OutputRecorder(target_class=specs, index=index)
-
                     capture_tasks.append((key, specs))
 
             for name, module in self.named_modules():
                 for key, specs in capture_tasks:
                     if isinstance(module, specs.target_class):
-                        if specs.layer_name is not None:
-                            if specs.layer_name in name:
-                                hook_fn = make_capture_fn(key, specs.index)
-                                hooks.append(register_hook_if_needed(module, hook_fn))
-                        else:
-                            hook_fn = make_capture_fn(key, specs.index)
-                            hooks.append(register_hook_if_needed(module, hook_fn))
+                        if specs.layer_name is not None and specs.layer_name not in name:
+                            continue
+                        # Monkey patch forward
+                        original_forward = module.forward
+                        module.forward = make_capture_wrapper(original_forward, key, specs.index)
+                        monkey_patched_layers.append((module, original_forward))
 
         outputs = func(self, *args, **kwargs)
-        for h in hooks:
-            if h is not None:
-                h.remove()
+
+        # Restore original forward methods
+        for module, original_forward in monkey_patched_layers:
+            module.forward = original_forward
+
+        # Inject collected outputs into model output
         for key in collected_outputs:
             if key == "hidden_states":
                 if hasattr(outputs, "vision_hidden_states"):
@@ -1079,7 +1070,6 @@ def check_model_inputs(func):
                 outputs[key] = collected_outputs[key]
             elif key == "attentions":
                 if isinstance(capture_flags[key], list) and len(capture_flags[key]) == 2:
-                    # we have cross attention states return in the same buffer
                     outputs[key] = collected_outputs[key][0::2]
                     outputs["cross_" + key] = collected_outputs[key][1::2]
                 else:

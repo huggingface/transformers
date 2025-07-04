@@ -123,7 +123,7 @@ from .utils import (
     logging,
     strtobool,
 )
-from .utils.generic import GeneralInterface
+from .utils.generic import GeneralInterface, OutputRecorder
 from .utils.hub import create_and_tag_model_card, get_checkpoint_shard_files
 from .utils.import_utils import (
     ENV_VARS_TRUE_VALUES,
@@ -2026,6 +2026,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
     # through all modules up to the Attention layer, can slice logits with Tensor, and have a default TP plan
     _supports_attention_backend = False
     _can_record_outputs = None
+
+    @property
+    @torch._dynamo.allow_in_graph
+    def can_record_outputs(self) -> dict[str, OutputRecorder]:
+        return self._can_record_outputs or {}
 
     @property
     def dummy_inputs(self) -> dict[str, torch.Tensor]:
