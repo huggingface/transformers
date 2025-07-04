@@ -310,9 +310,8 @@ class PagedAttentionCache:
 
     @traced
     def _get_physical_sliding_indices(
-        self, state: RequestState, logical_indices: list[int]
+        self, state: RequestState, logical_indices: list[int], query_length: int
     ) -> tuple[Optional[list[int]], Optional[list[int]]]:
-        # TODO
         """
         Maps logical sequence indices to physical cache indices using the sliding window mechanism.
 
@@ -339,20 +338,37 @@ class PagedAttentionCache:
         current_seq_len = len(logical_indices)
         sliding_window = self.sliding_window
 
-        sliding_window_blocks = (sliding_window + block_size - 1) // block_size
+        def get_circular_physical_index(logical_index: int, sliding_window: int) -> int:
+            """Convert a logical index to a physical index using circular mapping."""
+            circular_pos = logical_index % sliding_window
+            block_idx = circular_pos // block_size
+            block_offset = circular_pos % block_size
 
-        # get all blocks
-        sliding_blocks = block_table[
-            :sliding_window_blocks
-        ]  # TODO: need to adapt code in _allocate_blocks_if_needed to avoid overallocating blocks
+            if block_idx >= len(block_table):
+                raise IndexError(
+                    f"Logical index {logical_index} maps to block index {block_idx} which is out of bounds "
+                    f"for request {request_id}"
+                )
+
+            physical_block_num = block_table[block_idx]
+            return physical_block_num * block_size + block_offset
 
         if current_seq_len <= sliding_window:
-            # within sliding window size
-            pass
+            # Window is not full, we can read all logical indices
+            read_logical_indices = logical_indices
         else:
-            # exceeded window size
-            pass
-        pass
+            # Window is full, we need to read the last `sliding_window` indices
+            read_logical_indices = logical_indices[-sliding_window:]
+
+        read_indices = []
+        for idx in read_logical_indices:
+            read_indices.append(get_circular_physical_index(idx, sliding_window))
+
+        write_logical_indices = logical_indices[-query_length:]
+        write_indices = []
+        for idx in write_logical_indices:
+            write_indices.append(get_circular_physical_index(idx, sliding_window))
+        return read_indices, write_indices
 
     @traced
     def update(
@@ -941,11 +957,11 @@ class ContinuousBatchProcessor:
             cache_index = list(range(key_length))
 
             positions_to_add = cache_index[past_length:]
-            (sliding_read_indices, sliding_write_indices) = self.cache._get_physical_sliding_indices(
-                state, cache_index
-            )
             read_indices = self.cache._get_physical_indices(state, cache_index)
             write_indices = read_indices[-query_length:]
+            sliding_read_indices, sliding_write_indices = self.cache._get_physical_sliding_indices(
+                state, cache_index, query_length
+            )
             cache_index = {
                 "full_attention": (read_indices, write_indices),
                 "sliding_window": (sliding_read_indices, sliding_write_indices),
