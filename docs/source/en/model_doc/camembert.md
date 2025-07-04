@@ -1,141 +1,79 @@
-<!--Copyright 2020 The HuggingFace Team. All rights reserved.
-
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
-the License. You may obtain a copy of the License at
-
-http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
-an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
-specific language governing permissions and limitations under the License.
-
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
-rendered properly in your Markdown viewer.
-
--->
-
-# CamemBERT
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+# CamemBERT Base
+<div style="float: right;">
+	<div class="flex flex-wrap space-x-1">
+		<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+		<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
+	</div>
 </div>
 
-## Overview
+[CamemBERT](https://huggingface.co/docs/transformers/model_doc/camembert) is a language model based on RoBERTa, but it was trained specifically on French text from the OSCAR dataset.
 
-The CamemBERT model was proposed in [CamemBERT: a Tasty French Language Model](https://huggingface.co/papers/1911.03894) by
-[Louis Martin](https://huggingface.co/louismartin), [Benjamin Muller](https://huggingface.co/benjamin-mlr), [Pedro Javier Ortiz Suárez](https://huggingface.co/pjox), Yoann Dupont, Laurent Romary, Éric Villemonte de la
-Clergerie, [Djamé Seddah](https://huggingface.co/Djame), and [Benoît Sagot](https://huggingface.co/sagot). It is based on Facebook's RoBERTa model released in 2019. It is a model
-trained on 138GB of French text.
+What sets CamemBERT apart is that it learned from a huge, high quality collection of French data, as opposed to mixing lots of languages. This helps it really understand French better than many multilingual models.
 
-The abstract from the paper is the following:
+Common applications of CamemBERT include masked language modeling (Fill-mask prediction), text classification (sentiment analysis), token classification (entity recognition) and sentence pair classification (entailment tasks).
 
-*Pretrained language models are now ubiquitous in Natural Language Processing. Despite their success, most available
-models have either been trained on English data or on the concatenation of data in multiple languages. This makes
-practical use of such models --in all languages except English-- very limited. Aiming to address this issue for French,
-we release CamemBERT, a French version of the Bi-directional Encoders for Transformers (BERT). We measure the
-performance of CamemBERT compared to multilingual models in multiple downstream tasks, namely part-of-speech tagging,
-dependency parsing, named-entity recognition, and natural language inference. CamemBERT improves the state of the art
-for most of the tasks considered. We release the pretrained model for CamemBERT hoping to foster research and
-downstream applications for French NLP.*
+You can find all the original CamemBERT checkpoints under the [CamemBERT](https://huggingface.co/models?search=camembert) collection.
 
-This model was contributed by [the ALMAnaCH team (Inria)](https://huggingface.co/almanach). The original code can be found [here](https://camembert-model.fr/).
+> [!TIP]
+> This model was contributed by the [Facebook AI](https://huggingface.co/facebook) team.
+>
+> Click on the CamemBERT models in the right sidebar for more examples of how to apply CamemBERT to different NLP tasks.
 
-<Tip>
+The examples below demonstrate how to perform masked language modeling with `pipeline` or the `AutoModel` class.
 
-This implementation is the same as RoBERTa. Refer to the [documentation of RoBERTa](roberta) for usage examples as well 
-as the information relative to the inputs and outputs.
+<hfoptions id="usage">
 
-</Tip>
+<hfoption id="Pipeline">
+
+```python
+from transformers import pipeline
+
+fill_mask = pipeline("fill-mask", model="camembert-base")
+result = fill_mask("Le camembert est un délicieux fromage <mask>.")
+print(result)
+```
+
+</hfoption>
+
+<hfoption id="AutoModel">
+
+```python
+from transformers import AutoTokenizer, AutoModelForMaskedLM
+
+tokenizer = AutoTokenizer.from_pretrained("camembert-base")
+model = AutoModelForMaskedLM.from_pretrained("camembert-base")
+
+inputs = tokenizer("Le camembert est un délicieux fromage <mask>.", return_tensors="pt")
+outputs = model(**inputs)
+```
+
+</hfoption>
+
+</hfoptions>
+
+Quantization reduces the memory burden of large models by representing weights in lower precision. Refer to the [Quantization](https://huggingface.co/docs/transformers/main/en/quantization) overview for available options.
+The example below uses [BitsAndBytes](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#load-in-8bit-or-4bit-using-bitsandbytes) quantization to load the model in 8-bit precision.
+
+```python
+from transformers import AutoTokenizer, AutoModelForMaskedLM, BitsAndBytesConfig
+
+quant_config = BitsAndBytesConfig(load_in_8bit=True)
+model = AutoModelForMaskedLM.from_pretrained(
+    "camembert-base",
+    quantization_config=quant_config,
+    device_map="auto"
+)
+tokenizer = AutoTokenizer.from_pretrained("camembert-base")
+```
+	
+## Notes
+
+- CamemBERT uses RoBERTa pretraining objectives.
+- It makes use of a SentencePiece tokenizer.
+- It does not support token type IDs (segment embeddings).
+- Special pre-processing/post-processing is not needed.
 
 ## Resources
 
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Causal language modeling task guide](../tasks/language_modeling)
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
-- [Multiple choice task guide](../tasks/multiple_choice)
-
-## CamembertConfig
-
-[[autodoc]] CamembertConfig
-
-## CamembertTokenizer
-
-[[autodoc]] CamembertTokenizer
-    - build_inputs_with_special_tokens
-    - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
-    - save_vocabulary
-
-## CamembertTokenizerFast
-
-[[autodoc]] CamembertTokenizerFast
-
-<frameworkcontent>
-<pt>
-
-## CamembertModel
-
-[[autodoc]] CamembertModel
-
-## CamembertForCausalLM
-
-[[autodoc]] CamembertForCausalLM
-
-## CamembertForMaskedLM
-
-[[autodoc]] CamembertForMaskedLM
-
-## CamembertForSequenceClassification
-
-[[autodoc]] CamembertForSequenceClassification
-
-## CamembertForMultipleChoice
-
-[[autodoc]] CamembertForMultipleChoice
-
-## CamembertForTokenClassification
-
-[[autodoc]] CamembertForTokenClassification
-
-## CamembertForQuestionAnswering
-
-[[autodoc]] CamembertForQuestionAnswering
-
-</pt>
-<tf>
-
-## TFCamembertModel
-
-[[autodoc]] TFCamembertModel
-
-## TFCamembertForCausalLM
-
-[[autodoc]] TFCamembertForCausalLM
-
-## TFCamembertForMaskedLM
-
-[[autodoc]] TFCamembertForMaskedLM
-
-## TFCamembertForSequenceClassification
-
-[[autodoc]] TFCamembertForSequenceClassification
-
-## TFCamembertForMultipleChoice
-
-[[autodoc]] TFCamembertForMultipleChoice
-
-## TFCamembertForTokenClassification
-
-[[autodoc]] TFCamembertForTokenClassification
-
-## TFCamembertForQuestionAnswering
-
-[[autodoc]] TFCamembertForQuestionAnswering
-
-</tf>
-</frameworkcontent>
-
+- [Original Paper](https://arxiv.org/abs/1911.03894)
+- [Hugging Face Model Card](https://huggingface.co/camembert-base)
