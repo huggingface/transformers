@@ -38,7 +38,7 @@ class Ernie4_5Tokenizer(PreTrainedTokenizer):
     # Model input names expected by the tokenizer
     model_input_names = ["input_ids", "position_ids", "attention_mask", "labels"]
     # Padding side (where to add padding tokens)
-    padding_side = "right"
+    padding_side = "left"
 
     def __init__(
         self,
