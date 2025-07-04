@@ -1478,6 +1478,12 @@ if __name__ == "__main__":
             else:
                 other_ci_artifacts.append((target_workflow_run_id, ci_artifacts))
 
+    current_artifacts = sorted(filter(os.path.isdir, os.listdir()))
+    prev_artifacts = sorted(os.listdir(output_dir))
+
+    print(f"current_artifacts: {current_artifacts}")
+    print(f"prev_artifacts: {prev_artifacts}")
+
     ci_name_in_report = ""
     if job_name in job_to_test_map:
         ci_name_in_report = job_to_test_map[job_name]
