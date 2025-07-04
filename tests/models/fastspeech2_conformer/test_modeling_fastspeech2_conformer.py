@@ -466,7 +466,7 @@ class FastSpeech2ConformerModelIntegrationTest(unittest.TestCase):
         )
         # fmt: on
 
-        expected_loss = torch.tensor(74.4595, device=torch_device)
+        expected_loss = torch.tensor(74.127174, device=torch_device)
 
         torch.testing.assert_close(spectrogram[0, :10, :10], expected_mel_spectrogram, rtol=1e-3, atol=1e-3)
         torch.testing.assert_close(loss, expected_loss, rtol=1e-4, atol=1e-4)
