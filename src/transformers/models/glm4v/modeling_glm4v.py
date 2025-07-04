@@ -902,6 +902,7 @@ class Glm4vTextModel(Glm4vPreTrainedModel):
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
+            position_ids=position_ids,
         )
 
         hidden_states = inputs_embeds
@@ -1269,13 +1270,13 @@ class Glm4vModel(Glm4vPreTrainedModel):
 
             if input_ids is None:
                 video_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
                 video_mask = video_mask.all(-1)
             else:
-                video_mask = input_ids == self.config.video_token_id
+                video_mask = input_ids == self.config.image_token_id
 
-            n_video_tokens = (video_mask).sum()
+            n_video_tokens = video_mask.sum()
             n_video_features = video_embeds.shape[0]
             video_mask = video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
             if not is_torchdynamo_compiling() and n_video_tokens != n_video_features:

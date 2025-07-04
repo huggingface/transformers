@@ -245,6 +245,7 @@ class PhiModel(LlamaModel):
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
+            position_ids=position_ids,
         )
 
         inputs_embeds = self.embed_dropout(inputs_embeds)  # diff with Llama

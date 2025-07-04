@@ -19,7 +19,7 @@ import unittest
 import requests
 
 from transformers import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig, pipeline
-from transformers.testing_utils import cleanup, require_torch, require_torch_sdpa, slow, torch_device
+from transformers.testing_utils import Expectations, cleanup, require_torch, require_torch_sdpa, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -771,9 +771,18 @@ class SamModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
         scores = outputs.iou_scores.squeeze().cpu()
-        masks = outputs.pred_masks[0, 0, 0, 0, :3].cpu()
+        masks = outputs.pred_masks[0, 0, 0, 0, :3]
+
+        expectations = Expectations(
+            {
+                (None, None): [-12.7729, -12.3665, -12.6061],
+                ("cuda", 8): [-12.7657, -12.3683, -12.5983],
+            }
+        )
+        expected_masks = torch.tensor(expectations.get_expectation()).to(torch_device)
+
         torch.testing.assert_close(scores[-1], torch.tensor(0.9566), rtol=2e-4, atol=2e-4)
-        torch.testing.assert_close(masks, torch.tensor([-12.7729, -12.3665, -12.6061]), rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(masks, expected_masks, rtol=2e-4, atol=2e-4)
 
     def test_inference_mask_generation_batched_points_batched_images(self):
         model = SamModel.from_pretrained("facebook/sam-vit-base")
