@@ -720,7 +720,7 @@ def _infer_parameter_dtype(
     # in int/uint/bool and not cast them.
     casting_dtype = None
     is_param_float8_e4m3fn = is_torch_e4m3fn_available and empty_param.dtype == torch.float8_e4m3fn
-    # is_param_float8_e5m2 = is_torch_e5m2_available and empty_param.dtype == torch.float8_e5m2
+    is_param_float8_e5m2 = is_torch_e5m2_available and empty_param.dtype == torch.float8_e5m2
     if empty_param.dtype.is_floating_point and not is_param_float8_e4m3fn and not is_param_float8_e5m2:
     # if empty_param.dtype.is_floating_point and not is_param_float8_e4m3fn:
         # First fp32 if part of the exception list

@@ -145,34 +145,36 @@ class Mxfp4HfQuantizer(HfQuantizer):
         
         module, _ = get_module_from_name(model, param_name)
 
-        # calculating padding needed for each tensor
-        if "gate_up_proj" in param_name and isinstance(module, Mxfp4OpenAIMoeExperts):
-            right_pad = module.gate_up_proj_right_pad
-            bottom_pad = module.gate_up_proj_bottom_pad
-        elif "down_proj" in param_name and isinstance(module, Mxfp4OpenAIMoeExperts):
-            right_pad = module.down_proj_right_pad
-            bottom_pad = module.down_proj_bottom_pad
-
+        
         with torch.cuda.device(target_device):
-            loaded_weight_shuffled = shuffle_weight(param_value).to(target_device)
-            loaded_weight = torch.nn.functional.pad(loaded_weight_shuffled,
-                                    (0, right_pad, 0, bottom_pad, 0, 0),
-                                    mode="constant",
-                                    value=0)
-            # delete intermediate tensor immediate to prevent OOM
-            del loaded_weight_shuffled
-            torch.cuda.empty_cache()
-            loaded_weight, flex, mx = quantize_to_mxfp4(
-                loaded_weight, self.swizzle_mx_value, self.swizzle_mx_scale)
-        if isinstance(module, Mxfp4OpenAIMoeExperts):
-            if "gate_up_proj" in param_name:
-                module.gate_up_proj_precision_config = PrecisionConfig(
-                    mx_ctx=mx, flex_ctx=FlexCtx(rhs_data=flex))
-                module.gate_up_proj = torch.nn.Parameter(loaded_weight, requires_grad=False)
-            elif "down_proj" in param_name:
-                module.down_proj_precision_config = PrecisionConfig(
-                    mx_ctx=mx, flex_ctx=FlexCtx(rhs_data=flex))
-                module.down_proj = torch.nn.Parameter(loaded_weight, requires_grad=False)
+            if isinstance(module, Mxfp4OpenAIMoeExperts):
+                if "gate_up_proj" in param_name:
+                    right_pad = module.gate_up_proj_right_pad
+                    bottom_pad = module.gate_up_proj_bottom_pad
+                    # we only shuffle gate_proj
+                    loaded_weight_shuffled = shuffle_weight(param_value).to(target_device)
+                    loaded_weight = torch.nn.functional.pad(loaded_weight_shuffled,
+                                            (0, right_pad, 0, bottom_pad, 0, 0),
+                                            mode="constant",
+                                            value=0)
+                    del loaded_weight_shuffled
+                    torch.cuda.empty_cache()
+                    loaded_weight, flex, mx = quantize_to_mxfp4(
+                    loaded_weight, self.swizzle_mx_value, self.swizzle_mx_scale)
+                    module.gate_up_proj_precision_config = PrecisionConfig(mx_ctx=mx, flex_ctx=FlexCtx(rhs_data=flex))
+                    module.gate_up_proj = torch.nn.Parameter(loaded_weight, requires_grad=False)
+                elif "down_proj" in param_name:
+                    right_pad = module.down_proj_right_pad
+                    bottom_pad = module.down_proj_bottom_pad
+                    loaded_weight = torch.nn.functional.pad(param_value,
+                                            (0, right_pad, 0, bottom_pad, 0, 0),
+                                            mode="constant",
+                                            value=0).to(target_device)
+                    # delete intermediate tensor immediate to prevent OOM
+                    loaded_weight, flex, mx = quantize_to_mxfp4(
+                        loaded_weight, self.swizzle_mx_value, self.swizzle_mx_scale)
+                    module.down_proj_precision_config = PrecisionConfig(mx_ctx=mx, flex_ctx=FlexCtx(rhs_data=flex))
+                    module.down_proj = torch.nn.Parameter(loaded_weight, requires_grad=False)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         from ..integrations import shuffle_weight, Mxfp4OpenAIMoeExperts
@@ -184,7 +186,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 gate_up_proj_bias = torch.nn.functional.pad(gate_up_proj_bias, (0, module.gate_up_proj_right_pad, 0, 0),
                                 mode="constant",
                                 value=0)
-
                 down_proj_bias = module.down_proj_bias.to(torch.float32)
                 down_proj_bias = torch.nn.functional.pad(down_proj_bias, (0, module.down_proj_right_pad, 0, 0),
                                 mode="constant",
