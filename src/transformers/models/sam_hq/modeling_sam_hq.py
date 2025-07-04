@@ -29,12 +29,12 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 from transformers.modeling_outputs import ModelOutput
-from transformers.modeling_utils import PreTrainedModel
 from transformers.utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs
 
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
 from .configuration_sam_hq import SamHQConfig, SamHQMaskDecoderConfig, SamHQPromptEncoderConfig, SamHQVisionConfig
