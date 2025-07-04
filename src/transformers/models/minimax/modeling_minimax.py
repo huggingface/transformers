@@ -599,10 +599,6 @@ class MiniMaxPreTrainedModel(PreTrainedModel):
     _supports_quantized_cache = False
     _supports_static_cache = False
     _supports_attention_backend = True
-    _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
-        "hidden_states": MiniMaxDecoderLayer,
-        "attentions": MiniMaxAttention,
-    }
     _can_record_outputs = {
         "hidden_states": MiniMaxDecoderLayer,
         "attentions": MiniMaxAttention,

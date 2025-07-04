@@ -292,7 +292,7 @@ class Qwen3PreTrainedModel(PreTrainedModel):
     _supports_quantized_cache = True
     _supports_static_cache = True
     _supports_attention_backend = True
-    _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
+    _can_record_outputs = {
         "hidden_states": Qwen3DecoderLayer,
         "attentions": Qwen3Attention,
     }

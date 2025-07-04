@@ -1019,7 +1019,7 @@ def check_model_inputs(func):
         collected_outputs = defaultdict(tuple)
         monkey_patched_layers = []
 
-        def make_capture_wrapper(orig_forward, key, index):
+        def make_capture_wrapper(module, orig_forward, key, index):
             @wraps(orig_forward)
             def wrapped_forward(*args, **kwargs):
                 output = orig_forward(*args, **kwargs)
@@ -1027,6 +1027,12 @@ def check_model_inputs(func):
                     collected_outputs[key] += (output,)
                 elif output[index] is not None:
                     collected_outputs[key] += (output[index],)
+                # Manually invoke forward hooks (preserve original hook behavior)
+                if module._forward_hooks:
+                    for hook in module._forward_hooks.values():
+                        hook_result = hook(module, args, output)
+                        if hook_result is not None:
+                            output = hook_result
                 return output
 
             return wrapped_forward
@@ -1051,7 +1057,7 @@ def check_model_inputs(func):
                             continue
                         # Monkey patch forward
                         original_forward = module.forward
-                        module.forward = make_capture_wrapper(original_forward, key, specs.index)
+                        module.forward = make_capture_wrapper(module, original_forward, key, specs.index)
                         monkey_patched_layers.append((module, original_forward))
 
         outputs = func(self, *args, **kwargs)

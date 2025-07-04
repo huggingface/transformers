@@ -263,10 +263,6 @@ class MistralPreTrainedModel(PreTrainedModel):
     _supports_quantized_cache = True
     _supports_static_cache = True
     _supports_attention_backend = True
-    _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
-        "hidden_states": MistralDecoderLayer,
-        "attentions": MistralAttention,
-    }
     _can_record_outputs = {
         "hidden_states": MistralDecoderLayer,
         "attentions": MistralAttention,

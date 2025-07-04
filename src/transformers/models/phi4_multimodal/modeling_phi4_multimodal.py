@@ -1596,10 +1596,6 @@ class Phi4MultimodalPreTrainedModel(PreTrainedModel):
     _supports_quantized_cache = True
     _supports_static_cache = True
     _supports_attention_backend = True
-    _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
-        "hidden_states": Phi4MultimodalDecoderLayer,
-        "attentions": Phi4MultimodalAttention,
-    }
     _can_record_outputs = {
         "hidden_states": Phi4MultimodalDecoderLayer,
         "attentions": Phi4MultimodalAttention,

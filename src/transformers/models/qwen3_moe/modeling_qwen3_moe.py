@@ -432,10 +432,6 @@ class Qwen3MoePreTrainedModel(PreTrainedModel):
     _supports_quantized_cache = True
     _supports_static_cache = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _supports_attention_backend = True
-    _can_record_outputs: dict[str, tuple[nn.Module, int]] = {
-        "hidden_states": Qwen3MoeDecoderLayer,
-        "attentions": Qwen3MoeAttention,
-    }
     _can_record_outputs = {
         "hidden_states": Qwen3MoeDecoderLayer,
         "attentions": Qwen3MoeAttention,
