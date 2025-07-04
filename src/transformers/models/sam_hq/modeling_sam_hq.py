@@ -21,7 +21,7 @@
 # limitations under the License.
 import collections
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 
 import numpy as np
 import torch
@@ -31,7 +31,7 @@ from torch import Tensor, nn
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
 from .configuration_sam_hq import SamHQConfig, SamHQMaskDecoderConfig, SamHQPromptEncoderConfig, SamHQVisionConfig
 
@@ -594,6 +594,28 @@ class SamHQLayerNorm(nn.Module):
         return x
 
 
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+        attn_weights = torch.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class SamHQAttention(nn.Module):
     """
     SAM_HQ's attention layer that allows for downscaling the size of the embedding after projection to queries, keys, and
@@ -602,6 +624,7 @@ class SamHQAttention(nn.Module):
 
     def __init__(self, config, downsample_rate=None):
         super().__init__()
+        self.config = config
         self.hidden_size = config.hidden_size
 
         downsample_rate = config.attention_downsample_rate if downsample_rate is None else downsample_rate
@@ -623,12 +646,11 @@ class SamHQAttention(nn.Module):
         return hidden_states.transpose(1, 2)
 
     def _recombine_heads(self, hidden_states: Tensor, point_batch_size: int) -> Tensor:
-        batch, n_heads, n_tokens, c_per_head = hidden_states.shape
-        hidden_states = hidden_states.transpose(1, 2)
+        batch, n_tokens, n_heads, c_per_head = hidden_states.shape
         return hidden_states.reshape(batch // point_batch_size, point_batch_size, n_tokens, n_heads * c_per_head)
 
     def forward(
-        self, query: Tensor, key: Tensor, value: Tensor, attention_similarity: Optional[Tensor] = None
+        self, query: Tensor, key: Tensor, value: Tensor, attention_similarity: Optional[Tensor] = None, **kwargs
     ) -> Tensor:
         # Input projections
         query = self.q_proj(query)
@@ -642,64 +664,33 @@ class SamHQAttention(nn.Module):
         value = self._separate_heads(value, self.num_attention_heads)
 
         # SamHQAttention
-        _, _, _, c_per_head = query.shape
-        attn = query @ key.permute(0, 1, 3, 2)  # batch_size * point_batch_size  x N_heads x N_tokens x N_tokens
-        attn = attn / (c_per_head**0.5)
-        attn = torch.softmax(attn, dim=-1)
+        scale = query.shape[-1] ** -0.5
+        attention_interface: Callable = eager_attention_forward
+        self.config._attn_implementation = "sdpa"
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attn_output, _ = attention_interface(
+            self,
+            query,
+            key,
+            value,
+            attention_mask=attention_similarity,
+            dropout=0.0 if not self.training else self.dropout_p,
+            scaling=scale,
+            is_causal=False,
+            **kwargs,
+        )
 
-        if attention_similarity is not None:
-            attn = attn + attention_similarity
-            attn = torch.softmax(attn, dim=-1)
-
-        # Get output
-        out = attn @ value
-        out = self._recombine_heads(out, point_batch_size)
+        out = self._recombine_heads(attn_output, point_batch_size)
         out = self.out_proj(out)
 
         return out
-
-
-class SamHQSdpaAttention(SamHQAttention):
-    """
-    SAM_HQ's attention layer that allows for downscaling the size of the embedding after projection to queries, keys, and
-    values. Using SDPA instead of the default attention.
-    """
-
-    def __init__(self, config, downsample_rate=None):
-        super().__init__(config, downsample_rate)
-
-    def forward(
-        self, query: Tensor, key: Tensor, value: Tensor, attention_similarity: Optional[Tensor] = None
-    ) -> Tensor:
-        # Input projections
-        query = self.q_proj(query)
-        key = self.k_proj(key)
-        value = self.v_proj(value)
-
-        point_batch_size = query.shape[1]
-        # Separate into heads
-        query = self._separate_heads(query, self.num_attention_heads)
-        key = self._separate_heads(key, self.num_attention_heads)
-        value = self._separate_heads(value, self.num_attention_heads)
-
-        # Scaled dot product attention
-        attn_mask = None
-        if attention_similarity is not None:
-            attn_mask = attention_similarity.unsqueeze(1).expand(-1, self.num_attention_heads, -1, -1)
-
-        out = F.scaled_dot_product_attention(query, key, value, attn_mask=attn_mask)
-
-        # Get output
-        out = self._recombine_heads(out, point_batch_size)
-        out = self.out_proj(out)
-
-        return out
-
-
-SAM_HQ_ATTENTION_CLASSES = {
-    "eager": SamHQAttention,
-    "sdpa": SamHQSdpaAttention,
-}
 
 
 class SamHQTwoWayAttentionBlock(nn.Module):
@@ -722,21 +713,17 @@ class SamHQTwoWayAttentionBlock(nn.Module):
         self.hidden_size = config.hidden_size
         self.layer_norm_eps = config.layer_norm_eps
 
-        self.self_attn = SAM_HQ_ATTENTION_CLASSES[config._attn_implementation](config, downsample_rate=1)
+        self.self_attn = SamHQAttention(config, downsample_rate=1)
         self.layer_norm1 = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps)
 
-        self.cross_attn_token_to_image = SAM_HQ_ATTENTION_CLASSES[config._attn_implementation](
-            config, downsample_rate=attention_downsample_rate
-        )
+        self.cross_attn_token_to_image = SamHQAttention(config, downsample_rate=attention_downsample_rate)
         self.layer_norm2 = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps)
 
         self.mlp = SamHQMLPBlock(config)
         self.layer_norm3 = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps)
 
         self.layer_norm4 = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps)
-        self.cross_attn_image_to_token = SAM_HQ_ATTENTION_CLASSES[config._attn_implementation](
-            config, downsample_rate=attention_downsample_rate
-        )
+        self.cross_attn_image_to_token = SamHQAttention(config, downsample_rate=attention_downsample_rate)
         self.skip_first_layer_pe = skip_first_layer_pe
 
     def forward(
@@ -803,7 +790,7 @@ class SamHQTwoWayTransformer(nn.Module):
         for i in range(self.num_hidden_layers):
             self.layers.append(SamHQTwoWayAttentionBlock(config, skip_first_layer_pe=(i == 0)))
 
-        self.final_attn_token_to_image = SAM_HQ_ATTENTION_CLASSES[config._attn_implementation](config)
+        self.final_attn_token_to_image = SamHQAttention(config)
         self.layer_norm_final_attn = nn.LayerNorm(config.hidden_size)
 
     def forward(
