@@ -38,6 +38,9 @@ from ..generation.configuration_utils import GenerationConfig
 from ..utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 
 
+torch.manual_seed(0)
+
+
 class RequestStatus(Enum):
     """Status of a generation request through its lifecycle."""
 
