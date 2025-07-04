@@ -16,6 +16,7 @@ import argparse
 import gc
 import json
 import os
+from pathlib import Path
 from typing import List, Optional
 
 import regex as re
@@ -85,7 +86,19 @@ def write_model(
     eos_token_id = 199999 if not instruct else [199999, 200018]
     pad_token_id = 128004
 
-    config = OpenAIMoeConfig()
+    original_config = json.loads((Path(input_base_path) / "config.json").read_text())
+
+    num_local_experts = original_config.pop("num_experts")
+    rope_scaling = {
+        "beta_fast": float(original_config.pop("rope_ntk_beta")),
+        "beta_slow": float(original_config.pop("rope_ntk_alpha")),
+        "factor": float(original_config.pop('rope_scaling_factor')),
+        "rope_type": "yarn",
+        "truncate": False,
+        "original_max_position_embeddings": 4096
+      }
+
+    config = OpenAIMoeConfig(num_local_experts=num_local_experts, rope_scaling=rope_scaling, **original_config)
 
     print(f"Fetching all parameters from the checkpoint at {input_base_path}...")
     final_ = {}
@@ -224,13 +237,31 @@ class OpenAIMoeConverter(TikTokenConverter):
         # TODO 1st donwload the vocabfile!!!
         tokenizer = tiktoken.get_encoding(vocab_file)
         self.additional_special_tokens = {}
-        # 199998 is not defined either
-        self.additional_special_tokens["<|reserved_199998|>"] = 199998
-        self.additional_special_tokens = {"<|endoftext|>": 199999, "<|endofprompt|>": 200018}
+        # Complete list of Harmony special tokens as per o200k_harmony spec
+        special_tokens_map = {
+            "<|startoftext|>": 199998,
+            "<|endoftext|>": 199999,
+            "<|return|>": 200002,
+            "<|constrain|>": 200003,
+            "<|channel|>": 200005,
+            "<|start|>": 200006,
+            "<|end|>": 200007,
+            "<|message|>": 200008,
+            "<|call|>": 200012,
+            "<|endofprompt|>": 200018,
+        }
+
+        # Add the remaining reserved slots while skipping IDs already present above.
+        used_ids = set(special_tokens_map.values())
         for k in range(199999, 200018):
-            self.additional_special_tokens[f"<|reserved_{k}|>"] = k
-        sorted_list = sorted(self.additional_special_tokens.items(), key=lambda x: x[1])
-        self.additional_special_tokens = [k[0] for k in sorted_list]
+            if k in used_ids:
+                continue
+            special_tokens_map.setdefault(f"<|reserved_{k}|>", k)
+
+        # Keep only token strings (sorted by ID) for TikTokenConverter.
+        self.additional_special_tokens = [
+            tok for tok, _ in sorted(special_tokens_map.items(), key=lambda x: x[1])
+        ]
         tokenizer = self.converted()
         if chat_template is not None:
             kwargs["chat_template"] = chat_template
@@ -243,30 +274,47 @@ class OpenAIMoeConverter(TikTokenConverter):
 
 
 def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
-    # Chat template
-    chat_template = (
-        "{% for message in messages %}"
-        "{% if loop.index0 == 0 %}"
-        "{{ bos_token }}"
-        "{% endif %}"
-        "{{ '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n' }}"
-        "{% if message['content'] is string %}"
-        "{{ message['content'] }}"
-        "{% else %}"
-        "{% for content in message['content'] %}"
-        "{% if content['type'] == 'image' %}"
-        "{{ '<|image|>' }}"
-        "{% elif content['type'] == 'text' %}"
-        "{{ content['text'] }}"
-        "{% endif %}"
-        "{% endfor %}"
-        "{% endif %}"
-        "{{ '<|eot_id|>' }}"
-        "{% endfor %}"
-        "{% if add_generation_prompt %}"
-        "{{ '<|start_header_id|>assistant<|end_header_id|>\n\n' }}"
-        "{% endif %}"
-    )
+    # Updated Harmony chat template
+    chat_template = """{# Harmony chat template --------------------------------------------------
+   This template mirrors the message rendering logic implemented in
+   `harmony/src/encoding.rs`.  It can be consumed by Hugging Face
+   Transformers (``chat_template`` field) so that *text → tokens*
+   conversion of chat conversations happens fully on the Python side
+   without relying on the Rust renderer.
+
+   Supported *message* keys (per ``chat::Message``):
+     - role (user│assistant│system│developer│tool)
+     - name (optional author name)
+     - recipient (optional recipient – omitted or "all" → broadcast)
+     - channel   (optional meta channel)
+     - content_type (optional content-type qualifier)
+     - content (string – the actual message payload)
+
+   The template renders each historical message *fully* (incl. the
+   trailing <|end|>/<|return|> sentinel) and – if ``add_generation_prompt``
+   is True – appends a partial header for the **next** assistant turn
+   exactly like ``render_conversation_for_completion`` does on the Rust
+   side: ``<|start|>assistant``.
+#}
+
+{%- macro harmony_header(m) -%}
+    <|start|>{% if m['role'] == 'tool' %}{{ m['name'] }}{% else %}{{ m['role'] }}{% if m.get('name') %}:{{ m['name'] }}{% endif %}{% endif %}{% if m.get('recipient') and m['recipient'] != 'all' %} to={{ m['recipient'] }}{% endif %}{% if m.get('channel') %}<|channel|>{{ m['channel'] }}{% endif %}{% if m.get('content_type') %} {{ m['content_type'] }}{% endif %}<|message|>
+{%- endmacro -%}
+
+{# ---------------------------------------------------------------------
+   Render complete history
+#}
+{%- for message in messages -%}
+    {{- harmony_header(message) -}}{{ message['content'] }}{%- if message['role'] == 'assistant' -%}<|return|>{%- else -%}<|end|>{%- endif -%}
+{%- endfor -%}
+
+{# ---------------------------------------------------------------------
+   Generation prompt for *next* assistant answer
+#}
+{%- if add_generation_prompt -%}
+<|start|>assistant
+{%- endif -%}
+"""
 
     converter = OpenAIMoeConverter(
         vocab_file=tokenizer_path,
