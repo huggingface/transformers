@@ -36,6 +36,7 @@ from ..qwen2.modeling_qwen2 import (
     Qwen2ForTokenClassification,
     Qwen2Model,
     Qwen2RMSNorm,
+    Qwen2PreTrainedModel,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -111,6 +112,10 @@ class Qwen3DecoderLayer(Qwen2DecoderLayer):
     pass
 
 
+class Qwen3PreTrainedModel(Qwen2PreTrainedModel):
+    pass
+
+
 class Qwen3Model(Qwen2Model):
     pass
 
@@ -160,6 +165,7 @@ class Qwen3ForQuestionAnswering(Qwen2ForQuestionAnswering):
 __all__ = [
     "Qwen3ForCausalLM",
     "Qwen3ForQuestionAnswering",
+    "Qwen3PreTrainedModel",
     "Qwen3Model",
     "Qwen3ForSequenceClassification",
     "Qwen3ForTokenClassification",
