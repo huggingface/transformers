@@ -55,11 +55,15 @@ class Mxfp4HfQuantizer(HfQuantizer):
 
         compute_capability = torch.cuda.get_device_capability()
         major, minor = compute_capability
+        # TODO: Fix that
+        # if not is_triton_kernels_availalble():
+        #     raise ValueError(
+        #         "MXFP4 quantization requires triton_kernels library"
+        #     )
         if major < 9:
             raise ValueError(
-                "FP4 quantized models is only supported on GPUs with compute capability >= 9.0 (e.g H100)"
+                "MXFP4 quantized models is only supported on GPUs with compute capability >= 9.0 (e.g H100)"
             )
-        # TODO: update accelerate version when it is released
         if not is_accelerate_available():
             raise ImportError(
                 f"Using `bitsandbytes` 4-bit quantization requires Accelerate: `pip install 'accelerate>=1.8.0'`"
@@ -82,6 +86,21 @@ class Mxfp4HfQuantizer(HfQuantizer):
                     "This is not supported when the model is quantized on the fly. "
                     "Please use a quantized checkpoint or remove the CPU or disk device from the device_map."
                 )
+        from triton_kernels.numerics_details.mxfp import SwizzlingType
+
+        if major < 9:
+            # NYI for Ampere
+            swizzle_mx_value = None
+            swizzle_mx_scale = None
+        elif major < 10:
+            swizzle_mx_value = SwizzlingType.HOPPER
+            swizzle_mx_scale = SwizzlingType.HOPPER
+        else:
+            swizzle_mx_value = None
+            swizzle_mx_scale = SwizzlingType.BLACKWELL
+
+        self.swizzle_mx_value = swizzle_mx_value
+        self.swizzle_mx_scale = swizzle_mx_scale
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
@@ -103,25 +122,13 @@ class Mxfp4HfQuantizer(HfQuantizer):
         state_dict: Dict[str, Any],
         **kwargs,
     ):
-        from ..integrations import Mxfp4Linear, Mxfp4OpenAIMoeExperts
-
+        from ..integrations import Mxfp4OpenAIMoeExperts
         module, tensor_name = get_module_from_name(model, param_name)
 
-        if isinstance(module, Mxfp4Linear):
-            if self.pre_quantized or tensor_name == "bias":
-                if tensor_name == "weight" and param_value.dtype != torch.float8_e5m2:
-                    raise ValueError("Expect quantized weights but got an unquantized weight")
+        if isinstance(module, Mxfp4OpenAIMoeExperts):
+            if tensor_name in ["down_proj_bias", "gate_up_proj_bias"]:
                 return False
             return True
-        if isinstance(module, Mxfp4OpenAIMoeExperts):
-            if self.pre_quantized or tensor_name == "bias":
-                if (tensor_name == "down_proj" or tensor_name == "gate_up_proj") and param_value.dtype != torch.float8_e5m2:
-                    raise ValueError("Expect quantized weights but got an unquantized weight")
-                return False
-            else:
-                if tensor_name == "gate_up_proj_scale" or tensor_name == "down_proj_scale":
-                    raise ValueError("Expect unquantized weights but got a quantized weight_scale")
-                return True
         return False
 
     def create_quantized_param(
@@ -133,12 +140,57 @@ class Mxfp4HfQuantizer(HfQuantizer):
         state_dict: Dict[str, Any],
         unexpected_keys: Optional[List[str]] = None,
     ):
-        """
-        Quantizes weights into weight and weight_scale
-        """
-        pass
+        from ..integrations import quantize_to_mxfp4, Mxfp4OpenAIMoeExperts, shuffle_weight
+        from triton_kernels.matmul_ogs import FlexCtx, PrecisionConfig
+        
+        module, _ = get_module_from_name(model, param_name)
+
+        # calculating padding needed for each tensor
+        if "gate_up_proj" in param_name and isinstance(module, Mxfp4OpenAIMoeExperts):
+            right_pad = module.gate_up_proj_right_pad
+            bottom_pad = module.gate_up_proj_bottom_pad
+        elif "down_proj" in param_name and isinstance(module, Mxfp4OpenAIMoeExperts):
+            right_pad = module.down_proj_right_pad
+            bottom_pad = module.down_proj_bottom_pad
+
+        with torch.cuda.device(target_device):
+            loaded_weight_shuffled = shuffle_weight(param_value).to(target_device)
+            loaded_weight = torch.nn.functional.pad(loaded_weight_shuffled,
+                                    (0, right_pad, 0, bottom_pad, 0, 0),
+                                    mode="constant",
+                                    value=0)
+            # delete intermediate tensor immediate to prevent OOM
+            del loaded_weight_shuffled
+            torch.cuda.empty_cache()
+            loaded_weight, flex, mx = quantize_to_mxfp4(
+                loaded_weight, self.swizzle_mx_value, self.swizzle_mx_scale)
+        if isinstance(module, Mxfp4OpenAIMoeExperts):
+            if "gate_up_proj" in param_name:
+                module.gate_up_proj_precision_config = PrecisionConfig(
+                    mx_ctx=mx, flex_ctx=FlexCtx(rhs_data=flex))
+                module.gate_up_proj = torch.nn.Parameter(loaded_weight, requires_grad=False)
+            elif "down_proj" in param_name:
+                module.down_proj_precision_config = PrecisionConfig(
+                    mx_ctx=mx, flex_ctx=FlexCtx(rhs_data=flex))
+                module.down_proj = torch.nn.Parameter(loaded_weight, requires_grad=False)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
+        from ..integrations import shuffle_weight, Mxfp4OpenAIMoeExperts
+
+        for module in model.modules():
+            if isinstance(module, Mxfp4OpenAIMoeExperts):
+                gate_up_proj_bias = shuffle_weight(module.gate_up_proj_bias)
+                gate_up_proj_bias = gate_up_proj_bias.to(torch.float32)
+                gate_up_proj_bias = torch.nn.functional.pad(gate_up_proj_bias, (0, module.gate_up_proj_right_pad, 0, 0),
+                                mode="constant",
+                                value=0)
+
+                down_proj_bias = module.down_proj_bias.to(torch.float32)
+                down_proj_bias = torch.nn.functional.pad(down_proj_bias, (0, module.down_proj_right_pad, 0, 0),
+                                mode="constant",
+                                value=0)
+                module.gate_up_proj_bias = torch.nn.Parameter(gate_up_proj_bias, requires_grad=False)
+                module.down_proj_bias = torch.nn.Parameter(down_proj_bias, requires_grad=False)
         return model
 
     def _process_model_before_weight_loading(
@@ -167,11 +219,11 @@ class Mxfp4HfQuantizer(HfQuantizer):
         model.config.quantization_config = self.quantization_config
 
     def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
-        from ..integrations import Mxfp4Linear, Mxfp4OpenAIMoeExperts
+        from ..integrations import Mxfp4OpenAIMoeExperts
 
         not_missing_keys = []
         for name, module in model.named_modules():
-            if isinstance(module, Mxfp4Linear) or isinstance(module, Mxfp4OpenAIMoeExperts):
+            if isinstance(module, Mxfp4OpenAIMoeExperts):
                 for missing in missing_keys:
                     if (
                         (name in missing or name in f"{prefix}.{missing}")

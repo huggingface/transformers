@@ -27,27 +27,44 @@ import re
 
 logger = logging.get_logger(__name__)
 
-from triton_kernels.matmul_ogs import matmul_ogs
-from triton_kernels.routing import (GatherIndx, RoutingData, ScatterIndx,
-                                    routing)
 
-class Mxfp4Linear(torch.nn.Linear):
-    def __init__(self, in_features, out_features, bias, weight_dtype=torch.float32):
-        super().__init__(in_features, out_features, bias)
-        # dtype torch.float4_e2m1fn not supported yet
-        self.weight = torch.nn.Parameter(torch.zeros((out_features, in_features), dtype=torch.float8_e5m2))
-        # self.weight_scale = torch.nn.Parameter(torch.zeros((out_features, 1), dtype=weight_dtype))
+def quantize_to_mxfp4(w, swizzle_mx_value, swizzle_mx_scale): 
+    from triton_kernels.numerics_details.mxfp import downcast_to_mxfp
+    from triton_kernels.matmul_ogs import InFlexData, MicroscalingCtx
+    swizzle_axis = 2 if swizzle_mx_scale else None
+    w = w.to(torch.bfloat16)
+    w, mx_scales, weight_scale_shape = downcast_to_mxfp(
+        w,
+        torch.uint8,
+        axis=1,
+        swizzle_axis=swizzle_axis,
+        swizzle_scale=swizzle_mx_scale,
+        swizzle_value=swizzle_mx_value)
+    return w, InFlexData(), MicroscalingCtx(
+        weight_scale=mx_scales,
+        swizzle_scale=swizzle_mx_scale,
+        swizzle_value=swizzle_mx_value,
+        actual_weight_scale_shape=weight_scale_shape)
 
-        if bias:
-            self.bias = torch.nn.Parameter(torch.zeros((out_features), dtype=weight_dtype))
-        else:
-            self.bias = None
+def shuffle_weight(w: "torch.Tensor") -> "torch.Tensor":
+    # Shuffle weight along the last dimension so that
+    # we folded the weights to adjance location
+    # Example:
+    # input:
+    #       [[1, 2, 3, 4, 5, 6],
+    #        [7, 8, 9, 10, 11, 12]]
+    # output:
+    #       [[1, 4, 2, 5, 3, 6],
+    #        [7, 10, 8, 11, 9, 12]]
+    # This will be used together with triton swiglu kernel
+    shape = w.shape
+    N = shape[-1]
+    first = w[..., :N // 2]
+    second = w[..., N // 2:]
 
-    def forward(self, x):
-        """
-        update
-        """
-        return
+    stacked = torch.stack((first, second), dim=-1)
+    w_shuffled = stacked.reshape(shape)
+    return w_shuffled
 
 # maybe subclass
 class Mxfp4OpenAIMoeExperts(nn.Module):
@@ -68,104 +85,75 @@ class Mxfp4OpenAIMoeExperts(nn.Module):
         )
         self.down_proj_bias = nn.Parameter(torch.zeros(self.num_experts, self.hidden_size))
         self.alpha = 1.702
+        
+        self.gate_up_proj_precision_config = None
+        self.down_proj_precision_config = None
 
-        # self.gate_up_proj_scale = torch.nn.Parameter(
-        #     torch.zeros((self.num_experts, 1, self.expert_dim * 2))
-        # )
-        # self.down_proj_scale = torch.nn.Parameter(
-        #     torch.zeros((self.num_experts, self.hidden_size, 1))
-        # )
+        smallest_even_divide_number = lambda x, n: (x // n + 1) * n if x % n != 0 else x
 
+        self.gate_up_proj_right_pad = smallest_even_divide_number(self.intermediate_size * 2, 256) - self.intermediate_size * 2
+        self.gate_up_proj_bottom_pad = 0 
+        
+        self.down_proj_right_pad = smallest_even_divide_number(self.hidden_size, 256) - self.hidden_size
+        self.down_proj_bottom_pad = self.gate_up_proj_right_pad // 2
+            
     def forward(self, hidden_states: torch.Tensor, router_logits=None, topk=None, router_indices=None, routing_weights=None) -> torch.Tensor:
         """
         To update with moe mxfp4 kernels, for now we just upcast the weights in torch.bfloat16
         """
-        # if self.training:
-        #     next_states = torch.zeros_like(hidden_states, dtype=hidden_states.dtype, device=hidden_states.device)
-        #     with torch.no_grad():
-        #         expert_mask = torch.nn.functional.one_hot(router_indices, num_classes=self.num_experts).permute(2, 1, 0)
-        #         expert_hitted = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-        #     for expert_idx in expert_hitted:
-        #         with torch.no_grad():
-        #             idx, top_x = torch.where(
-        #                 expert_mask[expert_idx][0]
-        #             )  # idx: top-1/top-2 indicator, top_x: token indices
-        #         current_state = hidden_states[top_x]  # (num_tokens, hidden_dim)
-        #         gate_up = (
-        #             current_state @ self.gate_up_proj[expert_idx].to(torch.bfloat16) + self.gate_up_proj_bias[expert_idx]
-        #         )  # (num_tokens, 2 * interm_dim)
-        #         gate, up = gate_up.chunk(2, dim=-1)  # (num_tokens, interm_dim)
-        #         glu = gate * torch.sigmoid(gate * self.alpha)  # (num_tokens, interm_dim)
-        #         gated_output = (up + 1) * glu  # (num_tokens, interm_dim)
-        #         out = (
-        #             gated_output @ self.down_proj[expert_idx].to(torch.bfloat16) + self.down_proj_bias[expert_idx]
-        #         )  # (num_tokens, hidden_dim)
-        #         weighted_output = out * routing_weights[top_x, idx, None]  # (num_tokens, hidden_dim)
-        #         next_states.index_add_(0, top_x, weighted_output.to(hidden_states.dtype)[0])
-        # else:
-        #     hidden_states = hidden_states.repeat(self.num_experts, 1)
-        #     hidden_states = hidden_states.view(self.num_experts, -1, self.hidden_size)
-        #     gate_up = torch.bmm(hidden_states, self.gate_up_proj.to(torch.bfloat16)) + self.gate_up_proj_bias[..., None, :]
-        #     gate, up = gate_up.chunk(2, dim=-1)  # not supported for DTensors
-        #     glu = gate * torch.sigmoid(gate * self.alpha)
-        #     next_states = torch.bmm(((up + 1) * glu), self.down_proj.to(torch.bfloat16)) + self.down_proj_bias[..., None, :]
-        #     next_states = next_states.view(-1, self.hidden_size)
         
-        use_oai_kernels = True
-        if use_oai_kernels:
+        # type check, uint8 means mxfp4
+        #TODO: fp8 x mxfp4 on blackwell
+        assert hidden_states.dtype == torch.bfloat16
+        assert self.gate_up_proj.dtype in (torch.bfloat16, torch.uint8)
+        assert self.down_proj.dtype in (torch.bfloat16, torch.uint8)
+        assert self.gate_up_proj_bias.dtype == torch.float32
+        assert self.down_proj_bias.dtype == torch.float32
+
+        # Shape check, only check non-mxfp4
+        if self.gate_up_proj.dtype != torch.uint8:
+            assert hidden_states.ndim == 2
+            assert hidden_states.shape[-1] == self.gate_up_proj.shape[-2]
+            assert self.down_proj.shape[-1] == self.gate_up_proj.shape[1]
+
+        from triton_kernels.matmul_ogs import FnSpecs, FusedActivation, matmul_ogs
+        from triton_kernels.swiglu import swiglu_fn
+        from triton_kernels.routing import routing
+        # TODO: needed in the context of device_map, maybe not for TP
+        with torch.cuda.device(hidden_states.device):
             renormalize = True
-            print(router_logits)
-            print(topk)
-            routing_data, gather_idx, scatter_idx = routing(router_logits, topk, renormalize)
-            print(routing_data)
-            print(gather_idx)
-            print(scatter_idx)
-            
-            # if global_num_experts == -1:
-            #     global_num_experts = E
+            routing_data, gather_idx, scatter_idx = routing(router_logits, topk, sm_first=not renormalize)
+            act = FusedActivation(FnSpecs("swiglu", swiglu_fn, ("alpha", "limit")),(self.alpha, None), 2)
 
-            # # consistent with default implementation
-            # intermediate_cache2 = torch.empty((M * n_expts_act, N // 2),
-            #                                 device="cuda",
-            #                                 dtype=dtype)
+            apply_router_weight_on_input = False
+            intermediate_cache1 = matmul_ogs(hidden_states,
+                                            self.gate_up_proj,
+                                            self.gate_up_proj_bias,
+                                            routing_data,
+                                            gather_indx=gather_idx,
+                                            precision_config=self.gate_up_proj_precision_config,
+                                            gammas=routing_data.gate_scal if apply_router_weight_on_input else None,
+                                            fused_activation=act)
 
-            # intermediate_cache1 = matmul_ogs(hidden_states,
-            #                                 w1,
-            #                                 None,
-            #                                 routing_data,
-            #                                 gather_indx=gather_indx,
-            #                                 gammas=routing_data.gate_scal
-            #                                 if apply_router_weight_on_input else None)
+            intermediate_cache3 = matmul_ogs(
+                intermediate_cache1,
+                self.down_proj,
+                self.down_proj_bias,
+                routing_data,
+                scatter_indx=scatter_idx,
+                precision_config=self.down_proj_precision_config,
+                gammas=None if apply_router_weight_on_input else routing_data.gate_scal)
 
-            # if activation == "silu":
-            #     torch.ops._C.silu_and_mul(intermediate_cache2,
-            #                             intermediate_cache1.view(-1, N))
-            # elif activation == "gelu":
-            #     torch.ops._C.gelu_and_mul(intermediate_cache2,
-            #                             intermediate_cache1.view(-1, N))
-            # else:
-            #     raise ValueError(f"Unsupported FusedMoe activation: {activation}")
+            # manually crop the tensor since oai kernel pad the output
+            output_states = intermediate_cache3[..., :self.hidden_size].contiguous()
+        torch.cuda.synchronize()
+        return output_states
 
-            # intermediate_cache3 = matmul_ogs(
-            #     intermediate_cache2,
-            #     w2,
-            #     None,
-            #     routing_data,
-            #     scatter_indx=scatter_indx,
-            #     gammas=None
-            #     if apply_router_weight_on_input else routing_data.gate_scal)
-
-            
-            
-            # if n_expts_tot > 1:
-            #     logits = matmul_ogs(xg, wg, bg, precision_config=pcg)
-            #     rdata, gather_indx, scatter_indx = routing(logits, n_expts_act, simulated_ep=EP)
-            # else:
-            #     rdata, gather_indx, scatter_indx = None, None, None
-            # x = matmul_ogs(x, w1, b1, rdata, gather_indx=gather_indx, precision_config=pc1, fused_activation=act)
-            # x = matmul_ogs(x, w2, b2, rdata, scatter_indx=scatter_indx, precision_config=pc2)
-        
-            # return intermediate_cache3
+def mlp_forward(self, hidden_states):
+    hidden_states = hidden_states.reshape(-1, self.hidden_dim)
+    router_logits = self.router(hidden_states)
+    routed_out = self.experts(hidden_states, router_logits=router_logits, topk=self.top_k)
+    return routed_out, router_logits
 
 def should_convert_module(current_key_name, patterns):
     current_key_name_str = ".".join(current_key_name)
@@ -191,26 +179,19 @@ def _replace_with_mxfp4_linear(
 
     for name, module in model.named_children():
         current_key_name.append(name)
-
-        if (isinstance(module, nn.Linear)) and should_convert_module(current_key_name, modules_to_not_convert):
-            with init_empty_weights():
-                in_features = module.in_features
-                out_features = module.out_features
-                model._modules[name] = Mxfp4Linear(
-                    in_features,
-                    out_features,
-                    module.bias is not None,
-                )
-                has_been_replaced = True
-                model._modules[name].requires_grad_(False)
-        if module.__class__.__name__ == "OpenAIMoeExperts" and should_convert_module(
-            current_key_name, modules_to_not_convert
-        ):
+        if not should_convert_module(current_key_name, modules_to_not_convert):
+            current_key_name.pop(-1)
+            continue
+        if isinstance(module, nn.Linear):
+            raise NotImplementedError("Mxfp4 linear layer is not implemented yet")
+        if module.__class__.__name__ == "OpenAIMoeExperts":
             with init_empty_weights():
                 # tp_plan[re.sub(r"\d+", "*", current_key_name_str + ".down_proj_scale")] = None
                 model._modules[name] = Mxfp4OpenAIMoeExperts(config)
                 has_been_replaced=True
-
+        if module.__class__.__name__ == "OpenAIMoeMLP":
+            from types import MethodType
+            module.forward = MethodType(mlp_forward, module)
         if len(list(module.children())) > 0:
             _, has_been_replaced = _replace_with_mxfp4_linear(
                 module,
