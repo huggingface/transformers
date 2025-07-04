@@ -522,10 +522,9 @@ class SamHQModelTester:
                 pixel_values,
                 output_hidden_states=True,
             )
-
         # after computing the convolutional features
         expected_hidden_states_shape = (self.batch_size, 12, 12, 36)
-        self.parent.assertEqual(len(result[1]), self.num_hidden_layers + 1)
+        self.parent.assertEqual(len(result.hidden_states), self.num_hidden_layers + 1)
         self.parent.assertEqual(result[1][0].shape, expected_hidden_states_shape)
 
     def prepare_config_and_inputs_for_common(self):
