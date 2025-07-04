@@ -1000,7 +1000,7 @@ DEPRECATED_OBJECTS = [
     "LineByLineWithSOPTextDataset",
     "NerPipeline",
     "PretrainedBartModel",
-    "PretrainedFSMTModel",
+    "PreTrainedFSMTModel",
     "SingleSentenceClassificationProcessor",
     "SquadDataTrainingArguments",
     "SquadDataset",
