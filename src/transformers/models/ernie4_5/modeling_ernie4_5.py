@@ -130,13 +130,14 @@ class Ernie4_5RotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(1, -1, position_ids.shape[0]).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float().transpose(0, 2)
+        expected_shape = position_ids.shape[1], self.inv_freq.shape[0], position_ids.shape[0]
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(*expected_shape).to(x.device)[..., None]
+        position_ids_expanded = position_ids[:, None, :].transpose(0, 2).float().expand(*expected_shape)[..., None]
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float())
-            emb = torch.cat((freqs, freqs), dim=-1)
+            freqs = (inv_freq_expanded.float() * position_ids_expanded.float()).permute(2, 0, 1, 3)
+            emb = torch.cat((freqs, freqs), dim=-1).reshape(*freqs.shape[:2], -1)
             cos = emb.cos() * self.attention_scaling
             sin = emb.sin() * self.attention_scaling
 
@@ -151,7 +152,7 @@ def rotate_half(x):
     return torch.stack((-x2, x1), dim=-1).reshape(*input_shape, -1)
 
 
-def apply_rotary_pos_emb(q, k, cos, sin):
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -159,9 +160,20 @@ def apply_rotary_pos_emb(q, k, cos, sin):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
+        position_ids (`torch.Tensor`, *optional*):
+            Deprecated and unused.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
     Returns:
         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
@@ -236,24 +248,14 @@ class Ernie4_5Attention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states).view(hidden_shape)#.transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(hidden_shape)#.transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape)#.transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        ## rope
         cos, sin = position_embeddings
-        cos = cos.view(-1, input_shape[1], 1, self.head_dim)
-        sin = sin.view(-1, input_shape[1], 1, self.head_dim)
         query_states, key_states = apply_rotary_pos_emb(
             query_states, key_states, cos, sin
         )
-        ## rope
-
-        ## transpose after
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
-        ##
 
         if past_key_value is not None:
             # cache_position needed for the static cache
