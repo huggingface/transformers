@@ -130,12 +130,12 @@ class Ernie4_5RotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(1, -1, position_ids.shape[0]).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float().transpose(0, 2)
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float())
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
             sin = emb.sin() * self.attention_scaling
@@ -177,95 +177,32 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-class Ernie4_5RopeEmbedding(nn.Module):
+def apply_rotary_2(q, k, cos, sin):
     """
-    Rotary Position Embedding (RoPE) implementation for transformer models.
-
-    RoPE encodes absolute positional information with rotation matrices and
-    naturally incorporates relative position information in self-attention.
+    Apply rotary position embeddings to queries and keys.
 
     Args:
-        head_dim (int): Dimension size of each attention head
-        base (int, optional): Base value for frequency calculation. Defaults to 10000.
+        q (Tensor): Query tensor [batch, heads, seq_len, dim]
+        k (Tensor): Key tensor [batch, heads, seq_len, dim]
 
-    Attributes:
-        head_dim (int): Dimension size of each attention head
-        base (int): Base value for frequency calculation
+    Returns:
+        Tuple[Tensor, Tensor]: Rotated queries and keys
     """
-
-    def __init__(self, head_dim, base=10000):
-        """
-        Initialize RoPE embedding layer.
-
-        Args:
-            head_dim: Dimension of each attention head
-            compression_ratio: Scaling factor for position indices
-            base: Base value for frequency calculation
-        """
-        super().__init__()
-        self.head_dim = head_dim
-        self.base = base
-
-    def forward(self, seq_length, position_ids=None):
-        """
-        Compute rotary position embeddings for given sequence length.
-
-        Args:
-            seq_length (int): Maximum sequence length
-            position_ids (Tensor, optional): Custom position indices. Defaults to None.
-
-        Returns:
-            Tensor: Rotary position embeddings of shape [1, 1, seq_length, head_dim]
-        """
-        indices = torch.arange(0, self.head_dim, 2, dtype=torch.float32)
-        indices = 1 / self.base ** (indices / self.head_dim)
-        if position_ids is None:
-            position_ids = torch.arange(
-                0, seq_length, 1, dtype=torch.float32
-            ).unsqueeze(1)
-            sinusoid_inp = position_ids * indices.unsqueeze(0)
-        else:
-            seq_length = position_ids.shape[-1]
-            sinusoid_inp = position_ids.unsqueeze(-1).to(
-                torch.float32
-            ) * indices.unsqueeze(0)
-        pos_emb = torch.cat([torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)], dim=-1)
-        pos_emb = pos_emb.view(-1, 1, seq_length, self.head_dim)
-        pos_emb = pos_emb.detach()
-        return pos_emb
-
-    def apply_rotary(self, rp, q, k):
-        """
-        Apply rotary position embeddings to queries and keys.
-
-        Args:
-            rp (Tensor): Rotary position embeddings
-            q (Tensor): Query tensor [batch, heads, seq_len, dim]
-            k (Tensor): Key tensor [batch, heads, seq_len, dim]
-
-        Returns:
-            Tuple[Tensor, Tensor]: Rotated queries and keys
-        """
-        sin, cos = torch.chunk(rp.to(q.device), 2, dim=-1)
-        # sin [θ0,θ1,θ2......θd/2-1] -> sin_pos [θ0,θ0,θ1,θ1,θ2,θ2......θd/2-1,θd/2-1]
-        sin_pos = torch.stack([sin, sin], dim=-1).reshape(rp.shape)
-        # cos [θ0,θ1,θ2......θd/2-1] -> cos_pos [θ0,θ0,θ1,θ1,θ2,θ2......θd/2-1,θd/2-1]
-        cos_pos = torch.stack([cos, cos], dim=-1).reshape(rp.shape)
-        # rotate_half_query_layer [-q1,q0,-q3,q2......,-qd-1,qd-2]
-        rotate_half_q = torch.stack(
-            [-q[:, :, :, 1::2], q[:, :, :, 0::2]], dim=-1
-        ).reshape(q.shape)
-        query = (q.to(torch.float32) * cos_pos) + (
-            rotate_half_q.to(torch.float32) * sin_pos
-        )
-        # rotate_half_key_layer [-k1,k0,-k3,k2......,-kd-1,kd-2]
-        rotate_half_k = torch.stack(
-            [-k[:, :, :, 1::2], k[:, :, :, 0::2]], dim=-1
-        ).reshape(k.shape)
-        key = (k.to(torch.float32) * cos_pos) + (
-            rotate_half_k.to(torch.float32) * sin_pos
-        )
-        return query, key
+    # rotate_half_query_layer [-q1,q0,-q3,q2......,-qd-1,qd-2]
+    rotate_half_q = torch.stack(
+        [-q[:, :, :, 1::2], q[:, :, :, 0::2]], dim=-1
+    ).reshape(q.shape)
+    query = (q.to(torch.float32) * cos) + (
+        rotate_half_q.to(torch.float32) * sin
+    )
+    # rotate_half_key_layer [-k1,k0,-k3,k2......,-kd-1,kd-2]
+    rotate_half_k = torch.stack(
+        [-k[:, :, :, 1::2], k[:, :, :, 0::2]], dim=-1
+    ).reshape(k.shape)
+    key = (k.to(torch.float32) * cos) + (
+        rotate_half_k.to(torch.float32) * sin
+    )
+    return query, key
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -325,10 +262,6 @@ class Ernie4_5Attention(nn.Module):
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.use_bias)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.use_bias)
 
-        self.rotary_emb = Ernie4_5RopeEmbedding(
-            self.head_dim, base=config.rope_theta,
-        )
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -346,24 +279,12 @@ class Ernie4_5Attention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape)#.transpose(1, 2)
 
         ## rope
-        query_states_dtype = query_states.dtype
-
-        offset = 0
-        kv_seq_len = key_states.shape[-3]
-        if past_key_value is not None and not kv_seq_len > 1:
-            #offset = past_key_value[0].shape[-3]
-            offset = past_key_value.get_seq_length()
-            kv_seq_len += offset
-
-        cos_sin = self.rotary_emb(kv_seq_len).transpose(1, 2)
-        if offset > 0:
-            cos_sin = cos_sin[:, offset:]
-        query_states, key_states = self.rotary_emb.apply_rotary(
-            cos_sin, query_states, key_states
+        cos, sin = position_embeddings
+        cos = cos.view(-1, input_shape[1], 1, self.head_dim)
+        sin = sin.view(-1, input_shape[1], 1, self.head_dim)
+        query_states, key_states = apply_rotary_2(
+            query_states, key_states, cos, sin
         )
-
-        query_states = query_states.to(query_states_dtype)
-        key_states = key_states.to(query_states_dtype)
         ## rope
 
         ## transpose after
@@ -372,13 +293,8 @@ class Ernie4_5Attention(nn.Module):
         value_states = value_states.transpose(1, 2)
         ##
 
-        # old rope
-        #cos, sin = position_embeddings
-        #query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
         if past_key_value is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            #cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            # cache_position needed for the static cache
             cache_kwargs = {"cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
