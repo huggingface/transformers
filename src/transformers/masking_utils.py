@@ -111,11 +111,26 @@ def chunked_causal_mask_function(chunk_size: int) -> Callable:
 
 
 def padding_mask_function(padding_mask: torch.Tensor) -> Callable:
+    """
+    This return the mask_function function corresponding to a 2D padding mask.
+    """
+
     def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
         # Note that here the mask should ALWAYS be at least of the max `kv_index` size in the dimension 1. This is because
         # we cannot pad it here in the mask_function as we don't know the final size, and we cannot try/except, as it is not
         # vectorizable on accelerator devices
         return padding_mask[batch_idx, kv_idx]
+
+    return inner_mask
+
+
+def packed_sequence_mask_function(packed_sequence_mask: torch.Tensor) -> Callable:
+    """
+    This return the mask_function function corresponding to a 2D packed sequence mask.
+    """
+
+    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
+        return packed_sequence_mask[batch_idx, q_idx] == packed_sequence_mask[batch_idx, kv_idx]
 
     return inner_mask
 
@@ -584,12 +599,40 @@ class AttentionMaskInterface(GeneralInterface):
 ALL_MASK_ATTENTION_FUNCTIONS: AttentionMaskInterface = AttentionMaskInterface()
 
 
+def find_packed_sequence_indices(position_ids: torch.Tensor) -> Optional[torch.Tensor]:
+    """
+    Find the indices of the sequence to which each new query token in the sequence belongs when using packed
+    tensor format (i.e. several sequences packed in the same batch dimension).
+
+    Args:
+        position_ids (`torch.Tensor`)
+            A 2D tensor of shape (batch_size, query_length) indicating the positions of each token in the sequences.
+
+    Returns:
+        A 2D tensor where each similar integer indicates that the tokens belong to the same sequence. For example, if we
+        pack 3 sequences of 2, 3 and 1 tokens respectively along a single batch dim, this will return [[0, 0, 1, 1, 1, 2]].
+    """
+    # What separate different sequences is when 2 consecutive positions_ids are separated by more than 1. So
+    # taking the diff (by prepending the first value - 1 to keep correct indexing) and applying cumsum to the result
+    # gives exactly the sequence indices
+    # Note that we assume that a single sequence cannot span several batch dimensions, i.e. 1 single sequence
+    # cannot be part of the end of the first batch dim and the start of the 2nd one for example
+    first_dummy_value = position_ids[:, :1] - 1  # We just need the diff on this first value to be 1
+    position_diff = torch.diff(position_ids, prepend=first_dummy_value, dim=-1)
+    packed_sequence_mask = (position_diff != 1).cumsum(-1)
+
+    # Here it would be nice to return None if we did not detect packed sequence format, i.e. if `packed_sequence_mask[:, -1] == 0`
+    # but it causes issues with export
+    return packed_sequence_mask
+
+
 def _preprocess_mask_arguments(
     config: PretrainedConfig,
     input_embeds: torch.Tensor,
     attention_mask: Optional[Union[torch.Tensor, BlockMask]],
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
+    position_ids: Optional[torch.Tensor],
     layer_idx: Optional[int],
 ) -> tuple[bool, Optional[Union[torch.Tensor, BlockMask]], int, int]:
     """
@@ -609,6 +652,8 @@ def _preprocess_mask_arguments(
             A tensor of shape (query_length,) indicating the current indices of the input sequence elements.
         past_key_values (`Cache`, optional):
             The past key values, if we use a cache.
+        position_ids (`torch.Tensor`, optional)
+            A 2D tensor of shape (batch_size, query_length) indicating the positions of each token in the sequences.
         layer_idx (`int`, optional):
             If `past_key_values` is not None, this is the layer index of the cache from which to get the key-value
             length and offset. Indeed, for hybrid caches, different layers may return different lengths.
@@ -618,6 +663,9 @@ def _preprocess_mask_arguments(
             Whether we should early exit mask creation, and return the mask as-is.
         attention_mask (`torch.Tensor` or `BlockMask` or `None`):
             The attention mask to either return immediately, or to use in downstream mask creation.
+        packed_sequence_mask (`torch.Tensor`, optional):
+            In case we detected packed sequence format, this is a tensor where each similar integer indicates that
+            the tokens belong to the same sequence.
         kv_length (`int`):
             The size that the key and value states will have during the attention computation.
         kv_offset (`int`):
@@ -625,7 +673,7 @@ def _preprocess_mask_arguments(
     """
     # If the mask is already 4D, simply return as-is (it was already prepared, or it is custom)
     if isinstance(attention_mask, (torch.Tensor, BlockMask)) and len(attention_mask.shape) == 4:
-        return True, attention_mask, None, None
+        return True, attention_mask, None, None, None
 
     # For TGI/vLLM backends, or other custom attention without equivalent mask creation: we don't need a mask!
     # Note: it's not ideal to check the `_global_mapping` attribute instead of the object itself, however otherwise
@@ -633,7 +681,7 @@ def _preprocess_mask_arguments(
     # with `torch._dynamo.exc.Unsupported: 'inline in skipfiles:Mapping.__contains__ | __contains__, skipped
     # according trace_rules.lookup SKIP_DIRS'` -- can be removed when we require Python>=3.11
     if config._attn_implementation not in ALL_MASK_ATTENTION_FUNCTIONS._global_mapping:
-        return True, None, None, None
+        return True, None, None, None, None
 
     # Move the mask to correct device, and potentially switch dtype for efficiency
     if attention_mask is not None and attention_mask.ndim == 2:
@@ -646,7 +694,17 @@ def _preprocess_mask_arguments(
     else:
         kv_length, kv_offset = input_embeds.shape[1], 0
 
-    return False, attention_mask, kv_length, kv_offset
+    # We check the position_ids for potential packed sequence format (only if the 2D attention mask is explicitly None,
+    # and we don't have past_key_values, i.e. generally a training setup)
+    packed_sequence_mask = None
+    if position_ids is not None and attention_mask is None and past_key_values is None:
+        batch_size = input_embeds.shape[0]
+        # The position ids are sometimes just unsqueezed, without being expanded
+        if batch_size != position_ids.shape[0]:
+            position_ids = position_ids.expand(batch_size, -1)
+        packed_sequence_mask = find_packed_sequence_indices(position_ids)
+
+    return False, attention_mask, packed_sequence_mask, kv_length, kv_offset
 
 
 def create_causal_mask(
@@ -655,6 +713,7 @@ def create_causal_mask(
     attention_mask: Optional[torch.Tensor],
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
+    position_ids: Optional[torch.Tensor],
     or_mask_function: Optional[Callable] = None,
     and_mask_function: Optional[Callable] = None,
 ) -> Optional[Union[torch.Tensor, BlockMask]]:
@@ -676,6 +735,8 @@ def create_causal_mask(
             A tensor of shape (query_length,) indicating the current indices of the input sequence elements.
         past_key_values (`Cache`, optional):
             The past key values, if we use a cache.
+        position_ids (`torch.Tensor`, optional)
+            A 2D tensor of shape (batch_size, query_length) indicating the positions of each token in the sequences.
         or_mask_function (`Callable`, optional):
             An optional mask function to combine with the causal mask function (by doing the union of both). This is
             useful to easily overlay another mask on top of the causal one, for example for image tokens handling.
@@ -689,8 +750,8 @@ def create_causal_mask(
     else:
         layer_idx = 0
 
-    early_exit, attention_mask, kv_length, kv_offset = _preprocess_mask_arguments(
-        config, input_embeds, attention_mask, cache_position, past_key_values, layer_idx
+    early_exit, attention_mask, packed_sequence_mask, kv_length, kv_offset = _preprocess_mask_arguments(
+        config, input_embeds, attention_mask, cache_position, past_key_values, position_ids, layer_idx
     )
     if early_exit:
         return attention_mask
@@ -702,6 +763,11 @@ def create_causal_mask(
     # Do not allow skip if we are compiling (this is to match BC)
     # TODO: cyril -> probably revisit and remove this, but a lot of tests rely on it
     allow_is_causal_skip = not past_key_values.is_compileable if past_key_values is not None else True
+
+    # If we detected packing format
+    if packed_sequence_mask is not None and _is_torch_greater_or_equal_than_2_6:
+        mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
+        allow_is_causal_skip = False
 
     # Allow slight deviations from causal mask
     if or_mask_function is not None:
@@ -736,6 +802,7 @@ def create_sliding_window_causal_mask(
     attention_mask: Optional[torch.Tensor],
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
+    position_ids: Optional[torch.Tensor],
     or_mask_function: Optional[Callable] = None,
     and_mask_function: Optional[Callable] = None,
 ) -> Optional[Union[torch.Tensor, BlockMask]]:
@@ -758,6 +825,8 @@ def create_sliding_window_causal_mask(
             A tensor of shape (query_length,) indicating the current indices of the input sequence elements.
         past_key_values (`Cache`, optional):
             The past key values, if we use a cache.
+        position_ids (`torch.Tensor`, optional)
+            A 2D tensor of shape (batch_size, query_length) indicating the positions of each token in the sequences.
         or_mask_function (`Callable`, optional):
             An optional mask function to combine with the sliding causal mask function (by doing the union of both). This is
             useful to easily overlay another mask on top of the sliding causal one, for example for image tokens handling.
@@ -771,8 +840,8 @@ def create_sliding_window_causal_mask(
     else:
         layer_idx = 0
 
-    early_exit, attention_mask, kv_length, kv_offset = _preprocess_mask_arguments(
-        config, input_embeds, attention_mask, cache_position, past_key_values, layer_idx
+    early_exit, attention_mask, packed_sequence_mask, kv_length, kv_offset = _preprocess_mask_arguments(
+        config, input_embeds, attention_mask, cache_position, past_key_values, position_ids, layer_idx
     )
     if early_exit:
         return attention_mask
@@ -788,6 +857,11 @@ def create_sliding_window_causal_mask(
     # Do not allow skip if we are compiling (this is to match BC)
     # TODO: cyril -> probably revisit and remove this, but a lot of tests rely on it
     allow_is_causal_skip = not past_key_values.is_compileable if past_key_values is not None else True
+
+    # If we detected packing format
+    if packed_sequence_mask is not None and _is_torch_greater_or_equal_than_2_6:
+        mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
+        allow_is_causal_skip = False
 
     # Allow slight deviations from sliding causal mask
     if or_mask_function is not None:
@@ -823,6 +897,7 @@ def create_chunked_causal_mask(
     attention_mask: Optional[torch.Tensor],
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
+    position_ids: Optional[torch.Tensor],
     or_mask_function: Optional[Callable] = None,
     and_mask_function: Optional[Callable] = None,
 ) -> Optional[Union[torch.Tensor, BlockMask]]:
@@ -845,6 +920,8 @@ def create_chunked_causal_mask(
             A tensor of shape (query_length,) indicating the current indices of the input sequence elements.
         past_key_values (`Cache`, optional):
             The past key values, if we use a cache.
+        position_ids (`torch.Tensor`, optional)
+            A 2D tensor of shape (batch_size, query_length) indicating the positions of each token in the sequences.
         or_mask_function (`Callable`, optional):
             An optional mask function to combine with the chunked causal mask function (by doing the union of both). This is
             useful to easily overlay another mask on top of the chunked causal one, for example for image tokens handling.
@@ -858,8 +935,8 @@ def create_chunked_causal_mask(
     else:
         layer_idx = 0
 
-    early_exit, attention_mask, kv_length, kv_offset = _preprocess_mask_arguments(
-        config, input_embeds, attention_mask, cache_position, past_key_values, layer_idx
+    early_exit, attention_mask, packed_sequence_mask, kv_length, kv_offset = _preprocess_mask_arguments(
+        config, input_embeds, attention_mask, cache_position, past_key_values, position_ids, layer_idx
     )
     if early_exit:
         return attention_mask
@@ -882,6 +959,11 @@ def create_chunked_causal_mask(
     # Do not allow skip if we are compiling (this is to match BC)
     # TODO: cyril -> probably revisit and remove this, but a lot of tests rely on it
     allow_is_causal_skip = not past_key_values.is_compileable if past_key_values is not None else True
+
+    # If we detected packing format
+    if packed_sequence_mask is not None and _is_torch_greater_or_equal_than_2_6:
+        mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
+        allow_is_causal_skip = False
 
     # Allow slight deviations from chunked causal mask
     if or_mask_function is not None:
@@ -924,6 +1006,7 @@ def create_masks_for_generate(
     attention_mask: Optional[torch.Tensor],
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
+    position_ids: Optional[torch.Tensor],
     or_mask_function: Optional[Callable] = None,
     and_mask_function: Optional[Callable] = None,
     **kwargs,
@@ -945,6 +1028,8 @@ def create_masks_for_generate(
             A tensor of shape (query_length,) indicating the current indices of the input sequence elements.
         past_key_values (`Cache`, optional):
             The past key values, if we use a cache.
+        position_ids (`torch.Tensor`, optional)
+            A 2D tensor of shape (batch_size, query_length) indicating the positions of each token in the sequences.
         or_mask_function (`Callable`, optional):
             An optional mask function to combine with the other mask function (by doing the union of both). This is
             useful to easily overlay another mask on top of the causal one, for example for image tokens handling.
@@ -961,6 +1046,7 @@ def create_masks_for_generate(
         "attention_mask": attention_mask,
         "cache_position": cache_position,
         "past_key_values": past_key_values,
+        "position_ids": position_ids,
         "or_mask_function": or_mask_function,
         "and_mask_function": and_mask_function,
     }

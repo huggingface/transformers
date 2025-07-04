@@ -540,6 +540,7 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
+                "position_ids": position_ids,
             }
             # Create the masks
             causal_mask_mapping = {
@@ -921,6 +922,7 @@ class Gemma3Model(Gemma3PreTrainedModel):
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
+                "position_ids": position_ids,
             }
             if token_type_ids is not None and inputs_embeds.shape[1] != 1:
                 # We need to pass an additional mask function to account for token type ids, and it needs to be an `or`
@@ -1180,6 +1182,7 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         attention_mask: Optional[torch.Tensor],
         cache_position: torch.Tensor,
         past_key_values: Optional[Cache],
+        position_ids: Optional[torch.Tensor],
         token_type_ids: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> dict:
@@ -1190,6 +1193,7 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
             "attention_mask": attention_mask,
             "cache_position": cache_position,
             "past_key_values": past_key_values,
+            "position_ids": position_ids,
         }
         # Add the token type ids mask for generate as well
         if token_type_ids is not None and input_embeds.shape[1] != 1:
