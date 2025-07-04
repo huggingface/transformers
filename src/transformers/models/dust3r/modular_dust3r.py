@@ -15,7 +15,7 @@
 """PyTorch Dust3R model using modular approach with ViT inheritance."""
 
 import math
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -87,7 +87,7 @@ class Dust3RDecoder(nn.Module):
 
         self.pos_encoding = RoPE2D() if RoPE2D else None
 
-    def forward(self, feat1: torch.Tensor, feat2: torch.Tensor) -> Tuple[torch.Tensor, ...]:
+    def forward(self, feat1: torch.Tensor, feat2: torch.Tensor) -> tuple[torch.Tensor, ...]:
         """
         Cross-attention decoder following the Dust3R architecture.
 
@@ -147,7 +147,7 @@ class Dust3RHead(nn.Module):
             ]
         )
 
-    def forward(self, d1_0, d1_6, d1_9, d1_12, d2_0, d2_6, d2_9, d2_12) -> Tuple[torch.Tensor, ...]:
+    def forward(self, d1_0, d1_6, d1_9, d1_12, d2_0, d2_6, d2_9, d2_12) -> tuple[torch.Tensor, ...]:
         """
         Apply heads to decoder outputs.
 
@@ -248,7 +248,7 @@ class Dust3RModel(Dust3RPreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    def _prune_heads(self, heads_to_prune: Dict[int, List[int]]) -> None:
+    def _prune_heads(self, heads_to_prune: dict[int, list[int]]) -> None:
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
@@ -262,7 +262,7 @@ class Dust3RModel(Dust3RPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         """
         Forward pass for Dust3R model.
 
