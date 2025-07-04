@@ -866,7 +866,7 @@ class TransformersKwargs(TypedDict, total=False):
             you are doing gradient accumulation.
         output_hidden_states (`Optional[bool]`, *optional*):
             Most of the models support outputing all hidden states computed during the forward pass.
-        otput_attentions (`Optional[bool]`, *optional*):
+        output_attentions (`Optional[bool]`, *optional*):
             Turn this on to return the intermediary attention scores.
         output_router_logits (`Optional[bool]`, *optional*):
             For MoE models, this allows returning the router logits to compute the loss.
@@ -1031,12 +1031,6 @@ def check_model_inputs(func):
                     collected_outputs[key] += (output,)
                 elif output[index] is not None:
                     collected_outputs[key] += (output[index],)
-                # Manually invoke forward hooks (preserve original hook behavior)
-                if module._forward_hooks:
-                    for hook in module._forward_hooks.values():
-                        hook_result = hook(module, args, output)
-                        if hook_result is not None:
-                            output = hook_result
                 return output
 
             return wrapped_forward
