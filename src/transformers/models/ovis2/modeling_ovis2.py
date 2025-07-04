@@ -621,30 +621,40 @@ class Ovis2Model(Ovis2PreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if pixel_values is not None and inputs_embeds is not None:
-            raise ValueError(
-                "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
-            )
-
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
             image_features, visual_indicator_features = self.get_image_features(pixel_values=pixel_values)
 
-            special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
-            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+            if input_ids is None:
+                special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+                special_image_mask = special_image_mask.all(-1)
+            else:
+                special_image_mask = input_ids == self.config.image_token_id
+
+            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             image_features = image_features.reshape(-1, image_features.shape[-1])
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
             for i, visual_indicator_id in enumerate(self.visual_indicator_token_ids):
-                mask = (input_ids == visual_indicator_id).to(inputs_embeds.device)
-                inputs_embeds[mask] = (
-                    visual_indicator_features[i]
-                    .expand_as(inputs_embeds[mask])
-                    .to(inputs_embeds.device, inputs_embeds.dtype)
-                )
+                if input_ids is None:
+                    mask = inputs_embeds == self.get_input_embeddings()(
+                        torch.tensor(visual_indicator_id, dtype=torch.long, device=inputs_embeds.device)
+                    )
+                    mask = mask.all(-1)
+                else:
+                    mask = (input_ids == visual_indicator_id).to(inputs_embeds.device)
+
+                if mask.any():
+                    inputs_embeds[mask] = (
+                        visual_indicator_features[i]
+                        .expand_as(inputs_embeds[mask])
+                        .to(inputs_embeds.device, inputs_embeds.dtype)
+                    )
 
         outputs = self.language_model(
             attention_mask=attention_mask,

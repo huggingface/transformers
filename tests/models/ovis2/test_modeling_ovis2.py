@@ -120,7 +120,9 @@ class Ovis2VisionText2TextModelTester:
         self.vocab_size = vocab_size
         self.sliding_window = sliding_window
         self.hidden_size = hidden_size
-        self.image_seq_length = vision_config["image_size"] // 32
+        self.image_seq_length = vision_config["image_size"] // (
+            vision_config["patch_size"] * vision_config["hidden_stride"] ** 2
+        )
         self.seq_length = seq_length + self.image_seq_length
         self.is_training = is_training
         self.num_attention_heads = text_config["num_attention_heads"]
