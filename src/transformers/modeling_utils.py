@@ -123,8 +123,7 @@ from .utils import (
     logging,
     strtobool,
 )
-from .utils.generic import GeneralInterface, OutputRecorder
-from .utils.generic import _CAN_RECORD_REGISTRY
+from .utils.generic import _CAN_RECORD_REGISTRY, GeneralInterface, OutputRecorder
 from .utils.hub import create_and_tag_model_card, get_checkpoint_shard_files
 from .utils.import_utils import (
     ENV_VARS_TRUE_VALUES,
