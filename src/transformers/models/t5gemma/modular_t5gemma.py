@@ -203,10 +203,6 @@ class T5GemmaConfig(PretrainedConfig):
 
         # Used in pipeline generation.
         self.vocab_size = vocab_size
-        if self.vocab_size != self.decoder.vocab_size:
-            raise ValueError(
-                f"Decoder vocab size {self.decoder.vocab_size} does not match the config vocab size {self.vocab_size}."
-            )
 
     def __setattr__(self, key, value):
         shared_attr_with_submodules = [
@@ -215,6 +211,7 @@ class T5GemmaConfig(PretrainedConfig):
             "_attn_implementation",
             "dropout_rate",
             "attention_dropout",
+            "vocab_size",
         ]
 
         if key in shared_attr_with_submodules:
