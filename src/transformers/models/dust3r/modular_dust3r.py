@@ -28,11 +28,16 @@ from ...modeling_outputs import (
 )
 from ...utils import logging
 from ..vit.modeling_vit import (
+    ViTAttention,
     ViTEmbeddings,
     ViTEncoder,
+    ViTIntermediate,
     ViTLayer,
+    ViTOutput,
     ViTPooler,
     ViTPreTrainedModel,
+    ViTSelfAttention,
+    ViTSelfOutput,
 )
 from .configuration_dust3r import Dust3RConfig
 
@@ -172,9 +177,39 @@ class Dust3RHead(nn.Module):
         return pt1, cf1, pt2, cf2
 
 
+class Dust3RSelfAttention(ViTSelfAttention):
+    def __init__(self, config: Dust3RConfig) -> None:
+        super().__init__(config)
+
+
+class Dust3RSelfOutput(ViTSelfOutput):
+    def __init__(self, config: Dust3RConfig) -> None:
+        super().__init__(config)
+
+
+class Dust3RAttention(ViTAttention):
+    def __init__(self, config: Dust3RConfig) -> None:
+        super().__init__(config)
+        self.attention = Dust3RSelfAttention(config)
+        self.output = Dust3RSelfOutput(config)
+
+
+class Dust3RIntermediate(ViTIntermediate):
+    def __init__(self, config: Dust3RConfig) -> None:
+        super().__init__(config)
+
+
+class Dust3ROutput(ViTOutput):
+    def __init__(self, config: Dust3RConfig) -> None:
+        super().__init__(config)
+
+
 class Dust3RLayer(ViTLayer):
     def __init__(self, config: Dust3RConfig):
         super().__init__(config)
+        self.attention = Dust3RAttention(config)
+        self.intermediate = Dust3RIntermediate(config)
+        self.output = Dust3ROutput(config)
 
 
 class Dust3RPooler(ViTPooler):
@@ -187,7 +222,7 @@ class Dust3RPreTrainedModel(ViTPreTrainedModel):
     base_model_prefix = "dust3r"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Dust3REmbeddings", "Dust3RLayer"]
+    _no_split_modules = ["Dust3REmbeddings", "Dust3RLayer", "Dust3RAttention"]
     _supports_sdpa = True
     _supports_flash_attn_2 = True
     _supports_flex_attn = True
@@ -255,7 +290,6 @@ class Dust3RModel(Dust3RPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
-        pixel_values_2: Optional[torch.Tensor] = None,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
