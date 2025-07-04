@@ -18,7 +18,7 @@ import copy
 import json
 import os
 import warnings
-from typing import Any, Optional, Union
+from typing import Any, Optional, TypeVar, Union
 
 from packaging import version
 
@@ -40,6 +40,10 @@ from .utils.generic import is_timm_config_dict
 
 
 logger = logging.get_logger(__name__)
+
+
+# type hinting: specifying the type of config class that inherits from PretrainedConfig
+SpecificPretrainedConfigType = TypeVar("SpecificPretrainedConfigType", bound="PretrainedConfig")
 
 
 class PretrainedConfig(PushToHubMixin):
@@ -191,7 +195,7 @@ class PretrainedConfig(PushToHubMixin):
 
     model_type: str = ""
     base_config_key: str = ""
-    sub_configs: dict[str, "PretrainedConfig"] = {}
+    sub_configs: dict[str, type["PretrainedConfig"]] = {}
     has_no_defaults_at_init: bool = False
     attribute_map: dict[str, str] = {}
     base_model_tp_plan: Optional[dict[str, Any]] = None
@@ -474,7 +478,7 @@ class PretrainedConfig(PushToHubMixin):
 
     @classmethod
     def from_pretrained(
-        cls,
+        cls: type[SpecificPretrainedConfigType],
         pretrained_model_name_or_path: Union[str, os.PathLike],
         cache_dir: Optional[Union[str, os.PathLike]] = None,
         force_download: bool = False,
@@ -482,7 +486,7 @@ class PretrainedConfig(PushToHubMixin):
         token: Optional[Union[str, bool]] = None,
         revision: str = "main",
         **kwargs,
-    ) -> "PretrainedConfig":
+    ) -> SpecificPretrainedConfigType:
         r"""
         Instantiate a [`PretrainedConfig`] (or a derived class) from a pretrained model configuration.
 
@@ -717,7 +721,9 @@ class PretrainedConfig(PushToHubMixin):
         return config_dict, kwargs
 
     @classmethod
-    def from_dict(cls, config_dict: dict[str, Any], **kwargs) -> "PretrainedConfig":
+    def from_dict(
+        cls: type[SpecificPretrainedConfigType], config_dict: dict[str, Any], **kwargs
+    ) -> SpecificPretrainedConfigType:
         """
         Instantiates a [`PretrainedConfig`] from a Python dictionary of parameters.
 
@@ -778,7 +784,9 @@ class PretrainedConfig(PushToHubMixin):
             return config
 
     @classmethod
-    def from_json_file(cls, json_file: Union[str, os.PathLike]) -> "PretrainedConfig":
+    def from_json_file(
+        cls: type[SpecificPretrainedConfigType], json_file: Union[str, os.PathLike]
+    ) -> SpecificPretrainedConfigType:
         """
         Instantiates a [`PretrainedConfig`] from the path to a JSON file of parameters.
 
