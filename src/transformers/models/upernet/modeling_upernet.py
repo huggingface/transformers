@@ -267,6 +267,7 @@ class UperNetFCNHead(nn.Module):
 
 @auto_docstring
 class UperNetPreTrainedModel(PreTrainedModel):
+    config: UperNetConfig
     config_class = UperNetConfig
     main_input_name = "pixel_values"
     _no_split_modules = []

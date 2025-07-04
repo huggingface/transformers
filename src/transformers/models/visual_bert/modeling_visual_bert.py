@@ -492,6 +492,7 @@ class VisualBertPreTrainingHeads(nn.Module):
 
 @auto_docstring
 class VisualBertPreTrainedModel(PreTrainedModel):
+    config: VisualBertConfig
     config_class = VisualBertConfig
     base_model_prefix = "visual_bert"
     supports_gradient_checkpointing = True

@@ -296,6 +296,7 @@ class OlmoRotaryEmbedding(nn.Module):
 
 @auto_docstring
 class OlmoPreTrainedModel(PreTrainedModel):
+    config: OlmoConfig
     config_class = OlmoConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True

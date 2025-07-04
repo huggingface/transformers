@@ -644,6 +644,7 @@ class ElectraGeneratorPredictions(nn.Module):
 
 @auto_docstring
 class ElectraPreTrainedModel(PreTrainedModel):
+    config: ElectraConfig
     config_class = ElectraConfig
     load_tf_weights = load_tf_weights_in_electra
     base_model_prefix = "electra"
@@ -1277,6 +1278,7 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
 
 @auto_docstring
 class ElectraForQuestionAnswering(ElectraPreTrainedModel):
+    config: ElectraConfig
     config_class = ElectraConfig
     base_model_prefix = "electra"
 

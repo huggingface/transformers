@@ -1719,6 +1719,7 @@ class BigBirdPreTrainingHeads(nn.Module):
 
 @auto_docstring
 class BigBirdPreTrainedModel(PreTrainedModel):
+    config: BigBirdConfig
     config_class = BigBirdConfig
     load_tf_weights = load_tf_weights_in_big_bird
     base_model_prefix = "bert"

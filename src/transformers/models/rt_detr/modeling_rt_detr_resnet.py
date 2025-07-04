@@ -297,6 +297,7 @@ class RTDetrResNetEncoder(nn.Module):
 @auto_docstring
 # Copied from transformers.models.resnet.modeling_resnet.ResNetPreTrainedModel with ResNet->RTDetrResNet
 class RTDetrResNetPreTrainedModel(PreTrainedModel):
+    config: RTDetrResNetConfig
     config_class = RTDetrResNetConfig
     base_model_prefix = "resnet"
     main_input_name = "pixel_values"

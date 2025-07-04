@@ -396,6 +396,7 @@ class MusicgenMelodyDecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenPreTrainedModel with Musicgen->MusicgenMelody
 class MusicgenMelodyPreTrainedModel(PreTrainedModel):
+    config: MusicgenMelodyDecoderConfig
     config_class = MusicgenMelodyDecoderConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
@@ -1270,6 +1271,7 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
 
 @auto_docstring
 class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
+    config: MusicgenMelodyConfig
     config_class = MusicgenMelodyConfig
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True

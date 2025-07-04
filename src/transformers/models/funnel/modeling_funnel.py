@@ -760,6 +760,7 @@ class FunnelDiscriminatorPredictions(nn.Module):
 
 @auto_docstring
 class FunnelPreTrainedModel(PreTrainedModel):
+    config: FunnelConfig
     config_class = FunnelConfig
     load_tf_weights = load_tf_weights_in_funnel
     base_model_prefix = "funnel"

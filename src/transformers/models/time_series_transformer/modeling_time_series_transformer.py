@@ -629,6 +629,7 @@ class TimeSeriesTransformerDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class TimeSeriesTransformerPreTrainedModel(PreTrainedModel):
+    config: TimeSeriesTransformerConfig
     config_class = TimeSeriesTransformerConfig
     base_model_prefix = "model"
     main_input_name = "past_values"

@@ -929,6 +929,7 @@ class FalconH1DecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class FalconH1PreTrainedModel(PreTrainedModel):
+    config: FalconH1Config
     config_class = FalconH1Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True

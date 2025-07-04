@@ -552,6 +552,7 @@ class GPT2SequenceSummary(nn.Module):
 
 @auto_docstring
 class GPT2PreTrainedModel(PreTrainedModel):
+    config: GPT2Config
     config_class = GPT2Config
     load_tf_weights = load_tf_weights_in_gpt2
     base_model_prefix = "transformer"

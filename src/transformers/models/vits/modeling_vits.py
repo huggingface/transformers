@@ -1213,6 +1213,7 @@ class VitsTextEncoder(nn.Module):
 
 @auto_docstring
 class VitsPreTrainedModel(PreTrainedModel):
+    config: VitsConfig
     config_class = VitsConfig
     base_model_prefix = "vits"
     main_input_name = "input_ids"

@@ -437,6 +437,7 @@ class FalconMambaBlock(GradientCheckpointingLayer):
 @auto_docstring
 # Copied from transformers.models.mamba.modeling_mamba.MambaPreTrainedModel with Mamba->FalconMamba
 class FalconMambaPreTrainedModel(PreTrainedModel):
+    config: FalconMambaConfig
     config_class = FalconMambaConfig
     base_model_prefix = "backbone"
     _no_split_modules = ["FalconMambaBlock", "FalconMambaMixer"]

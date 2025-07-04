@@ -294,6 +294,7 @@ class CodeGenBlock(GradientCheckpointingLayer):
 
 @auto_docstring
 class CodeGenPreTrainedModel(PreTrainedModel):
+    config: CodeGenConfig
     config_class = CodeGenConfig
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True

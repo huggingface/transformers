@@ -956,6 +956,7 @@ class MLP(nn.Module):
 @auto_docstring
 # Copied from transformers.models.detr.modeling_detr.DetrPreTrainedModel with Detr->ConditionalDetr
 class ConditionalDetrPreTrainedModel(PreTrainedModel):
+    config: ConditionalDetrConfig
     config_class = ConditionalDetrConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"

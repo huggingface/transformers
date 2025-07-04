@@ -311,6 +311,7 @@ class Phi3DecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class Phi3PreTrainedModel(PreTrainedModel):
+    config: Phi3Config
     config_class = Phi3Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True

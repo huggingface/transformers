@@ -816,6 +816,7 @@ class ChameleonImageVocabularyMapping:
 
 @auto_docstring
 class ChameleonPreTrainedModel(PreTrainedModel):
+    config: ChameleonConfig
     config_class = ChameleonConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
@@ -857,6 +858,7 @@ class ChameleonPreTrainedModel(PreTrainedModel):
     """
 )
 class ChameleonVQVAE(ChameleonPreTrainedModel):
+    config: ChameleonVQVAEConfig
     config_class = ChameleonVQVAEConfig
     _no_split_modules = ["ChameleonVQVAEVectorQuantizer"]
 

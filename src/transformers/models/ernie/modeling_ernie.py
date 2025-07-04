@@ -625,6 +625,7 @@ class ErniePreTrainingHeads(nn.Module):
 
 @auto_docstring
 class ErniePreTrainedModel(PreTrainedModel):
+    config: ErnieConfig
     config_class = ErnieConfig
     base_model_prefix = "ernie"
     supports_gradient_checkpointing = True

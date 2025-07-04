@@ -562,6 +562,7 @@ class Data2VecTextPooler(nn.Module):
 
 @auto_docstring
 class Data2VecTextPreTrainedModel(PreTrainedModel):
+    config: Data2VecTextConfig
     config_class = Data2VecTextConfig
     base_model_prefix = "data2vec_text"
     supports_gradient_checkpointing = True

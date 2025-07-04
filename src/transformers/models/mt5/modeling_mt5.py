@@ -752,6 +752,7 @@ class MT5ClassificationHead(nn.Module):
 @auto_docstring
 # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel with T5->MT5, t5->mt5
 class MT5PreTrainedModel(PreTrainedModel):
+    config: MT5Config
     config_class = MT5Config
     load_tf_weights = load_tf_weights_in_mt5
     base_model_prefix = "transformer"
@@ -1318,6 +1319,7 @@ class MT5Model(MT5PreTrainedModel):
     ```"""
 
     model_type = "mt5"
+    config: MT5Config
     config_class = MT5Config
     _keys_to_ignore_on_load_unexpected = ["decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight"]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
@@ -1585,6 +1587,7 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel, GenerationMixin):
     ```"""
 
     model_type = "mt5"
+    config: MT5Config
     config_class = MT5Config
     _keys_to_ignore_on_load_unexpected = ["decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight"]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
@@ -1926,6 +1929,7 @@ class MT5EncoderModel(MT5PreTrainedModel):
     ```"""
 
     model_type = "mt5"
+    config: MT5Config
     config_class = MT5Config
     _tied_weights_keys = ["encoder.embed_tokens.weight"]
 

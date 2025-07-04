@@ -490,6 +490,7 @@ class LightGluePreTrainedModel(PreTrainedModel):
     models.
     """
 
+    config: LightGlueConfig
     config_class = LightGlueConfig
     base_model_prefix = "lightglue"
     main_input_name = "pixel_values"

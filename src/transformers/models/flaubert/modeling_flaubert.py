@@ -669,6 +669,7 @@ class FlaubertSequenceSummary(nn.Module):
 @auto_docstring
 # Copied from transformers.models.xlm.modeling_xlm.XLMPreTrainedModel with XLM->Flaubert
 class FlaubertPreTrainedModel(PreTrainedModel):
+    config: FlaubertConfig
     config_class = FlaubertConfig
     load_tf_weights = None
     base_model_prefix = "transformer"

@@ -475,6 +475,7 @@ class GitEncoder(nn.Module):
 
 @auto_docstring
 class GitPreTrainedModel(PreTrainedModel):
+    config: GitConfig
     config_class = GitConfig
     base_model_prefix = "git"
     supports_gradient_checkpointing = True
@@ -903,6 +904,7 @@ class GitVisionTransformer(nn.Module):
     """
 )
 class GitVisionModel(GitPreTrainedModel):
+    config: GitVisionConfig
     config_class = GitVisionConfig
     main_input_name = "pixel_values"
 

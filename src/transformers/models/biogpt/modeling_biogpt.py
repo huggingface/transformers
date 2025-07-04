@@ -343,6 +343,7 @@ class BioGptDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class BioGptPreTrainedModel(PreTrainedModel):
+    config: BioGptConfig
     config_class = BioGptConfig
     base_model_prefix = "biogpt"
     supports_gradient_checkpointing = True

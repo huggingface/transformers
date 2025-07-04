@@ -468,6 +468,7 @@ class LevitClassificationLayer(nn.Module):
 
 @auto_docstring
 class LevitPreTrainedModel(PreTrainedModel):
+    config: LevitConfig
     config_class = LevitConfig
     base_model_prefix = "levit"
     main_input_name = "pixel_values"

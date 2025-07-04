@@ -257,6 +257,7 @@ class MistralDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class MistralPreTrainedModel(PreTrainedModel):
+    config: MistralConfig
     config_class = MistralConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True

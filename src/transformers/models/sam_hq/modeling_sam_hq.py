@@ -1099,6 +1099,7 @@ class SamHQMaskDecoder(nn.Module):
 
 @auto_docstring
 class SamHQPreTrainedModel(PreTrainedModel):
+    config: SamHQConfig
     config_class = SamHQConfig
     base_model_prefix = "sam_hq"
     main_input_name = "pixel_values"
@@ -1134,6 +1135,7 @@ class SamHQPreTrainedModel(PreTrainedModel):
     """
 )
 class SamHQVisionModel(SamHQPreTrainedModel):
+    config: SamHQVisionConfig
     config_class = SamHQVisionConfig
     main_input_name = "pixel_values"
 

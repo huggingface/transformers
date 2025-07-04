@@ -625,6 +625,7 @@ class XmodPooler(nn.Module):
 
 @auto_docstring
 class XmodPreTrainedModel(PreTrainedModel):
+    config: XmodConfig
     config_class = XmodConfig
     base_model_prefix = "roberta"
     supports_gradient_checkpointing = True

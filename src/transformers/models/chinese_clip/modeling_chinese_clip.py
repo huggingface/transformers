@@ -607,6 +607,7 @@ class ChineseCLIPTextPooler(nn.Module):
 
 @auto_docstring
 class ChineseCLIPPreTrainedModel(PreTrainedModel):
+    config: ChineseCLIPConfig
     config_class = ChineseCLIPConfig
     base_model_prefix = "chinese_clip"
     supports_gradient_checkpointing = True
@@ -856,6 +857,7 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
+    config: ChineseCLIPTextConfig
     config_class = ChineseCLIPTextConfig
     _no_split_modules = ["ChineseCLIPTextEmbeddings"]
 
@@ -975,6 +977,7 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
     """
 )
 class ChineseCLIPVisionModel(ChineseCLIPPreTrainedModel):
+    config: ChineseCLIPVisionConfig
     config_class = ChineseCLIPVisionConfig
     main_input_name = "pixel_values"
     _no_split_modules = ["ChineseCLIPVisionEmbeddings", "ChineseCLIPVisionAttention"]
@@ -1030,6 +1033,7 @@ class ChineseCLIPVisionModel(ChineseCLIPPreTrainedModel):
 
 @auto_docstring
 class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
+    config: ChineseCLIPConfig
     config_class = ChineseCLIPConfig
 
     def __init__(self, config: ChineseCLIPConfig):

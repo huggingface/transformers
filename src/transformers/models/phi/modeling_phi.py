@@ -290,6 +290,7 @@ class PhiRotaryEmbedding(nn.Module):
 
 @auto_docstring
 class PhiPreTrainedModel(PreTrainedModel):
+    config: PhiConfig
     config_class = PhiConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True

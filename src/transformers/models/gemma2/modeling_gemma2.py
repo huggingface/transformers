@@ -334,6 +334,7 @@ class Gemma2RotaryEmbedding(nn.Module):
 
 @auto_docstring
 class Gemma2PreTrainedModel(PreTrainedModel):
+    config: Gemma2Config
     config_class = Gemma2Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True

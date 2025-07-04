@@ -102,6 +102,7 @@ class CsmOutputWithPast(ModelOutput):
 )
 @auto_docstring
 class CsmPreTrainedModel(PreTrainedModel):
+    config: CsmConfig
     config_class = CsmConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
@@ -402,6 +403,7 @@ class CsmDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class CsmDepthDecoderModel(CsmPreTrainedModel):
+    config: CsmDepthDecoderConfig
     config_class = CsmDepthDecoderConfig
 
     def __init__(self, config):

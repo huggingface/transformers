@@ -434,6 +434,7 @@ class BlipEncoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class BlipPreTrainedModel(PreTrainedModel):
+    config: BlipConfig
     config_class = BlipConfig
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
@@ -551,6 +552,7 @@ class BlipEncoder(nn.Module):
 
 class BlipVisionModel(BlipPreTrainedModel):
     main_input_name = "pixel_values"
+    config: BlipVisionConfig
     config_class = BlipVisionConfig
 
     def __init__(self, config: BlipVisionConfig):
@@ -617,6 +619,7 @@ class BlipVisionModel(BlipPreTrainedModel):
     """
 )
 class BlipModel(BlipPreTrainedModel):
+    config: BlipConfig
     config_class = BlipConfig
 
     def __init__(self, config: BlipConfig):
@@ -902,6 +905,7 @@ class BlipModel(BlipPreTrainedModel):
     """
 )
 class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
+    config: BlipConfig
     config_class = BlipConfig
     _tied_weights_keys = ["text_decoder.cls.predictions.decoder.bias"]
     main_input_name = "pixel_values"
@@ -1080,6 +1084,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
     """
 )
 class BlipForQuestionAnswering(BlipPreTrainedModel, GenerationMixin):
+    config: BlipConfig
     config_class = BlipConfig
     _tied_weights_keys = ["text_decoder.cls.predictions.decoder.bias"]
 
@@ -1310,6 +1315,7 @@ class BlipForQuestionAnswering(BlipPreTrainedModel, GenerationMixin):
     """
 )
 class BlipForImageTextRetrieval(BlipPreTrainedModel):
+    config: BlipConfig
     config_class = BlipConfig
 
     def __init__(self, config: BlipConfig):

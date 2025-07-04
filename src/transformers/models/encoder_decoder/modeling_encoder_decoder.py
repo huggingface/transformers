@@ -73,6 +73,7 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
     :meth*~transformers.AutoModelForCausalLM.from_pretrained* class method for the decoder.
     """
 
+    config: EncoderDecoderConfig
     config_class = EncoderDecoderConfig
     base_model_prefix = "encoder_decoder"
     main_input_name = "input_ids"

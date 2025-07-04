@@ -680,6 +680,7 @@ class TableTransformerDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class TableTransformerPreTrainedModel(PreTrainedModel):
+    config: TableTransformerConfig
     config_class = TableTransformerConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"

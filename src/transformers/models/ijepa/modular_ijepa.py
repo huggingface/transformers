@@ -88,6 +88,7 @@ class IJepaEmbeddings(ViTEmbeddings):
 
 @auto_docstring
 class IJepaPreTrainedModel(PreTrainedModel):
+    config: IJepaConfig
     config_class = IJepaConfig
     base_model_prefix = "ijepa"
     main_input_name = "pixel_values"

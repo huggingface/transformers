@@ -385,6 +385,7 @@ class PersimmonDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class PersimmonPreTrainedModel(PreTrainedModel):
+    config: PersimmonConfig
     config_class = PersimmonConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True

@@ -134,6 +134,7 @@ class InternVLVisionAttention(JanusVisionAttention):
 
 @auto_docstring
 class InternVLVisionPreTrainedModel(PreTrainedModel):
+    config: InternVLVisionConfig
     config_class = InternVLVisionConfig
     base_model_prefix = "internvl_vision"
     main_input_name = "pixel_values"

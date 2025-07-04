@@ -479,6 +479,7 @@ class ImageGPTBlock(GradientCheckpointingLayer):
 
 @auto_docstring
 class ImageGPTPreTrainedModel(PreTrainedModel):
+    config: ImageGPTConfig
     config_class = ImageGPTConfig
     load_tf_weights = load_tf_weights_in_imagegpt
     base_model_prefix = "transformer"

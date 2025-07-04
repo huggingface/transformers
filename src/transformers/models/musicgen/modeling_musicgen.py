@@ -430,6 +430,7 @@ class MusicgenDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class MusicgenPreTrainedModel(PreTrainedModel):
+    config: MusicgenDecoderConfig
     config_class = MusicgenDecoderConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
@@ -1341,6 +1342,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
     """
 )
 class MusicgenForConditionalGeneration(PreTrainedModel, GenerationMixin):
+    config: MusicgenConfig
     config_class = MusicgenConfig
     base_model_prefix = "encoder_decoder"
     main_input_name = "input_ids"

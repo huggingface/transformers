@@ -539,6 +539,7 @@ class ViltEncoder(nn.Module):
 
 @auto_docstring
 class ViltPreTrainedModel(PreTrainedModel):
+    config: ViltConfig
     config_class = ViltConfig
     base_model_prefix = "vilt"
     supports_gradient_checkpointing = True

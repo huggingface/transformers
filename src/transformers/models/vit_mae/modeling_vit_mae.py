@@ -600,6 +600,7 @@ class ViTMAEEncoder(nn.Module):
 
 @auto_docstring
 class ViTMAEPreTrainedModel(PreTrainedModel):
+    config: ViTMAEConfig
     config_class = ViTMAEConfig
     base_model_prefix = "vit"
     main_input_name = "pixel_values"

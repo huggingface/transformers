@@ -1063,6 +1063,7 @@ class JambaMambaDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class JambaPreTrainedModel(PreTrainedModel):
+    config: JambaConfig
     config_class = JambaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True

@@ -287,6 +287,7 @@ class GPTNeoXRotaryEmbedding(nn.Module):
 
 @auto_docstring
 class GPTNeoXPreTrainedModel(PreTrainedModel):
+    config: GPTNeoXConfig
     config_class = GPTNeoXConfig
     base_model_prefix = "gpt_neox"
     supports_gradient_checkpointing = True

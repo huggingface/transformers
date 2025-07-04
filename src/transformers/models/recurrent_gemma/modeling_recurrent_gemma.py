@@ -504,6 +504,7 @@ class RecurrentGemmaDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class RecurrentGemmaPreTrainedModel(PreTrainedModel):
+    config: RecurrentGemmaConfig
     config_class = RecurrentGemmaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True

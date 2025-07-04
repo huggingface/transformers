@@ -466,6 +466,7 @@ class VideoMAEEncoder(nn.Module):
 
 @auto_docstring
 class VideoMAEPreTrainedModel(PreTrainedModel):
+    config: VideoMAEConfig
     config_class = VideoMAEConfig
     base_model_prefix = "videomae"
     main_input_name = "pixel_values"

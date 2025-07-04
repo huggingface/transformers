@@ -422,6 +422,7 @@ class MobileNetV2Stem(nn.Module):
 
 @auto_docstring
 class MobileNetV2PreTrainedModel(PreTrainedModel):
+    config: MobileNetV2Config
     config_class = MobileNetV2Config
     load_tf_weights = load_tf_weights_in_mobilenet_v2
     base_model_prefix = "mobilenet_v2"

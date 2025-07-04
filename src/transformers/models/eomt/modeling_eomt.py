@@ -995,6 +995,7 @@ class EomtPreTrainedModel(PreTrainedModel):
     models.
     """
 
+    config: EomtConfig
     config_class = EomtConfig
     base_model_prefix = "eomt"
     main_input_name = "pixel_values"

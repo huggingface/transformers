@@ -617,6 +617,7 @@ class MobileViTEncoder(nn.Module):
 
 @auto_docstring
 class MobileViTPreTrainedModel(PreTrainedModel):
+    config: MobileViTConfig
     config_class = MobileViTConfig
     base_model_prefix = "mobilevit"
     main_input_name = "pixel_values"

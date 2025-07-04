@@ -654,6 +654,7 @@ class MobileBertPreTrainingHeads(nn.Module):
 
 @auto_docstring
 class MobileBertPreTrainedModel(PreTrainedModel):
+    config: MobileBertConfig
     config_class = MobileBertConfig
     load_tf_weights = load_tf_weights_in_mobilebert
     base_model_prefix = "mobilebert"

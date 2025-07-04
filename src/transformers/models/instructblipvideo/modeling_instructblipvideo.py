@@ -845,6 +845,7 @@ class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 @auto_docstring
 class InstructBlipVideoPreTrainedModel(PreTrainedModel):
+    config: InstructBlipVideoConfig
     config_class = InstructBlipVideoConfig
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
@@ -885,6 +886,7 @@ class InstructBlipVideoPreTrainedModel(PreTrainedModel):
 
 class InstructBlipVideoVisionModel(InstructBlipVideoPreTrainedModel):
     main_input_name = "pixel_values"
+    config: InstructBlipVideoVisionConfig
     config_class = InstructBlipVideoVisionConfig
 
     def __init__(self, config: InstructBlipVideoVisionConfig):
@@ -1390,6 +1392,7 @@ class InstructBlipVideoModel(InstructBlipVideoPreTrainedModel):
     """
 )
 class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel, GenerationMixin):
+    config: InstructBlipVideoConfig
     config_class = InstructBlipVideoConfig
     main_input_name = "pixel_values"
     _supports_cache_class = True

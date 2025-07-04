@@ -1202,6 +1202,7 @@ class ZoeDepthMetricDepthEstimationHead(nn.Module):
 # avoiding sdpa and flash_attn_2 support, it's done int the backend
 @auto_docstring
 class ZoeDepthPreTrainedModel(PreTrainedModel):
+    config: ZoeDepthConfig
     config_class = ZoeDepthConfig
     base_model_prefix = "zoedepth"
     main_input_name = "pixel_values"

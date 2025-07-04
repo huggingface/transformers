@@ -799,6 +799,7 @@ class ClvpConditioningEncoder(nn.Module):
 
 @auto_docstring
 class ClvpPreTrainedModel(PreTrainedModel):
+    config: ClvpConfig
     config_class = ClvpConfig
     base_model_prefix = "clvp"
     supports_gradient_checkpointing = True
@@ -1477,6 +1478,7 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
     """
 )
 class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
+    config: ClvpConfig
     config_class = ClvpConfig
 
     def __init__(self, config: ClvpConfig):

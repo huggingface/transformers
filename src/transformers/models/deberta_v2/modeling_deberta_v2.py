@@ -690,6 +690,7 @@ class DebertaV2Encoder(nn.Module):
 
 @auto_docstring
 class DebertaV2PreTrainedModel(PreTrainedModel):
+    config: DebertaV2Config
     config_class = DebertaV2Config
     base_model_prefix = "deberta"
     _keys_to_ignore_on_load_unexpected = ["position_embeddings"]

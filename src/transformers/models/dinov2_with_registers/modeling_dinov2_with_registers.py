@@ -498,6 +498,7 @@ class Dinov2WithRegistersEncoder(nn.Module):
 
 @auto_docstring
 class Dinov2WithRegistersPreTrainedModel(PreTrainedModel):
+    config: Dinov2WithRegistersConfig
     config_class = Dinov2WithRegistersConfig
     base_model_prefix = "dinov2_with_registers"
     main_input_name = "pixel_values"

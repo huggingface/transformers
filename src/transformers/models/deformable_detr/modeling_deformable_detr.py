@@ -916,6 +916,7 @@ class DeformableDetrDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class DeformableDetrPreTrainedModel(PreTrainedModel):
+    config: DeformableDetrConfig
     config_class = DeformableDetrConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"

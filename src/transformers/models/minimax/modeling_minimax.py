@@ -585,6 +585,7 @@ class MiniMaxDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class MiniMaxPreTrainedModel(PreTrainedModel):
+    config: MiniMaxConfig
     config_class = MiniMaxConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True

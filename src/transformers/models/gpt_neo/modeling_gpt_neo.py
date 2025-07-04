@@ -484,6 +484,7 @@ class GPTNeoBlock(GradientCheckpointingLayer):
 
 @auto_docstring
 class GPTNeoPreTrainedModel(PreTrainedModel):
+    config: GPTNeoConfig
     config_class = GPTNeoConfig
     load_tf_weights = load_tf_weights_in_gpt_neo
     base_model_prefix = "transformer"

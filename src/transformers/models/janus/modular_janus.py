@@ -376,6 +376,7 @@ class JanusConfig(PretrainedConfig):
 
 @auto_docstring
 class JanusPreTrainedModel(PreTrainedModel):
+    config: JanusConfig
     config_class = JanusConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True

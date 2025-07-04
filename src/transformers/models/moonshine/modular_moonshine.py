@@ -501,6 +501,7 @@ class MoonshineDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class MoonshinePreTrainedModel(PreTrainedModel):
+    config: MoonshineConfig
     config_class = MoonshineConfig
     base_model_prefix = "model"
     main_input_name = "input_values"

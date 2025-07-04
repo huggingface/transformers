@@ -959,6 +959,7 @@ class FastSpeech2ConformerLoss(nn.Module):
 
 @auto_docstring
 class FastSpeech2ConformerPreTrainedModel(PreTrainedModel):
+    config: FastSpeech2ConformerConfig
     config_class = FastSpeech2ConformerConfig
     base_model_prefix = "fastspeech2_conformer"
 
@@ -1331,6 +1332,7 @@ class HifiGanResidualBlock(nn.Module):
 )
 # Copied from transformers.models.speecht5.modeling_speecht5.SpeechT5HifiGan with SpeechT5->FastSpeech2Conformer
 class FastSpeech2ConformerHifiGan(PreTrainedModel):
+    config: FastSpeech2ConformerHifiGanConfig
     config_class = FastSpeech2ConformerHifiGanConfig
     main_input_name = "spectrogram"
 
@@ -1455,6 +1457,7 @@ class FastSpeech2ConformerHifiGan(PreTrainedModel):
     """
 )
 class FastSpeech2ConformerWithHifiGan(PreTrainedModel):
+    config: FastSpeech2ConformerWithHifiGanConfig
     config_class = FastSpeech2ConformerWithHifiGanConfig
 
     def __init__(self, config: FastSpeech2ConformerWithHifiGanConfig):

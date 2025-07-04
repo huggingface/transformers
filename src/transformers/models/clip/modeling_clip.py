@@ -424,6 +424,7 @@ class CLIPEncoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class CLIPPreTrainedModel(PreTrainedModel):
+    config: CLIPConfig
     config_class = CLIPConfig
     base_model_prefix = "clip"
     supports_gradient_checkpointing = True
@@ -672,6 +673,7 @@ class CLIPTextTransformer(nn.Module):
     """
 )
 class CLIPTextModel(CLIPPreTrainedModel):
+    config: CLIPTextConfig
     config_class = CLIPTextConfig
 
     _no_split_modules = ["CLIPTextEmbeddings", "CLIPEncoderLayer"]
@@ -778,6 +780,7 @@ class CLIPVisionTransformer(nn.Module):
     """
 )
 class CLIPVisionModel(CLIPPreTrainedModel):
+    config: CLIPVisionConfig
     config_class = CLIPVisionConfig
     main_input_name = "pixel_values"
     _no_split_modules = ["CLIPEncoderLayer"]
@@ -831,6 +834,7 @@ class CLIPVisionModel(CLIPPreTrainedModel):
 
 @auto_docstring
 class CLIPModel(CLIPPreTrainedModel):
+    config: CLIPConfig
     config_class = CLIPConfig
     _no_split_modules = ["CLIPTextEmbeddings", "CLIPEncoderLayer", "CLIPVisionEmbeddings"]
 
@@ -1053,6 +1057,7 @@ class CLIPModel(CLIPPreTrainedModel):
 
 @auto_docstring
 class CLIPTextModelWithProjection(CLIPPreTrainedModel):
+    config: CLIPTextConfig
     config_class = CLIPTextConfig
 
     _no_split_modules = ["CLIPTextEmbeddings", "CLIPEncoderLayer"]
@@ -1119,6 +1124,7 @@ class CLIPTextModelWithProjection(CLIPPreTrainedModel):
 
 @auto_docstring
 class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
+    config: CLIPVisionConfig
     config_class = CLIPVisionConfig
     main_input_name = "pixel_values"
 

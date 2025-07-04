@@ -394,6 +394,7 @@ class SplinterEncoder(nn.Module):
 
 @auto_docstring
 class SplinterPreTrainedModel(PreTrainedModel):
+    config: SplinterConfig
     config_class = SplinterConfig
     base_model_prefix = "splinter"
     supports_gradient_checkpointing = True

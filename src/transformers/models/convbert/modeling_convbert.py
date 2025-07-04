@@ -232,6 +232,7 @@ class ConvBertEmbeddings(nn.Module):
 
 @auto_docstring
 class ConvBertPreTrainedModel(PreTrainedModel):
+    config: ConvBertConfig
     config_class = ConvBertConfig
     load_tf_weights = load_tf_weights_in_convbert
     base_model_prefix = "convbert"

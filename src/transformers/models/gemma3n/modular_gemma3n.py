@@ -1475,6 +1475,7 @@ class Gemma3nAudioConformerBlock(nn.Module):
 class Gemma3nAudioEncoder(PreTrainedModel):
     """An audio encoder based on the [Universal Speech Model](https://arxiv.org/abs/2303.01037) architecture."""
 
+    config: Gemma3nAudioConfig
     config_class = Gemma3nAudioConfig
 
     main_input_name = "audio_mel"
@@ -1912,6 +1913,7 @@ class Gemma3nTextDecoderLayer(Gemma3DecoderLayer):
 
 
 class Gemma3nPreTrainedModel(Gemma2PreTrainedModel):
+    config: Gemma3nConfig
     config_class = Gemma3nConfig
     base_model_prefix = ""
     _no_split_modules = ["Gemma3nTextDecoderLayer"]
@@ -1942,6 +1944,7 @@ class Gemma3nPreTrainedModel(Gemma2PreTrainedModel):
 
 @auto_docstring(custom_intro="The base Gemma 3n language model without a language modeling head.")
 class Gemma3nTextModel(Gemma3TextModel):
+    config: Gemma3nTextConfig
     config_class = Gemma3nTextConfig
 
     def __init__(self, config: Gemma3nTextConfig):

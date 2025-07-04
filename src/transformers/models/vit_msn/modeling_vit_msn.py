@@ -438,6 +438,7 @@ class ViTMSNEncoder(nn.Module):
 
 @auto_docstring
 class ViTMSNPreTrainedModel(PreTrainedModel):
+    config: ViTMSNConfig
     config_class = ViTMSNConfig
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
