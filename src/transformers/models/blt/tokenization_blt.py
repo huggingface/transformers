@@ -14,6 +14,7 @@
 # limitations under the License.
 """Tokenization classes for BLT."""
 
+import os
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
@@ -229,14 +230,13 @@ class BLTTokenizer(PreTrainedTokenizer):
         except (UnicodeDecodeError, ValueError):
             return ""
 
-    def encode(self, text: str, add_bos: bool | None = None, add_eos: bool | None = None):
+    def encode(self, text: str, add_special_tokens: bool = True, **kwargs):
         """
         Encode text exactly like the original BLT tokenizer.
         """
-        if add_bos is None:
-            add_bos = self.add_bos_token
-        if add_eos is None:
-            add_eos = self.add_eos_token
+        # Handle the standard PreTrainedTokenizer interface
+        add_bos = kwargs.get('add_bos', self.add_bos_token if add_special_tokens else False)
+        add_eos = kwargs.get('add_eos', self.add_eos_token if add_special_tokens else False)
 
         # Since bpe_delim=False, we use the simple byte encoding
         tokens = bytes(text, encoding="utf-8", errors="ignore")
@@ -268,4 +268,4 @@ class BLTTokenizer(PreTrainedTokenizer):
         """Get vocab size like the original tokenizer."""
         return self.vocab_size_unit_1 + self.offsetting_special_char
 
-__all__ = ["BLTTokenizer"] 
+__all__ = ["BLTTokenizer"]
