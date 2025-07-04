@@ -813,8 +813,8 @@ class CacheExportIntegrationTest(unittest.TestCase):
         self.assertEqual(model.generation_config.cache_implementation, cache_implementation)
         self.assertEqual(model.generation_config.max_length, max_cache_len)
         self.assertTrue(model.generation_config.cache_config is not None)
-        self.assertEqual(model.generation_config.cache_config.batch_size, batch_size)
-        self.assertEqual(model.generation_config.cache_config.max_cache_len, max_cache_len)
+        self.assertEqual(model.generation_config.cache_config.get("batch_size"), batch_size)
+        self.assertEqual(model.generation_config.cache_config.get("max_cache_len"), max_cache_len)
 
         exported_program = convert_and_export_with_cache(model)
 

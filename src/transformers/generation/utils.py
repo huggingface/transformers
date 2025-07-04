@@ -35,7 +35,6 @@ from ..cache_utils import (
     HybridChunkedCache,
     OffloadedCache,
     OffloadedHybridCache,
-    QuantizedCacheConfig,
 )
 from ..configuration_utils import PretrainedConfig
 from ..dynamic_module_utils import (
@@ -2077,22 +2076,22 @@ class GenerationMixin(ContinuousMixin):
                 cache_config = (
                     generation_config.cache_config
                     if generation_config.cache_config is not None
-                    else QuantizedCacheConfig()
+                    else {"backend": "quanto"}
                 )
-                cache_class = QUANT_BACKEND_CLASSES_MAPPING[cache_config.backend]
+                cache_class = QUANT_BACKEND_CLASSES_MAPPING[cache_config["backend"]]
 
-                if cache_config.backend == "quanto" and not is_optimum_quanto_available():
+                if cache_config["backend"] == "quanto" and not is_optimum_quanto_available():
                     raise ImportError(
                         "You need to install optimum-quanto in order to use KV cache quantization with optimum-quanto backend. "
                         "Please install it via  with `pip install optimum-quanto`"
                     )
-                elif cache_config.backend == "HQQ" and not is_hqq_available():
+                elif cache_config["backend"] == "HQQ" and not is_hqq_available():
                     raise ImportError(
                         "You need to install `HQQ` in order to use KV cache quantization with HQQ backend. "
                         "Please install it via  with `pip install hqq`"
                     )
 
-                model_kwargs[cache_name] = cache_class(cache_config)
+                model_kwargs[cache_name] = cache_class(**cache_config)
             elif generation_config.cache_implementation == "offloaded":
                 model_kwargs[cache_name] = OffloadedCache()
             elif generation_config.cache_implementation == "dynamic":

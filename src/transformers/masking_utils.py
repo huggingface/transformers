@@ -693,7 +693,7 @@ def create_causal_mask(
     """
     # If we have an HybridCache structure, here we want to create the mask for the full layers
     is_sliding = []
-    if past_key_values is not None:
+    if past_key_values is not None and past_key_values.layers is not None:
         is_sliding = [getattr(layer, "is_sliding", False) for layer in past_key_values.layers]
     layer_idx = is_sliding.index(True) if True in is_sliding else 0
 
@@ -775,7 +775,7 @@ def create_sliding_window_causal_mask(
     """
     # If we have an HybridCache structure, here we want to create the mask for the sliding layers
     is_sliding = []
-    if past_key_values is not None:
+    if past_key_values is not None and past_key_values.layers is not None:
         is_sliding = [getattr(layer, "is_sliding", False) for layer in past_key_values.layers]
     layer_idx = is_sliding.index(True) if True in is_sliding else 0
 

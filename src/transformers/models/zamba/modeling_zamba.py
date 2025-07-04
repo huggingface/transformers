@@ -146,6 +146,9 @@ class ZambaHybridDynamicCache(Cache):
     def __len__(self):
         return len(self.key_cache)
 
+    def __getitem__(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+        return self.key_cache[layer_idx], self.value_cache[layer_idx]
+
     # Copied from transformers.models.jamba.modeling_jamba.HybridMambaAttentionDynamicCache.update
     def update(
         self,

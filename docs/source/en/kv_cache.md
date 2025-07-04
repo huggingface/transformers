@@ -134,7 +134,7 @@ The [`QuantizedCache`] reduces memory requirements by quantizing the KV values t
 > [!WARNING]
 > Quantizing the cache can harm latency if the context length is short and there is enough GPU memory available for generation without enabling cache quantization. Try to find a balance between memory efficiency and latency.
 
-Enable [`QuantizedCache`] by configuring `cache_implementation="quantized"` in [`GenerationConfig`], and indicate the quantization backend in [`QuantizedCacheConfig`]. Any additional quantization related parameters should also be passed either as a dict or an instance of [`QuantizedCacheConfig`]. You should use the default values for these additional parameters unless you're running out-of-memory. In that case, consider decreasing the residual length.
+Enable [`QuantizedCache`] by configuring `cache_implementation="quantized"` in [`GenerationConfig`], and the quantization backend, as well as any additional quantization related parameters should also be passed either as a dict. You should use the default values for these additional parameters unless you're running out-of-memory. In that case, consider decreasing the residual length.
 
 <hfoptions id="quantized-cache">
 <hfoption id="HQQQuantizedCache">
@@ -142,7 +142,7 @@ Enable [`QuantizedCache`] by configuring `cache_implementation="quantized"` in [
 For [`HQQQuantizedCache`], we recommend setting the `axis-key` and `axis-value` parameters to `1`.
 
 ```py
-from transformers import AutoTokenizer, AutoModelForCausalLM, HQQQuantizedCache, QuantizedCacheConfig
+from transformers import AutoTokenizer, AutoModelForCausalLM, HQQQuantizedCache
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
 model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", torch_dtype=torch.float16).to("cuda:0")
@@ -159,7 +159,7 @@ I like rock music because it's loud and energetic. It's a great way to express m
 For [`QuantoQuantizedCache`], we recommend setting the `axis-key` and `axis-value` parameters to `0`.
 
 ```py
-from transformers import AutoTokenizer, AutoModelForCausalLM, QuantoQuantizedCache, QuantizedCacheConfig
+from transformers import AutoTokenizer, AutoModelForCausalLM, QuantoQuantizedCache
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
 model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", torch_dtype=torch.float16).to("cuda:0")
@@ -273,7 +273,6 @@ from transformers.cache_utils import (
     StaticCache,
     SlidingWindowCache,
     QuantoQuantizedCache,
-    QuantizedCacheConfig,
 )
 
 model_id = "meta-llama/Llama-2-7b-chat-hf"
