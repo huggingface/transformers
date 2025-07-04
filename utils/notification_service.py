@@ -1485,8 +1485,8 @@ if __name__ == "__main__":
         workflow_run_id=target_workflow_run_id,
     )
 
-    current_artifacts = sorted(filter(os.path.isdir, os.listdir()))
-    prev_artifacts = sorted(filter(os.path.isdir, output_dir))
+    current_artifacts = sorted([d for d in os.listdir() if os.path.isdir(d) and d.endswith("_test_reports")])
+    prev_artifacts = sorted([d for d in os.listdir(output_dir) if os.path.isdir(d) and d.endswith("_test_reports")])
 
     print(f"current_artifacts: {current_artifacts}")
     print(f"prev_artifacts: {prev_artifacts}")
