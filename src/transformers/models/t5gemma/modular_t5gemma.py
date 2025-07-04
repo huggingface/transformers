@@ -98,6 +98,8 @@ class T5GemmaConfig(PretrainedConfig):
             The dropout ratio for attention.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether tie input and output embeddings.
+        vocab_size (`int`, *optional*, defaults to 256000):
+            Vocabulary size of the T5Gemma model (the same as Gemma 2).
         kwargs (additional keyword arguments, optional, *optional*):
             Will be passed to the PretrainedConfig base class.
     """
@@ -146,6 +148,7 @@ class T5GemmaConfig(PretrainedConfig):
         classifier_dropout_rate: float = 0.0,
         attention_dropout: float = 0.0,
         tie_word_embeddings: bool = True,
+        vocab_size: int = 256000,
         **kwargs,
     ):
         # Encoder.
@@ -197,8 +200,13 @@ class T5GemmaConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.classifier_dropout_rate = classifier_dropout_rate
         self.tie_word_embeddings = tie_word_embeddings
+
         # Used in pipeline generation.
-        self.vocab_size = kwargs.get("vocab_size", decoder.vocab_size)
+        self.vocab_size = vocab_size
+        if self.vocab_size != self.decoder.vocab_size:
+            raise ValueError(
+                f"Decoder vocab size {self.decoder.vocab_size} does not match the config vocab size {self.vocab_size}."
+            )
 
     def __setattr__(self, key, value):
         shared_attr_with_submodules = [
