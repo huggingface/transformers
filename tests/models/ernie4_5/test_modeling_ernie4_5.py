@@ -57,6 +57,14 @@ class Ernie4_5ModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": Ernie4_5Model,
+            "text-generation": Ernie4_5ForCausalLM,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_headmasking = False
     test_pruning = False
     fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
