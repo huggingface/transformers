@@ -124,6 +124,7 @@ from .utils import (
     strtobool,
 )
 from .utils.generic import GeneralInterface, OutputRecorder
+from .utils.generic import _CAN_RECORD_REGISTRY
 from .utils.hub import create_and_tag_model_card, get_checkpoint_shard_files
 from .utils.import_utils import (
     ENV_VARS_TRUE_VALUES,
@@ -2081,6 +2082,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         self._keep_in_fp32_modules_strict = copy.copy(self.__class__._keep_in_fp32_modules_strict)
 
         self._no_split_modules = self._no_split_modules or []
+        _CAN_RECORD_REGISTRY[self] = self._can_record_outputs
 
     def post_init(self):
         """

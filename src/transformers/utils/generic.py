@@ -42,6 +42,10 @@ from .import_utils import (
     requires,
 )
 
+from weakref import WeakKeyDictionary
+
+_CAN_RECORD_REGISTRY = WeakKeyDictionary()
+
 
 logger = logging.get_logger(__name__)
 
@@ -992,11 +996,7 @@ def check_model_inputs(func):
     def wrapper(self, *args, **kwargs):
         use_cache = kwargs.get("use_cache", getattr(self.config, "use_cache", False))
         return_dict = kwargs.pop("return_dict", getattr(self.config, "return_dict", True))
-
-        sig = inspect.signature(func)
-        bound = sig.bind_partial(self, *args, **kwargs)
-        bound.apply_defaults()
-        all_args = bound.arguments
+        all_args = kwargs.copy()
 
         if getattr(self, "gradient_checkpointing", False) and self.training and use_cache:
             logger.warning_once(
@@ -1008,7 +1008,7 @@ def check_model_inputs(func):
             for k, v in all_args["kwargs"].items():
                 all_args[k] = v
 
-        capture_flags = self.can_record_outputs
+        capture_flags = _CAN_RECORD_REGISTRY[self]
         recordable_keys = {
             f"output_{k}": all_args.get(
                 f"output_{k}", getattr(self.config, f"output_{k}", all_args.get("output_attentions", False))
