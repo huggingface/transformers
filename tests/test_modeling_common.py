@@ -1251,6 +1251,9 @@ class ModelTesterMixin:
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
             config.output_attentions = True
+            for k in config.sub_configs:
+                getattr(config, k).output_attentions = True
+
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -1973,6 +1976,8 @@ class ModelTesterMixin:
             # check that output_hidden_states also work using config
             del inputs_dict["output_hidden_states"]
             config.output_hidden_states = True
+            for k in config.sub_configs:
+                getattr(config, k).output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
