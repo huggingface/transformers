@@ -26,7 +26,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
@@ -507,6 +507,8 @@ class Qwen3MoeModel(Qwen3MoePreTrainedModel):
                 use_cache = False
 
         if use_cache and past_key_values is None:
+            from ...cache_utils import DynamicCache
+
             past_key_values = DynamicCache()
 
         if inputs_embeds is None:
@@ -562,7 +564,8 @@ class Qwen3MoeModel(Qwen3MoePreTrainedModel):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
-            if output_router_logits:
+            # 🔧 FIX: Add null check to prevent None router logits from being collected
+            if output_router_logits and layer_outputs[-1] is not None:
                 all_router_logits += (layer_outputs[-1],)
 
         hidden_states = self.norm(hidden_states)
@@ -613,6 +616,10 @@ def load_balancing_loss_func(
         The auxiliary loss.
     """
     if gate_logits is None or not isinstance(gate_logits, tuple):
+        return 0
+
+    # 🔧 FIX: Handle empty tuple case (when all layers are MLP-only)
+    if len(gate_logits) == 0:
         return 0
 
     if isinstance(gate_logits, tuple):
