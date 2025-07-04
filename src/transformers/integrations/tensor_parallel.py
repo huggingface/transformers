@@ -944,7 +944,7 @@ def shard_and_distribute_module(
 
     # Add hooks to the module if not done yet
     # add_tensor_parallel_hooks_to_module(model, module_to_tp, tp_plan, param_name, current_module_plan, device_mesh)
-    if not getattr(module_to_tp, "_is_hooked", False): # this adds gather hook to layers.*.mlp.experts and skips the rest
+    if not getattr(module_to_tp, "_is_hooked", False):
         add_tensor_parallel_hooks_to_module(
             model, module_to_tp, tp_plan, param_name, current_shard_plan, device_mesh, parameter_name
         )

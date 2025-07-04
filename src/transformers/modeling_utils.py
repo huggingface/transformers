@@ -2092,10 +2092,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     )
 
         # loop over named modules and attach hooks. this is necessary when a module doesn't have parameters and thus we never hit
-        # device_mesh = self._device_mesh # TODO: can we attach device_mesh to model
-        device_mesh = torch.distributed.device_mesh.DeviceMesh.from_group(torch.distributed.distributed_c10d._get_default_group(), device_type="cuda") # TODO:
+        device_mesh = self.config.device_mesh
         for name, module in self.named_modules():
-            if not getattr(module, "_is_hooked", False): # this adds gather hook to layers.*.mlp.experts and skips the rest
+            if not getattr(module, "_is_hooked", False):
                 from transformers.integrations.tensor_parallel import add_tensor_parallel_hooks_to_module
                 add_tensor_parallel_hooks_to_module(
                     model=self,
@@ -4647,6 +4646,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             if config.base_model_ep_plan is None:
                 raise ValueError("base_model_ep_plan is required when enable_expert_parallel is True")
             config.base_model_tp_plan = config.base_model_ep_plan # TODO: hack for now
+
+        config.device_mesh = device_mesh # Used in post_init
 
         with ContextManagers(model_init_context):
             # Let's make sure we don't run the init function of buffer modules
