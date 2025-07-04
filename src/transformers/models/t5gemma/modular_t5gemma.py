@@ -607,6 +607,7 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": None,
+                "position_ids": position_ids,
             }
             self_attn_mask_mapping = {
                 "full_attention": create_causal_mask(
@@ -702,6 +703,7 @@ class T5GemmaDecoder(T5GemmaEncoder):
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values.self_attention_cache if past_key_values is not None else None,
+                "position_ids": position_ids,
             }
             self_attn_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
@@ -715,6 +717,7 @@ class T5GemmaDecoder(T5GemmaEncoder):
                 "attention_mask": encoder_attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": None,
+                "position_ids": None,
             }
             cross_attn_mask_mapping = {
                 "full_attention": create_causal_mask(
