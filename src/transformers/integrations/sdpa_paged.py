@@ -47,16 +47,16 @@ def sdpa_attention_paged_forward__(
     attention_mask: Optional[torch.Tensor],
     dropout: float = 0.0,
     scaling: Optional[float] = None,
+    reshaping_function = None,
     is_causal: Optional[bool] = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
     cache = kwargs.pop("cache", None)
     if cache is not None:
-        key, value = cache.update(key, value, module.layer_idx, **kwargs)
+        key, value = cache.update(key, value, module.layer_idx, reshaping_function=reshaping_function, **kwargs)
     if hasattr(module, "num_key_value_groups"):
         key = repeat_kv(key, module.num_key_value_groups)
         value = repeat_kv(value, module.num_key_value_groups)
-
     causal_mask = attention_mask
     query = query.contiguous()
     key = key.contiguous()
@@ -66,7 +66,6 @@ def sdpa_attention_paged_forward__(
         key,
         value,
         attn_mask=causal_mask,
-        dropout_p=dropout,
         scale=scaling,
         is_causal=False,
     )
@@ -86,57 +85,73 @@ def sdpa_attention_paged_forward(
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
     reshaping_function = paged_attention_kernel.reshape_and_cache
-    num_kv_heads = key.shape[1]
-    cache = kwargs.pop("cache", None)
-    if cache is not None:
-        key, value = cache.update(key, value, module.layer_idx, reshaping_function=reshaping_function, **kwargs)
-    
-    if hasattr(module, "num_key_value_groups"):
-        key = repeat_k_kernel(key, module.num_key_value_groups)
-        value = repeat_v_kernel(value, module.num_key_value_groups)
-    # print(f"query: {query.shape}, key: {key.shape}, value: {value.shape}")
-    batch_size, num_heads, seq_len, head_size = query.shape
-    query = query.transpose(1, 2).reshape(batch_size * seq_len, num_heads, head_size)
-    attn_output = torch.empty_like(query, device=query.device)
-    
-    # Get sequence lengths and block tables
-    seq_lens = kwargs.get("cumulative_seqlens_k", None)
-    if seq_lens is None:
-        seq_lens = torch.full((batch_size,), seq_len, device=query.device, dtype=torch.int32)
-    
-    block_tables = kwargs.get("block_tables", None)
-    block_size = kwargs.get("block_size", 32)
-    
-    # Ensure proper scaling
-    scale = scaling
-    if scale is None:
-        scale = torch.tensor(1.0 / (head_size ** 0.5), device=query.device)
-    elif not isinstance(scale, torch.Tensor):
-        scale = torch.tensor(scale, device=query.device)
-    
-    # Call paged attention kernel
-    torch.mps.synchronize()
-    paged_attention_kernel.paged_attention_v1(
-        attn_output,
-        query,
-        key,  # key should be in the correct paged format after cache.update
-        value,  # value should be in the correct paged format after cache.update
-        num_kv_heads=num_kv_heads,
-        block_tables=block_tables,
-        seq_lens=seq_lens,
-        block_size=block_size,
-        max_seq_len=kwargs.get("max_seqlen_k", seq_lens),
-        kv_cache_dtype=kwargs.get("kv_cache_dtype", "auto"),
-        scale=scale,
-        k_scale=kwargs.get("k_scale", torch.tensor(1.0, device=query.device)),
-        v_scale=kwargs.get("v_scale", torch.tensor(1.0, device=query.device)),
-        alibi_slopes=kwargs.get("alibi_slopes", None),
-    )
-    torch.mps.synchronize()
+    cumulative_seqlens_q = kwargs.get("cumulative_seqlens_q", None)
+    cumulative_seqlens_k = kwargs.get("cumulative_seqlens_k", None)
+    # print(cumulative_seqlens_q)
+    is_decoding = torch.equal(cumulative_seqlens_q, torch.cat([torch.arange(torch.max(cumulative_seqlens_q).item() + 1, device=cumulative_seqlens_q.device), torch.zeros(max(0, len(cumulative_seqlens_q) - torch.max(cumulative_seqlens_q).item() - 1), device=cumulative_seqlens_q.device)]))
+    if not is_decoding:
+        return sdpa_attention_paged_forward__(
+            module,
+            query,
+            key,
+            value,
+            attention_mask,
+            reshaping_function=reshaping_function,
+            **kwargs,
+        )
+    else:
+        reshaping_function = paged_attention_kernel.reshape_and_cache
+
+        num_kv_heads = key.shape[1]
+        cache = kwargs.pop("cache", None)
+        if cache is not None:
+            key, value = cache.update(key, value, module.layer_idx, reshaping_function=reshaping_function, kernel=True, **kwargs)
+        
+        # if hasattr(module, "num_key_value_groups"):
+        #     key = repeat_k_kernel(key, module.num_key_value_groups)
+        #     value = repeat_v_kernel(value, module.num_key_value_groups)
+        # print(f"query: {query.shape}, key: {key.shape}, value: {value.shape}")
+        batch_size, num_heads, seq_len, head_size = query.shape
+        query = query.transpose(1, 2).reshape(batch_size * seq_len, num_heads, head_size)
+        attn_output = torch.empty_like(query, device=query.device)
+        
+        # Get sequence lengths and block tables
+        seq_lens = kwargs.get("cumulative_seqlens_k", None)
+        if seq_lens is None:
+            seq_lens = torch.full((batch_size,), seq_len, device=query.device, dtype=torch.int32)
+        
+        block_tables = kwargs.get("block_tables", None)
+        block_size = kwargs.get("block_size", 32)
+        
+        # Ensure proper scaling
+        scale = scaling
+        if scale is None:
+            scale = torch.tensor(1.0 / (head_size ** 0.5), device=query.device)
+        elif not isinstance(scale, torch.Tensor):
+            scale = torch.tensor(scale, device=query.device)
+
+        torch.mps.synchronize()
+        paged_attention_kernel.paged_attention_v1(
+            attn_output,
+            query,
+            key,  # key should be in the correct paged format after cache.update
+            value,  # value should be in the correct paged format after cache.update
+            num_kv_heads=num_kv_heads,
+            block_tables=block_tables,
+            seq_lens=seq_lens,
+            block_size=block_size,
+            max_seq_len=kwargs.get("max_seqlen_k", seq_lens),
+            kv_cache_dtype=kwargs.get("kv_cache_dtype", "auto"),
+            scale=scale,
+            k_scale=kwargs.get("k_scale", torch.tensor(1.0, device=query.device)),
+            v_scale=kwargs.get("v_scale", torch.tensor(1.0, device=query.device)),
+            alibi_slopes=kwargs.get("alibi_slopes", None),
+        )
+        torch.mps.synchronize()
     
     # Reshape output back to original format
-    attn_output = attn_output.reshape(batch_size, seq_len, num_heads, head_size)
-    attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.reshape(batch_size, seq_len, num_heads, head_size)
+        attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, None
 
