@@ -130,6 +130,8 @@ def get_last_daily_ci_reports(
 
     results = {}
     print(downloaded_artifact_names)
+    os.system(output_dir)
+
     for artifact_name in downloaded_artifact_names:
         artifact_zip_path = os.path.join(output_dir, f"{artifact_name}.zip")
         if os.path.isfile(artifact_zip_path):
@@ -138,9 +140,8 @@ def get_last_daily_ci_reports(
             with zipfile.ZipFile(artifact_zip_path) as z:
                 z.extractall(target_dir)
                 print(target_dir)
-                import os
                 os.system(target_dir)
-                os.system(output_dir)
+                print("=====" * 30)
 
             results[artifact_name] = {}
             with zipfile.ZipFile(artifact_zip_path) as z:

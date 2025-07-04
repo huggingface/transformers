@@ -1486,6 +1486,8 @@ if __name__ == "__main__":
     )
 
     current_artifacts = sorted([d for d in os.listdir() if os.path.isdir(d) and d.endswith("_test_reports")])
+
+    print(os.listdir(output_dir))
     prev_artifacts = sorted([d for d in os.listdir(output_dir) if os.path.isdir(d) and d.endswith("_test_reports")])
 
     print(f"current_artifacts: {current_artifacts}")
