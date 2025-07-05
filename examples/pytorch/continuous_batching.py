@@ -20,10 +20,10 @@ generation_config = GenerationConfig(
     eos_token_id=tokenizer.eos_token_id,
     pad_token_id=tokenizer.pad_token_id,
     use_cache=False,
-    num_blocks=256,
+    num_blocks=64,
     block_size=32,
     do_sample=True,
-    max_batch_tokens=128,  # Maximum number of tokens to process in a single batch
+    max_batch_tokens=16,  # Maximum number of tokens to process in a single batch
     scheduler="prefill_first",
 )
 
@@ -107,4 +107,3 @@ print(f"CB generation took: {end_time_simple - start_time_simple:.2f} seconds")
 #     print(f"  Output: {output_text}")
 # print("-" * 20)
 # print("--- Finished Simple Batch Generation Example ---\n\n")
-

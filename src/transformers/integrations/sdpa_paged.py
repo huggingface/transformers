@@ -118,7 +118,6 @@ def sdpa_attention_paged_forward(
         query = query.transpose(1, 2).reshape(batch_size * seq_len, num_heads, head_size)
         attn_output = torch.empty_like(query, device=query.device)
 
-        # Get sequence lengths and block tables
         seq_lens = kwargs.get("cumulative_seqlens_k")
         block_tables = kwargs.get("block_tables")
         block_size = kwargs.get("block_size", 32)
