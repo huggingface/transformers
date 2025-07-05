@@ -97,7 +97,6 @@ def sdpa_attention_paged_forward(
         seq_lens = kwargs.get("cumulative_seqlens_k")
         block_tables = kwargs.get("block_tables")
         block_size = kwargs.get("block_size", 32)
-        scale = scaling
         torch.mps.synchronize()
         paged_attention_kernel.paged_attention_v1(
             module._attn_output,
@@ -108,12 +107,12 @@ def sdpa_attention_paged_forward(
             block_tables=block_tables,
             seq_lens=seq_lens,
             block_size=block_size,
-            max_seq_len=kwargs.get("max_seqlen_k", seq_lens),
+            max_seq_len=kwargs.get("max_seqlen_k"),
             kv_cache_dtype=kwargs.get("kv_cache_dtype", "auto"),
-            scale=scale,
-            k_scale=kwargs.get("k_scale", torch.tensor(1.0, device=query.device)),
-            v_scale=kwargs.get("v_scale", torch.tensor(1.0, device=query.device)),
-            alibi_slopes=kwargs.get("alibi_slopes", None),
+            scale=module.scaling,
+            k_scale=None,
+            v_scale=None,
+            alibi_slopes=None,
         )
 
         attn_output = module._attn_output.reshape(batch_size, seq_len, num_heads, head_size)

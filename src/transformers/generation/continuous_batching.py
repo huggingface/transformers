@@ -308,7 +308,7 @@ class PagedAttentionCache:
         read_index,
         write_index,
         reshaping_function=None,
-        kernel=True,
+        kernel=False,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         total_slots = self.num_blocks * self.block_size
@@ -321,15 +321,20 @@ class PagedAttentionCache:
                 write_index=write_index,
                 reshaping_function=reshaping_function,
             )
+            k = self.key_cache[layer_idx].view(total_slots, self.num_key_value_heads, self.head_dim)[read_index, :, :]
+            v = self.value_cache[layer_idx].view(total_slots, self.num_key_value_heads, self.head_dim)[
+                read_index, :, :
+            ]
+            return k, v
+        else:
             k_cache_flat = self.key_cache[layer_idx].view(total_slots, self.num_key_value_heads, self.head_dim)
             v_cache_flat = self.value_cache[layer_idx].view(total_slots, self.num_key_value_heads, self.head_dim)
+            batch_size, num_heads, seq_len, head_size = key_states.shape
+            key = key_states.transpose(1, 2).view(batch_size * seq_len, num_heads, head_size)
+            value = value_states.transpose(1, 2).view(batch_size * seq_len, num_heads, head_size)
+            k_cache_flat[write_index, :, :] = key
+            v_cache_flat[write_index, :, :] = value
             return k_cache_flat[read_index, :, :], v_cache_flat[read_index, :, :]
-        else:
-            k_cache_flat = self.key_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
-            v_cache_flat = self.value_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
-            k_cache_flat[:, write_index, :] = key_states[0]
-            v_cache_flat[:, write_index, :] = value_states[0]
-            return k_cache_flat[None, :, read_index, :], v_cache_flat[None, :, read_index, :]
 
     def reshape_and_cache_tensors(
         self,
@@ -359,8 +364,6 @@ class PagedAttentionCache:
             torch.tensor(1.0, device="mps"),  # k_scale
             torch.tensor(1.0, device="mps"),  # v_scale
         )
-
-        # return key_cache.permute(2, 0, 1, 3), value_cache.permute(2, 0, 1, 3)
 
 
 class Scheduler(ABC):
