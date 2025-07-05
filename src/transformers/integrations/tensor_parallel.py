@@ -469,6 +469,43 @@ class ReplicateParallel(TensorParallelLayer):
         param = DTensor.from_local(param, device_mesh, [Replicate()], run_check=False)
         return param
 
+class VocabParallel(TensorParallelLayer):
+    """
+    VocabParallel is used to shard the embedding table.
+    """
+
+    def __init__(self, use_dtensor=True):
+        super().__init__()
+        # Set the output layouts to trigger all-reduce
+        self.output_layouts = (Replicate(),)
+        self.use_local_output = True
+        self.use_dtensor = use_dtensor
+    
+    @staticmethod
+    def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
+        print("VocabParallel _prepare_input_fn")
+        return inputs
+
+    @staticmethod
+    def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
+        print("VocabParallel _prepare_output_fn")
+        # The forward pass should produce a DTensor with Shard(0) placement
+        # This redistribute call will automatically perform all-reduce when going from Shard(0) -> Replicate()
+        if outputs.placements != output_layouts:
+            outputs = outputs.redistribute(placements=output_layouts, async_op=False)
+        return outputs.to_local() if use_local_output else outputs
+    
+    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
+        #TODO(3outeille): if several device_mesh dims, should be shard given TP axes
+        # Shard the embedding table along dim 0 (vocab dimension)
+        parameter = get_tensor_shard(param, empty_param, device_mesh, rank, 0)
+        shard = [Shard(0)]
+        parameter = parameter.to(param_casting_dtype)
+        if to_contiguous:
+            parameter = parameter.contiguous()
+        if self.use_dtensor:
+            parameter = DTensor.from_local(parameter, device_mesh, shard, run_check=False)
+        return nn.Parameter(parameter)
 
 class ColwiseParallel(TensorParallelLayer):
     """
@@ -807,6 +844,7 @@ class ParallelInterface(GeneralInterface):
     # a new instance is created (in order to locally override a given entry)
     _global_mapping = (
         {
+            "vocab_parallel": VocabParallel(),
             "colwise": ColwiseParallel(),
             "rowwise": RowwiseParallel(),
             "colwise_rep": ColwiseParallel(output_layouts=Replicate()),
