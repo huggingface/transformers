@@ -164,6 +164,9 @@ generation.
 [[autodoc]] MinPLogitsWarper
     - __call__
 
+[[autodoc]] MomentPLogitsWarper
+    - __call__
+
 [[autodoc]] NoBadWordsLogitsProcessor
     - __call__
 

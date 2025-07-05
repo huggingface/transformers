@@ -71,6 +71,7 @@ else:
         "MinLengthLogitsProcessor",
         "MinNewTokensLengthLogitsProcessor",
         "MinPLogitsWarper",
+        "MomentPLogitsWarper",
         "NoBadWordsLogitsProcessor",
         "NoRepeatNGramLogitsProcessor",
         "PrefixConstrainedLogitsProcessor",
@@ -96,9 +97,6 @@ else:
         "StoppingCriteriaList",
         "validate_stopping_criteria",
         "StopStringCriteria",
-    ]
-    _import_structure["continuous_batching"] = [
-        "ContinuousMixin",
     ]
     _import_structure["utils"] = [
         "GenerationMixin",
@@ -216,7 +214,6 @@ if TYPE_CHECKING:
             EarlyExitCandidateGenerator,
             PromptLookupCandidateGenerator,
         )
-        from .continuous_batching import ContinuousMixin
         from .logits_process import (
             AlternatingCodebooksLogitsProcessor,
             ClassifierFreeGuidanceLogitsProcessor,
@@ -235,6 +232,7 @@ if TYPE_CHECKING:
             MinLengthLogitsProcessor,
             MinNewTokensLengthLogitsProcessor,
             MinPLogitsWarper,
+            MomentPLogitsWarper,
             NoBadWordsLogitsProcessor,
             NoRepeatNGramLogitsProcessor,
             PrefixConstrainedLogitsProcessor,
