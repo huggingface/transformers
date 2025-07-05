@@ -191,7 +191,8 @@ class PagedAttentionCache(Cache):
 
         self.block_size = block_size
         self.num_blocks = num_blocks
-        self.cache_shape = (self.num_key_value_heads, num_blocks, self.block_size, self.head_dim)
+        # self.cache_shape = (self.num_key_value_heads, self.num_blocks, self.block_size, self.head_dim)
+        self.cache_shape = (self.num_blocks, self.block_size, self.num_key_value_heads, self.head_dim)
 
         self.dtype = dtype
         self.device = device
@@ -293,15 +294,45 @@ class PagedAttentionCache(Cache):
         layer_idx: int,
         read_index,
         write_index,
+        reshaping_function,
+        kernel=True,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        # Reshape cache for easier indexing
         total_slots = self.num_blocks * self.block_size
-        k_cache_flat = self.key_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
-        v_cache_flat = self.value_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
-        k_cache_flat[:, write_index, :] = key_states[0]
-        v_cache_flat[:, write_index, :] = value_states[0]
-        return k_cache_flat[None, :, read_index, :], v_cache_flat[None, :, read_index, :]
+        batch_size, num_heads, seq_len, head_size = key_states.shape
+        key = key_states.transpose(1, 2).view(batch_size * seq_len, num_heads, head_size)
+        value = value_states.transpose(1, 2).view(batch_size * seq_len, num_heads, head_size)
+        if kernel:
+            # Pre-create scale tensors to avoid CUDA graph capture issues
+            if not hasattr(self, "_k_scale_tensor") or self._k_scale_tensor.device != key.device:
+                self._k_scale_tensor = torch.tensor(1.0, device=key.device, dtype=key.dtype)
+            if not hasattr(self, "_v_scale_tensor") or self._v_scale_tensor.device != value.device:
+                self._v_scale_tensor = torch.tensor(1.0, device=value.device, dtype=value.dtype)
+                
+            reshaping_function(
+                key,
+                value,
+                self.key_cache[layer_idx],
+                self.value_cache[layer_idx],
+                write_index.to(torch.int64).flatten(),
+                "auto",  # kv_cache_dtype
+                self._k_scale_tensor,  # k_scale
+                self._v_scale_tensor,  # v_scale
+            )
+            if kwargs.get("max_seqlen_q", -1) == 1:
+                return self.key_cache[layer_idx], self.value_cache[layer_idx]
+            else:
+                k = self.key_cache[layer_idx].view(total_slots, self.num_key_value_heads, self.head_dim)
+                v = self.value_cache[layer_idx].view(total_slots, self.num_key_value_heads, self.head_dim)
+                return k[read_index, :, :], v[read_index, :, :]
+        else:
+            k_cache_flat = self.key_cache[layer_idx].view(total_slots, self.num_key_value_heads, self.head_dim)
+            v_cache_flat = self.value_cache[layer_idx].view(total_slots, self.num_key_value_heads, self.head_dim)
+            k_cache_flat[write_index, :, :] = key
+            v_cache_flat[write_index, :, :] = value
+            if kwargs.get("max_seqlen_q", -1) == 1:
+                return self.key_cache[layer_idx], self.value_cache[layer_idx]
+            return k_cache_flat[read_index, :, :], v_cache_flat[read_index, :, :]
 
 
 class Scheduler(ABC):
@@ -776,21 +807,26 @@ class ContinuousBatchProcessor:
     def setup_static_tensors(self):
         T = self.max_batch_tokens
         max_token_budget = self.cache.num_blocks * self.cache.block_size
-        tensor_metadata = {"dtype": torch.int32, "device": self.model_device}
+        tensor_metadata = {"dtype": torch.int32, "pin_memory": True if torch.cuda.is_available() else False}
         self.tensor_metadata = tensor_metadata
-        self.input_ids = torch.zeros((1, T), **tensor_metadata)
-        self.position_ids = torch.zeros((1, T), **tensor_metadata)
-        self.attention_mask = torch.zeros(
-            (1, 1, T, max_token_budget), dtype=self.model_dtype, device=self.model_device
+        self.input_ids = torch.zeros((1, T), **tensor_metadata).to(self.model_device, non_blocking=True)
+        self.position_ids = torch.zeros((1, T), **tensor_metadata).to(self.model_device, non_blocking=True)
+        self.attention_mask = torch.zeros((1, 1, T, max_token_budget), dtype=self.model_dtype).to(
+            self.model_device, non_blocking=True
         )
-        self.cumulative_seqlens_q = torch.zeros((T + 1,), **tensor_metadata)
-        self.cumulative_seqlens_k = torch.zeros((T + 1,), **tensor_metadata)
-        self.write_index = torch.zeros((T,), **tensor_metadata)
-        self.read_index = torch.zeros((max_token_budget,), **tensor_metadata)
-        self.logits_indices = torch.full((T,), -1, **tensor_metadata)
+        self.cumulative_seqlens_q = torch.zeros((T + 1,), **tensor_metadata).to(self.model_device, non_blocking=True)
+        self.cumulative_seqlens_k = torch.zeros((T + 1,), **tensor_metadata).to(self.model_device, non_blocking=True)
+        self.write_index = torch.zeros((T,), **tensor_metadata).to(self.model_device, non_blocking=True)
+        self.read_index = torch.zeros((max_token_budget,), **tensor_metadata).to(self.model_device, non_blocking=True)
+        self.logits_indices = torch.full((T,), -1, **tensor_metadata).to(self.model_device, non_blocking=True)
         self.max_seqlen_q = 0
         self.max_seqlen_k = 0
-        self.output_ids = torch.full((1, T), -1, **tensor_metadata)
+        self.output_ids = torch.full((1, T), -1, **tensor_metadata).to(self.model_device, non_blocking=True)
+        self.block_tables = torch.full(
+            (T, 20),
+            fill_value=-1,
+            dtype=torch.int32,
+        ).to(self.model_device, non_blocking=True)
 
     @traced
     @torch.no_grad()
@@ -807,6 +843,7 @@ class ContinuousBatchProcessor:
         self.max_seqlen_q = 0
         self.max_seqlen_k = 0
         self.output_ids.zero_()
+        self.block_tables.fill_(-1)
 
     def get_model_kwargs(self) -> PagedAttentionArgs:
         """Get model keyword arguments for the current batch."""
@@ -822,7 +859,7 @@ class ContinuousBatchProcessor:
             "logits_indices": self.logits_indices,
             "max_seqlen_q": self.max_seqlen_q,
             "max_seqlen_k": self.max_seqlen_k,
-            "block_tables": self.cache._block_tables,
+            "block_tables": self.block_tables,
             "cache": self.cache,
             "use_cache": False,
         }
@@ -933,6 +970,11 @@ class ContinuousBatchProcessor:
             self.max_seqlen_k = max(self.max_seqlen_k, key_length)
             state.position_offset += query_length
 
+            block_list = self.cache.get_block_table(state.request_id)
+            self.block_tables[len(cumulative_seqlens_q) - 2, : len(block_list)] = torch.tensor(
+                block_list, dtype=torch.int32, device=self.model_device
+            )
+
         logger.warning(
             f"Scheduled: {len(self.requests_in_batch)}, Waiting: {len(self.scheduler.waiting_requests)}, Active: {len(self.scheduler.active_requests)}. cum Q: {cumulative_seqlens_q[-1]}. cum KV: {cumulative_seqlens_k[-1]}, free blocks: {self.cache.get_num_free_blocks()}"
         )
@@ -968,7 +1010,10 @@ class ContinuousBatchProcessor:
         self.cumulative_seqlens_k[: len(cumulative_seqlens_k)] = to_tensor(cumulative_seqlens_k)
         self.logits_indices[: len(logits_indices)] = to_tensor(logits_indices)
         min_value = torch.finfo(self.model_dtype).min
-        if self.config._attn_implementation != "paged_attention":  # we set `is_causal` to True in paged call`
+        if (
+            self.config._attn_implementation != "paged_attention" and self.max_seqlen_q != 1
+        ):  # we set `is_causal` to True in paged call`
+            # when decoding with sdpa paged, no need for a mask
             for i in range(len(cumulative_seqlens_q) - 1):
                 if (
                     cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]
