@@ -246,10 +246,6 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
         processed_grids = reorder_videos(processed_grids, grouped_videos_index)
         pixel_values_videos = torch.cat(processed_videos, dim=0)
         video_grid_thw = torch.tensor(processed_grids)
-        total_frames = video_grid_thw[0][0].item()
-        h = video_grid_thw[0][1].item()
-        w = video_grid_thw[0][2].item()
-        video_grid_thw = [[1, h, w] for _ in range(total_frames)]
         data = {
             "pixel_values_videos": pixel_values_videos,
             "video_grid_thw": video_grid_thw,
