@@ -19,34 +19,6 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(num_key_value_heads * n_rep, slen, head_dim)
 
 
-def repeat_k_kernel(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    num_blocks, num_key_value_heads, head_dim_x, block_size, x = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :, :].expand(
-        num_blocks, num_key_value_heads, n_rep, head_dim_x, block_size, x
-    )
-    return hidden_states.reshape(num_blocks, num_key_value_heads * n_rep, head_dim_x, block_size, x)
-
-
-def repeat_v_kernel(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    num_blocks, num_key_value_heads, head_dim, block_size = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(
-        num_blocks, num_key_value_heads, n_rep, head_dim, block_size
-    )
-    return hidden_states.reshape(num_blocks, num_key_value_heads * n_rep, head_dim, block_size)
-
-
 def sdpa_attention_paged_forward__(
     module: torch.nn.Module,
     query: torch.Tensor,
@@ -64,6 +36,7 @@ def sdpa_attention_paged_forward__(
         key, value = cache.update(key, value, module.layer_idx, reshaping_function=reshaping_function, **kwargs)
 
     # because of the kernel, the shape of the cache is different
+    # it return [num_tokens, num_kv_heads, head_dim]
     key = key.permute(1, 0, 2)
     value = value.permute(1, 0, 2)
     if hasattr(module, "num_key_value_groups"):
@@ -115,8 +88,6 @@ def sdpa_attention_paged_forward(
             key, value = cache.update(
                 key, value, module.layer_idx, reshaping_function=reshaping_function, kernel=True, **kwargs
             )
-        if kvg := getattr(module, "num_key_value_groups", None):
-            key, value = repeat_kv(key, kvg), repeat_kv(value, kvg)
         batch_size, num_heads, seq_len, head_size = query.shape
         query = query.transpose(1, 2).reshape(batch_size * seq_len, num_heads, head_size)
 
@@ -147,5 +118,4 @@ def sdpa_attention_paged_forward(
 
         attn_output = module._attn_output.reshape(batch_size, seq_len, num_heads, head_size)
         attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, None
+        return attn_output, None
