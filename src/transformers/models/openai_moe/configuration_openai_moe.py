@@ -36,11 +36,11 @@ class OpenAIMoeConfig(PretrainedConfig):
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.self_attn.sinks": "local_rowwise",
 
-        # "layers.*.mlp.experts.gate_up_proj": "local_packed_rowwise",
-        # "layers.*.mlp.experts.gate_up_proj_bias": "local_packed_rowwise",
-        # "layers.*.mlp.experts.down_proj": "local_colwise",
-        # "layers.*.mlp.experts.down_proj_bias": "local", # TODO: add smthg that says bias exists only once for all TPs
-        # "layers.*.mlp.experts": "gather", # TODO: same, this should mean i want to allreduce output 
+        "layers.*.mlp.experts.gate_up_proj": "local_packed_rowwise",
+        "layers.*.mlp.experts.gate_up_proj_bias": "local_packed_rowwise",
+        "layers.*.mlp.experts.down_proj": "local_colwise",
+        "layers.*.mlp.experts.down_proj_bias": "local", # TODO: add smthg that says bias exists only once for all TPs
+        "layers.*.mlp.experts": "gather", # TODO: same, this should mean i want to allreduce output 
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

@@ -36,7 +36,7 @@ _torch_distributed_available = torch.distributed.is_available()
 
 
 if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
-    from torch.distributed.tensor import DTensor, Placement, Replicate, Shard
+    from torch.distributed.tensor import DTensor, Placement, Replicate, Shard, Partial
 
 
 def initialize_tensor_parallelism(tp_plan, tp_size=None):
@@ -474,37 +474,75 @@ class VocabParallel(TensorParallelLayer):
     VocabParallel is used to shard the embedding table.
     """
 
-    def __init__(self, use_dtensor=True):
+    def __init__(
+        self,
+        *,
+        input_layouts: Optional[Placement] = None,
+        output_layouts: Optional[Placement] = None,
+        use_local_output: bool = True,
+        use_dtensor=True,):
         super().__init__()
-        # Set the output layouts to trigger all-reduce
-        self.output_layouts = (Replicate(),)
-        self.use_local_output = True
+        self.input_layouts = (input_layouts or Replicate(),)
+        self.desired_input_layouts = (Replicate(),)
+        self.output_layouts = (output_layouts or Replicate(),)
+        self.use_local_output = use_local_output
         self.use_dtensor = use_dtensor
     
     @staticmethod
     def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
-        print("VocabParallel _prepare_input_fn")
-        return inputs
+        rank = device_mesh.get_rank()
+        world_size = device_mesh.size()
+        vocab_size = mod.num_embeddings 
+        local_vocab_size = vocab_size // world_size
+        vocab_start = rank * local_vocab_size
+        vocab_end = vocab_start + local_vocab_size
+
+        input_tensor = inputs if isinstance(inputs, torch.Tensor) else inputs[0]
+
+        input_mask = (input_tensor < vocab_start) | (input_tensor >= vocab_end)
+        masked_input = input_tensor.clone() - vocab_start
+        masked_input[input_mask] = 0  # Set invalid tokens to 0
+        # Store the mask for use in _prepare_output_fn
+        mod._vocab_parallel_input_mask = input_mask
+        if not isinstance(input_tensor, DTensor):
+            masked_input = DTensor.from_local(masked_input, device_mesh, input_layouts, run_check=False)
+
+        return masked_input
 
     @staticmethod
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
-        print("VocabParallel _prepare_output_fn")
-        # The forward pass should produce a DTensor with Shard(0) placement
-        # This redistribute call will automatically perform all-reduce when going from Shard(0) -> Replicate()
-        if outputs.placements != output_layouts:
-            outputs = outputs.redistribute(placements=output_layouts, async_op=False)
-        return outputs.to_local() if use_local_output else outputs
+        output_tensor = outputs if isinstance(outputs, DTensor) else outputs[0]
+
+        # Retrieve the input mask from the module
+        input_mask = getattr(mod, '_vocab_parallel_input_mask', None)
+        if input_mask is not None:                        
+            #TODO(3outeille): double check if there is another workaround
+            if isinstance(output_tensor, DTensor):
+                local_tensor = output_tensor.to_local()
+                input_mask = input_mask.to(local_tensor.device)
+                local_tensor[input_mask] = 0.0
+            else:
+                output_tensor[input_mask] = 0.0
+
+        if not isinstance(output_tensor, DTensor):
+            output_tensor = DTensor.from_local(output_tensor, device_mesh, output_layouts, run_check=False)
+
+        # The forward pass should produce a DTensor with Partial() placement
+        # This redistribute call will automatically perform all-reduce when going from Partial() -> Replicate()
+        if output_tensor.placements != output_layouts:
+            output_tensor = output_tensor.redistribute(placements=output_layouts, async_op=False)
+        return output_tensor.to_local() if use_local_output else output_tensor
     
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         #TODO(3outeille): if several device_mesh dims, should be shard given TP axes
         # Shard the embedding table along dim 0 (vocab dimension)
         parameter = get_tensor_shard(param, empty_param, device_mesh, rank, 0)
-        shard = [Shard(0)]
+        placements = [Partial()]
         parameter = parameter.to(param_casting_dtype)
         if to_contiguous:
             parameter = parameter.contiguous()
         if self.use_dtensor:
-            parameter = DTensor.from_local(parameter, device_mesh, shard, run_check=False)
+            parameter = DTensor.from_local(parameter, device_mesh, placements, run_check=False)
         return nn.Parameter(parameter)
 
 class ColwiseParallel(TensorParallelLayer):
