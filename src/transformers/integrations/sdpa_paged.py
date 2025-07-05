@@ -6,16 +6,19 @@ from kernels import get_kernel
 
 paged_attention_kernel = get_kernel("kernels-community/paged-attention")
 
+
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
     num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
     """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    print(hidden_states.shape)
+    num_key_value_heads, slen, head_dim = hidden_states.shape
     if n_rep == 1:
         return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+    hidden_states = hidden_states[:, None, :, :].expand(num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(num_key_value_heads * n_rep, slen, head_dim)
+
 
 def repeat_k_kernel(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
@@ -25,8 +28,11 @@ def repeat_k_kernel(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     num_blocks, num_key_value_heads, head_dim_x, block_size, x = hidden_states.shape
     if n_rep == 1:
         return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :, :].expand(num_blocks, num_key_value_heads, n_rep, head_dim_x, block_size, x)
+    hidden_states = hidden_states[:, :, None, :, :, :].expand(
+        num_blocks, num_key_value_heads, n_rep, head_dim_x, block_size, x
+    )
     return hidden_states.reshape(num_blocks, num_key_value_heads * n_rep, head_dim_x, block_size, x)
+
 
 def repeat_v_kernel(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
@@ -34,10 +40,13 @@ def repeat_v_kernel(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
     """
     num_blocks, num_key_value_heads, head_dim, block_size = hidden_states.shape
-    if n_rep == 1:  
+    if n_rep == 1:
         return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(num_blocks, num_key_value_heads, n_rep, head_dim, block_size)
+    hidden_states = hidden_states[:, :, None, :, :].expand(
+        num_blocks, num_key_value_heads, n_rep, head_dim, block_size
+    )
     return hidden_states.reshape(num_blocks, num_key_value_heads * n_rep, head_dim, block_size)
+
 
 def sdpa_attention_paged_forward__(
     module: torch.nn.Module,
@@ -47,7 +56,7 @@ def sdpa_attention_paged_forward__(
     attention_mask: Optional[torch.Tensor],
     dropout: float = 0.0,
     scaling: Optional[float] = None,
-    reshaping_function = None,
+    reshaping_function=None,
     is_causal: Optional[bool] = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
@@ -88,7 +97,18 @@ def sdpa_attention_paged_forward(
     cumulative_seqlens_q = kwargs.get("cumulative_seqlens_q", None)
     cumulative_seqlens_k = kwargs.get("cumulative_seqlens_k", None)
     # print(cumulative_seqlens_q)
-    is_decoding = torch.equal(cumulative_seqlens_q, torch.cat([torch.arange(torch.max(cumulative_seqlens_q).item() + 1, device=cumulative_seqlens_q.device), torch.zeros(max(0, len(cumulative_seqlens_q) - torch.max(cumulative_seqlens_q).item() - 1), device=cumulative_seqlens_q.device)]))
+    is_decoding = torch.equal(
+        cumulative_seqlens_q,
+        torch.cat(
+            [
+                torch.arange(torch.max(cumulative_seqlens_q).item() + 1, device=cumulative_seqlens_q.device),
+                torch.zeros(
+                    max(0, len(cumulative_seqlens_q) - torch.max(cumulative_seqlens_q).item() - 1),
+                    device=cumulative_seqlens_q.device,
+                ),
+            ]
+        ),
+    )
     if not is_decoding:
         return sdpa_attention_paged_forward__(
             module,
@@ -105,8 +125,10 @@ def sdpa_attention_paged_forward(
         num_kv_heads = key.shape[1]
         cache = kwargs.pop("cache", None)
         if cache is not None:
-            key, value = cache.update(key, value, module.layer_idx, reshaping_function=reshaping_function, kernel=True, **kwargs)
-        
+            key, value = cache.update(
+                key, value, module.layer_idx, reshaping_function=reshaping_function, kernel=True, **kwargs
+            )
+
         # if hasattr(module, "num_key_value_groups"):
         #     key = repeat_k_kernel(key, module.num_key_value_groups)
         #     value = repeat_v_kernel(value, module.num_key_value_groups)
@@ -114,19 +136,19 @@ def sdpa_attention_paged_forward(
         batch_size, num_heads, seq_len, head_size = query.shape
         query = query.transpose(1, 2).reshape(batch_size * seq_len, num_heads, head_size)
         attn_output = torch.empty_like(query, device=query.device)
-        
+
         # Get sequence lengths and block tables
         seq_lens = kwargs.get("cumulative_seqlens_k", None)
         if seq_lens is None:
             seq_lens = torch.full((batch_size,), seq_len, device=query.device, dtype=torch.int32)
-        
+
         block_tables = kwargs.get("block_tables", None)
         block_size = kwargs.get("block_size", 32)
-        
+
         # Ensure proper scaling
         scale = scaling
         if scale is None:
-            scale = torch.tensor(1.0 / (head_size ** 0.5), device=query.device)
+            scale = torch.tensor(1.0 / (head_size**0.5), device=query.device)
         elif not isinstance(scale, torch.Tensor):
             scale = torch.tensor(scale, device=query.device)
 
@@ -148,11 +170,9 @@ def sdpa_attention_paged_forward(
             alibi_slopes=kwargs.get("alibi_slopes", None),
         )
         torch.mps.synchronize()
-    
-    # Reshape output back to original format
+
+        # Reshape output back to original format
         attn_output = attn_output.reshape(batch_size, seq_len, num_heads, head_size)
         attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, None
-
-

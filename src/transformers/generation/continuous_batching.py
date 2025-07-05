@@ -308,7 +308,7 @@ class PagedAttentionCache:
         read_index,
         write_index,
         reshaping_function=None,
-        kernel=False,
+        kernel=True,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         # Reshape cache for easier indexing
@@ -319,19 +319,33 @@ class PagedAttentionCache:
 
         if kernel:
             self.reshape_and_cache_tensors(
-                key_states, value_states, self.key_cache[layer_idx], self.value_cache[layer_idx], 
-                self.block_size, x, layer_idx, write_index=write_index, reshaping_function=reshaping_function
+                key_states,
+                value_states,
+                self.key_cache[layer_idx],
+                self.value_cache[layer_idx],
+                self.block_size,
+                x,
+                layer_idx,
+                write_index=write_index,
+                reshaping_function=reshaping_function,
             )
-            return k_cache_flat[:, read_index, :].view(self.num_key_value_heads, self.num_blocks, self.block_size, self.head_dim).view(self.num_key_value_heads, self.num_blocks, self.block_size, self.head_dim//x, x).permute(1, 0, 3, 2, 4), v_cache_flat[:, read_index, :].view(self.num_key_value_heads, self.num_blocks, self.block_size, self.head_dim).permute(1,0,3,2)
+            return k_cache_flat[:, read_index, :], v_cache_flat[:, read_index, :]
+            return k_cache_flat[:, read_index, :].view(
+                self.num_key_value_heads, self.num_blocks, self.block_size, self.head_dim
+            ).view(self.num_key_value_heads, self.num_blocks, self.block_size, self.head_dim // x, x).permute(
+                1, 0, 3, 2, 4
+            ), v_cache_flat[:, read_index, :].view(
+                self.num_key_value_heads, self.num_blocks, self.block_size, self.head_dim
+            ).permute(1, 0, 3, 2)
             # return k_cache_flat[None,:, read_index, :].view(self.num_blocks, self.num_key_value_heads, self.head_dim // x, self.block_size, x),  v_cache_flat[None,:, read_index, :].view(self.num_blocks, self.num_key_value_heads, self.head_dim, self.block_size)
         else:
             k_cache_flat[:, write_index, :] = key_states[0]
             v_cache_flat[:, write_index, :] = value_states[0]
-            return k_cache_flat[None,:, read_index, :],  v_cache_flat[None,:, read_index, :]
+            return k_cache_flat[None, :, read_index, :], v_cache_flat[None, :, read_index, :]
 
     def reshape_and_cache_tensors(
         self,
-        key: torch.Tensor,  
+        key: torch.Tensor,
         value: torch.Tensor,
         key_cache: torch.Tensor,
         value_cache: torch.Tensor,
@@ -340,13 +354,18 @@ class PagedAttentionCache:
         layer_idx: int,
         write_index: torch.Tensor,
         reshaping_function,
-        **kwargs
+        **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Reshape and cache key/value tensors following the same logic as the Metal kernel.
         """
-        key_cache = key_cache.view(self.num_key_value_heads, self.num_blocks, self.block_size, self.head_dim // x, x).permute(1, 0, 3, 2, 4)
-        value_cache = value_cache.view(self.num_key_value_heads, self.num_blocks, self.block_size, self.head_dim).permute(1, 0, 3, 2)
+        # key_cache = key_cache.view(
+        #     self.num_key_value_heads, self.num_blocks, self.block_size, self.head_dim // x, x
+        # ).permute(1, 0, 3, 2, 4)
+        # value_cache = value_cache.view(
+        #     self.num_key_value_heads, self.num_blocks, self.block_size, self.head_dim
+        # ).permute(1, 0, 3, 2)
+
         # Create slot mapping (which tokens go to which cache slots)
         # Convert write_index to int64 as expected by Metal kernel
         slot_mapping = write_index.to(torch.int64)
@@ -356,8 +375,9 @@ class PagedAttentionCache:
         value = value.transpose(1, 2).view(batch_size * seq_len, num_heads, head_size)
 
         from kernels import get_kernel
+
         paged_attention_kernel = get_kernel("kernels-community/paged-attention")
-        paged_attention_kernel.reshape_and_cache(
+        paged_attention_kernel.reshape_and_cache_flash(
             key,
             value,
             key_cache,
@@ -382,6 +402,8 @@ class PagedAttentionCache:
         )
 
         return key_cache, value_cache
+
+
 class Scheduler(ABC):
     """
     Abstract base class for scheduling requests in the continuous batch processor.
@@ -1018,7 +1040,7 @@ class ContinuousBatchProcessor:
             state.position_offset += query_length
 
             block_list = self.cache.get_block_table(state.request_id)
-            self.block_tables[len(cumulative_seqlens_q) , :len(block_list)] = torch.tensor(
+            self.block_tables[len(cumulative_seqlens_q), : len(block_list)] = torch.tensor(
                 block_list, dtype=torch.int32, device=self.model_device
             )
 
