@@ -1,5 +1,11 @@
 # Use the specified base image
-curl -I https://ghcr.io/v2/docker pull ghcr.io/dimvy-clothing-brand:latest --debugdocker login ghcr.iocurl -I https://ghcr.io/v2/sudo systemctl start dockerdocker run hello-worldsudo systemctl start dockersudo systemctl start dockerFROM ghcr.io/dimvy-clothing-brand:latest
+RUN curl -I https://ghcr.io/v2/
+RUN docker pull ghcr.io/dimvy-clothing-brand:latest --debug
+RUN docker login ghcr.io
+RUN sudo systemctl start docker
+RUN docker run hello-world
+RUN sudo systemctl start docker
+FROM ghcr.io/dimvy-clothing-brand:latest
 
 # Add any additional instructions below
 # Example: Install dependencies
