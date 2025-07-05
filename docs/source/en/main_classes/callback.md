@@ -46,8 +46,9 @@ By default, `TrainingArguments.report_to` is set to `"all"`, so a [`Trainer`] wi
 - [`~integrations.FlyteCallback`] if [flyte](https://flyte.org/) is installed.
 - [`~integrations.DVCLiveCallback`] if [dvclive](https://dvc.org/doc/dvclive) is installed.
 - [`~integrations.SwanLabCallback`] if [swanlab](http://swanlab.cn/) is installed.
+- [`~integrations.LogfireCallback`] if [logfire](https://pydantic.dev/logfire) is installed.
 
-If a package is installed but you don't wish to use the accompanying integration, you can change `TrainingArguments.report_to` to a list of just those integrations you want to use (e.g. `["azure_ml", "wandb"]`). 
+If a package is installed but you don't wish to use the accompanying integration, you can change `TrainingArguments.report_to` to a list of just those integrations you want to use (e.g. `["azure_ml", "wandb"]`).
 
 The main class that implements callbacks is [`TrainerCallback`]. It gets the
 [`TrainingArguments`] used to instantiate the [`Trainer`], can access that
@@ -95,6 +96,8 @@ Here is the list of the available [`TrainerCallback`] in the library:
 
 [[autodoc]] integrations.SwanLabCallback
     - setup
+
+[[autodoc]] integrations.logfireCallback
 
 ## TrainerCallback
 
