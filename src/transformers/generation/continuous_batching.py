@@ -316,16 +316,16 @@ class PagedAttentionCache:
             self.reshape_and_cache_tensors(
                 key_states,
                 value_states,
-                self.key_cache[layer_idx],
-                self.value_cache[layer_idx],
                 write_index=write_index,
                 reshaping_function=reshaping_function,
+                layer_idx=layer_idx,
             )
-            k = self.key_cache[layer_idx].view(total_slots, self.num_key_value_heads, self.head_dim)[read_index, :, :]
-            v = self.value_cache[layer_idx].view(total_slots, self.num_key_value_heads, self.head_dim)[
-                read_index, :, :
-            ]
-            return k, v
+            k = self.key_cache[layer_idx].view(total_slots, self.num_key_value_heads, self.head_dim)
+            v = self.value_cache[layer_idx].view(total_slots, self.num_key_value_heads, self.head_dim)
+            if kwargs.get("max_seqlen_q", -1) == 1:
+                return k, v
+            else:
+                return k[read_index, :, :], v[read_index, :, :]
         else:
             k_cache_flat = self.key_cache[layer_idx].view(total_slots, self.num_key_value_heads, self.head_dim)
             v_cache_flat = self.value_cache[layer_idx].view(total_slots, self.num_key_value_heads, self.head_dim)
@@ -334,22 +334,23 @@ class PagedAttentionCache:
             value = value_states.transpose(1, 2).view(batch_size * seq_len, num_heads, head_size)
             k_cache_flat[write_index, :, :] = key
             v_cache_flat[write_index, :, :] = value
+            if kwargs.get("max_seqlen_q", -1) == 1:
+                return self.key_cache[layer_idx], self.value_cache[layer_idx]
             return k_cache_flat[read_index, :, :], v_cache_flat[read_index, :, :]
 
     def reshape_and_cache_tensors(
         self,
         key: torch.Tensor,
         value: torch.Tensor,
-        key_cache: torch.Tensor,
-        value_cache: torch.Tensor,
         write_index: torch.Tensor,
         reshaping_function,
+        layer_idx: int,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Reshape and cache key/value tensors following the same logic as the Metal kernel.
         """
-        slot_mapping = write_index.to(torch.int64)
+        slot_mapping = write_index.to(torch.int64) - 1
         batch_size, num_heads, seq_len, head_size = key.shape
         key = key.transpose(1, 2).view(batch_size * seq_len, num_heads, head_size)
         value = value.transpose(1, 2).view(batch_size * seq_len, num_heads, head_size)
@@ -357,8 +358,8 @@ class PagedAttentionCache:
         reshaping_function(
             key,
             value,
-            key_cache,
-            value_cache,
+            self.key_cache[layer_idx],
+            self.value_cache[layer_idx],
             slot_mapping,
             "auto",  # kv_cache_dtype
             torch.tensor(1.0, device="mps"),  # k_scale
