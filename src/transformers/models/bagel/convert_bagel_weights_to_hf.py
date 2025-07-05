@@ -36,8 +36,44 @@ from transformers.models.janus.image_processing_janus import JanusImageProcessor
 from transformers.models.janus.processing_janus import JanusProcessor
 
 
-# Mappings
-MAPPINGS = {}
+MAPPINGS = {
+    # Vision model
+    r"vit_model.vision_model": r"model.vision_tower",
+
+    # Connector and time embedder
+    r"connector.fc1": r"model.vision_connecter.fc1",
+    r"connector.fc2": r"model.vision_connecter.fc2",
+    r"time_embedder.mlp.0": r"model.timestep_embedder.mlp.linear1",
+    r"time_embedder.mlp.2": r"model.timestep_embedder.mlp.linear2",
+    r"vae2llm": r"model.vae2llm_connector",
+    r"llm2vae": r"model.llm2vae_connector",
+    r"latent_pos_embed.pos_embed": r"model.latent_pos_embed",
+    r"vit_pos_embed.pos_embed": r"model.vit_pos_embed",
+
+    # Language model
+    r"language_model.lm_head": r"lm_head",
+    r"language_model.model.embed_tokens": r"model.language_model.embed_tokens",
+    r"language_model.model.layers.(\d+).input_layernorm_moe_gen": r"model.language_model.layers.\1.input_layernorm_generation",
+    r"language_model.model.layers.(\d+).input_layernorm": r"model.language_model.layers.\1.input_layernorm",
+    r"language_model.model.layers.(\d+).mlp_moe_gen": r"model.language_model.layers.\1.mlp_generation",
+    r"language_model.model.layers.(\d+).mlp": r"model.language_model.layers.\1.mlp",
+    r"language_model.model.layers.(\d+).self_attn.k_norm_moe_gen": r"model.language_model.layers.\1.self_attn.k_norm_generation",
+    r"language_model.model.layers.(\d+).self_attn.k_norm": r"model.language_model.layers.\1.self_attn.k_norm",
+    r"language_model.model.layers.(\d+).self_attn.q_norm_moe_gen": r"model.language_model.layers.\1.self_attn.q_norm_generation",
+    r"language_model.model.layers.(\d+).self_attn.q_norm": r"model.language_model.layers.\1.self_attn.q_norm",
+    r"language_model.model.layers.(\d+).self_attn.q_proj_moe_gen": r"model.language_model.layers.\1.self_attn.q_proj_generation",
+    r"language_model.model.layers.(\d+).self_attn.q_proj": r"model.language_model.layers.\1.self_attn.q_proj",
+    r"language_model.model.layers.(\d+).self_attn.k_proj_moe_gen": r"model.language_model.layers.\1.self_attn.k_proj_generation",
+    r"language_model.model.layers.(\d+).self_attn.k_proj": r"model.language_model.layers.\1.self_attn.k_proj",
+    r"language_model.model.layers.(\d+).self_attn.v_proj_moe_gen": r"model.language_model.layers.\1.self_attn.v_proj_generation",
+    r"language_model.model.layers.(\d+).self_attn.v_proj": r"model.language_model.layers.\1.self_attn.v_proj",
+    r"language_model.model.layers.(\d+).self_attn.o_proj_moe_gen": r"model.language_model.layers.\1.self_attn.o_proj_generation",
+    r"language_model.model.layers.(\d+).self_attn.o_proj": r"model.language_model.layers.\1.self_attn.o_proj",
+    r"language_model.model.layers.(\d+).post_attention_layernorm_moe_gen": r"model.language_model.layers.\1.post_attention_layernorm_generation",
+    r"language_model.model.layers.(\d+).post_attention_layernorm": r"model.language_model.layers.\1.post_attention_layernorm",
+    r"language_model.model.norm_moe_gen": r"model.language_model.norm_generation",
+    r"language_model.model.norm.weight": r"model.language_model.norm.weight",
+}
 
 
 def convert_old_keys_to_new_keys(state_dict):
@@ -73,12 +109,7 @@ def convert_state_dict_to_hf(state_dict):
     converted_state_dict = {}
 
     for old_key, new_key in conversion_dict.items():
-        if new_key:
-            if "qkv" in new_key or "kv" in new_key:  # Detect merged attention keys and split them.
-                qkv_split_dict = split_tensor(state_dict[old_key], new_key)
-                converted_state_dict.update(qkv_split_dict)
-            else:
-                converted_state_dict[new_key] = state_dict[old_key]
+        converted_state_dict[new_key] = state_dict[old_key]
 
     # Embeddings will not have initial dimension
     pos_embed_key = "model.vision_model.embeddings.position_embedding.weight"
@@ -126,9 +157,7 @@ def ensure_model_downloaded(
 
 
 def load_model_state_dict(input_path: str) -> dict:
-    """
-    Load model state dict, handling both single and sharded files.
-    """
+    """Load model state dict, handling both single and sharded files."""
     index_path = os.path.join(input_path, "pytorch_model.bin.index.json")
     single_file_path = os.path.join(input_path, "pytorch_model.bin")
 
