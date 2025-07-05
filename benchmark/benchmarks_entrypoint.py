@@ -3,7 +3,6 @@ import importlib.util
 import logging
 import os
 import sys
-from typing import Dict, Tuple
 
 from psycopg2.extensions import register_adapter
 from psycopg2.extras import Json
