@@ -62,6 +62,10 @@ def sdpa_attention_paged_forward__(
     cache = kwargs.pop("cache", None)
     if cache is not None:
         key, value = cache.update(key, value, module.layer_idx, reshaping_function=reshaping_function, **kwargs)
+
+    # because of the kernel, the shape of the cache is different
+    key = key.permute(1, 0, 2)
+    value = value.permute(1, 0, 2)
     if hasattr(module, "num_key_value_groups"):
         key = repeat_kv(key, module.num_key_value_groups)
         value = repeat_kv(value, module.num_key_value_groups)
@@ -111,12 +115,13 @@ def sdpa_attention_paged_forward(
             key, value = cache.update(
                 key, value, module.layer_idx, reshaping_function=reshaping_function, kernel=True, **kwargs
             )
-
         if kvg := getattr(module, "num_key_value_groups", None):
             key, value = repeat_kv(key, kvg), repeat_kv(value, kvg)
         batch_size, num_heads, seq_len, head_size = query.shape
         query = query.transpose(1, 2).reshape(batch_size * seq_len, num_heads, head_size)
-        attn_output = torch.empty_like(query, device=query.device)
+
+        if not hasattr(module, "_attn_out"):
+            module._attn_output = torch.empty_like(query, device=query.device)
 
         seq_lens = kwargs.get("cumulative_seqlens_k")
         block_tables = kwargs.get("block_tables")
@@ -124,7 +129,7 @@ def sdpa_attention_paged_forward(
         scale = scaling
         torch.mps.synchronize()
         paged_attention_kernel.paged_attention_v1(
-            attn_output,
+            module._attn_output,
             query,
             key,  # key should be in the correct paged format after cache.update
             value,  # value should be in the correct paged format after cache.update
@@ -140,7 +145,7 @@ def sdpa_attention_paged_forward(
             alibi_slopes=kwargs.get("alibi_slopes", None),
         )
 
-        attn_output = attn_output.reshape(batch_size, seq_len, num_heads, head_size)
+        attn_output = module._attn_output.reshape(batch_size, seq_len, num_heads, head_size)
         attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, None
