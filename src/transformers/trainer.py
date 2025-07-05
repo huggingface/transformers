@@ -132,6 +132,7 @@ from .trainer_utils import (
     seed_worker,
     set_seed,
     speed_metrics,
+    try_get_base_model,
 )
 from .training_args import OptimizerNames, ParallelMode, TrainingArguments
 from .utils import (
@@ -630,7 +631,7 @@ class Trainer:
         unwrapped_model = self.accelerator.unwrap_model(model)
         # We also unwrap peft model
         if _is_peft_model(unwrapped_model):
-            unwrapped_model = unwrapped_model.get_base_model()
+            unwrapped_model = try_get_base_model(unwrapped_model)
 
         # Check if the model has explicit setup for loss kwargs,
         # if not, check if `**kwargs` are in model.forward
