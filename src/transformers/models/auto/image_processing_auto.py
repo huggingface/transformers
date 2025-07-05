@@ -85,6 +85,7 @@ else:
             ("efficientformer", ("EfficientFormerImageProcessor",)),
             ("efficientnet", ("EfficientNetImageProcessor", "EfficientNetImageProcessorFast")),
             ("eomt", ("EomtImageProcessor", "EomtImageProcessorFast")),
+            ("fast", ("FastImageProcessor",)),
             ("flava", ("FlavaImageProcessor", "FlavaImageProcessorFast")),
             ("focalnet", ("BitImageProcessor", "BitImageProcessorFast")),
             ("fuyu", ("FuyuImageProcessor",)),
