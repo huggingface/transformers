@@ -211,6 +211,16 @@ class GenerationConfig(PushToHubMixin):
             Minimum token probability, which will be scaled by the probability of the most likely token. It must be a
             value between 0 and 1. Typical values are in the 0.01-0.2 range, comparably selective as setting `top_p` in
             the 0.99-0.8 range (use the opposite of normal `top_p` values).
+        moment_p (`float`, *optional*):
+            Threshold for moment-based sampling. If set to float < 1, only tokens with cumulative moment mass up to
+            `moment_p` are kept for generation. The moment is calculated as the sum of probabilities raised to the
+            power specified by `moment_p_exponent`, scaled by `moment_p_alpha`.
+        moment_p_exponent (`float`, *optional*, defaults to 2.0):
+            The exponent to which probabilities are raised when calculating the moment. Higher values emphasize the
+            tail of the distribution more. With exponent=1, behaves similarly to top-p sampling.
+        moment_p_alpha (`float`, *optional*, defaults to 1.0):
+            Scaling factor applied to the moment threshold. Values < 1 make filtering more selective, while values > 1
+            make it less selective.
         typical_p (`float`, *optional*, defaults to 1.0):
             Local typicality measures how similar the conditional probability of predicting a target token next is to
             the expected conditional probability of predicting a random token next, given the partial text already
@@ -421,6 +431,9 @@ class GenerationConfig(PushToHubMixin):
         self.top_k = kwargs.pop("top_k", 50)
         self.top_p = kwargs.pop("top_p", 1.0)
         self.min_p = kwargs.pop("min_p", None)
+        self.moment_p = kwargs.pop("moment_p", None)
+        self.moment_p_exponent = kwargs.pop("moment_p_exponent", 2.0)
+        self.moment_p_alpha = kwargs.pop("moment_p_alpha", 1.0)
         self.typical_p = kwargs.pop("typical_p", 1.0)
         self.epsilon_cutoff = kwargs.pop("epsilon_cutoff", 0.0)
         self.eta_cutoff = kwargs.pop("eta_cutoff", 0.0)
@@ -659,6 +672,21 @@ class GenerationConfig(PushToHubMixin):
                 minor_issues["top_p"] = greedy_wrong_parameter_msg.format(flag_name="top_p", flag_value=self.top_p)
             if self.min_p is not None:
                 minor_issues["min_p"] = greedy_wrong_parameter_msg.format(flag_name="min_p", flag_value=self.min_p)
+            if self.moment_p is not None and self.moment_p != 1.0:
+                warnings.warn(
+                    greedy_wrong_parameter_msg.format(flag_name="moment_p", flag_value=self.moment_p),
+                    UserWarning,
+                )
+            if self.moment_p_exponent is not None and self.moment_p_exponent != 2.0:
+                warnings.warn(
+                    greedy_wrong_parameter_msg.format(flag_name="moment_p_exponent", flag_value=self.moment_p_exponent),
+                    UserWarning,
+                )
+            if self.moment_p_alpha is not None and self.moment_p_alpha != 1.0:
+                warnings.warn(
+                    greedy_wrong_parameter_msg.format(flag_name="moment_p_alpha", flag_value=self.moment_p_alpha),
+                    UserWarning,
+                )
             if self.typical_p is not None and self.typical_p != 1.0:
                 minor_issues["typical_p"] = greedy_wrong_parameter_msg.format(
                     flag_name="typical_p", flag_value=self.typical_p
