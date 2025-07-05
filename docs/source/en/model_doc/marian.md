@@ -98,13 +98,52 @@ visualizer("Hello, how are you?")
 - All model names use the following format: `Helsinki-NLP/opus-mt-{src}-{tgt}`. Language codes formatted like `es_AR` usually refer to the `code_{region}`. For example, `es_AR` refers to Spanish from Argentina.
 - If a model can output multiple languages, prepend the desired output language to `src_txt` as shown below. New multilingual models from the [Tatoeba-Challenge](https://github.com/Helsinki-NLP/Tatoeba-Challenge) require 3 character language codes.
 
-   ```py
-   add code snippet here
+```python
+
+from transformers import MarianMTModel, MarianTokenizer
+
+# Model trained on multiple source languages → multiple target languages
+# Example: multilingual to Arabic (arb)
+model_name = "Helsinki-NLP/opus-mt-mul-mul"  # Tatoeba Challenge model
+tokenizer = MarianTokenizer.from_pretrained(model_name)
+model = MarianMTModel.from_pretrained(model_name)
+
+# Prepend the desired output language code (3-letter ISO 639-3)
+src_texts = ["arb>> Hello, how are you today?"]
+
+# Tokenize and translate
+inputs = tokenizer(src_texts, return_tensors="pt", padding=True, truncation=True)
+translated = model.generate(**inputs)
+
+# Decode and print result
+translated_texts = tokenizer.batch_decode(translated, skip_special_tokens=True)
+print(translated_texts[0])
+
+```
    
 - Older multilingual models use 2 character language codes.
 
-   ```py
-   add code snippet here
+```python
+
+from transformers import MarianMTModel, MarianTokenizer
+
+# Example: older multilingual model (like en → many)
+model_name = "Helsinki-NLP/opus-mt-en-ROMANCE"  # English → French, Spanish, Italian, etc.
+tokenizer = MarianTokenizer.from_pretrained(model_name)
+model = MarianMTModel.from_pretrained(model_name)
+
+# Prepend the 2-letter ISO 639-1 target language code (older format)
+src_texts = [">>fr<< Hello, how are you today?"]
+
+# Tokenize and translate
+inputs = tokenizer(src_texts, return_tensors="pt", padding=True, truncation=True)
+translated = model.generate(**inputs)
+
+# Decode and print result
+translated_texts = tokenizer.batch_decode(translated, skip_special_tokens=True)
+print(translated_texts[0])
+
+```
 
 ## MarianConfig
 
