@@ -47,7 +47,6 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("deit", "TFDeiTModel"),
         ("distilbert", "TFDistilBertModel"),
         ("dpr", "TFDPRQuestionEncoder"),
-        ("dust3r", "TFDust3RModel"),
         ("efficientformer", "TFEfficientFormerModel"),
         ("electra", "TFElectraModel"),
         ("esm", "TFEsmModel"),
@@ -211,7 +210,6 @@ TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("cvt", "TFCvtForImageClassification"),
         ("data2vec-vision", "TFData2VecVisionForImageClassification"),
         ("deit", ("TFDeiTForImageClassification", "TFDeiTForImageClassificationWithTeacher")),
-        ("dust3r", "TFDust3RForImageClassification"),
         (
             "efficientformer",
             ("TFEfficientFormerForImageClassification", "TFEfficientFormerForImageClassificationWithTeacher"),

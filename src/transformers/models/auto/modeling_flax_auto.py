@@ -38,7 +38,6 @@ FLAX_MODEL_MAPPING_NAMES = OrderedDict(
         ("clip", "FlaxCLIPModel"),
         ("dinov2", "FlaxDinov2Model"),
         ("distilbert", "FlaxDistilBertModel"),
-        ("dust3r", "FlaxDust3RModel"),
         ("electra", "FlaxElectraModel"),
         ("gemma", "FlaxGemmaModel"),
         ("gpt-sw3", "FlaxGPT2Model"),
@@ -127,7 +126,6 @@ FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         # Model for Image-classification
         ("beit", "FlaxBeitForImageClassification"),
         ("dinov2", "FlaxDinov2ForImageClassification"),
-        ("dust3r", "FlaxDust3RForImageClassification"),
         ("regnet", "FlaxRegNetForImageClassification"),
         ("resnet", "FlaxResNetForImageClassification"),
         ("vit", "FlaxViTForImageClassification"),
