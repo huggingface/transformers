@@ -84,25 +84,26 @@ def sdpa_attention_paged_forward(
     else:
         num_kv_heads = key.shape[1]
         cache = kwargs.pop("cache", None)
-        if cache is not None:
-            key, value = cache.update(
-                key, value, module.layer_idx, reshaping_function=reshaping_function, kernel=True, **kwargs
-            )
+        key, value = cache.update(key, value, module.layer_idx, reshaping_function=reshaping_function, **kwargs)
+
         batch_size, num_heads, seq_len, head_size = query.shape
         query = query.transpose(1, 2).reshape(batch_size * seq_len, num_heads, head_size)
 
         if not hasattr(module, "_attn_out"):
             module._attn_output = torch.empty_like(query, device=query.device)
 
-        seq_lens = kwargs.get("cumulative_seqlens_k")
+        x = 16 // key.element_size()
+        key = key.view(cache.num_blocks, cache.block_size, num_kv_heads, head_size // x, x).permute(0, 2, 3, 1, 4)
+        value = value.permute(0, 2, 3, 1).contiguous()
+        seq_lens = kwargs.get("cumulative_seqlens_k")  # .flatten()
         block_tables = kwargs.get("block_tables")
         block_size = kwargs.get("block_size", 32)
         torch.mps.synchronize()
         paged_attention_kernel.paged_attention_v1(
             module._attn_output,
             query,
-            key,  # key should be in the correct paged format after cache.update
-            value,  # value should be in the correct paged format after cache.update
+            key,  # → [num_blocks, num_kv_heads, head_dim // x, block_size, x], x depends on the dtype
+            value,  # # → [num_blocks, num_kv_heads, head_dim, block_size]
             num_kv_heads=num_kv_heads,
             block_tables=block_tables,
             seq_lens=seq_lens,
