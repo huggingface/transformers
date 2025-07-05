@@ -176,7 +176,7 @@ class LlavaOnevisionConfig(PretrainedConfig):
                 patch_size=14,
                 image_size=384,
                 num_hidden_layers=26,
-                num_attention_heads=14,
+                num_attention_heads=16,
                 vision_use_head=False,
             )
 

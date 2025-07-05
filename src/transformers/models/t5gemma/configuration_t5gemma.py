@@ -260,27 +260,20 @@ class T5GemmaConfig(PretrainedConfig):
         tie_word_embeddings: bool = True,
         **kwargs,
     ):
-        # Encoder.
         if isinstance(encoder, dict):
-            # From preset configuration
             encoder = T5GemmaModuleConfig(**encoder)
         elif encoder is None:
-            # From scratch
             encoder = T5GemmaModuleConfig()
         else:
             assert isinstance(encoder, T5GemmaModuleConfig), f"{type(encoder)} is not supported."
 
-        # Decoder.
         if isinstance(decoder, dict):
-            # From preset configuration
             decoder = T5GemmaModuleConfig(**decoder)
         elif decoder is None:
-            # From scratch
             decoder = encoder
         else:
             assert isinstance(decoder, T5GemmaModuleConfig), f"{type(decoder)} is not supported."
 
-        # Decouple encoder and decoder config in any case
         encoder = T5GemmaModuleConfig(**encoder.to_dict())
         decoder = T5GemmaModuleConfig(**decoder.to_dict())
 
@@ -324,7 +317,7 @@ class T5GemmaConfig(PretrainedConfig):
             setattr(self.decoder, key, value)
         super().__setattr__(key, value)
 
-    def get_text_config(self, decoder=False) -> "PretrainedConfig":
+    def get_text_config(self, decoder=False):
         # Always return self, regardless of the decoder option.
         del decoder
         return self

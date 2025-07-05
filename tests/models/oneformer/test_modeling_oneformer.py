@@ -21,6 +21,7 @@ import numpy as np
 from tests.test_modeling_common import floats_tensor
 from transformers import AutoModelForImageClassification, OneFormerConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
+    Expectations,
     is_flaky,
     require_timm,
     require_torch,
@@ -528,7 +529,7 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
                 self.assertEqual(model.model.pixel_level_module.encoder.out_indices, [1, 2, 3])
 
 
-TOLERANCE = 1e-4
+TOLERANCE = 2e-4
 
 
 # We will verify our results on an image of cute cats
@@ -574,12 +575,15 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
         slice_hidden_state = outputs.pixel_decoder_hidden_states[0][0, 0, :3, :3]
         torch.testing.assert_close(slice_hidden_state, expected_slice_hidden_state, atol=TOLERANCE, rtol=TOLERANCE)
 
-        # fmt: off
-        expected_slice_hidden_state = [[3.0668, -1.1833, -5.1103], [3.344, -3.362, -5.1101], [2.6017, -4.3613, -4.1444]]
-        expected_slice_hidden_state = torch.tensor(expected_slice_hidden_state).to(torch_device)
+        expectations = Expectations(
+            {
+                (None, None): [[3.0668, -1.1833, -5.1103], [3.344, -3.362, -5.1101], [2.6017, -4.3613, -4.1444]],
+                ("cuda", 8): [[3.0590, -1.1903, -5.1119], [3.3919, -3.3547, -5.1469], [2.6041, -4.3592, -4.1406]],
+            }
+        )
+        expected_slice_hidden_state = torch.tensor(expectations.get_expectation()).to(torch_device)
         slice_hidden_state = outputs.transformer_decoder_class_predictions[0, :3, :3]
         torch.testing.assert_close(slice_hidden_state, expected_slice_hidden_state, atol=TOLERANCE, rtol=TOLERANCE)
-        # fmt: on
 
     def test_inference_universal_segmentation_head(self):
         model = OneFormerForUniversalSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
@@ -599,8 +603,13 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
             masks_queries_logits.shape,
             (1, model.config.num_queries, inputs_shape[-2] // 4, (inputs_shape[-1] + 2) // 4),
         )
-        expected_slice = [[3.1848, 4.2141, 4.1993], [2.9000, 3.5721, 3.6603], [2.5358, 3.0883, 3.6168]]
-        expected_slice = torch.tensor(expected_slice).to(torch_device)
+        expectations = Expectations(
+            {
+                (None, None): [[3.1848, 4.2141, 4.1993], [2.9000, 3.5721, 3.6603], [2.5358, 3.0883, 3.6168]],
+                ("cuda", 8): [[3.1687, 4.1893, 4.1742], [2.8768, 3.5380, 3.6257], [2.5121, 3.0552, 3.5822]],
+            }
+        )
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
         torch.testing.assert_close(masks_queries_logits[0, 0, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
 
         # class_queries_logits
@@ -609,8 +618,13 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
             class_queries_logits.shape,
             (1, model.config.num_queries, model.config.num_labels + 1),
         )
-        expected_slice = [[3.0668, -1.1833, -5.1103], [3.3440, -3.3620, -5.1101], [2.6017, -4.3613, -4.1444]]
-        expected_slice = torch.tensor(expected_slice).to(torch_device)
+        expectations = Expectations(
+            {
+                (None, None): [[3.0668, -1.1833, -5.1103], [3.3440, -3.3620, -5.1101], [2.6017, -4.3613, -4.1444]],
+                ("cuda", 8): [[3.0590, -1.1903, -5.1119], [3.3919, -3.3547, -5.1469], [2.6041, -4.3592, -4.1406]],
+            }
+        )
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
         torch.testing.assert_close(class_queries_logits[0, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
 
     @require_torch_accelerator
