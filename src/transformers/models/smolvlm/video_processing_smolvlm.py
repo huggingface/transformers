@@ -249,7 +249,7 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         video: "torch.Tensor",
         metadata: Union[VideoMetadata, dict],
         num_frames: Optional[int] = None,
-        fps: Optional[int] = None,
+        fps: Optional[Union[int, float]] = None,
         skip_secs: Optional[int] = 1,
     ):
         """
@@ -266,7 +266,7 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
                 Metadata of the video containing information about total duration, fps and total number of frames.
             num_frames (`int`, *optional*):
                 Maximum number of frames to sample. Defaults to `self.num_frames`.
-            fps (`int`, *optional*):
+            fps (`int` or `float`, *optional*):
                 Target frames to sample per second. Defaults to `self.fps`.
             skip_secs (`float`, *optional*, defaults to `1`):
                 Number of seconds to skip from the start and end if the video is long enough.
@@ -328,7 +328,7 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         do_sample_frames: bool,
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
-        fps: Optional[int] = None,
+        fps: Optional[Union[int, float]] = None,
         num_frames: Optional[int] = None,
         skip_secs: Optional[int] = 0,
         return_tensors: Optional[Union[str, TensorType]] = None,

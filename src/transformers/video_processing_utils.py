@@ -125,7 +125,7 @@ BASE_VIDEO_PROCESSOR_DOCSTRING = r"""
             Whether to sample frames from the video before processing or to process the whole video.
         num_frames (`int`, *optional*, defaults to `self.num_frames`):
             Maximum number of frames to sample when `do_sample_frames=True`.
-        fps (`int`, *optional*, defaults to `self.fps`):
+        fps (`int` or `float`, *optional*, defaults to `self.fps`):
             Target frames to sample per second when `do_sample_frames=True`.
         return_tensors (`str` or `TensorType`, *optional*):
             Returns stacked tensors if set to `pt, otherwise returns a list of tensors.
@@ -237,7 +237,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         video: "torch.Tensor",
         metadata: Optional[Union[VideoMetadata, dict]] = None,
         num_frames: Optional[int] = None,
-        fps: Optional[int] = None,
+        fps: Optional[Union[int, float]] = None,
     ):
         """
         Default sampling function which uniformly samples the desired number of frames between 0 and total number of frames.
@@ -251,7 +251,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
                 Metadata of the video containing information about total duration, fps and total number of frames.
             num_frames (`int`, *optional*):
                 Maximum number of frames to sample. Defaults to `self.num_frames`.
-            fps (`int`, *optional*):
+            fps (`int` or `float`, *optional*):
                 Target frames to sample per second. Defaults to `self.fps`.
 
         Returns:
@@ -369,7 +369,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
         do_sample_frames: Optional[bool] = None,
-        fps: Optional[int] = None,
+        fps: Optional[Union[int, float]] = None,
         num_frames: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         device: Optional["torch.Tensor"] = None,
