@@ -587,6 +587,7 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config = model.config
             model.to(torch_device)
             model.eval()
+            print(model.__class__, model._can_record_outputs)
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
@@ -598,8 +599,10 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
+            config.mask_decoder_config.output_attentions = True
+            config.vision_config.output_attentions = True
             config.output_attentions = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
