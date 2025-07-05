@@ -1024,6 +1024,18 @@ class TrainingArguments:
             )
         },
     )
+
+    enable_emergency_checkpoint: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Whether to enable failure-safe training with emergency checkpointing upon unexpected termination "
+                "(e.g., SIGTERM, SIGINT, or unhandled Python exceptions). "
+                "This attempts to save the current training state to a dedicated 'emergency_checkpoint' directory."
+            )
+        },
+    )
+
     restore_callback_states_from_checkpoint: bool = field(
         default=False,
         metadata={
