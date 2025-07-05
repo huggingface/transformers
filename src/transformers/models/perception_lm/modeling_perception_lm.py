@@ -343,7 +343,7 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
 
-    # Make modules available throught conditional class for BC
+    # Make modules available throught conditional class for BC with test_sdpa_can_dispatch_composite_models
     @property
     def language_model(self):
         return self.model.language_model
