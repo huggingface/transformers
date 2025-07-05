@@ -44,7 +44,7 @@ tokens and decodes them back into audio.
 from transformers import AutoProcessor, DiaForConditionalGeneration
 
 torch_device = "cuda"
-model_checkpoint = "buttercrab/dia-v1-1.6b"
+model_checkpoint = "nari-labs/Dia-1.6B-0626"
 
 text = ["[S1] Dia is an open weights text to dialogue model."]
 processor = AutoProcessor.from_pretrained(model_checkpoint)
@@ -66,7 +66,7 @@ from datasets import load_dataset, Audio
 from transformers import AutoProcessor, DiaForConditionalGeneration
 
 torch_device = "cuda"
-model_checkpoint = "buttercrab/dia-v1-1.6b"
+model_checkpoint = "nari-labs/Dia-1.6B-0626"
 
 ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
 ds = ds.cast_column("audio", Audio(sampling_rate=44100))
@@ -93,7 +93,7 @@ from datasets import load_dataset, Audio
 from transformers import AutoProcessor, DiaForConditionalGeneration
 
 torch_device = "cuda"
-model_checkpoint = "buttercrab/dia-v1-1.6b"
+model_checkpoint = "nari-labs/Dia-1.6B-0626"
 
 ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
 ds = ds.cast_column("audio", Audio(sampling_rate=44100))

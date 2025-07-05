@@ -1672,7 +1672,7 @@ class DFineForObjectDetection(DFinePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **loss_kwargs,
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], DFineObjectDetectionOutput]:
         r"""
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -1777,7 +1777,7 @@ class DFineForObjectDetection(DFinePreTrainedModel):
                 denoising_meta_values=denoising_meta_values,
                 predicted_corners=predicted_corners,
                 initial_reference_points=initial_reference_points,
-                **loss_kwargs,
+                **kwargs,
             )
 
         if not return_dict:
