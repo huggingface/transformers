@@ -25,7 +25,7 @@ from ...activations import ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, logging
+from ...utils import TransformersKwargs, logging
 from ..llama.modeling_llama import (
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
@@ -225,9 +225,6 @@ class Qwen3MoeModel(MixtralModel):
         )
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
-
 class Qwen3MoeForCausalLM(MixtralForCausalLM):
     def __init__(self, config):
         super().__init__(config)
@@ -248,7 +245,7 @@ class Qwen3MoeForCausalLM(MixtralForCausalLM):
         output_router_logits: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> MoeCausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

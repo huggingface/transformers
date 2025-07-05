@@ -35,7 +35,7 @@ from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ImagesKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import LossKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ...video_utils import VideoInput
 from ..glm4.modeling_glm4 import Glm4MLP, Glm4RMSNorm, eager_attention_forward
 from ..qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLConfig
@@ -882,9 +882,6 @@ class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
         return outputs
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
-
 class Glm4vModelOutputWithPast(Qwen2_5_VLModelOutputWithPast):
     pass
 
@@ -956,6 +953,7 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
+            position_ids=position_ids,
         )
 
         hidden_states = inputs_embeds
@@ -1214,7 +1212,7 @@ class Glm4vModel(Qwen2_5_VLModel):
         video_grid_thw: Optional[torch.LongTensor] = None,
         rope_deltas: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Glm4vModelOutputWithPast]:
         r"""
         pixel_values_videos (`torch.FloatTensor` of shape `(seq_length, num_channels * temporal_size * image_size * image_size)):
@@ -1378,7 +1376,7 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
         video_grid_thw: Optional[torch.LongTensor] = None,
         rope_deltas: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Glm4vCausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
