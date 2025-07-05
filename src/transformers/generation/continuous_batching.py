@@ -311,12 +311,8 @@ class PagedAttentionCache:
         kernel=True,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        # Reshape cache for easier indexing
         total_slots = self.num_blocks * self.block_size
-        k_cache_flat = self.key_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
-        v_cache_flat = self.value_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
-        x = 16
-
+        x = 16  # ?
         if kernel:
             self.reshape_and_cache_tensors(
                 key_states,
@@ -329,16 +325,12 @@ class PagedAttentionCache:
                 write_index=write_index,
                 reshaping_function=reshaping_function,
             )
+            k_cache_flat = self.key_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
+            v_cache_flat = self.value_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
             return k_cache_flat[:, read_index, :], v_cache_flat[:, read_index, :]
-            return k_cache_flat[:, read_index, :].view(
-                self.num_key_value_heads, self.num_blocks, self.block_size, self.head_dim
-            ).view(self.num_key_value_heads, self.num_blocks, self.block_size, self.head_dim // x, x).permute(
-                1, 0, 3, 2, 4
-            ), v_cache_flat[:, read_index, :].view(
-                self.num_key_value_heads, self.num_blocks, self.block_size, self.head_dim
-            ).permute(1, 0, 3, 2)
-            # return k_cache_flat[None,:, read_index, :].view(self.num_blocks, self.num_key_value_heads, self.head_dim // x, self.block_size, x),  v_cache_flat[None,:, read_index, :].view(self.num_blocks, self.num_key_value_heads, self.head_dim, self.block_size)
         else:
+            k_cache_flat = self.key_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
+            v_cache_flat = self.value_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
             k_cache_flat[:, write_index, :] = key_states[0]
             v_cache_flat[:, write_index, :] = value_states[0]
             return k_cache_flat[None, :, read_index, :], v_cache_flat[None, :, read_index, :]
@@ -373,11 +365,7 @@ class PagedAttentionCache:
         batch_size, num_heads, seq_len, head_size = key.shape
         key = key.transpose(1, 2).view(batch_size * seq_len, num_heads, head_size)
         value = value.transpose(1, 2).view(batch_size * seq_len, num_heads, head_size)
-
-        from kernels import get_kernel
-
-        paged_attention_kernel = get_kernel("kernels-community/paged-attention")
-        paged_attention_kernel.reshape_and_cache_flash(
+        reshaping_function(
             key,
             value,
             key_cache,

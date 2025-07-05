@@ -12,7 +12,6 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
     num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
     """
-    print(hidden_states.shape)
     num_key_value_heads, slen, head_dim = hidden_states.shape
     if n_rep == 1:
         return hidden_states
@@ -93,23 +92,13 @@ def sdpa_attention_paged_forward(
     is_causal: Optional[bool] = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
-    reshaping_function = paged_attention_kernel.reshape_and_cache
+    reshaping_function = paged_attention_kernel.reshape_and_cache_flash
     cumulative_seqlens_q = kwargs.get("cumulative_seqlens_q", None)
     cumulative_seqlens_k = kwargs.get("cumulative_seqlens_k", None)
     # print(cumulative_seqlens_q)
-    is_decoding = torch.equal(
-        cumulative_seqlens_q,
-        torch.cat(
-            [
-                torch.arange(torch.max(cumulative_seqlens_q).item() + 1, device=cumulative_seqlens_q.device),
-                torch.zeros(
-                    max(0, len(cumulative_seqlens_q) - torch.max(cumulative_seqlens_q).item() - 1),
-                    device=cumulative_seqlens_q.device,
-                ),
-            ]
-        ),
-    )
+    is_decoding = kwargs.get("max_seqlen_q", -1) == 1
     if not is_decoding:
+        print("prefill!")
         return sdpa_attention_paged_forward__(
             module,
             query,
@@ -120,8 +109,7 @@ def sdpa_attention_paged_forward(
             **kwargs,
         )
     else:
-        reshaping_function = paged_attention_kernel.reshape_and_cache
-
+        print("decoding!")
         num_kv_heads = key.shape[1]
         cache = kwargs.pop("cache", None)
         if cache is not None:
@@ -129,30 +117,20 @@ def sdpa_attention_paged_forward(
                 key, value, module.layer_idx, reshaping_function=reshaping_function, kernel=True, **kwargs
             )
 
-        # if hasattr(module, "num_key_value_groups"):
-        #     key = repeat_k_kernel(key, module.num_key_value_groups)
-        #     value = repeat_v_kernel(value, module.num_key_value_groups)
-        # print(f"query: {query.shape}, key: {key.shape}, value: {value.shape}")
+        if kvg := getattr(module, "num_key_value_groups", None):
+            key = repeat_k_kernel(key, kvg)
+            value = repeat_v_kernel(value, kvg)
         batch_size, num_heads, seq_len, head_size = query.shape
         query = query.transpose(1, 2).reshape(batch_size * seq_len, num_heads, head_size)
         attn_output = torch.empty_like(query, device=query.device)
 
         # Get sequence lengths and block tables
-        seq_lens = kwargs.get("cumulative_seqlens_k", None)
-        if seq_lens is None:
-            seq_lens = torch.full((batch_size,), seq_len, device=query.device, dtype=torch.int32)
-
-        block_tables = kwargs.get("block_tables", None)
+        seq_lens = kwargs.get("cumulative_seqlens_k")
+        block_tables = kwargs.get("block_tables")
         block_size = kwargs.get("block_size", 32)
-
-        # Ensure proper scaling
         scale = scaling
-        if scale is None:
-            scale = torch.tensor(1.0 / (head_size**0.5), device=query.device)
-        elif not isinstance(scale, torch.Tensor):
-            scale = torch.tensor(scale, device=query.device)
-
         torch.mps.synchronize()
+        print(query.shape, key.shape, value.shape)
         paged_attention_kernel.paged_attention_v1(
             attn_output,
             query,
