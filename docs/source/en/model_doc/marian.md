@@ -26,7 +26,6 @@ rendered properly in your Markdown viewer.
 # MarianMT
 
 
-## Overview
 
 [MarianMT](https://huggingface.co/papers/1804.00344) is a machine translation model trained with the Marian framework which is written in pure C++. The framework includes its own custom auto-differentiation engine and efficient meta-algorithms to train encoder-decoder models like BART.
 
