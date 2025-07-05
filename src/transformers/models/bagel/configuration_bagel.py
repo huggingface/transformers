@@ -89,16 +89,14 @@ llm_config = {
     "max_window_layers": 28,
     "model_type": "qwen2",
     "num_attention_heads": 28,
-    "num_hidden_layers": 28,
+    "num_hidden_layers": 2,  # 28
     "num_key_value_heads": 4,
     "rms_norm_eps": 1e-06,
     "rope_theta": 1000000.0,
-    "sliding_window": 131072,
     "tie_word_embeddings": False,
     "torch_dtype": "bfloat16",
     "transformers_version": "4.43.1",
     "use_cache": True,
-    "use_sliding_window": False,
     "vocab_size": 152064,
 }
 
@@ -108,7 +106,7 @@ vit_config = {
     "intermediate_size": 4304,
     "model_type": "siglip_vision_model",
     "num_attention_heads": 16,
-    "num_hidden_layers": 26,
+    "num_hidden_layers": 2,  # 26
     "patch_size": 14,
     "vision_use_head": False,
 }

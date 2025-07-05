@@ -20,10 +20,11 @@ from typing import Callable, Optional, Union
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PretrainedConfig
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...generation import GenerationMixin
+from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, logging
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, is_torch_available, torch_int
@@ -70,16 +71,14 @@ llm_config = {
     "max_window_layers": 28,
     "model_type": "qwen2",
     "num_attention_heads": 28,
-    "num_hidden_layers": 28,
+    "num_hidden_layers": 2,  # 28
     "num_key_value_heads": 4,
     "rms_norm_eps": 1e-06,
     "rope_theta": 1000000.0,
-    "sliding_window": 131072,
     "tie_word_embeddings": False,
     "torch_dtype": "bfloat16",
     "transformers_version": "4.43.1",
     "use_cache": True,
-    "use_sliding_window": False,
     "vocab_size": 152064,
 }
 
@@ -89,7 +88,7 @@ vit_config = {
     "intermediate_size": 4304,
     "model_type": "siglip_vision_model",
     "num_attention_heads": 16,
-    "num_hidden_layers": 26,
+    "num_hidden_layers": 2,  # 26
     "patch_size": 14,
     "vision_use_head": False,
 }
@@ -353,6 +352,7 @@ class BagelTextRMSNorm(Qwen2RMSNorm):
 class BagelTextMLP(Qwen2MLP):
     pass
 
+
 def text_eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -386,8 +386,11 @@ class BagelTextAttention(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.hidden_size = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.num_key_value_heads = config.num_key_value_heads
+        self.head_dim = getattr(config, "head_dim", self.hidden_size // self.num_heads)
+        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
@@ -397,16 +400,14 @@ class BagelTextAttention(nn.Module):
         self.q_norm_generation = BagelTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm_generation = BagelTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
-        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=True)
-        self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)
-        self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)
-        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
-
-        self.q_proj_generation = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=True)
-        self.k_proj_generation = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)
-        self.v_proj_generation = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)
-        self.o_proj_generation = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
-        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
+        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=True)
+        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
+        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
+        self.q_proj_generation = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=True)
+        self.k_proj_generation = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
+        self.v_proj_generation = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
+        self.o_proj_generation = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
     def forward(
         self,
@@ -418,12 +419,15 @@ class BagelTextAttention(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
+        bsz, q_len, _ = hidden_states.size()
 
-        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = (
+            self.k_proj(hidden_states).view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        )
+        value_states = (
+            self.v_proj(hidden_states).view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        )
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -445,11 +449,11 @@ class BagelTextAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            sliding_window=self.sliding_window,  # main diff with Llama
+            is_causal=True,
             **kwargs,
         )
 
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
@@ -460,6 +464,7 @@ class BagelTextDecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
 
         self.self_attn = BagelTextAttention(config=config, layer_idx=layer_idx)
+        # Do we need attention type.
         self.attention_type = config.layer_types[layer_idx]
 
         self.mlp = BagelTextMLP(config)
@@ -530,9 +535,8 @@ class BagelTextModel(BagelPreTrainedModel):
         )
         self.norm = BagelTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.norm_generation = BagelTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = BagelTextRotaryEmbedding(config=config)
+        self.rotary_emb = BagelTextRotaryEmbedding(config)
         self.gradient_checkpointing = False
-        self.has_sliding_layers = "sliding_attention" in self.config.layer_types
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -589,23 +593,15 @@ class BagelTextModel(BagelPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        # It may already have been prepared by e.g. `generate`
-        if not isinstance(causal_mask_mapping := attention_mask, dict):
-            # Prepare mask arguments
-            mask_kwargs = {
-                "config": self.config,
-                "input_embeds": inputs_embeds,
-                "attention_mask": attention_mask,
-                "cache_position": cache_position,
-                "past_key_values": past_key_values,
-            }
-            # Create the masks
-            causal_mask_mapping = {
-                "full_attention": create_causal_mask(**mask_kwargs),
-            }
-            # The sliding window alternating layers are not always activated depending on the config
-            if self.has_sliding_layers:
-                causal_mask_mapping["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
+        # Prepare mask arguments
+        mask_kwargs = {
+            "config": self.config,
+            "input_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "cache_position": cache_position,
+            "past_key_values": past_key_values,
+        }
+        causal_mask = create_causal_mask(**mask_kwargs)
 
         hidden_states = inputs_embeds
 
@@ -616,13 +612,13 @@ class BagelTextModel(BagelPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        for decoder_layer in self.layers:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
             layer_outputs = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                attention_mask=causal_mask,
                 position_ids=position_ids,
                 past_key_value=past_key_values,
                 output_attentions=output_attentions,
@@ -792,10 +788,7 @@ class BagelVQVAEDiagonalGaussian(nn.Module):
             return mean
 
 
-@auto_docstring(
-    custom_intro=""" Bagel VQVAE part.
-    """
-)
+@auto_docstring(custom_intro="""Bagel VQVAE part.""")
 class BagelVQVAE(BagelPreTrainedModel):
     config_class = BagelVQVAEConfig
     _no_split_modules = [
@@ -922,7 +915,7 @@ class BagelModel(BagelPreTrainedModel):
         self.patch_latent_dim = self.latent_patch_size**2 * self.latent_channel
 
         self.vision_tower = BagelVisionTransformer(config.vision_config)
-        # self.language_model = BagelTextModel(config.text_config)
+        self.language_model = BagelTextModel(config.text_config)
         # self.vq_model = BagelVQVAE(config.vq_config)
 
         self.vision_connecter = BagelVisionConnector(config)
@@ -986,7 +979,7 @@ class BagelModel(BagelPreTrainedModel):
 
         image_embeddings = self.vision_tower(pixel_values).last_hidden_state
         image_embeddings = self.vision_connecter(image_embeddings)
-        # rn pso_embed is of sahpe [num_pathces,x], make it compatible with batch
+        # rn pos_embed is of sahpe [num_pathces,x], make it compatible with batch
         pos_embed = self.vit_pos_embed[position_ids]
         image_embeddings = image_embeddings + pos_embed
         return image_embeddings
@@ -1005,23 +998,32 @@ class BagelModel(BagelPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ):
-        if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values=pixel_values)
+        if input_ids is not None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        # outputs = self.language_model(
-        #     attention_mask=attention_mask,
-        #     position_ids=position_ids,
-        #     past_key_values=past_key_values,
-        #     inputs_embeds=inputs_embeds,
-        #     use_cache=use_cache,
-        #     cache_position=cache_position,
-        #     **kwargs,
-        # )
-        return image_features
+        if pixel_values is not None:
+            image_embeds = self.get_image_features(pixel_values=pixel_values)
+            # boi+image_tokens+eoi+bos+text_tokens+eos
+            print("image and text embeds shape:", image_embeds.shape, inputs_embeds.shape)
+            inputs_embeds = torch.cat([inputs_embeds, image_embeds], dim=1)
+            print("final_inputs_embeds shape:", inputs_embeds.shape)
+
+        outputs = self.language_model(
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            **kwargs,
+        )
+        return outputs
 
 
 @auto_docstring
-class BagelForConditionalGeneration(BagelPreTrainedModel):
+class BagelForConditionalGeneration(BagelPreTrainedModel, GenerationMixin):
+    _tied_weights_keys = ["lm_head.weight"]
+
     def __init__(self, config: BagelConfig):
         super().__init__(config)
         self.model = BagelModel(config)
@@ -1052,10 +1054,27 @@ class BagelForConditionalGeneration(BagelPreTrainedModel):
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
     ):
-        return self.model(
+        outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
             **kwargs,
+        )
+
+        hidden_states = outputs.last_hidden_state
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+
+        return CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
