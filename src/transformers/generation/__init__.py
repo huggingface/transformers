@@ -98,6 +98,9 @@ else:
         "validate_stopping_criteria",
         "StopStringCriteria",
     ]
+    _import_structure["continuous_batching"] = [
+        "ContinuousMixin",
+    ]
     _import_structure["utils"] = [
         "GenerationMixin",
         "GreedySearchEncoderDecoderOutput",
@@ -214,6 +217,7 @@ if TYPE_CHECKING:
             EarlyExitCandidateGenerator,
             PromptLookupCandidateGenerator,
         )
+        from .continuous_batching import ContinuousMixin
         from .logits_process import (
             AlternatingCodebooksLogitsProcessor,
             ClassifierFreeGuidanceLogitsProcessor,
