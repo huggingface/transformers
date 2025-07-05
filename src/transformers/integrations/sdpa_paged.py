@@ -89,7 +89,7 @@ def sdpa_attention_paged_forward(
         batch_size, num_heads, seq_len, head_size = query.shape
         query = query.transpose(1, 2).reshape(batch_size * seq_len, num_heads, head_size)
 
-        if not hasattr(module, "_attn_out"):
+        if not hasattr(module, "_attn_output"):
             module._attn_output = torch.empty_like(query, device=query.device)
 
         x = 16 // key.element_size()
@@ -98,7 +98,15 @@ def sdpa_attention_paged_forward(
         seq_lens = kwargs.get("cumulative_seqlens_k")  # .flatten()
         block_tables = kwargs.get("block_tables")
         block_size = kwargs.get("block_size", 32)
-        torch.mps.synchronize()
+        
+        # Pre-create scale tensors to avoid CUDA graph capture issues
+        if not hasattr(module, "_k_scale_tensor"):
+            module._k_scale_tensor = torch.tensor(1.0, device=key.device, dtype=key.dtype)
+        if not hasattr(module, "_v_scale_tensor"):
+            module._v_scale_tensor = torch.tensor(1.0, device=value.device, dtype=value.dtype)
+        
+        # torch.mps.synchronize()
+        torch.cuda.synchronize()
         paged_attention_kernel.paged_attention_v1(
             module._attn_output,
             query,
@@ -111,11 +119,11 @@ def sdpa_attention_paged_forward(
             max_seq_len=kwargs.get("max_seqlen_k"),
             kv_cache_dtype=kwargs.get("kv_cache_dtype", "auto"),
             scale=module.scaling,
-            k_scale=None,
-            v_scale=None,
+            k_scale=module._k_scale_tensor,
+            v_scale=module._v_scale_tensor,
             alibi_slopes=None,
         )
 
-        attn_output = module._attn_output.reshape(batch_size, seq_len, num_heads, head_size)
+        attn_output = torch.reshape(module._attn_output, (batch_size, seq_len, num_heads, head_size))
         attn_output = attn_output.transpose(1, 2).contiguous()
         return attn_output, None

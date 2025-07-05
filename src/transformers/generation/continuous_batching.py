@@ -316,6 +316,12 @@ class PagedAttentionCache:
         key = key_states.transpose(1, 2).view(batch_size * seq_len, num_heads, head_size)
         value = value_states.transpose(1, 2).view(batch_size * seq_len, num_heads, head_size)
         if kernel:
+            # Pre-create scale tensors to avoid CUDA graph capture issues
+            if not hasattr(self, "_k_scale_tensor") or self._k_scale_tensor.device != key.device:
+                self._k_scale_tensor = torch.tensor(1.0, device=key.device, dtype=key.dtype)
+            if not hasattr(self, "_v_scale_tensor") or self._v_scale_tensor.device != value.device:
+                self._v_scale_tensor = torch.tensor(1.0, device=value.device, dtype=value.dtype)
+                
             reshaping_function(
                 key,
                 value,
@@ -323,8 +329,8 @@ class PagedAttentionCache:
                 self.value_cache[layer_idx],
                 write_index.to(torch.int64).flatten(),
                 "auto",  # kv_cache_dtype
-                torch.tensor(1.0, device="mps"),  # k_scale
-                torch.tensor(1.0, device="mps"),  # v_scale
+                self._k_scale_tensor,  # k_scale
+                self._v_scale_tensor,  # v_scale
             )
             if kwargs.get("max_seqlen_q", -1) == 1:
                 return self.key_cache[layer_idx], self.value_cache[layer_idx]
@@ -830,7 +836,7 @@ class ContinuousBatchProcessor:
         self.max_seqlen_k = 0
         self.output_ids = torch.full((1, T), -1, **tensor_metadata).to(self.model_device, non_blocking=True)
         self.block_tables = torch.full(
-            (T, 8),
+            (T, 20),
             fill_value=-1,
             dtype=torch.int32,
         ).to(self.model_device, non_blocking=True)
