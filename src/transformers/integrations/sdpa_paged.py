@@ -93,12 +93,8 @@ def sdpa_attention_paged_forward(
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
     reshaping_function = paged_attention_kernel.reshape_and_cache_flash
-    cumulative_seqlens_q = kwargs.get("cumulative_seqlens_q", None)
-    cumulative_seqlens_k = kwargs.get("cumulative_seqlens_k", None)
-    # print(cumulative_seqlens_q)
     is_decoding = kwargs.get("max_seqlen_q", -1) == 1
     if not is_decoding:
-        print("prefill!")
         return sdpa_attention_paged_forward__(
             module,
             query,
@@ -109,7 +105,6 @@ def sdpa_attention_paged_forward(
             **kwargs,
         )
     else:
-        print("decoding!")
         num_kv_heads = key.shape[1]
         cache = kwargs.pop("cache", None)
         if cache is not None:
@@ -118,8 +113,7 @@ def sdpa_attention_paged_forward(
             )
 
         if kvg := getattr(module, "num_key_value_groups", None):
-            key = repeat_k_kernel(key, kvg)
-            value = repeat_v_kernel(value, kvg)
+            key, value = repeat_kv(key, kvg), repeat_kv(value, kvg)
         batch_size, num_heads, seq_len, head_size = query.shape
         query = query.transpose(1, 2).reshape(batch_size * seq_len, num_heads, head_size)
         attn_output = torch.empty_like(query, device=query.device)
@@ -130,7 +124,6 @@ def sdpa_attention_paged_forward(
         block_size = kwargs.get("block_size", 32)
         scale = scaling
         torch.mps.synchronize()
-        print(query.shape, key.shape, value.shape)
         paged_attention_kernel.paged_attention_v1(
             attn_output,
             query,
@@ -147,9 +140,7 @@ def sdpa_attention_paged_forward(
             v_scale=kwargs.get("v_scale", torch.tensor(1.0, device=query.device)),
             alibi_slopes=kwargs.get("alibi_slopes", None),
         )
-        torch.mps.synchronize()
 
-        # Reshape output back to original format
         attn_output = attn_output.reshape(batch_size, seq_len, num_heads, head_size)
         attn_output = attn_output.transpose(1, 2).contiguous()
 
