@@ -308,11 +308,11 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
 
-    @unittest.skip("ViT PE cannot be tested with meta device")
+    @unittest.skip("ViT PE / TimmWrapperModel cannot be tested with meta device")
     def test_can_be_initialized_on_meta(self):
         pass
 
-    @unittest.skip("ViT PE cannot be tested with meta device")
+    @unittest.skip("ViT PE / TimmWrapperModel cannot be tested with meta device")
     def test_can_load_with_meta_device_context_manager(self):
         pass
 

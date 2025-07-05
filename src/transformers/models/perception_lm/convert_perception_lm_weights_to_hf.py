@@ -298,10 +298,10 @@ def write_model(
         state_dict = {
             "model.language_model.embed_tokens.weight": loaded["tok_embeddings.weight"],
             "model.language_model.norm.weight": loaded["norm.weight"],
-            "model.multi_modal_projector.projector.0.weight": loaded["vision_projector.projector.0.weight"],
-            "model.multi_modal_projector.projector.2.weight": loaded["vision_projector.projector.2.weight"],
-            "model.multi_modal_projector.projector.0.bias": loaded["vision_projector.projector.0.bias"],
-            "model.multi_modal_projector.projector.2.bias": loaded["vision_projector.projector.2.bias"],
+            "model.multi_modal_projector.linear_1.weight": loaded["vision_projector.projector.0.weight"],
+            "model.multi_modal_projector.linear_2.weight": loaded["vision_projector.projector.2.weight"],
+            "model.multi_modal_projector.linear_1.bias": loaded["vision_projector.projector.0.bias"],
+            "model.multi_modal_projector.linear_2.bias": loaded["vision_projector.projector.2.bias"],
         }
         if not tie_word_embeddings:
             state_dict["lm_head.weight"] = loaded["output.weight"]

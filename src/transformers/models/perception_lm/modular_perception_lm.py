@@ -21,8 +21,7 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 
-from transformers.generation.utils import GenerationMixin
-
+from ...generation.utils import GenerationMixin
 from ...utils import (
     auto_docstring,
     can_return_tuple,
@@ -40,15 +39,10 @@ from .configuration_perception_lm import PerceptionLMConfig
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "PerceptionLMConfig"
 
-# Base docstring
-_CHECKPOINT_FOR_DOC = "facebook/Perception-LM-1B"
-
-
-class AdaptiveAvgPooling(nn.Module):
+class PerceptionLMAdaptiveAvgPooling(nn.Module):
     def __init__(self, pooling_ratio=2):
-        super(AdaptiveAvgPooling, self).__init__()
+        super().__init__()
         self.pooling_ratio = pooling_ratio
 
     def forward(self, hidden_states):
@@ -70,29 +64,28 @@ class PerceptionLMMultiModalProjector(nn.Module):
         super().__init__()
         input_size = config.vision_config.model_args["embed_dim"]
         output_size = config.text_config.hidden_size
-        self.projector = nn.ModuleList(
-            [
-                nn.Linear(
-                    in_features=input_size,
-                    out_features=output_size,
-                    bias=True,
-                ),
-                nn.GELU(),
-                nn.Linear(
-                    in_features=output_size,
-                    out_features=output_size,
-                    bias=True,
-                ),
-            ]
+        self.linear_1 = nn.Linear(
+            in_features=input_size,
+            out_features=output_size,
+            bias=True,
+        )
+        self.gelu = nn.GELU()
+        self.linear_2 = nn.Linear(
+            in_features=output_size,
+            out_features=output_size,
+            bias=True,
         )
         self.pooling = (
-            AdaptiveAvgPooling(config.projector_pooling_ratio) if config.projector_pooling_ratio > 1 else nn.Identity()
+            PerceptionLMAdaptiveAvgPooling(config.projector_pooling_ratio)
+            if config.projector_pooling_ratio > 1
+            else nn.Identity()
         )
 
     def forward(self, features):
         features = features.permute(1, 0, 2)  # NLD -> LND
-        for layer in self.projector:
-            features = layer(features)
+        features = self.linear_1(features)
+        features = self.gelu(features)
+        features = self.linear_2(features)
         features = features.permute(1, 0, 2)  # LND -> NLD
         features = self.pooling(features)
         return features
@@ -112,9 +105,10 @@ class PerceptionLMCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
 
 @auto_docstring
 class PerceptionLMModel(LlavaModel):
+    _checkpoint_conversion_mapping = {}
+
     def __init__(self, config: PerceptionLMConfig):
         super().__init__(config)
-        del self.vision_tower
         self.vision_tower = AutoModel.from_config(config.vision_config)
         self.multi_modal_projector = PerceptionLMMultiModalProjector(config)
         self.language_model = AutoModel.from_config(config.text_config)
@@ -162,7 +156,6 @@ class PerceptionLMModel(LlavaModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **lm_kwargs,
@@ -191,8 +184,6 @@ class PerceptionLMModel(LlavaModel):
                 Whether or not to return the attentions tensors of all attention layers.
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
             cache_position (`torch.LongTensor`, *optional*):
                 Position indices for caching.
             logits_to_keep (`int` or `torch.Tensor`, *optional*, defaults to 0):
@@ -208,7 +199,6 @@ class PerceptionLMModel(LlavaModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
         if (pixel_values is not None or pixel_values_videos is not None) and inputs_embeds is not None:
@@ -274,7 +264,7 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
 
-    # Make modules available throught conditional class for BC
+    # Make modules available throught conditional class for BC with test_sdpa_can_dispatch_composite_models
     @property
     def language_model(self):
         return self.model.language_model
@@ -351,7 +341,6 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **lm_kwargs,
@@ -382,8 +371,6 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
                 Whether or not to return the attentions tensors of all attention layers.
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
             cache_position (`torch.LongTensor`, *optional*):
                 Position indices for caching.
             logits_to_keep (`int` or `torch.Tensor`, *optional*, defaults to 0):
@@ -406,7 +393,6 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             **lm_kwargs,
