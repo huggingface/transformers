@@ -1300,7 +1300,7 @@ class GenerationMixin(ContinuousMixin):
                 processors.append(
                     MinPLogitsWarper(min_p=generation_config.min_p, min_tokens_to_keep=min_tokens_to_keep)
                 )
-            if generation_config.moment_p is not None:
+            if generation_config.moment_p_alpha > 0.0:
                 # Applied after temperature scaling, similar to min_p
                 processors.append(
                     MomentPLogitsWarper(
