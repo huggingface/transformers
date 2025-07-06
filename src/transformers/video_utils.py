@@ -510,91 +510,6 @@ VIDEO_DECODERS = {
     "torchcodec": read_video_torchcodec,
 }
 
-def process_video_object(
-        video: "VideoInput",
-        video_fps: Optional[float] = None,
-        num_frames: Optional[int] = None,
-        sampling_fps: Optional[int] = None,
-        sample_indices_fn: Optional[Callable] = None,
-        video_backend: str = "pyav",
-        **kwargs,):
-    """
-        Process the video object (ndarray or torch.tensor) provided in the apply_chat_template function.
-        Args:
-            video (`VideoInput`):
-                The video object to process. Can be a list of PIL frames, a numpy array, or a torch tensor. By default, video will be sampled based on `num_frames` or `sampling_fps` and `video_fps` or sample_indices_fn. While sampling, sample_indices_fn will have first priority, second priority will be given to time based sampling with `video_fps` and `sampling_fps`, third priority will given to `num_frames`. If none of them are provided, the whole video will be loaded.
-            video_fps (`float`, *optional*):
-                Frames per second of the video. If not provided, any time based sampling (sampling with sampling_fps) will not be performed.
-            num_frames (`int`, *optional*):
-                Number of frames to sample uniformly. If not provided, it will try to sample based (`sampling_fps` and `video_fps`) or sample_indices_fn.
-            sampling_fps (`int`, *optional*):
-                Frames per second to sample the video at. If provided video_fps must also be provided for time based smapling. If not provided, it will try to sample based on `num_frames` or `sample_indices_fn`.
-            sample_indices_fn (`Callable`, *optional*):
-                A callable function that will return indices at which the video should be sampled. If the video has to be loaded using
-                by a different sampling technique than provided by `num_frames` or (`sampling_fps` and `video_fps`) arguments, one should provide their own `sample_indices_fn`.
-                If provided, it will take priority over `num_frames`, `sampling_fps`, and `video_fps` arguments.
-                If not provided, simple uniform sampling with fps is performed.
-                The function expects at input the all args along with all kwargs passed to `process_video_object` and should output valid
-                indices at which the video should be sampled. For example:
-                Example:
-                def sample_indices_fn(metadata, **kwargs):
-                    return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int)
-            video_backend (`str`, *optional*, defaults to `"pyav"`):
-                which backend was used to load the video. Can be any of ["decord", "pyav", "opencv", "torchvision"]. Defaults to "pyav".
-        Returns:
-            Tuple[`np.array`, `VideoMetadata`]: A tuple containing:
-                - Numpy array of frames in RGB (shape: [num_frames, height, width, 3]).
-                - `VideoMetadata` object containing metadata about the video, such as total number of frames, fps, duration, and video backend.
-        
-    """
-
-    if not is_valid_video(video):
-        raise ValueError(
-            f"Invalid video input. Expected either a list of PIL frames or an input of 4 dimensions, but got"
-            f" type {type(video)}."
-        )
-    if isinstance(video, np.ndarray):
-        video = torch.from_numpy(video)
-    total_num_frames = video.size(0)
-    # if sample_indices_fn is provided, we prioritize it over other arguments
-    if sample_indices_fn is not None:
-        indices = sample_indices_fn(**kwargs)
-    elif sampling_fps is not None:
-        if video_fps is None:
-            raise ValueError(
-                "For time based sampling (i.e. sampling n frames for each second), both `video_fps` and `sampling_fps` are required."
-            )
-        num_frames = int(total_num_frames / video_fps * sampling_fps)
-        if num_frames > total_num_frames:
-            raise ValueError(
-                f"When loading the video with sampling_fps={sampling_fps}, we computed num_frames={num_frames} "
-                f"which exceeds total_num_frames={total_num_frames}. Check fps or video metadata."
-            )
-        indices = get_uniform_frame_indices(total_num_frames, num_frames)
-    elif num_frames is not None:
-        indices = get_uniform_frame_indices(total_num_frames, num_frames)
-    else:
-        # If no sampling is specified, we load the whole video
-        indices = np.arange(0, total_num_frames, dtype=int)
-
-    video = video[indices].contiguous().numpy()
-    if video_fps is None:
-        logger.warning("`video_fps` is not provided. When loading the video, we cannot infer metadata such as `video_fps` or `duration`. ")
-        duration = 0
-        video_fps = 0
-    else:
-        duration = total_num_frames / video_fps
-        video_fps = float(video_fps)
-    
-    metadata = VideoMetadata(
-        total_num_frames=int(total_num_frames),
-        fps=float(video_fps),
-        duration=float(duration),
-        video_backend=video_backend,
-    )
-
-    metadata.frames_indices = indices
-    return video, metadata
 
 def load_video(
     video: Union[str, "VideoInput"],
@@ -695,6 +610,7 @@ def load_video(
     video_decoder = VIDEO_DECODERS[backend]
     video, metadata = video_decoder(file_obj, sample_indices_fn, **kwargs)
     return video, metadata
+
 
 def convert_to_rgb(
     video: np.array,
