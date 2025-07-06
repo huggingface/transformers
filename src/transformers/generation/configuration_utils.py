@@ -211,10 +211,6 @@ class GenerationConfig(PushToHubMixin):
             Minimum token probability, which will be scaled by the probability of the most likely token. It must be a
             value between 0 and 1. Typical values are in the 0.01-0.2 range, comparably selective as setting `top_p` in
             the 0.99-0.8 range (use the opposite of normal `top_p` values).
-        moment_p (`float`, *optional*):
-            Threshold for moment-based sampling. If set to float < 1, only tokens with cumulative moment mass up to
-            `moment_p` are kept for generation. The moment is calculated as the sum of probabilities raised to the
-            power specified by `moment_p_exponent`, scaled by `moment_p_alpha`.
         moment_p_exponent (`float`, *optional*, defaults to 2.0):
             The exponent to which probabilities are raised when calculating the moment. Higher values emphasize the
             tail of the distribution more. With exponent=1, behaves similarly to top-p sampling.
