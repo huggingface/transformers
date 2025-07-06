@@ -30,6 +30,18 @@ rendered properly in your Markdown viewer.
 
 You can find all the original RoBERTa checkpoints under the [Facebook AI](https://huggingface.co/FacebookAI) organization.
 
+## Quick Links
+
+🤗 **Popular RoBERTa Models on HuggingFace Hub:**
+- [roberta-base](https://huggingface.co/roberta-base) - Base model, 125M parameters
+- [roberta-large](https://huggingface.co/roberta-large) - Large model, 355M parameters
+- [distilroberta-base](https://huggingface.co/distilroberta-base) - Distilled version, smaller and faster
+- [roberta-base-openai-detector](https://huggingface.co/roberta-base-openai-detector) - Fine-tuned for AI text detection
+
+📖 **Additional Resources:**
+- [Original RoBERTa Paper](https://huggingface.co/papers/1907.11692)
+- [All RoBERTa Models](https://huggingface.co/models?search=roberta)
+
 
 > [!TIP]
 > Click on the RoBERTa models in the right sidebar for more examples of how to apply RoBERTa to different language tasks.
@@ -40,43 +52,54 @@ The example below demonstrates how to predict the `<mask>` token with [`Pipeline
 <hfoption id="Pipeline">
 
 ```py
-import torch
-from transformers import pipeline
+# Import required libraries
+import torch  # PyTorch for tensor operations and GPU support
+from transformers import pipeline  # HuggingFace's high-level interface for AI models
 
+# Create a fill-mask pipeline with RoBERTa
 pipeline = pipeline(
-    task="fill-mask",
-    model="FacebookAI/roberta-base",
-    torch_dtype=torch.float16,
-    device=0
+    task="fill-mask",  # Task: predict masked tokens in text
+    model="FacebookAI/roberta-base",  # Meta's RoBERTa base model (125M parameters)
+    torch_dtype=torch.float16,  # Use half-precision to save memory
+    device=0  # Use GPU device 0 (or CPU if no GPU available)
 )
-pipeline("Plants create <mask> through a process known as photosynthesis.")
+
+# Predict the masked token in the sentence
+result = pipeline("Plants create <mask> through a process known as photosynthesis.")
+print(result)
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
 ```py
-import torch
-from transformers import AutoModelForMaskedLM, AutoTokenizer
+# Import required libraries
+import torch  # PyTorch for tensor operations and GPU support
+from transformers import AutoModelForMaskedLM, AutoTokenizer  # HuggingFace model and tokenizer classes
 
+# Load the tokenizer and model
 tokenizer = AutoTokenizer.from_pretrained(
-    "FacebookAI/roberta-base",
+    "FacebookAI/roberta-base",  # Load RoBERTa's tokenizer
 )
 model = AutoModelForMaskedLM.from_pretrained(
-    "FacebookAI/roberta-base",
-    torch_dtype=torch.float16,
-    device_map="auto",
-    attn_implementation="sdpa"
+    "FacebookAI/roberta-base",  # Load RoBERTa model for masked language modeling
+    torch_dtype=torch.float16,  # Use half-precision to save memory
+    device_map="auto",  # Automatically place model on available devices
+    attn_implementation="sdpa"  # Use scaled dot-product attention for efficiency
 )
+
+# Tokenize input text and move to GPU
 inputs = tokenizer("Plants create <mask> through a process known as photosynthesis.", return_tensors="pt").to("cuda")
 
+# Generate predictions without computing gradients (inference mode)
 with torch.no_grad():
-    outputs = model(**inputs)
-    predictions = outputs.logits
+    outputs = model(**inputs)  # Forward pass through the model
+    predictions = outputs.logits  # Get prediction scores for each token
 
-masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]
-predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
-predicted_token = tokenizer.decode(predicted_token_id)
+# Find the masked token position and get the most likely prediction
+masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]  # Find <mask> position
+predicted_token_id = predictions[0, masked_index].argmax(dim=-1)  # Get highest scoring token
+predicted_token = tokenizer.decode(predicted_token_id)  # Convert token ID back to text
 
 print(f"The predicted token is: {predicted_token}")
 ```
