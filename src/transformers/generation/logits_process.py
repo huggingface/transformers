@@ -631,20 +631,19 @@ class MomentPLogitsWarper(LogitsProcessor):
     grounded approach to truncation.
 
     The core idea is to compute the "moment" of the distribution by summing all probabilities raised to a chosen
-    exponent. This moment is then used to set a dynamic threshold for filtering, optionally scaled by an `alpha`
-    parameter.
+    exponent. This moment is then used to set a dynamic threshold for filtering, scaled by an `alpha` parameter.
 
     The exponent controls the sensitivity of the filter: increasing the exponent (e.g., above 2) makes the truncation
     less aggressive by lowering the threshold. Decreasing the exponent (toward 1) makes the truncation more aggressive,
     and as the exponent approaches 1, the truncation threshold approaches 1.0, meaning fewer tokens are retained.
 
-    The `alpha` parameter provides an additional scaling factor for fine-tuning selectivity.
+    The `alpha` parameter provides a scaling factor for fine-tuning selectivity.
 
     Theoretically, this method is justified by its ability to adaptively consider the "shape" of the entire distribution,
     rather than relying on a single token or a fixed cumulative mass. This can lead to more stable and controllable
     sampling, especially in cases where the distribution is flat or multi-modal.
 
-    In practice, we recommend setting `moment_p=1.0` for most use cases, as this leverages the full moment of the
+    In practice, we recommend setting `alpha=1.0` for most use cases, as this leverages the full moment of the
     distribution and provides a principled cutoff. Adjust the exponent and alpha to control the strictness of the
     filter: higher exponents for sharper truncation, lower for smoother.
 
@@ -652,9 +651,6 @@ class MomentPLogitsWarper(LogitsProcessor):
     is forthcoming.
 
     Args:
-        moment_p (`float`):
-            If set to < 1, only tokens with cumulative moment probability mass up to `moment_p` are kept for 
-            generation. It must be a value between 0 and 1.
         exponent (`float`, *optional*, defaults to 2.0):
             The exponent to which the probabilities are raised. Higher values place more emphasis on the tail 
             of the distribution.
@@ -677,13 +673,13 @@ class MomentPLogitsWarper(LogitsProcessor):
 
     >>> inputs = tokenizer("A sequence: 1, 2", return_tensors="pt")
 
-    >>> # With moment_p sampling with exponent=2 (second moment)
-    >>> outputs = model.generate(**inputs, do_sample=True, moment_p=0.3, moment_p_exponent=2.0)
+    >>> # With moment-p sampling with exponent=2 (second moment)
+    >>> outputs = model.generate(**inputs, do_sample=True, moment_p_exponent=2.0, moment_p_alpha=1.0)
     >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
     A sequence: 1, 2, 3, 4, 5, 6, 7, 8, 9
 
     >>> # With a smaller alpha to make filtering more aggressive
-    >>> outputs = model.generate(**inputs, do_sample=True, moment_p=0.3, moment_p_exponent=2.0, moment_p_alpha=0.5)
+    >>> outputs = model.generate(**inputs, do_sample=True, moment_p_exponent=2.0, moment_p_alpha=0.5)
     >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
     A sequence: 1, 2, 3, 4, 5
     ```
@@ -691,15 +687,11 @@ class MomentPLogitsWarper(LogitsProcessor):
 
     def __init__(
         self, 
-        moment_p: float, 
         exponent: float = 2.0, 
         alpha: float = 1.0,
         filter_value: float = -float("Inf"), 
         min_tokens_to_keep: int = 1
     ):
-        moment_p = float(moment_p)
-        if moment_p < 0 or moment_p > 1.0:
-            raise ValueError(f"`moment_p` has to be a float in the [0, 1] interval, but is {moment_p}")
         if not isinstance(min_tokens_to_keep, int) or (min_tokens_to_keep < 1):
             raise ValueError(f"`min_tokens_to_keep` has to be a positive integer, but is {min_tokens_to_keep}")
         if exponent <= 0:
@@ -707,7 +699,6 @@ class MomentPLogitsWarper(LogitsProcessor):
         if alpha <= 0:
             raise ValueError(f"`alpha` has to be a positive float, but is {alpha}")
 
-        self.moment_p = moment_p
         self.exponent = exponent
         self.alpha = alpha
         self.filter_value = filter_value
@@ -722,7 +713,7 @@ class MomentPLogitsWarper(LogitsProcessor):
         moment = torch.sum(torch.pow(probs, self.exponent), dim=-1, keepdim=True)
         
         # Apply alpha scaling to the threshold
-        scaled_threshold = self.moment_p * moment * self.alpha
+        scaled_threshold = moment * self.alpha
         
         # Sort probabilities and calculate cumulative moment
         sorted_probs, sorted_indices = torch.sort(probs, descending=True, dim=-1)
