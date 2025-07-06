@@ -428,7 +428,6 @@ class GenerationConfig(PushToHubMixin):
         self.top_k = kwargs.pop("top_k", 50)
         self.top_p = kwargs.pop("top_p", 1.0)
         self.min_p = kwargs.pop("min_p", None)
-        self.moment_p = kwargs.pop("moment_p", None)
         self.moment_p_exponent = kwargs.pop("moment_p_exponent", 2.0)
         self.moment_p_alpha = kwargs.pop("moment_p_alpha", 1.0)
         self.typical_p = kwargs.pop("typical_p", 1.0)
@@ -669,11 +668,6 @@ class GenerationConfig(PushToHubMixin):
                 minor_issues["top_p"] = greedy_wrong_parameter_msg.format(flag_name="top_p", flag_value=self.top_p)
             if self.min_p is not None:
                 minor_issues["min_p"] = greedy_wrong_parameter_msg.format(flag_name="min_p", flag_value=self.min_p)
-            if self.moment_p is not None and self.moment_p != 1.0:
-                warnings.warn(
-                    greedy_wrong_parameter_msg.format(flag_name="moment_p", flag_value=self.moment_p),
-                    UserWarning,
-                )
             if self.moment_p_exponent is not None and self.moment_p_exponent != 2.0:
                 warnings.warn(
                     greedy_wrong_parameter_msg.format(
