@@ -75,7 +75,7 @@ model = AutoModelForImageTextToText.from_pretrained(
 # generated_texts = processor.batch_decode(output_ids, skip_special_tokens=True)
 # print(generated_texts)
 
-video, _ = video_utils.load_video("./test_video.mp4")
+video, metadata = video_utils.load_video("https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_10MB.mp4")
 # print(f"Video shape: {video.shape}")  # Should be (T, H, W, C) where T is the number of frames
 
 # Video
@@ -83,8 +83,8 @@ conversation = [
     {
         "role": "user",
         "content": [
-            # {"type": "video", "path": "./test_video.mp4"},
-            {"type": "video", "video": video},
+            {"type": "video", "url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_10MB.mp4"},
+            # {"type": "video", "video": {'frames':video, 'metadata': metadata}},
             {"type": "text", "text": "Describe this video in detail"}
         ]
     },

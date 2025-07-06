@@ -36,7 +36,7 @@ from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
 from .image_utils import ChannelDimension, is_vision_available, load_image
 from .utils.chat_template_utils import render_jinja_template
-from .video_utils import VideoMetadata, load_video, process_video_object
+from .video_utils import VideoMetadata, load_video, convert_pil_frames_to_video
 
 
 if is_vision_available():
@@ -1707,7 +1707,6 @@ class ProcessorMixin(PushToHubMixin):
                 )
     
     def _validate_video_content(self, video_data:dict) -> dict:
-        from video_utils import convert_pil_frames_to_video
         if "frames" not in video_data:
             raise ValueError(
                 "Expected video data to contain 'frames' key with a list of PIL.images or numpy arrays or torch tensors."
@@ -1724,37 +1723,36 @@ class ProcessorMixin(PushToHubMixin):
                 f"Expected video frames to be a list of PIL images, numpy arrays or torch tensors, but got {type(frames)}."
             )
         
-        metadata = None
         total_num_frames = video.shape[0]
-        if 'metadata' not in video_data and 'fps' not in video_data and 'duration' not in video_data:
+        if 'metadata' not in video_data:
             logger.warning(
                 "When loading the video from list of images or ndarray or tensors, we cannot infer metadata such as `fps` or `duration`. "
                 "If your model requires metadata, please provide either metadata or atleast one of 'fps' or 'duration'"
             )
-        elif 'metadata' in video_data and ('fps' in video_data['fps'] or 'duration' in video_data['duration']):
-            raise ValueError(
-                "Incorrectly formatted video metadata. Please provide either complete 'metadata' or one of ['fps','duration']."
-            )
-        elif 'metadata' in video_data:
-            if 'fps' not in video_data['metadata'] and 'duration' not in video_data['metadata']:
+            metadata = None
+        elif isinstance(video_data['metadata'], VideoMetadata):
+            metadata = video_data['metadata']
+        elif isinstance(video_data['metadata'], dict):
+            if 'fps' not in video_data['metadata'] and 'duration' not in video_data:
                 logger.warning(
                     "When loading the video from list of images or ndarray or tensors, we cannot infer metadata such as `fps` or `duration`. "
                     "Video metadata dictionary should have atleast one of 'fps' or 'duration'. "
                 )
+                metadata = None
             else:
-                metadata = VideoMetadata(**video_data['metadata'])
-        elif 'fps' in video_data and video_data['fps'] > float(0):
-            video_fps = video_data['fps']
-            duration = total_num_frames / video_fps
-            metadata = VideoMetadata(total_num_frames=total_num_frames, fps=video_fps, duration=duration)
-        elif 'duration' in video_data and video_data['duration'] > float(0):
-            duration = video_data['duration']
-            video_fps = total_num_frames / duration
-            metadata = VideoMetadata(total_num_frames=total_num_frames, fps=video_fps, duration=duration)
+                metadata = VideoMetadata()
+                metadata.total_num_frames = total_num_frames
+                if 'fps' in video_data['metadata'] and video_data['metadata']['fps'] > float(0):
+                    metadata.fps = video_data['metadata']['fps']
+                    metadata.duration = total_num_frames / metadata.fps
+                elif 'duration' in video_data and video_data['duration'] > float(0):
+                    metadata.duration = video_data['duration']
+                    metadata.fps = total_num_frames / metadata.duration
+                metadata.video_backend = video_data['metadata'].get('video_backend', 'pyav')
         else:
             raise ValueError(
-                "Incorrectly formatted video metadata. It should contain either 'metadata' with 'fps' or 'duration', or provide atleast one of 'fps' or 'duration'."
-            )
+                f"Expected video metadata to be a VideoMetadata object or a dictionary with 'fps' or 'duration' keys, but got {type(video_data['metadata'])}."
+            )       
         return video, metadata
 
 
