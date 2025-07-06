@@ -165,30 +165,30 @@ def mask_border(tensor: torch.Tensor, border_margin: int, value: Union[bool, flo
 
 
 @dataclass
-class KeypointMatchingOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for outputs of keypoint matching models. Due to the nature of keypoint detection and matching, the number
     of keypoints is not fixed and can vary from image to image, which makes batching non-trivial. In the batch of
     images, the maximum number of matches is set as the dimension of the matches and matching scores. The mask tensor is
     used to indicate which values in the keypoints, matches and matching_scores tensors are keypoint matching
     information.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
-            Loss computed during training.
-        matches (`torch.FloatTensor` of shape `(batch_size, 2, num_matches)`):
-            Index of keypoint matched in the other image.
-        matching_scores (`torch.FloatTensor` of shape `(batch_size, 2, num_matches)`):
-            Scores of predicted matches.
-        keypoints (`torch.FloatTensor` of shape `(batch_size, num_keypoints, 2)`):
-            Absolute (x, y) coordinates of predicted keypoints in a given image.
-        hidden_states (`Tuple[torch.FloatTensor, ...]`, *optional*):
-            Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(batch_size, 2, embed_dim,
-            num_keypoints)`, returned when `output_hidden_states=True` is passed or when
-            `config.output_hidden_states=True`)
-        attentions (`Tuple[torch.FloatTensor, ...]`, *optional*):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, 2, num_heads, num_keypoints,
-            num_keypoints)`, returned when `output_attentions=True` is passed or when `config.output_attentions=True`)
+    """
+)
+class KeypointMatchingOutput(ModelOutput):
+    r"""
+    matches (`torch.FloatTensor` of shape `(batch_size, 2, num_matches)`):
+        Index of keypoint matched in the other image.
+    matching_scores (`torch.FloatTensor` of shape `(batch_size, 2, num_matches)`):
+        Scores of predicted matches.
+    keypoints (`torch.FloatTensor` of shape `(batch_size, num_keypoints, 2)`):
+        Absolute (x, y) coordinates of predicted keypoints in a given image.
+    hidden_states (`tuple[torch.FloatTensor, ...]`, *optional*):
+        Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(batch_size, 2, num_channels,
+        num_keypoints)`, returned when `output_hidden_states=True` is passed or when
+        `config.output_hidden_states=True`)
+    attentions (`tuple[torch.FloatTensor, ...]`, *optional*):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, 2, num_heads, num_keypoints,
+        num_keypoints)`, returned when `output_attentions=True` is passed or when `config.output_attentions=True`)
     """
 
     matches: Optional[torch.FloatTensor] = None
@@ -824,6 +824,7 @@ class EfficientLoFTRFineFusionLayer(nn.Module):
         return fine_features_0, fine_features_1
 
 
+@auto_docstring
 class EfficientLoFTRPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -840,8 +841,6 @@ class EfficientLoFTRPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.Conv1d, nn.BatchNorm2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -867,35 +866,10 @@ class EfficientLoFTRPreTrainedModel(PreTrainedModel):
         return pixel_values[:, 0, :, :][:, None, :, :]
 
 
-EFFICIENTLOFTR_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`EfficientLoFTRConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+@auto_docstring(
+    custom_intro="""
+    EfficientLoFTR model taking images as inputs and outputting the features of the images.
     """
-
-EFFICIENTLOFTR_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`SuperGlueImageProcessor`]. See
-            [`SuperGlueImageProcessor.__call__`] for details.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors. See `attentions` under returned tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "EfficientLoFTR model taking images as inputs and outputting the matching of them.",
-    EFFICIENTLOFTR_START_DOCSTRING,
 )
 class EfficientLoFTRModel(EfficientLoFTRPreTrainedModel):
     def __init__(self, config: EfficientLoFTRConfig):
@@ -909,7 +883,8 @@ class EfficientLoFTRModel(EfficientLoFTRPreTrainedModel):
 
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(EFFICIENTLOFTR_INPUTS_DOCSTRING)
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -917,8 +892,8 @@ class EfficientLoFTRModel(EfficientLoFTRPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, "BackboneOutput"]:
-        """
+    ) -> Union[tuple, "BackboneOutput"]:
+        r"""
         Examples:
 
         ```python
@@ -941,13 +916,12 @@ class EfficientLoFTRModel(EfficientLoFTRPreTrainedModel):
         >>>     outputs = model(**inputs)
         ```"""
         if labels is not None:
-            raise ValueError("SuperGlue is not trainable, no labels should be provided.")
+            raise ValueError("EfficientLoFTR is not trainable, no labels should be provided.")
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if pixel_values.ndim != 5 or pixel_values.size(1) != 2:
             raise ValueError("Input must be a 5D tensor of shape (batch_size, 2, num_channels, height, width)")
@@ -984,9 +958,6 @@ class EfficientLoFTRModel(EfficientLoFTRPreTrainedModel):
         if output_attentions:
             all_attentions = all_attentions + local_feature_transformer_outputs[1]
 
-        if not return_dict:
-            return tuple(v for v in [features, all_hidden_states, all_attentions] if v is not None)
-
         return BackboneOutput(
             feature_maps=features,
             hidden_states=all_hidden_states,
@@ -994,9 +965,10 @@ class EfficientLoFTRModel(EfficientLoFTRPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    "EfficientLoFTR model taking images as inputs and outputting the matching of them.",
-    EFFICIENTLOFTR_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    EfficientLoFTR model taking images as inputs and outputting the matching of them.
+    """
 )
 class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
     """EfficientLoFTR dense image matcher
@@ -1337,7 +1309,8 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
 
         return fine_coordinates
 
-    @add_start_docstrings_to_model_forward(EFFICIENTLOFTR_INPUTS_DOCSTRING)
+    @auto_docstring
+    @can_return_tuple
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1345,8 +1318,8 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, "KeypointMatchingOutput"]:
-        """
+    ) -> Union[tuple, "KeypointMatchingOutput"]:
+        r"""
         Examples:
 
         ```python
@@ -1375,7 +1348,6 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # 1. Extract coarse and residual features
         model_outputs = self.efficientloftr(
@@ -1409,9 +1381,6 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
 
         matching_keypoints[:, :, :, 0] = matching_keypoints[:, :, :, 0] / width
         matching_keypoints[:, :, :, 1] = matching_keypoints[:, :, :, 1] / height
-
-        if not return_dict:
-            return (coarse_matched_indices, coarse_matching_scores, matching_keypoints) + model_outputs[1:]
 
         return KeypointMatchingOutput(
             matches=coarse_matched_indices,
