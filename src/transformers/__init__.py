@@ -43,6 +43,7 @@ from .utils import (
     is_timm_available,
     is_tokenizers_available,
     is_torch_available,
+    is_torch_npu_available,
     is_torchaudio_available,
     is_torchvision_available,
     is_vision_available,
@@ -1037,3 +1038,7 @@ if not is_tf_available() and not is_torch_available() and not is_flax_available(
         "Models won't be available and only tokenizers, configuration "
         "and file/data utilities can be used."
     )
+
+if is_torch_npu_available():
+    # for npu fusion_kernel patch
+    import transformers.integrations.npu_fusion_kernels_patch
