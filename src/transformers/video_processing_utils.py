@@ -761,6 +761,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         for key in to_remove:
             kwargs.pop(key, None)
 
+        logger.info(f"Video processor {video_processor}")
         if return_unused_kwargs:
             return video_processor, kwargs
         else:
