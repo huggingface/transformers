@@ -1304,7 +1304,6 @@ class GenerationMixin(ContinuousMixin):
                 # Applied after temperature scaling, similar to min_p
                 processors.append(
                     MomentPLogitsWarper(
-                        moment_p=generation_config.moment_p,
                         exponent=generation_config.moment_p_exponent,
                         alpha=generation_config.moment_p_alpha,
                         min_tokens_to_keep=min_tokens_to_keep
