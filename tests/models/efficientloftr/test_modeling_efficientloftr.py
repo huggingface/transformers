@@ -14,7 +14,6 @@
 import inspect
 import unittest
 from functools import reduce
-from typing import List
 
 from datasets import load_dataset
 
@@ -50,10 +49,10 @@ class EfficientLoFTRModelTester:
         batch_size=2,
         image_width=80,
         image_height=60,
-        stage_block_dims: List[int] = [32, 32, 64],
-        stage_num_blocks: List[int] = [1, 1, 1],
-        stage_hidden_expansion: List[int] = [1, 1, 1],
-        stage_stride: List[int] = [2, 1, 2],
+        stage_block_dims: list[int] = [32, 32, 64],
+        stage_num_blocks: list[int] = [1, 1, 1],
+        stage_hidden_expansion: list[int] = [1, 1, 1],
+        stage_stride: list[int] = [2, 1, 2],
         q_aggregation_kernel_size: int = 1,
         kv_aggregation_kernel_size: int = 1,
         q_aggregation_stride: int = 1,

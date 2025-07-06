@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from dataclasses import dataclass
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 import torch
 from torch import nn
@@ -194,8 +194,8 @@ class KeypointMatchingOutput(ModelOutput):
     matches: Optional[torch.FloatTensor] = None
     matching_scores: Optional[torch.FloatTensor] = None
     keypoints: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 class EfficientLoFTRRotaryEmbedding(nn.Module):
@@ -210,7 +210,7 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
         self.original_inv_freq = self.inv_freq
 
     @torch.no_grad()
-    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         _, _, height, width = x.shape
 
         i_position_indices = torch.ones(height, width, device=x.device).cumsum(0).float().unsqueeze(-1)
@@ -306,7 +306,7 @@ class EfficientLoFTRRepVGGStage(nn.Module):
 
     def forward(
         self, hidden_states: torch.Tensor, output_hidden_states: Optional[bool] = False
-    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[tuple[torch.Tensor]]]:
         all_hidden_states = () if output_hidden_states else None
         for block in self.blocks:
             hidden_states = block(hidden_states)
@@ -333,7 +333,7 @@ class EfficientLoFTRepVGG(nn.Module):
 
     def forward(
         self, hidden_states: torch.Tensor, output_hidden_states: Optional[bool] = False
-    ) -> Tuple[List[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[list[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         outputs = []
         all_hidden_states = () if output_hidden_states else None
         for stage in self.stages:
@@ -386,7 +386,7 @@ class EfficientLoFTRAggregationLayer(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor], Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor], Optional[torch.Tensor]]:
         query_states = hidden_states
         is_cross_attention = encoder_hidden_states is not None
         kv_states = encoder_hidden_states if is_cross_attention else hidden_states
@@ -466,7 +466,7 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: float,
     dropout: float = 0.0,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
@@ -517,9 +517,9 @@ class EfficientLoFTRAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor] = None,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         batch_size, seq_len, dim = hidden_states.shape
         input_shape = hidden_states.shape[:-1]
 
@@ -576,8 +576,8 @@ class EfficientLoFTRMLP(nn.Module):
 
 
 def get_positional_embeddings_slice(
-    hidden_states: torch.Tensor, positional_embeddings: Tuple[torch.Tensor, torch.Tensor]
-) -> Tuple[torch.Tensor, torch.Tensor]:
+    hidden_states: torch.Tensor, positional_embeddings: tuple[torch.Tensor, torch.Tensor]
+) -> tuple[torch.Tensor, torch.Tensor]:
     batch_size, h, w, _ = hidden_states.shape
     positional_embeddings = tuple(
         tensor[:, :h, :w, :].expand(batch_size, -1, -1, -1) for tensor in positional_embeddings
@@ -600,8 +600,8 @@ class EfficientLoFTRAggregatedAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor]:
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+    ) -> tuple[torch.Tensor]:
         batch_size, embed_dim, h, w = hidden_states.shape
 
         # Aggregate features
@@ -656,10 +656,10 @@ class EfficientLoFTRLocalFeatureTransformerLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[tuple[torch.Tensor]]]:
         all_attentions = () if output_attentions else None
         batch_size, _, embed_dim, height, width = hidden_states.shape
 
@@ -711,9 +711,9 @@ class EfficientLoFTRLocalFeatureTransformer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[tuple[torch.Tensor]]]:
         all_attentions = () if output_attentions else None
 
         for layer in self.layers:
@@ -739,7 +739,7 @@ class EfficientLoFTROutConvBlock(nn.Module):
         self.activation = ACT2CLS[config.mlp_activation_function]()
         self.out_conv3 = nn.Conv2d(intermediate_size, hidden_size, kernel_size=3, stride=1, padding=1, bias=False)
 
-    def forward(self, hidden_states: torch.Tensor, residual_states: List[torch.Tensor]) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, residual_states: list[torch.Tensor]) -> torch.Tensor:
         residual_states = self.out_conv1(residual_states)
         residual_states = residual_states + hidden_states
         residual_states = self.out_conv2(residual_states)
@@ -771,7 +771,7 @@ class EfficientLoFTRFineFusionLayer(nn.Module):
     def forward_pyramid(
         self,
         hidden_states: torch.Tensor,
-        residual_states: List[torch.Tensor],
+        residual_states: list[torch.Tensor],
     ) -> torch.Tensor:
         hidden_states = self.out_conv(hidden_states)
         hidden_states = nn.functional.interpolate(
@@ -785,8 +785,8 @@ class EfficientLoFTRFineFusionLayer(nn.Module):
     def forward(
         self,
         coarse_features: torch.Tensor,
-        residual_features: List[torch.Tensor],
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        residual_features: list[torch.Tensor],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         For each image pair, compute the fine features of pixels.
         In both images, compute a patch of fine features center cropped around each coarse pixel.
@@ -994,7 +994,7 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
 
         self.post_init()
 
-    def _get_matches_from_scores(self, scores: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _get_matches_from_scores(self, scores: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Based on a keypoint score matrix, compute the best keypoint matches between the first and second image.
         Since each image pair can have different number of matches, the matches are concatenated together for all pair
@@ -1043,7 +1043,7 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
 
     def _coarse_matching(
         self, coarse_features: torch.Tensor, coarse_scale: float
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         For each image pair, compute the matching confidence between each coarse element (by default (image_height / 8)
         * (image_width / 8 elements)) from the first image to the second image.
@@ -1093,7 +1093,7 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         coarse_matched_keypoints: torch.Tensor,
         fine_window_size: int,
         fine_scale: float,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         For each coarse pixel, retrieve the highest fine confidence score and index.
         The index represents the matching between a pixel position in the fine window in the first image and a pixel

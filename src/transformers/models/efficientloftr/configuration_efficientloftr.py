@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Dict, List, Optional
+from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
@@ -107,10 +107,10 @@ class EfficientLoFTRConfig(PretrainedConfig):
 
     def __init__(
         self,
-        stage_block_dims: Optional[List[int]] = None,
-        stage_num_blocks: Optional[List[int]] = None,
-        stage_hidden_expansion: Optional[List[float]] = None,
-        stage_stride: Optional[List[int]] = None,
+        stage_block_dims: Optional[list[int]] = None,
+        stage_num_blocks: Optional[list[int]] = None,
+        stage_hidden_expansion: Optional[list[float]] = None,
+        stage_stride: Optional[list[int]] = None,
         hidden_size: int = 256,
         activation_function: str = "relu",
         q_aggregation_kernel_size: int = 4,
@@ -129,7 +129,7 @@ class EfficientLoFTRConfig(PretrainedConfig):
         fine_kernel_size: int = 8,
         batch_norm_eps: float = 1e-5,
         rope_theta: float = 10000.0,
-        rope_scaling: Optional[Dict] = None,
+        rope_scaling: Optional[dict] = None,
         fine_matching_slice_dim: int = 8,
         fine_matching_regress_temperature: float = 10.0,
         initializer_range: float = 0.02,
