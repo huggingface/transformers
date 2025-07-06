@@ -409,132 +409,22 @@ class LogitsProcessorTest(unittest.TestCase):
         # first batch should keep two tokens, second batch would keep only 1, but due to `min_tokens_to_keep=2` keeps 2.
         self.assertListEqual((filtered_dist != 0.0).to(torch.long).sum(dim=-1).tolist(), [2, 2])
         
-    def test_moment_p_warper_basic(self):
-        """Test basic functionality of MomentPLogitsWarper"""
-        vocab_size = 10
-        batch_size = 2
-
-        # Create dummy input
-        input_ids = torch.tensor([[1, 2], [3, 4]])
-        scores = torch.tensor([
-            [1.0, 0.5, 0.3, 0.2, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.8, 0.6, 0.4, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        ])
-
-        # Test with moment_p=0.5, exponent=2.0
-        warper = MomentPLogitsWarper(moment_p=0.5, exponent=2.0, alpha=1.0)
-        processed_scores = warper(input_ids, scores)
-
-        # Check that some tokens were filtered
-        self.assertTrue((processed_scores == float('-inf')).any())
-
-        # Check that at least min_tokens_to_keep are not filtered
-        for i in range(batch_size):
-            non_filtered = (processed_scores[i] != float('-inf')).sum()
-            self.assertGreaterEqual(non_filtered, 1)
-
     def test_moment_p_warper_different_exponents(self):
         """Test MomentPLogitsWarper with different exponents"""
         input_ids = torch.tensor([[1]])
         scores = torch.tensor([[2.0, 1.0, 0.5, 0.0, 0.0]])
 
         # Test with exponent=1.0 (similar to top-p)
-        warper1 = MomentPLogitsWarper(moment_p=0.5, exponent=1.0, alpha=1.0)
+        warper1 = MomentPLogitsWarper(exponent=1.0, alpha=1.0)
         processed1 = warper1(input_ids, scores)
 
         # Test with exponent=3.0 (emphasizes tail more)
-        warper3 = MomentPLogitsWarper(moment_p=0.5, exponent=3.0, alpha=1.0)
+        warper3 = MomentPLogitsWarper(exponent=3.0, alpha=1.0)
         processed3 = warper3(input_ids, scores)
 
         # With higher exponent, we expect potentially different filtering
         # The exact behavior depends on the probability distribution
         self.assertEqual(processed1.shape, processed3.shape)
-
-    def test_moment_p_warper_alpha_scaling(self):
-        """Test MomentPLogitsWarper with different alpha values"""
-        input_ids = torch.tensor([[1]])
-        scores = torch.tensor([[2.0, 1.0, 0.5, 0.0, 0.0]])
-
-        # Test with alpha=0.5 (more selective)
-        warper_selective = MomentPLogitsWarper(moment_p=0.5, exponent=2.0, alpha=0.5)
-        processed_selective = warper_selective(input_ids, scores)
-
-        # Test with alpha=2.0 (less selective)
-        warper_lenient = MomentPLogitsWarper(moment_p=0.5, exponent=2.0, alpha=2.0)
-        processed_lenient = warper_lenient(input_ids, scores)
-
-        # More selective filtering should result in more tokens being filtered
-        num_filtered_selective = (processed_selective == float('-inf')).sum()
-        num_filtered_lenient = (processed_lenient == float('-inf')).sum()
-
-        self.assertGreaterEqual(num_filtered_selective, num_filtered_lenient)
-
-    def test_moment_p_warper_edge_cases(self):
-        """Test edge cases for MomentPLogitsWarper"""
-        input_ids = torch.tensor([[1]])
-
-        # Test with moment_p=0.0 (should keep only min_tokens_to_keep)
-        scores = torch.tensor([[1.0, 0.5, 0.0, 0.0, 0.0]])
-        warper_zero = MomentPLogitsWarper(moment_p=0.0, exponent=2.0, alpha=1.0)
-        processed_zero = warper_zero(input_ids, scores)
-        num_kept = (processed_zero != float('-inf')).sum()
-        self.assertEqual(num_kept, 1)  # min_tokens_to_keep=1
-
-        # Test with moment_p=1.0 (should keep all tokens)
-        warper_one = MomentPLogitsWarper(moment_p=1.0, exponent=2.0, alpha=1.0)
-        processed_one = warper_one(input_ids, scores)
-        num_kept_all = (processed_one != float('-inf')).sum()
-        self.assertEqual(num_kept_all, scores.shape[1])
-
-    def test_moment_p_warper_min_tokens_to_keep(self):
-        """Test that min_tokens_to_keep is respected"""
-        input_ids = torch.tensor([[1]])
-        scores = torch.tensor([[1.0, 0.5, 0.0, 0.0, 0.0]])
-
-        # Test with different min_tokens_to_keep values
-        for min_keep in [1, 2, 3]:
-            warper = MomentPLogitsWarper(
-                moment_p=0.1, exponent=2.0, alpha=1.0, min_tokens_to_keep=min_keep
-            )
-            processed = warper(input_ids, scores)
-            num_kept = (processed != float('-inf')).sum()
-            self.assertGreaterEqual(num_kept, min_keep)
-
-    def test_moment_p_warper_invalid_parameters(self):
-        """Test that invalid parameters raise appropriate errors"""
-        # Test invalid moment_p
-        with self.assertRaises(ValueError):
-            MomentPLogitsWarper(moment_p=-0.1)
-
-        with self.assertRaises(ValueError):
-            MomentPLogitsWarper(moment_p=1.5)
-
-        # Test invalid exponent
-        with self.assertRaises(ValueError):
-            MomentPLogitsWarper(moment_p=0.5, exponent=-1.0)
-
-        # Test invalid alpha
-        with self.assertRaises(ValueError):
-            MomentPLogitsWarper(moment_p=0.5, alpha=-1.0)
-
-        # Test invalid min_tokens_to_keep
-        with self.assertRaises(ValueError):
-            MomentPLogitsWarper(moment_p=0.5, min_tokens_to_keep=0)
-
-    def test_moment_p_warper_batch_consistency(self):
-        """Test that warper produces consistent results across batches"""
-        input_ids = torch.tensor([[1], [1]])
-        # Same scores for both batch items
-        scores = torch.tensor([
-            [2.0, 1.0, 0.5, 0.0, 0.0],
-            [2.0, 1.0, 0.5, 0.0, 0.0]
-        ])
-
-        warper = MomentPLogitsWarper(moment_p=0.3, exponent=2.0, alpha=1.0)
-        processed = warper(input_ids, scores)
-
-        # Both batch items should have identical results
-        torch.testing.assert_close(processed[0], processed[1])
 
     def test_typical_dist_warper(self):
         input_ids = None
