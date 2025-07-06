@@ -13,10 +13,9 @@
 # limitations under the License.
 """Testing suite for the PyTorch SwiftFormer model."""
 
-import copy
 import unittest
 
-from transformers import PretrainedConfig, SwiftFormerConfig
+from transformers import PreTrainedModel, SwiftFormerConfig, set_seed
 from transformers.testing_utils import (
     require_torch,
     require_vision,
@@ -26,7 +25,7 @@ from transformers.testing_utils import (
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -233,17 +232,66 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    def test_initialization(self):
-        def _config_zero_init(config):
-            configs_no_init = copy.deepcopy(config)
-            for key in configs_no_init.__dict__.keys():
-                if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
-                    setattr(configs_no_init, key, 1e-10)
-                if isinstance(getattr(configs_no_init, key, None), PretrainedConfig):
-                    no_init_subconfig = _config_zero_init(getattr(configs_no_init, key))
-                    setattr(configs_no_init, key, no_init_subconfig)
-            return configs_no_init
+    def test_can_init_all_missing_weights(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
+        for model_class in self.all_model_classes:
+            # Monkey patch the method to add a seed (we do it on PreTrainedModel._initialize_weights, which wraps
+            # `_init_weights` so that it can add the seed for composite models as well)
+            original_initialize_weights = PreTrainedModel._initialize_weights
+
+            def seeded_initialize_weights(self, module):
+                set_seed(0)
+                original_initialize_weights(self, module)
+
+            PreTrainedModel._initialize_weights = seeded_initialize_weights
+
+            # First, initialize the model from config -> this ensure everything is correctly initialized, even if
+            # _init_weights() does not take all weights into account correctly
+            model_from_config = model_class(config)
+            # Here, passing an empty state dict will force all weights to be moved from meta to cpu, then be initialized
+            # by _init_weights()
+            model_from_pretrained = model_class.from_pretrained(None, config=config, state_dict={})
+
+            # Back to original method to avoid issues if running several other tests
+            PreTrainedModel._initialize_weights = original_initialize_weights
+
+            # First, check if any parameters are still on meta -> this is usually an issue with tied weights
+            params_on_meta = []
+            for k, v in model_from_pretrained.named_parameters():
+                if v.device.type == "meta":
+                    params_on_meta.append(k)
+
+            self.assertTrue(
+                len(params_on_meta) == 0,
+                f"The following keys are still on the meta device, it probably comes from an issue in the tied weights:\n{params_on_meta}",
+            )
+
+            # Everything must be exactly the same as we set the same seed for each init
+            different_weights = []
+            for (k1, v1), (k2, v2) in zip(
+                model_from_config.state_dict().items(), model_from_pretrained.state_dict().items()
+            ):
+                self.assertEqual(k1, k2, "The keys from each model should be the same")
+
+                if "attn.w_g" in k1:
+                    continue
+
+                # Since we added the seed, they should be exactly the same (i.e. using allclose maybe be wrong due
+                # to very low std in init function)
+                if not (v1 == v2).all():
+                    different_weights.append(k1)
+
+            # Buffers that are initialized randomly are ignored as they are not initialized on meta device anyway
+            buffer_names = {name for name, _ in model_from_config.named_buffers()}
+            different_weights = [k for k in different_weights if k not in buffer_names]
+
+            self.assertTrue(
+                len(different_weights) == 0,
+                f"The following keys are not properly handled by `_init_weights()`:\n{different_weights}",
+            )
+
+    def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         configs_no_init = _config_zero_init(config)
