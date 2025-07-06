@@ -24,6 +24,8 @@ from typing import Callable, Optional, Union
 import torch
 import torch.nn as nn
 
+from transformers.utils.generic import OutputRecorder, check_model_inputs
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -41,7 +43,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from .configuration_t5gemma import T5GemmaConfig, T5GemmaModuleConfig
 
 
@@ -288,8 +290,6 @@ class T5GemmaCrossAttention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = config.query_pre_attn_scalar**-0.5
         self.attention_dropout = self.config.attention_dropout
-
-        # Requied by flash attention
         self.is_causal = False
 
         self.q_proj = nn.Linear(
@@ -323,47 +323,28 @@ class T5GemmaCrossAttention(nn.Module):
 
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
-        # [batch, q_len, -1, head_dim] => [batch, -1, q_len, head_dim]
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         if past_key_value is not None:
             is_updated = past_key_value.is_updated.get(self.layer_idx)
-            # after the first generated id, we can subsequently re-use all key/value_states from cache
             curr_past_key_value = past_key_value.cross_attention_cache
 
-        # conditions for calculating key and value states
-        if (
-            # no cache
-            past_key_value is None
-            # cross-attention but not cached yet
-            or not is_updated
-        ):
+        if past_key_value is None or not is_updated:
             encoder_input_shape = encoder_hidden_states.shape[:-1]
             encoder_hidden_shape = (*encoder_input_shape, -1, self.head_dim)
-            # [batch, kv_len, -1, head_dim] => [batch, -1, kv_len, head_dim]
             key_states = self.k_proj(encoder_hidden_states).view(encoder_hidden_shape).transpose(1, 2)
             value_states = self.v_proj(encoder_hidden_states).view(encoder_hidden_shape).transpose(1, 2)
 
-            # update cache
             if past_key_value is not None:
-                # save all key/value_states to cache to be re-used for fast auto-regressive generation
                 key_states, value_states = curr_past_key_value.update(key_states, value_states, self.layer_idx)
-                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 past_key_value.is_updated[self.layer_idx] = True
-        # cross-attention: reuse cached states
         else:
             key_states = curr_past_key_value.key_cache[self.layer_idx]
             value_states = curr_past_key_value.value_cache[self.layer_idx]
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -393,7 +374,6 @@ class T5GemmaEncoderLayer(GradientCheckpointingLayer):
         self.layer_idx = layer_idx
         self.attention_type = config.layer_types[layer_idx]
 
-        # self attention
         self.self_attn = T5GemmaSelfAttention(
             config=config,
             layer_idx=layer_idx,
@@ -401,12 +381,10 @@ class T5GemmaEncoderLayer(GradientCheckpointingLayer):
         self.pre_self_attn_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_self_attn_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-        # mlp
         self.mlp = T5GemmaMLP(config)
         self.pre_feedforward_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-        # dropout
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(
@@ -415,42 +393,27 @@ class T5GemmaEncoderLayer(GradientCheckpointingLayer):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = False,
         **kwargs,
-    ) -> tuple[
-        torch.FloatTensor,
-        Optional[tuple[torch.FloatTensor, torch.FloatTensor]],
-    ]:
-        # Self Attention
+    ) -> tuple[torch.FloatTensor,]:
         residual = hidden_states
         hidden_states = self.pre_self_attn_layernorm(hidden_states)
-        hidden_states, self_attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            output_attentions=output_attentions,
-            # Remove all caches for encoders.
-            use_cache=False,
             past_key_value=None,
             **kwargs,
         )
         hidden_states = self.post_self_attn_layernorm(hidden_states)
         hidden_states = residual + self.dropout(hidden_states)
 
-        # Mlp
         residual = hidden_states
         hidden_states = self.pre_feedforward_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = self.post_feedforward_layernorm(hidden_states)
         hidden_states = residual + self.dropout(hidden_states)
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        return outputs
+        return hidden_states
 
 
 class T5GemmaDecoderLayer(T5GemmaEncoderLayer):
@@ -458,7 +421,6 @@ class T5GemmaDecoderLayer(T5GemmaEncoderLayer):
 
     def __init__(self, config, layer_idx: int):
         super().__init__(config, layer_idx)
-        # cross attention
         self.cross_attn = T5GemmaCrossAttention(config=config, layer_idx=layer_idx)
         self.pre_cross_attn_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_cross_attn_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -470,27 +432,20 @@ class T5GemmaDecoderLayer(T5GemmaEncoderLayer):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[EncoderDecoderCache] = None,
-        output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
-    ) -> tuple[
-        torch.FloatTensor,
-        Optional[tuple[torch.FloatTensor, torch.FloatTensor]],
-        Optional[tuple[torch.FloatTensor, torch.FloatTensor]],
-    ]:
-        # Self Attention
+    ) -> torch.FloatTensor:
         residual = hidden_states
         hidden_states = self.pre_self_attn_layernorm(hidden_states)
-        hidden_states, self_attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_value=past_key_value.self_attention_cache if past_key_value is not None else None,
-            output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
             **kwargs,
@@ -498,34 +453,25 @@ class T5GemmaDecoderLayer(T5GemmaEncoderLayer):
         hidden_states = self.post_self_attn_layernorm(hidden_states)
         hidden_states = residual + self.dropout(hidden_states)
 
-        # Cross Attention
         residual = hidden_states
         hidden_states = self.pre_cross_attn_layernorm(hidden_states)
-        hidden_states, cross_attn_weights = self.cross_attn(
+        hidden_states, _ = self.cross_attn(
             hidden_states=hidden_states,
             encoder_hidden_states=encoder_hidden_states,
             attention_mask=encoder_attention_mask,
             past_key_value=past_key_value,
-            output_attentions=output_attentions,
             use_cache=use_cache,
             **kwargs,
         )
         hidden_states = self.post_cross_attn_layernorm(hidden_states)
         hidden_states = residual + self.dropout(hidden_states)
 
-        # Mlp
         residual = hidden_states
         hidden_states = self.pre_feedforward_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = self.post_feedforward_layernorm(hidden_states)
         hidden_states = residual + self.dropout(hidden_states)
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (self_attn_weights, cross_attn_weights)
-
-        return outputs
+        return hidden_states
 
 
 class T5GemmaClassificationHead(nn.Module):
@@ -554,6 +500,80 @@ class T5GemmaLMHead(nn.Module):
         return logits
 
 
+class T5GemmaAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(self, config: T5GemmaConfig, layer_idx: int):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.scaling = config.query_pre_attn_scalar**-0.5
+        self.attention_dropout = self.config.attention_dropout
+        self.is_causal = True
+
+        self.q_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.k_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+        )
+        self.attn_logit_softcapping = self.config.attn_logit_softcapping
+        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: Optional[torch.Tensor],
+        past_key_value: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if past_key_value is not None:
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=self.attention_dropout if self.training else 0.0,
+            scaling=self.scaling,
+            sliding_window=self.sliding_window,
+            softcap=self.attn_logit_softcapping,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+
 @auto_docstring
 class T5GemmaPreTrainedModel(PreTrainedModel):
     config_class = T5GemmaConfig
@@ -561,7 +581,6 @@ class T5GemmaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["T5GemmaBlock"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_3 = True
     _supports_flash_attn_2 = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -569,6 +588,10 @@ class T5GemmaPreTrainedModel(PreTrainedModel):
     _supports_quantized_cache = True
     _supports_static_cache = True
     _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": T5GemmaDecoderLayer,
+        "attentions": T5GemmaAttention,
+    }
 
     def _init_weights(self, module):
         # TODO: support intialization for encoders and decoders separately(?)
@@ -626,10 +649,8 @@ def bidirectional_mask_function(attention_mask: Optional[torch.Tensor]) -> Calla
     """
 
     def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
-        # if attention mask is not given, all attention positions are considered valid.
         if attention_mask is None:
             return torch.ones((), dtype=torch.bool)
-        # attention_mask: [batch_size, kv_len]
         return attention_mask[batch_idx, kv_idx].to(torch.bool)
 
     return inner_mask
@@ -664,6 +685,11 @@ def make_default_2d_attention_mask(
 
 
 class T5GemmaEncoder(T5GemmaPreTrainedModel):
+    _can_record_outputs = {
+        "attentions": T5GemmaSelfAttention,
+        "hidden_states": T5GemmaEncoderLayer,
+    }
+
     def __init__(self, config):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -688,51 +714,38 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    @can_return_tuple
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        # Input embeddings
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        # Cache position: only used for mask construction.
         cache_position = torch.arange(0, inputs_embeds.shape[1], device=inputs_embeds.device)
 
-        # Postional ids.
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        # Regular Attention mask.
         if attention_mask is None:
             attention_mask = make_default_2d_attention_mask(input_ids, inputs_embeds, self.config.pad_token_id)
 
-        # Attention masks
         if not isinstance(self_attn_mask_mapping := attention_mask, dict):
-            # Prepare mask arguments
             mask_kwargs = {
                 "config": self.config,
                 "input_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": None,
+                "position_ids": position_ids,
             }
-            # Create the masks
             self_attn_mask_mapping = {
                 "full_attention": create_causal_mask(
                     **mask_kwargs,
@@ -745,67 +758,44 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
                 ),
             }
 
-        # embed positions
         hidden_states = inputs_embeds
-
-        # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        # normalized
-        # Gemma2 downcasts the below to float16, causing sqrt(3072)=55.4256 to become 55.5
-        # See https://github.com/huggingface/transformers/pull/29402
         normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=hidden_states.dtype)
         hidden_states = hidden_states * normalizer
-
-        # transformer layers
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-
         hidden_states = self.dropout(hidden_states)
 
         for layer_module in self.layers[: self.config.num_hidden_layers]:
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-
-            layer_outputs = layer_module(
+            hidden_states = layer_module(
                 hidden_states,
                 position_embeddings,
                 self_attn_mask_mapping[layer_module.attention_type],
                 position_ids,
-                output_attentions,
-                **flash_attn_kwargs,
+                **kwargs,
             )
-
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attns += (layer_outputs[1],)
-
         hidden_states = self.norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
-
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
-
         return BaseModelOutput(
             last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
         )
 
 
 class T5GemmaDecoder(T5GemmaEncoder):
+    _can_record_outputs = {
+        "attentions": OutputRecorder(T5GemmaSelfAttention, index=1),
+        "cross_attentions": OutputRecorder(T5GemmaCrossAttention, index=1),
+        "hidden_states": T5GemmaDecoderLayer,
+    }
+
     def __init__(self, config):
         super().__init__(config)
-
         self.layers = nn.ModuleList(
             [T5GemmaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
 
-        # Initialize weights and apply final processing
         self.post_init()
 
-    @can_return_tuple
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -814,82 +804,58 @@ class T5GemmaDecoder(T5GemmaEncoder):
         past_key_values: Optional[EncoderDecoderCache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPastAndCrossAttentions:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if self.gradient_checkpointing and self.training and use_cache:
-            logger.warning_once(
-                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
-            )
-            use_cache = False
-
         if encoder_hidden_states is None:
             raise ValueError("`encoder_hidden_states` must be given in decoder")
 
-        # Input embeddings
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        # Caching
         if not self.training and use_cache and past_key_values is None:
             past_key_values = EncoderDecoderCache(
                 self_attention_cache=DynamicCache(),
                 cross_attention_cache=DynamicCache(),
             )
-
-        # Cache positions.
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
 
-        # Position ids.
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        # Regular Attention mask.
         if attention_mask is None and past_key_values is None:
             attention_mask = make_default_2d_attention_mask(input_ids, inputs_embeds, self.config.pad_token_id)
 
-        # Attention masks: Self attention
         if not isinstance(self_attn_mask_mapping := attention_mask, dict):
-            # Prepare mask arguments
             mask_kwargs = {
                 "config": self.config,
                 "input_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values.self_attention_cache if past_key_values is not None else None,
+                "position_ids": position_ids,
             }
-            # Create the masks
             self_attn_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
                 "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
             }
 
-        # Attention masks: Cross attention
         if not isinstance(cross_attn_mask_mapping := encoder_attention_mask, dict):
-            # Prepare mask arguments
             mask_kwargs = {
                 "config": self.config,
                 "input_embeds": encoder_hidden_states,
                 "attention_mask": encoder_attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": None,
+                "position_ids": None,
             }
             cross_attn_mask_mapping = {
                 "full_attention": create_causal_mask(
@@ -898,61 +864,31 @@ class T5GemmaDecoder(T5GemmaEncoder):
                 ),
             }
 
-        # embed positions
         hidden_states = inputs_embeds
-
-        # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        # normalized
-        # Gemma2 downcasts the below to float16, causing sqrt(3072)=55.4256 to become 55.5
-        # See https://github.com/huggingface/transformers/pull/29402
         normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=hidden_states.dtype)
         hidden_states = hidden_states * normalizer
-
-        # transformer layers
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-        all_cross_attns = () if output_attentions else None
-
         hidden_states = self.dropout(hidden_states)
 
         for layer_module in self.layers[: self.config.num_hidden_layers]:
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-
-            layer_outputs = layer_module(
+            hidden_states = layer_module(
                 hidden_states,
                 position_embeddings,
                 self_attn_mask_mapping[layer_module.attention_type],
                 position_ids,
                 past_key_values,
-                output_attentions,
                 use_cache,
                 cache_position,
                 encoder_hidden_states,
                 cross_attn_mask_mapping["full_attention"],
-                **flash_attn_kwargs,
+                **kwargs,
             )
-
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attns += (layer_outputs[1],)
-                all_cross_attns += (layer_outputs[2],)
-
         hidden_states = self.norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
-
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
-
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
-            cross_attentions=all_cross_attns,
         )
 
 
@@ -985,47 +921,36 @@ class T5GemmaModel(T5GemmaPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        # encoder
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        # decoder
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.BoolTensor] = None,
         decoder_position_ids: Optional[torch.LongTensor] = None,
-        # others
         encoder_outputs: Optional[BaseModelOutput] = None,
         past_key_values: Optional[EncoderDecoderCache] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Seq2SeqModelOutput:
         r"""
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, decoder_sequence_length)`, *optional*):
             Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the range `[0,
             config.decoder.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
         """
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-
-        # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
                 inputs_embeds=inputs_embeds,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                **flash_attn_kwargs,
+                **kwargs,
             )
 
         encoder_hidden_states = encoder_outputs.last_hidden_state
 
-        # Decode
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
@@ -1035,16 +960,16 @@ class T5GemmaModel(T5GemmaPreTrainedModel):
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=attention_mask,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             cache_position=cache_position,
-            **flash_attn_kwargs,
+            **kwargs,
         )
 
         return Seq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
             past_key_values=decoder_outputs.past_key_values,
-            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_hidden_states=decoder_outputs.hidden_states
+            if kwargs.get("output_hidden_states", False)
+            else (decoder_outputs.last_hidden_state,),
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
@@ -1078,18 +1003,14 @@ class T5GemmaEncoderModel(T5GemmaPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         encoder_outputs = self.encoder(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            **flash_attn_kwargs,
+            **kwargs,
         )
         return encoder_outputs
 
@@ -1131,26 +1052,21 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        # encoder
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        # decoder
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.BoolTensor] = None,
         decoder_position_ids: Optional[torch.LongTensor] = None,
-        # others
         encoder_outputs: Optional[BaseModelOutput] = None,
         past_key_values: Optional[EncoderDecoderCache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **loss_kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.FloatTensor], Seq2SeqLMOutput]:
         r"""
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, decoder_sequence_length)`, *optional*):
@@ -1187,10 +1103,8 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             cache_position=cache_position,
-            **loss_kwargs,
+            **kwargs,
         )
 
         hidden_states = decoder_outputs.last_hidden_state
@@ -1206,7 +1120,7 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
         loss = None
         if labels is not None:
             # Input has right-shifted so we directly perform masked lm loss
-            loss = self.loss_function(logits, labels, self.vocab_size, **loss_kwargs)
+            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
 
         return Seq2SeqLMOutput(
             loss=loss,
@@ -1259,21 +1173,17 @@ class T5GemmaForSequenceClassification(T5GemmaPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        # encoder
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        # decoder
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.Tensor] = None,
         decoder_position_ids: Optional[torch.LongTensor] = None,
-        # others
         encoder_outputs: Optional[BaseModelOutput] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> SequenceClassifierOutput:
         r"""
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, decoder_sequence_length)`, *optional*):
@@ -1311,8 +1221,7 @@ class T5GemmaForSequenceClassification(T5GemmaPreTrainedModel):
                 inputs_embeds=inputs_embeds,
                 decoder_inputs_embeds=decoder_inputs_embeds,
                 use_cache=False,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
+                **kwargs,
             )
             last_hidden_state = outputs.last_hidden_state
             hidden_states = outputs.decoder_hidden_states
@@ -1323,8 +1232,7 @@ class T5GemmaForSequenceClassification(T5GemmaPreTrainedModel):
                 attention_mask=attention_mask,
                 position_ids=position_ids,
                 inputs_embeds=inputs_embeds,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
+                **kwargs,
             )
             last_hidden_state = outputs.last_hidden_state
             hidden_states = outputs.hidden_states
@@ -1407,21 +1315,17 @@ class T5GemmaForTokenClassification(T5GemmaPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        # encoder
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        # decoder
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.Tensor] = None,
         decoder_position_ids: Optional[torch.LongTensor] = None,
-        # others
         encoder_outputs: Optional[BaseModelOutput] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> TokenClassifierOutput:
         r"""
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, decoder_sequence_length)`, *optional*):
@@ -1459,8 +1363,7 @@ class T5GemmaForTokenClassification(T5GemmaPreTrainedModel):
                 inputs_embeds=inputs_embeds,
                 decoder_inputs_embeds=decoder_inputs_embeds,
                 use_cache=False,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
+                **kwargs,
             )
             last_hidden_state = outputs.last_hidden_state
             hidden_states = outputs.decoder_hidden_states
@@ -1471,8 +1374,7 @@ class T5GemmaForTokenClassification(T5GemmaPreTrainedModel):
                 attention_mask=attention_mask,
                 position_ids=position_ids,
                 inputs_embeds=inputs_embeds,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
+                **kwargs,
             )
             last_hidden_state = outputs.last_hidden_state
             hidden_states = outputs.hidden_states

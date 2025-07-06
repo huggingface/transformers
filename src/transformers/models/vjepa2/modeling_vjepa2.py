@@ -487,6 +487,7 @@ class VJEPA2Encoder(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
+        **kwargs,
     ) -> BaseModelOutput:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -681,6 +682,7 @@ class VJEPA2Predictor(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
+        **kwargs,
     ) -> BaseModelOutput:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -1065,6 +1067,7 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
         skip_predictor: bool = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> VJEPA2WithMaskedInputModelOutput:
         r"""
         pixel_values_videos (`torch.Tensor` with shape `[batch size x num_frames x num_channels x height x width]`, required):
