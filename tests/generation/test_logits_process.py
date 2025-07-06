@@ -408,7 +408,7 @@ class LogitsProcessorTest(unittest.TestCase):
 
         # first batch should keep two tokens, second batch would keep only 1, but due to `min_tokens_to_keep=2` keeps 2.
         self.assertListEqual((filtered_dist != 0.0).to(torch.long).sum(dim=-1).tolist(), [2, 2])
-        
+
     def test_moment_p_warper_different_exponents(self):
         """Test MomentPLogitsWarper with different exponents"""
         input_ids = torch.tensor([[1]])

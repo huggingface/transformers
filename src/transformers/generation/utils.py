@@ -1306,7 +1306,7 @@ class GenerationMixin(ContinuousMixin):
                     MomentPLogitsWarper(
                         exponent=generation_config.moment_p_exponent,
                         alpha=generation_config.moment_p_alpha,
-                        min_tokens_to_keep=min_tokens_to_keep
+                        min_tokens_to_keep=min_tokens_to_keep,
                     )
                 )
             if generation_config.typical_p is not None and generation_config.typical_p < 1.0:

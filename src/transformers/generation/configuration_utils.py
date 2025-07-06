@@ -676,7 +676,9 @@ class GenerationConfig(PushToHubMixin):
                 )
             if self.moment_p_exponent is not None and self.moment_p_exponent != 2.0:
                 warnings.warn(
-                    greedy_wrong_parameter_msg.format(flag_name="moment_p_exponent", flag_value=self.moment_p_exponent),
+                    greedy_wrong_parameter_msg.format(
+                        flag_name="moment_p_exponent", flag_value=self.moment_p_exponent
+                    ),
                     UserWarning,
                 )
             if self.moment_p_alpha is not None and self.moment_p_alpha != 1.0:
