@@ -1539,11 +1539,8 @@ class ProcessorMixin(PushToHubMixin):
                         for key in ["image", "url", "path", "base64"]
                         if key in vision_info and vision_info["type"] == "image"
                     ]
-                    video_infos = [
-                        {
-                            "source": key,
-                            "data": vision_info[key],
-                        }
+                    video_fnames = [
+                        vision_info[key]
                         for vision_info in visuals
                         for key in ["video", "url", "path"]
                         if key in vision_info and vision_info["type"] == "video"
@@ -1557,39 +1554,39 @@ class ProcessorMixin(PushToHubMixin):
                         for fname in audio_fnames:
                             batch_audios.append(load_audio(fname, sampling_rate=mm_load_kwargs["sampling_rate"]))
                     else:
-                        for video_info in video_infos:
-                            if video_info['source'] in ["path", "url"]:
+                        for fname in video_fnames:
+                            if fname in ["path", "url"]:
                                 # If the video is a file path or URL, we load the audio from the video
                                 # and append it to the batch_audios list
-                                batch_audios.append(load_audio(video_info['data'], sampling_rate=mm_load_kwargs["sampling_rate"]))
-
-                    for video_info in video_infos:
-                        if video_info['source'] == "video":
-                            if isinstance(video_info['data'], (list, tuple)) and isinstance(video_info['data'][0], str):
-                                # Case 1(a): Video is provided as a list of image file names
-                                video = [np.array(load_image(image_fname)) for image_fname in video_info['data']]
-                                video = np.stack(video)
-                                metadata = None
-                                logger.warning(
-                                    "When loading the video from list of images, we cannot infer metadata such as `fps` or `duration`. "
-                                    "If your model requires metadata during processing, please load the whole video and let the processor sample frames instead."
-                                )
-                            elif isinstance(video_info['data'], dict):
-                                # Case 1(b): Video is provided as a dictionary with frames, fps, duration, metadata etc.
-                                video, metadata = self._validate_video_content(video_info['data'])
+                                batch_audios.append(load_audio(fname, sampling_rate=mm_load_kwargs["sampling_rate"]))
                             else:
                                 raise ValueError(
-                                    f"Expected video data to be a list of image file names, a dictionary with 'frames' key, or a string (file path or URL), but got {type(video_info['data'])}."
+                                    f"To load audio from video, you must provide video as a file path or URL, but got {fname}."
                                 )
-                        else:
-                            # Case 2: Video is provided as a file path or URL
-                            if not isinstance(video_info['data'], str):
-                                raise ValueError(
-                                    f"Expected video data to be a string (file path or URL), but got {type(video_info['data'])}."
-                                )
+
+                    for fname in video_fnames:
+                        if isinstance(fname, (list, tuple)) and isinstance(fname[0], str):
+                            # Case 1(a): Video is provided as a list of image file names
+                            video = [np.array(load_image(image_fname)) for image_fname in fname]
+                            video = np.stack(video)
+                            metadata = None
+                            logger.warning(
+                                "When loading the video from list of images, we cannot infer metadata such as `fps` or `duration`. "
+                                "If your model requires metadata during processing, please load the whole video and let the processor sample frames instead."
+                            )
+                        elif isinstance(fname, dict):
+                            # Case 1(b): Video is provided as a dictionary with frames, fps, duration, metadata etc.
+                            video, metadata = self._validate_video_content(fname)
+                        elif isinstance(fname, str):
+                            # Case 1(c): Video is provided as a single file path or URL
                             video, metadata = load_video(
-                                video_info['data'],
+                                fname,
                                 backend=mm_load_kwargs["video_load_backend"],
+                            )
+                        else:
+                            raise ValueError(
+                                f"Expected video data to be a file path or URL or "
+                                f"a list of image file names or a dictionary with 'frames' key and 'metadata' key, but got {type(fname)}."
                             )
                         videos.append(video)
                         video_metadata.append(metadata)
