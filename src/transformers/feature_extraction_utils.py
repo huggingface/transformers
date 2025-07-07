@@ -20,7 +20,7 @@ import json
 import os
 import warnings
 from collections import UserDict
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, TypeVar, Union
 
 import numpy as np
 
@@ -54,6 +54,9 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 PreTrainedFeatureExtractor = Union["SequenceFeatureExtractor"]  # noqa: F821
+
+# type hinting: specifying the type of feature extractor class that inherits from FeatureExtractionMixin
+SpecificFeatureExtractorType = TypeVar("SpecificFeatureExtractorType", bound="FeatureExtractionMixin")
 
 
 class BatchFeature(UserDict):
@@ -270,7 +273,7 @@ class FeatureExtractionMixin(PushToHubMixin):
 
     @classmethod
     def from_pretrained(
-        cls,
+        cls: type[SpecificFeatureExtractorType],
         pretrained_model_name_or_path: Union[str, os.PathLike],
         cache_dir: Optional[Union[str, os.PathLike]] = None,
         force_download: bool = False,
@@ -278,7 +281,7 @@ class FeatureExtractionMixin(PushToHubMixin):
         token: Optional[Union[str, bool]] = None,
         revision: str = "main",
         **kwargs,
-    ):
+    ) -> SpecificFeatureExtractorType:
         r"""
         Instantiate a type of [`~feature_extraction_utils.FeatureExtractionMixin`] from a feature extractor, *e.g.* a
         derived class of [`SequenceFeatureExtractor`].
