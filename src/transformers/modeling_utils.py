@@ -2092,7 +2092,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                         f"Unsupported tensor parallel style {v}. Supported styles are {ALL_PARALLEL_STYLES}"
                     )
                 
-        if hasattr(self.config, "attach_module_hooks") and self.config.attach_module_hooks:
+        if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
             # loop over named modules and attach hooks. this is necessary when a module doesn't have parameters and thus we never hit
             device_mesh = self.config.device_mesh
             for name, module in self.named_modules():
