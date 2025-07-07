@@ -16,6 +16,7 @@ from typing import List, Optional, Tuple
 
 import torch
 from torch import nn
+from torch.nn import functional as F
 
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
