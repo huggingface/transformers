@@ -246,7 +246,7 @@ class Aimv2TextModelTester:
         intermediate_size=37,
         dropout=0.1,
         attention_dropout=0.1,
-        max_position_embeddings=512,
+        max_position_embeddings=25,
     ):
         self.parent = parent
         self.batch_size = batch_size
