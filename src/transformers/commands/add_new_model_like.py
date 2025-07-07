@@ -659,7 +659,7 @@ def get_model_files(model_type: str, frameworks: Optional[list[str]] = None) -> 
     return {"doc_file": doc_file, "model_files": model_files, "module_name": module_name, "test_files": test_files}
 
 
-_re_checkpoint_for_doc = re.compile(r"^_CHECKPOINT_FOR_DOC\s+=\s+(\S*)\s*$", flags=re.MULTILINE)
+_re_checkpoint_in_config = re.compile(r"\[(.+?)\]\((https://huggingface\.co/.+?)\)")
 
 
 def find_base_model_checkpoint(
@@ -680,13 +680,14 @@ def find_base_model_checkpoint(
         model_files = get_model_files(model_type)
     module_files = model_files["model_files"]
     for fname in module_files:
-        if "modeling" not in str(fname):
+        # After the @auto_docstring refactor, we expect the checkpoint to be in the configuration file's docstring
+        if "configuration" not in str(fname):
             continue
 
         with open(fname, "r", encoding="utf-8") as f:
             content = f.read()
-            if _re_checkpoint_for_doc.search(content) is not None:
-                checkpoint = _re_checkpoint_for_doc.search(content).groups()[0]
+            if _re_checkpoint_in_config.search(content) is not None:
+                checkpoint = _re_checkpoint_in_config.search(content).groups()[0]
                 # Remove quotes
                 checkpoint = checkpoint.replace('"', "")
                 checkpoint = checkpoint.replace("'", "")

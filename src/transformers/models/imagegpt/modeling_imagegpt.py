@@ -26,6 +26,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -401,7 +402,7 @@ class ImageGPTMLP(nn.Module):
         return hidden_states
 
 
-class ImageGPTBlock(nn.Module):
+class ImageGPTBlock(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         hidden_size = config.hidden_size
@@ -719,29 +720,16 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                outputs = self._gradient_checkpointing_func(
-                    block.__call__,
-                    hidden_states,
-                    None,
-                    attention_mask,
-                    head_mask[i],
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    use_cache,
-                    output_attentions,
-                )
-            else:
-                outputs = block(
-                    hidden_states,
-                    layer_past=layer_past,
-                    attention_mask=attention_mask,
-                    head_mask=head_mask[i],
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
-                    use_cache=use_cache,
-                    output_attentions=output_attentions,
-                )
+            outputs = block(
+                hidden_states,
+                layer_past,
+                attention_mask,
+                head_mask[i],
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                encoder_attention_mask=encoder_attention_mask,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+            )
 
             hidden_states = outputs[0]
             if use_cache is True:

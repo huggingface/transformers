@@ -27,6 +27,7 @@ from torch.nn import functional as F
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -366,7 +367,7 @@ class BloomMLP(nn.Module):
         return output
 
 
-class BloomBlock(nn.Module):
+class BloomBlock(GradientCheckpointingLayer):
     def __init__(self, config: BloomConfig, layer_idx: Optional[int] = None):
         super().__init__()
         hidden_size = config.hidden_size
@@ -605,29 +606,16 @@ class BloomModel(BloomPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                outputs = self._gradient_checkpointing_func(
-                    block.__call__,
-                    hidden_states,
-                    alibi,
-                    causal_mask,
-                    past_key_values,
-                    head_mask[i],
-                    use_cache,
-                    output_attentions,
-                    cache_position,
-                )
-            else:
-                outputs = block(
-                    hidden_states,
-                    layer_past=past_key_values,
-                    attention_mask=causal_mask,
-                    head_mask=head_mask[i],
-                    use_cache=use_cache,
-                    output_attentions=output_attentions,
-                    alibi=alibi,
-                    cache_position=cache_position,
-                )
+            outputs = block(
+                hidden_states,
+                layer_past=past_key_values,
+                attention_mask=causal_mask,
+                head_mask=head_mask[i],
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                alibi=alibi,
+                cache_position=cache_position,
+            )
 
             hidden_states = outputs[0]
             if use_cache:

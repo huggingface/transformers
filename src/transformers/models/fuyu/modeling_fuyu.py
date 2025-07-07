@@ -21,11 +21,10 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...generation import GenerationMixin
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...models.auto.modeling_auto import AutoModel
-from ...utils import LossKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import auto_docstring, can_return_tuple, logging
 from .configuration_fuyu import FuyuConfig
 
 
@@ -56,9 +55,6 @@ class FuyuPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
-
 @auto_docstring(
     custom_intro="""
     The Fuyu model which consists of a vision backbone and a language model, without a language modeling head.
@@ -85,6 +81,12 @@ class FuyuModel(FuyuPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
+
+    def set_decoder(self, decoder):
+        self.language_model = decoder
+
+    def get_decoder(self):
+        return self.language_model
 
     def gather_continuous_embeddings(
         self,
@@ -200,14 +202,22 @@ class FuyuModel(FuyuPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
-            if image_patches is not None and past_key_values is None:
-                patch_embeddings = self.get_image_features(image_patches)
-                patch_embeddings = torch.cat(patch_embeddings, dim=0)
 
-                special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
-                special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-                patch_embeddings = patch_embeddings.to(inputs_embeds.device, inputs_embeds.dtype)
-                inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, patch_embeddings)
+        if image_patches is not None:
+            patch_embeddings = self.get_image_features(image_patches)
+            patch_embeddings = torch.cat(patch_embeddings, dim=0)
+
+            if input_ids is None:
+                special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+                special_image_mask = special_image_mask.all(-1)
+            else:
+                special_image_mask = input_ids == self.config.image_token_id
+
+            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+            patch_embeddings = patch_embeddings.to(inputs_embeds.device, inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, patch_embeddings)
 
         outputs = self.language_model(
             inputs_embeds=inputs_embeds,
@@ -284,12 +294,12 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         image_patches (`torch.FloatTensor` of shape `(batch_size, num_total_patches, patch_size_ x patch_size x num_channels)`, *optional*):
             Image patches to be used as continuous embeddings. The patches are flattened and then projected to the
             hidden size of the model.
+        image_patches_indices (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Tensor of indices of the image patches in the input_ids tensor.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.text_config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.text_config.vocab_size]`.
-        image_patches_indices (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Tensor of indices of the image patches in the input_ids tensor.
 
         Examples:
 

@@ -24,6 +24,7 @@ from datasets import Audio, load_dataset
 
 from transformers import AutoProcessor, EncodecConfig
 from transformers.testing_utils import (
+    Expectations,
     is_torch_available,
     require_torch,
     slow,
@@ -310,12 +311,13 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def test_feed_forward_chunking(self):
         (original_config, inputs_dict) = self.model_tester.prepare_config_and_inputs_for_common()
+        # original_config.norm_type = "time_group_norm"
         for model_class in self.all_model_classes:
             torch.manual_seed(0)
             config = copy.deepcopy(original_config)
             config.chunk_length_s = None
             config.overlap = None
-            config.sampling_rate = 10
+            config.sampling_rate = 20
 
             model = model_class(config)
             model.to(torch_device)
@@ -326,9 +328,9 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             hidden_states_no_chunk = model(**inputs)[1]
 
             torch.manual_seed(0)
-            config.chunk_length_s = 1
+            config.chunk_length_s = 2
             config.overlap = 0
-            config.sampling_rate = 10
+            config.sampling_rate = 20
 
             model = model_class(config)
             model.to(torch_device)
@@ -458,10 +460,21 @@ class EncodecIntegrationTest(unittest.TestCase):
             "1.5": 0.0025,
             "24.0": 0.0015,
         }
-        expected_codesums = {
-            "1.5": [371955],
-            "24.0": [6659962],
-        }
+
+        expectations = Expectations(
+            {
+                (None, None): {
+                    "1.5": [371955],
+                    "24.0": [6659962],
+                },
+                ("cuda", 8): {
+                    "1.5": [371955],
+                    "24.0": [6655079],
+                },
+            }
+        )
+        expected_codesums = expectations.get_expectation()
+
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         model_id = "facebook/encodec_24khz"
 
@@ -512,10 +525,21 @@ class EncodecIntegrationTest(unittest.TestCase):
             "3.0": 0.001,
             "24.0": 0.0005,
         }
-        expected_codesums = {
-            "3.0": [144259, 146765, 156435, 176871, 161971],
-            "24.0": [1568553, 1294948, 1306190, 1464747, 1663150],
-        }
+
+        expectations = Expectations(
+            {
+                (None, None): {
+                    "3.0": [144259, 146765, 156435, 176871, 161971],
+                    "24.0": [1568553, 1294948, 1306190, 1464747, 1663150],
+                },
+                ("cuda", 8): {
+                    "3.0": [144259, 146765, 156205, 176871, 161971],
+                    "24.0": [1566878, 1300459, 1310165, 1464747, 1663150],
+                },
+            }
+        )
+        expected_codesums = expectations.get_expectation()
+
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         model_id = "facebook/encodec_48khz"
 

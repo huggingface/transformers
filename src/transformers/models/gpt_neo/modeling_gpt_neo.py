@@ -27,6 +27,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter, _prepare_4d_causal_attention_mask
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -431,7 +432,7 @@ class GPTNeoMLP(nn.Module):
         return hidden_states
 
 
-class GPTNeoBlock(nn.Module):
+class GPTNeoBlock(GradientCheckpointingLayer):
     def __init__(self, config, layer_id=None):
         super().__init__()
         hidden_size = config.hidden_size
@@ -635,27 +636,15 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                outputs = self._gradient_checkpointing_func(
-                    block.__call__,
-                    hidden_states,
-                    None,
-                    causal_mask,
-                    head_mask[i],
-                    use_cache,
-                    output_attentions,
-                    cache_position,
-                )
-            else:
-                outputs = block(
-                    hidden_states,
-                    layer_past=past_key_values,
-                    attention_mask=causal_mask,
-                    head_mask=head_mask[i],
-                    use_cache=use_cache,
-                    output_attentions=output_attentions,
-                    cache_position=cache_position,
-                )
+            outputs = block(
+                hidden_states,
+                layer_past=past_key_values,
+                attention_mask=causal_mask,
+                head_mask=head_mask[i],
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                cache_position=cache_position,
+            )
 
             hidden_states = outputs[0]
             if use_cache:

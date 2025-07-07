@@ -147,32 +147,34 @@ def arange_like(x, dim: int) -> torch.Tensor:
 
 
 @dataclass
-class KeypointMatchingOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for outputs of keypoint matching models. Due to the nature of keypoint detection and matching, the number
     of keypoints is not fixed and can vary from image to image, which makes batching non-trivial. In the batch of
     images, the maximum number of matches is set as the dimension of the matches and matching scores. The mask tensor is
     used to indicate which values in the keypoints, matches and matching_scores tensors are keypoint matching
     information.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
-            Loss computed during training.
-        mask (`torch.IntTensor` of shape `(batch_size, num_keypoints)`):
-            Mask indicating which values in matches and matching_scores are keypoint matching information.
-        matches (`torch.FloatTensor` of shape `(batch_size, 2, num_matches)`):
-            Index of keypoint matched in the other image.
-        matching_scores (`torch.FloatTensor` of shape `(batch_size, 2, num_matches)`):
-            Scores of predicted matches.
-        keypoints (`torch.FloatTensor` of shape `(batch_size, num_keypoints, 2)`):
-            Absolute (x, y) coordinates of predicted keypoints in a given image.
-        hidden_states (`tuple[torch.FloatTensor, ...]`, *optional*):
-            Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(batch_size, 2, num_channels,
-            num_keypoints)`, returned when `output_hidden_states=True` is passed or when
-            `config.output_hidden_states=True`)
-        attentions (`tuple[torch.FloatTensor, ...]`, *optional*):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, 2, num_heads, num_keypoints,
-            num_keypoints)`, returned when `output_attentions=True` is passed or when `config.output_attentions=True`)
+    """
+)
+class KeypointMatchingOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
+        Loss computed during training.
+    matches (`torch.FloatTensor` of shape `(batch_size, 2, num_matches)`):
+        Index of keypoint matched in the other image.
+    matching_scores (`torch.FloatTensor` of shape `(batch_size, 2, num_matches)`):
+        Scores of predicted matches.
+    keypoints (`torch.FloatTensor` of shape `(batch_size, num_keypoints, 2)`):
+        Absolute (x, y) coordinates of predicted keypoints in a given image.
+    mask (`torch.IntTensor` of shape `(batch_size, num_keypoints)`):
+        Mask indicating which values in matches and matching_scores are keypoint matching information.
+    hidden_states (`tuple[torch.FloatTensor, ...]`, *optional*):
+        Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(batch_size, 2, num_channels,
+        num_keypoints)`, returned when `output_hidden_states=True` is passed or when
+        `config.output_hidden_states=True`)
+    attentions (`tuple[torch.FloatTensor, ...]`, *optional*):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, 2, num_heads, num_keypoints,
+        num_keypoints)`, returned when `output_attentions=True` is passed or when `config.output_attentions=True`)
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -549,17 +551,18 @@ class SuperGluePreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.Conv1d)):
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
+        elif isinstance(module, nn.BatchNorm1d):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, SuperGlueMultiLayerPerceptron):
-            nn.init.constant_(module.linear.bias, 0.0)
+
+        if hasattr(module, "bin_score"):
+            module.bin_score.data.fill_(1.0)
 
 
 @auto_docstring(
@@ -723,8 +726,8 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         matches0 = torch.where(valid0, indices0, indices0.new_tensor(-1))
         matches1 = torch.where(valid1, indices1, indices1.new_tensor(-1))
 
-        matches = torch.cat([matches0, matches1]).reshape(batch_size, 2, -1)
-        matching_scores = torch.cat([matching_scores0, matching_scores1]).reshape(batch_size, 2, -1)
+        matches = torch.cat([matches0, matches1], dim=1).reshape(batch_size, 2, -1)
+        matching_scores = torch.cat([matching_scores0, matching_scores1], dim=1).reshape(batch_size, 2, -1)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + encoded_keypoints[1]

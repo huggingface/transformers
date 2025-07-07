@@ -31,7 +31,7 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, Causal
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
 from .configuration_mllama import MllamaConfig, MllamaTextConfig, MllamaVisionConfig
 
 
@@ -197,7 +197,7 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: float,
     dropout: float = 0.0,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
@@ -1459,9 +1459,6 @@ class MllamaTextModel(MllamaPreTrainedModel):
         )
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
-
 @auto_docstring(
     custom_intro="""
     The Mllama Text Model with a language modeling head on top.
@@ -1518,7 +1515,7 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
         cross_attention_states (`torch.FloatTensor`, *optional*):
@@ -1531,10 +1528,6 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
             For each text token (in seq_length):
             - 1 indicates the token **should attend** to the corresponding image tile
             - 0 indicates the token **should not attend** to the corresponding image tile
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         full_text_row_masked_out_mask (`tuple[torch.Tensor, torch.Tensor]`, *optional*):
             A tuple containing two tensors that mask out rows in the cross-attention mechanism:
             - The first tensor has shape `(batch_size, 1, seq_length, 1)` and contains values of 0 or 1.
@@ -1544,6 +1537,10 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
               the forward pass of cross-attention layers.
             This mask is derived from the cross_attention_mask and is used to handle cases where a text token
             should not attend to any image token.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 
@@ -1640,6 +1637,12 @@ class MllamaModel(MllamaPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
+
+    def set_decoder(self, decoder):
+        self.language_model = decoder
+
+    def get_decoder(self):
+        return self.language_model
 
     @can_return_tuple
     @auto_docstring
@@ -1792,10 +1795,10 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
         self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
-        self.model = decoder
+        self.model.set_decoder(decoder)
 
     def get_decoder(self):
-        return self.model
+        return self.model.get_decoder()
 
     # Make modules available throught conditional class for BC
     @property
@@ -1827,7 +1830,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
         aspect_ratio_mask (`torch.Tensor` of shape `(batch_size, max_num_images, max_num_tiles)`, *optional*):

@@ -26,12 +26,15 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from transformers.utils.generic import check_model_inputs
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     MoeCausalLMOutputWithPast,
@@ -43,7 +46,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from .configuration_minimax import MiniMaxConfig
 
 
@@ -320,7 +323,7 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: float,
     dropout: float = 0.0,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
@@ -468,10 +471,10 @@ class MiniMaxSparseMoeBlock(nn.Module):
         # this will be used to easily index which expert is going to be sollicitated
         expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
 
-        expert_hitted = (expert_mask.sum(dim=(-1, -2)) > 0).nonzero(as_tuple=True)[0].tolist()
+        expert_hitted = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
         for expert_idx in expert_hitted:
             expert_layer = self.experts[expert_idx]
-            idx, top_x = torch.where(expert_mask[expert_idx])
+            idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
             # Index the correct hidden states and compute the expert hidden state for
             # the current expert. We need to make sure to multiply the output hidden
             # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
@@ -485,7 +488,7 @@ class MiniMaxSparseMoeBlock(nn.Module):
         return final_hidden_states, router_logits
 
 
-class MiniMaxDecoderLayer(nn.Module):
+class MiniMaxDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: MiniMaxConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -596,6 +599,10 @@ class MiniMaxPreTrainedModel(PreTrainedModel):
     _supports_quantized_cache = False
     _supports_static_cache = False
     _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": MiniMaxDecoderLayer,
+        "attentions": MiniMaxAttention,
+    }
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -669,7 +676,7 @@ class MiniMaxModel(MiniMaxPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    @can_return_tuple
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -683,7 +690,7 @@ class MiniMaxModel(MiniMaxPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_router_logits = (
@@ -729,6 +736,7 @@ class MiniMaxModel(MiniMaxPreTrainedModel):
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
+            position_ids=position_ids,
         )
 
         hidden_states = inputs_embeds
@@ -761,7 +769,7 @@ class MiniMaxModel(MiniMaxPreTrainedModel):
                 output_router_logits=output_router_logits,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                **flash_attn_kwargs,
+                **kwargs,
             )
 
             hidden_states = layer_outputs[0]
@@ -785,9 +793,6 @@ class MiniMaxModel(MiniMaxPreTrainedModel):
             attentions=all_self_attns,
             router_logits=all_router_logits,
         )
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 def load_balancing_loss_func(
@@ -924,7 +929,7 @@ class MiniMaxForCausalLM(MiniMaxPreTrainedModel, GenerationMixin):
         output_router_logits: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> MoeCausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1045,8 +1050,7 @@ class MiniMaxForSequenceClassification(MiniMaxPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> SequenceClassifierOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1062,8 +1066,7 @@ class MiniMaxForSequenceClassification(MiniMaxPreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            **kwargs,
         )
         hidden_states = transformer_outputs.last_hidden_state
         logits = self.score(hidden_states)
@@ -1139,8 +1142,7 @@ class MiniMaxForTokenClassification(MiniMaxPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> TokenClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1156,8 +1158,7 @@ class MiniMaxForTokenClassification(MiniMaxPreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            **kwargs,
         )
         sequence_output = outputs.last_hidden_state
         sequence_output = self.dropout(sequence_output)
@@ -1204,29 +1205,15 @@ class MiniMaxForQuestionAnswering(MiniMaxPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         **kwargs,
     ) -> QuestionAnsweringModelOutput:
-        r"""
-        start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        """
-
         outputs: BaseModelOutputWithPast = self.model(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            **kwargs,
         )
 
         sequence_output = outputs.last_hidden_state

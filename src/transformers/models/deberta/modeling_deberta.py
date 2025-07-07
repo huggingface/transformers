@@ -22,6 +22,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
@@ -492,7 +493,7 @@ class DebertaOutput(nn.Module):
         return hidden_states
 
 
-class DebertaLayer(nn.Module):
+class DebertaLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.attention = DebertaAttention(config)
@@ -580,25 +581,14 @@ class DebertaEncoder(nn.Module):
 
         rel_embeddings = self.get_rel_embedding()
         for i, layer_module in enumerate(self.layer):
-            if self.gradient_checkpointing and self.training:
-                hidden_states, att_m = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    next_kv,
-                    attention_mask,
-                    query_states,
-                    relative_pos,
-                    rel_embeddings,
-                    output_attentions,
-                )
-            else:
-                hidden_states, att_m = layer_module(
-                    next_kv,
-                    attention_mask,
-                    query_states=query_states,
-                    relative_pos=relative_pos,
-                    rel_embeddings=rel_embeddings,
-                    output_attentions=output_attentions,
-                )
+            hidden_states, att_m = layer_module(
+                next_kv,
+                attention_mask,
+                query_states=query_states,
+                relative_pos=relative_pos,
+                rel_embeddings=rel_embeddings,
+                output_attentions=output_attentions,
+            )
 
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)

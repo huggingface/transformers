@@ -20,13 +20,8 @@ import unittest
 import numpy as np
 
 from transformers import AutoProcessor, AutoTokenizer, JanusProcessor
-from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
-
-
-if is_vision_available():
-    pass
 
 
 class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):

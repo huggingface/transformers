@@ -15,7 +15,7 @@
 """PyTorch Falcon model."""
 
 import math
-from typing import TYPE_CHECKING, Optional, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -30,6 +30,7 @@ from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
 )
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -45,9 +46,6 @@ from ...utils import (
 )
 from .configuration_falcon import FalconConfig
 
-
-if TYPE_CHECKING:
-    from ...configuration_utils import PretrainedConfig
 
 if is_flash_attn_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
@@ -556,7 +554,7 @@ FALCON_ATTENTION_CLASSES = {
 }
 
 
-class FalconDecoderLayer(nn.Module):
+class FalconDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: FalconConfig, layer_idx=None):
         super().__init__()
         hidden_size = config.hidden_size
@@ -687,7 +685,7 @@ class FalconPreTrainedModel(PreTrainedModel):
 
     # Adapted from transformers.modeling_utils.PreTrainedModel._check_and_enable_sdpa
     @classmethod
-    def _check_and_enable_sdpa(cls, config, hard_check_only: bool = False) -> "PretrainedConfig":
+    def _check_and_enable_sdpa(cls, config, hard_check_only: bool = False):
         _is_bettertransformer = getattr(cls, "use_bettertransformer", False)
         if _is_bettertransformer:
             return config
@@ -836,33 +834,18 @@ class FalconModel(FalconPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                outputs = self._gradient_checkpointing_func(
-                    block.__call__,
-                    hidden_states,
-                    alibi,
-                    causal_mask,
-                    position_ids,
-                    head_mask[i],
-                    past_key_values,
-                    use_cache,
-                    output_attentions,
-                    cache_position,
-                    position_embeddings,
-                )
-            else:
-                outputs = block(
-                    hidden_states,
-                    layer_past=past_key_values,
-                    attention_mask=causal_mask,
-                    position_ids=position_ids,
-                    head_mask=head_mask[i],
-                    use_cache=use_cache,
-                    output_attentions=output_attentions,
-                    alibi=alibi,
-                    cache_position=cache_position,
-                    position_embeddings=position_embeddings,
-                )
+            outputs = block(
+                hidden_states,
+                layer_past=past_key_values,
+                attention_mask=causal_mask,
+                position_ids=position_ids,
+                head_mask=head_mask[i],
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                alibi=alibi,
+                cache_position=cache_position,
+                position_embeddings=position_embeddings,
+            )
 
             hidden_states = outputs[0]
             if use_cache is True:

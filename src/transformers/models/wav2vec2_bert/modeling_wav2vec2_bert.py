@@ -17,6 +17,7 @@ from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     CausalLMOutput,
@@ -394,7 +395,7 @@ class Wav2Vec2BertSelfAttention(nn.Module):
         return scores
 
 
-class Wav2Vec2BertEncoderLayer(nn.Module):
+class Wav2Vec2BertEncoderLayer(GradientCheckpointingLayer):
     """Conformer block based on https://huggingface.co/papers/2005.08100."""
 
     def __init__(self, config):
@@ -520,23 +521,13 @@ class Wav2Vec2BertEncoder(nn.Module):
             skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        layer.__call__,
-                        hidden_states,
-                        attention_mask,
-                        relative_position_embeddings,
-                        output_attentions,
-                        conv_attention_mask,
-                    )
-                else:
-                    layer_outputs = layer(
-                        hidden_states,
-                        attention_mask=attention_mask,
-                        relative_position_embeddings=relative_position_embeddings,
-                        output_attentions=output_attentions,
-                        conv_attention_mask=conv_attention_mask,
-                    )
+                layer_outputs = layer(
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    relative_position_embeddings=relative_position_embeddings,
+                    output_attentions=output_attentions,
+                    conv_attention_mask=conv_attention_mask,
+                )
                 hidden_states = layer_outputs[0]
 
             if skip_the_layer:

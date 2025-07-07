@@ -25,7 +25,7 @@ from ...activations import ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, logging
+from ...utils import TransformersKwargs, logging
 from ..llama.modeling_llama import (
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
@@ -99,9 +99,10 @@ class Qwen3MoeSparseMoeBlock(nn.Module):
         expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
 
         # Loop over all available experts in the model and perform the computation on each expert
-        for expert_idx in range(self.num_experts):
+        expert_hitted = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+        for expert_idx in expert_hitted:
             expert_layer = self.experts[expert_idx]
-            idx, top_x = torch.where(expert_mask[expert_idx])
+            idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
 
             # Index the correct hidden states and compute the expert hidden state for
             # the current expert. We need to make sure to multiply the output hidden
@@ -224,9 +225,6 @@ class Qwen3MoeModel(MixtralModel):
         )
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
-
 class Qwen3MoeForCausalLM(MixtralForCausalLM):
     def __init__(self, config):
         super().__init__(config)
@@ -247,7 +245,7 @@ class Qwen3MoeForCausalLM(MixtralForCausalLM):
         output_router_logits: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> MoeCausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

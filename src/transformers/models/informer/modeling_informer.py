@@ -34,6 +34,7 @@ from ...modeling_attn_mask_utils import (
     _prepare_4d_causal_attention_mask_for_sdpa,
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -744,7 +745,7 @@ class InformerProbSparseAttention(nn.Module):
 
 
 # source: https://github.com/zhouhaoyi/Informer2020/blob/main/models/encoder.py
-class InformerConvLayer(nn.Module):
+class InformerConvLayer(GradientCheckpointingLayer):
     def __init__(self, c_in):
         super().__init__()
         self.downConv = nn.Conv1d(
@@ -767,7 +768,7 @@ class InformerConvLayer(nn.Module):
         return x
 
 
-class InformerEncoderLayer(nn.Module):
+class InformerEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: InformerConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -845,7 +846,7 @@ class InformerEncoderLayer(nn.Module):
         return outputs
 
 
-class InformerDecoderLayer(nn.Module):
+class InformerDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: InformerConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.embed_dim = config.d_model
@@ -1086,27 +1087,15 @@ class InformerEncoder(InformerPreTrainedModel):
             if to_drop:
                 layer_outputs = (None, None)
             else:
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        encoder_layer.__call__,
-                        hidden_states,
-                        attention_mask,
-                        (head_mask[idx] if head_mask is not None else None),
-                        output_attentions,
-                    )
-                    if conv_layer is not None:
-                        output = self._gradient_checkpointing_func(conv_layer, layer_outputs[0])
-                        layer_outputs = (output,) + layer_outputs[1:]
-                else:
-                    layer_outputs = encoder_layer(
-                        hidden_states,
-                        attention_mask,
-                        layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                        output_attentions=output_attentions,
-                    )
-                    if conv_layer is not None:
-                        output = conv_layer(layer_outputs[0])
-                        layer_outputs = (output,) + layer_outputs[1:]
+                layer_outputs = encoder_layer(
+                    hidden_states,
+                    attention_mask,
+                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                    output_attentions=output_attentions,
+                )
+                if conv_layer is not None:
+                    output = conv_layer(layer_outputs[0])
+                    layer_outputs = (output,) + layer_outputs[1:]
 
                 hidden_states = layer_outputs[0]
 
@@ -1299,35 +1288,18 @@ class InformerDecoder(InformerPreTrainedModel):
                 if dropout_probability < self.layerdrop:
                     continue
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    head_mask[idx] if head_mask is not None else None,
-                    cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
-                    None,
-                    output_attentions,
-                    use_cache,
-                    cache_position,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=attention_mask,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                    cross_attn_layer_head_mask=(
-                        cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
-                    ),
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                encoder_attention_mask=encoder_attention_mask,
+                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                cross_attn_layer_head_mask=(cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+            )
             hidden_states = layer_outputs[0]
 
             if use_cache:
@@ -1461,8 +1433,14 @@ class InformerModel(InformerPreTrainedModel):
         )
 
         # static features
-        log_abs_loc = loc.abs().log1p() if self.config.input_size == 1 else loc.squeeze(1).abs().log1p()
-        log_scale = scale.log() if self.config.input_size == 1 else scale.squeeze(1).log()
+        if loc.ndim == 3:
+            squeezed_loc = loc.squeeze(1)
+            squeezed_scale = scale.squeeze(1)
+        else:
+            squeezed_loc = loc
+            squeezed_scale = scale
+        log_abs_loc = squeezed_loc.abs().log1p()
+        log_scale = squeezed_scale.log()
         static_feat = torch.cat((log_abs_loc, log_scale), dim=1)
 
         if static_real_features is not None:
