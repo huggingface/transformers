@@ -104,14 +104,8 @@ class Ernie4_5IntegrationTest(unittest.TestCase):
         )
 
         prompt = "Hey, are you conscious? Can you talk to me?"
-        messages = [
-            {"role": "user", "content": prompt}
-        ]
-        text = tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True
-        )
+        messages = [{"role": "user", "content": prompt}]
+        text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         model_inputs = tokenizer([text], add_special_tokens=False, return_tensors="pt").to(model.device)
 
         generated_ids = model.generate(
