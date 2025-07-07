@@ -1164,7 +1164,7 @@ def parse_commit_message(commit_message: str) -> dict[str, bool]:
 JOB_TO_TEST_FILE = {
     "tests_torch": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
     "tests_generate": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
-    "tests_tokenization": r"tests/(models/.*/test_tokenization.*|test_tokenization_mistral_common\.py)",
+    "tests_tokenization": r"tests/(?:models/.*/test_tokenization.*|test_tokenization_mistral_common\.py)",
     "tests_processors": r"tests/models/.*/test_(?!(?:modeling_|tokenization_)).*",  # takes feature extractors, image processors, processors
     "examples_torch": r"examples/pytorch/.*test_.*",
     "tests_exotic_models": r"tests/models/.*(?=layoutlmv|nat|deta|udop|nougat).*",
@@ -1180,6 +1180,7 @@ JOB_TO_TEST_FILE = {
 def create_test_list_from_filter(full_test_list, out_path):
     os.makedirs(out_path, exist_ok=True)
     all_test_files = "\n".join(full_test_list)
+    print(f"\n### ALL TEST FILES ###\n{all_test_files}")
     for job_name, _filter in JOB_TO_TEST_FILE.items():
         file_name = os.path.join(out_path, f"{job_name}_test_list.txt")
         if job_name == "tests_hub":

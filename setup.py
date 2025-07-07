@@ -204,7 +204,7 @@ _deps = [
     "opentelemetry-api",
     "opentelemetry-exporter-otlp",
     "opentelemetry-sdk",
-    "mistral-common[open-cv]>=1.6.3",
+    "mistral-common[opencv]>=1.6.3",
 ]
 
 
@@ -335,7 +335,7 @@ extras["video"] = deps_list("av")
 extras["num2words"] = deps_list("num2words")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
-extras["mistral-common"] = deps_list("mistral-common[open-cv]")
+extras["mistral-common"] = deps_list("mistral-common[opencv]")
 extras["testing"] = (
     deps_list(
         "pytest",
@@ -501,6 +501,7 @@ setup(
     ],
     cmdclass={"deps_table_update": DepsTableUpdateCommand},
 )
+print(extras["testing"])
 
 extras["tests_torch"] = deps_list()
 extras["tests_tf"] = deps_list()
