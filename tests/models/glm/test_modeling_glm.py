@@ -120,9 +120,13 @@ class GlmIntegrationTest(unittest.TestCase):
 
     def test_model_9b_eager(self):
         expected_texts = Expectations({
-            ("cuda", None): [
+            (None, None): [
                 "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
                 "Hi today I am going to show you how to make a simple and easy to make a DIY paper flower.",
+            ],
+            ("cuda", 8): [
+                'Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the',
+                'Hi today I am going to show you how to make a simple and easy to make a DIY paper lantern.',
             ],
             ("rocm", (9, 5)) : [
                 "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",

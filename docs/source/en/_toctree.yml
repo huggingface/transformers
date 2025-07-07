@@ -100,8 +100,6 @@
       title: Distributed inference
     - local: perf_infer_cpu
       title: CPU
-    - local: tf_xla
-      title: XLA
     title: Optimization
   - local: agents
     title: Agents
@@ -141,8 +139,6 @@
       title: GPU
     - local: perf_train_cpu
       title: CPU
-    - local: perf_train_tpu_tf
-      title: TPU
     - local: perf_train_special
       title: Apple Silicon
     - local: perf_train_gaudi
@@ -1144,4 +1140,3 @@
       title: Environment Variables
     title: Reference
   title: API
-

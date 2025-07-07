@@ -1116,6 +1116,7 @@ class MimiTransformerModel(nn.Module):
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
+            position_ids=position_ids,
         )
 
         # decoder layers

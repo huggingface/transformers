@@ -35,7 +35,7 @@ from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
-    LossKwargs,
+    TransformersKwargs,
     auto_docstring,
     can_return_tuple,
     logging,
@@ -801,9 +801,6 @@ class SmolVLMCausalLMOutputWithPast(ModelOutput):
     image_hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
-
 @auto_docstring(
     custom_intro="""
     The SmolVLM Model with a language modeling head. It is made up a SigLIP vision encoder, with a language modeling head on top.
@@ -874,7 +871,7 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
         cache_position: Optional[torch.LongTensor] = None,
         return_dict: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, SmolVLMCausalLMOutputWithPast]:
         r"""
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):

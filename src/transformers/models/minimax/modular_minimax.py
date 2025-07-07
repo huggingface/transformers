@@ -29,7 +29,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeModelOutputWithPast
 from ...processing_utils import Unpack
-from ...utils import logging
+from ...utils import TransformersKwargs, logging
 from ..mixtral.configuration_mixtral import MixtralConfig
 from ..mixtral.modeling_mixtral import (
     MixtralAttention,
@@ -490,7 +490,7 @@ class MiniMaxModel(MixtralModel):
         output_hidden_states: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_router_logits = (
@@ -536,6 +536,7 @@ class MiniMaxModel(MixtralModel):
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
+            position_ids=position_ids,
         )
 
         hidden_states = inputs_embeds
@@ -568,7 +569,7 @@ class MiniMaxModel(MixtralModel):
                 output_router_logits=output_router_logits,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                **flash_attn_kwargs,
+                **kwargs,
             )
 
             hidden_states = layer_outputs[0]
