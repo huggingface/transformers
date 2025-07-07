@@ -32,7 +32,8 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import AttentionInterface
 from ...processing_utils import Unpack
-from ...utils import OutputRecorder, TransformersKwargs, is_torch_flex_attn_available
+from ...utils import TransformersKwargs, is_torch_flex_attn_available
+from ...utils.generic import OutputRecorder
 from ..llama.modeling_llama import (
     LlamaForSequenceClassification,
     LlamaMLP,
