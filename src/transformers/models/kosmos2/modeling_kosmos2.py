@@ -1154,7 +1154,7 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = True
     _supports_sdpa = True
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         if isinstance(self, Kosmos2VisionModel):
             factor = self.config.initializer_factor
@@ -1194,16 +1194,6 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
                 module.fc1.bias.data.zero_()
             if module.fc2.bias is not None:
                 module.fc2.bias.data.zero_()
-        elif isinstance(module, Kosmos2VisionEncoderLayer):
-            module.layer_norm1.bias.data.zero_()
-            module.layer_norm1.weight.data.fill_(1.0)
-            module.layer_norm2.bias.data.zero_()
-            module.layer_norm2.weight.data.fill_(1.0)
-        elif isinstance(module, Kosmos2VisionTransformer):
-            module.pre_layrnorm.bias.data.zero_()
-            module.pre_layrnorm.weight.data.fill_(1.0)
-            module.post_layernorm.bias.data.zero_()
-            module.post_layernorm.weight.data.fill_(1.0)
         elif isinstance(module, KosmosTextAttention):
             nn.init.normal_(module.q_proj.weight, std=std)
             nn.init.normal_(module.k_proj.weight, std=std)
@@ -1232,10 +1222,14 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.dense.weight, std=std)
             if module.dense.bias is not None:
                 module.dense.bias.data.zero_()
+            module.latent_query.copy_(torch.randn(self.config.latent_query_num, self.config.text_config.embed_dim))
         elif isinstance(module, Kosmos2TextTransformer):
             module.embed_tokens.weight.data.normal_(mean=0.0, std=std)
             if module.embed_tokens.padding_idx is not None:
                 module.embed_tokens.weight.data[module.embed_tokens.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
 
 
 class Kosmos2VisionModel(Kosmos2PreTrainedModel):
