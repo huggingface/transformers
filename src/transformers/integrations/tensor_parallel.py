@@ -525,10 +525,8 @@ class VocabParallel(TensorParallelLayer):
                 output_tensor[input_mask] = 0.0
 
         if not isinstance(output_tensor, DTensor):
-            output_tensor = DTensor.from_local(output_tensor, device_mesh, output_layouts, run_check=False)
+            output_tensor = DTensor.from_local(output_tensor, device_mesh, [Shard(0)], run_check=False)
 
-        # The forward pass should produce a DTensor with Partial() placement
-        # This redistribute call will automatically perform all-reduce when going from Partial() -> Replicate()
         if output_tensor.placements != output_layouts:
             output_tensor = output_tensor.redistribute(placements=output_layouts, async_op=False)
         return output_tensor.to_local() if use_local_output else output_tensor
@@ -537,7 +535,7 @@ class VocabParallel(TensorParallelLayer):
         #TODO(3outeille): if several device_mesh dims, should be shard given TP axes
         # Shard the embedding table along dim 0 (vocab dimension)
         parameter = get_tensor_shard(param, empty_param, device_mesh, rank, 0)
-        placements = [Partial()]
+        placements = [Shard(0)]
         parameter = parameter.to(param_casting_dtype)
         if to_contiguous:
             parameter = parameter.contiguous()
