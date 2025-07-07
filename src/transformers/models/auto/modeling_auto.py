@@ -373,6 +373,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("yoso", "YosoModel"),
         ("zamba", "ZambaModel"),
         ("zamba2", "Zamba2Model"),
+        ("parakeet_ctc", "ParakeetCTC"),
     ]
 )
 
@@ -1474,6 +1475,7 @@ MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
         ("data2vec-audio", "Data2VecAudioForCTC"),
         ("hubert", "HubertForCTC"),
         ("mctct", "MCTCTForCTC"),
+        ("parakeet_ctc", "ParakeetCTC"),
         ("sew", "SEWForCTC"),
         ("sew-d", "SEWDForCTC"),
         ("unispeech", "UniSpeechForCTC"),

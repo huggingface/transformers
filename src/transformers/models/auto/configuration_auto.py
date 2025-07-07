@@ -267,6 +267,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("owlv2", "Owlv2Config"),
         ("owlvit", "OwlViTConfig"),
         ("paligemma", "PaliGemmaConfig"),
+        ("parakeet_ctc", "ParakeetCTCConfig"),
         ("patchtsmixer", "PatchTSMixerConfig"),
         ("patchtst", "PatchTSTConfig"),
         ("pegasus", "PegasusConfig"),
@@ -668,6 +669,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("owlv2", "OWLv2"),
         ("owlvit", "OWL-ViT"),
         ("paligemma", "PaliGemma"),
+        ("parakeet_ctc", "ParakeetCTC"),
         ("patchtsmixer", "PatchTSMixer"),
         ("patchtst", "PatchTST"),
         ("pegasus", "Pegasus"),
@@ -880,6 +882,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("llama4_text", "llama4"),
         ("blip_2_qformer", "blip_2"),
         ("fastspeech2_conformer_with_hifigan", "fastspeech2_conformer"),
+        ("parakeet_ctc", "fastconformer"),
     ]
 )
 

@@ -17,7 +17,7 @@ Feature extractor class for FastConformer
 """
 
 import warnings
-from typing import Optional, Union
+from typing import Optional, Union, Dict, Any
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
@@ -64,11 +64,11 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
             Window function type.
         normalize (`str`, *optional*, defaults to `"per_feature"`):
             Normalization type: "per_feature" or "all_features".
-        preemph (`float`, *optional*, defaults to 0.97):
+        preemphasis (`float`, *optional*, defaults to 0.97):
             Pre-emphasis factor.
         mag_power (`float`, *optional*, defaults to 2.0):
             Magnitude power for spectrogram.
-        mel_norm (`str`, *optional*, defaults to `"slaney"`):
+        mel_scale (`str`, *optional*, defaults to `"slaney"`):
             Mel filterbank normalization.
         padding_value (`float`, *optional*, defaults to 0.0):
             Padding value used to pad the audio. Should correspond to silences.
@@ -89,9 +89,9 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
         window_stride=0.01,
         window="hann",
         normalize="per_feature",
-        preemph=0.97,
+        preemphasis=0.97,
         mag_power=2.0,
-        mel_norm="slaney",
+        mel_scale="slaney",
         padding_value=0.0,
         return_attention_mask=True,
         **kwargs,
@@ -114,9 +114,9 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
         self.window_stride = window_stride
         self.window = window
         self.normalize = normalize
-        self.preemph = preemph
+        self.preemphasis = preemphasis
         self.mag_power = mag_power
-        self.mel_norm = mel_norm
+        self.mel_scale = mel_scale
 
         # Validation
         if self.win_length > self.n_fft:
@@ -148,7 +148,7 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
                     n_mels=self.feature_size,
                     fmin=0,
                     fmax=self.sampling_rate / 2,
-                    norm=self.mel_norm,
+                    norm=self.mel_scale,
                 ),
                 dtype=torch.float32,
             )
@@ -246,8 +246,8 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
             raise ValueError(f"seq_len batch size {seq_len.shape[0]} != audio batch size {B}")
 
         # Apply preemphasis
-        if self.preemph is not None and self.preemph > 0:
-            x = self.preemphasis_batch(x, self.preemph)
+        if self.preemphasis is not None and self.preemphasis > 0:
+            x = self.preemphasis_batch(x, self.preemphasis)
 
         # Get window
         window = self.get_window(self.win_length, self.window, device=device, dtype=x.dtype)
@@ -407,6 +407,18 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
             encoded_inputs.pop("attention_mask", None)
 
         return encoded_inputs
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary.
+        
+        Returns:
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
+        """
+        output = super().to_dict()
+        # Remove cached tensors that shouldn't be serialized
+        output.pop("_filterbanks", None)
+        return output
 
 
 __all__ = ["FastConformerFeatureExtractor"]

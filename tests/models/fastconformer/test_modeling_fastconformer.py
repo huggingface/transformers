@@ -26,9 +26,13 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, random_atte
 if is_torch_available():
     import torch
 
+    from transformers import AutoConfig, AutoFeatureExtractor, AutoModel
     from transformers.models.fastconformer import (
         FastConformerFeatureExtractor,
         FastConformerModel,
+        ParakeetCTC,
+        ParakeetCTCConfig,
+        FastConformerConfig,
     )
 
 
@@ -40,14 +44,14 @@ class FastConformerModelTester:
         seq_length=1024,  # mel-spectrogram frames
         is_training=False,
         vocab_size=1024,  # Required by HF framework
-        d_model=64,
-        encoder_layers=2,
-        encoder_attention_heads=4,
-        encoder_ffn_dim=256,
+        hidden_size=64,  # Changed from d_model
+        num_hidden_layers=2,  # Changed from encoder_layers
+        num_attention_heads=4,  # Changed from encoder_attention_heads
+        intermediate_size=256,  # Changed from encoder_ffn_dim
         encoder_layerdrop=0.1,
-        activation_function="silu",
-        dropout=0.1,
-        attention_dropout=0.1,
+        hidden_act="silu",  # Changed from activation_function
+        hidden_dropout_prob=0.1,  # Changed from dropout
+        attention_dropout=0.1,  # LlamaConfig uses attention_dropout
         activation_dropout=0.1,
         initializer_range=0.02,
         conv_kernel_size=9,
@@ -64,13 +68,13 @@ class FastConformerModelTester:
         self.seq_length = seq_length
         self.is_training = is_training
         self.vocab_size = vocab_size
-        self.d_model = d_model
-        self.encoder_layers = encoder_layers
-        self.encoder_attention_heads = encoder_attention_heads
-        self.encoder_ffn_dim = encoder_ffn_dim
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
         self.encoder_layerdrop = encoder_layerdrop
-        self.activation_function = activation_function
-        self.dropout = dropout
+        self.hidden_act = hidden_act
+        self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
         self.initializer_range = initializer_range
@@ -84,8 +88,10 @@ class FastConformerModelTester:
         self.scope = scope
 
         # Add compatibility attributes for common tests
-        self.num_hidden_layers = encoder_layers
-        self.num_attention_heads = encoder_attention_heads
+        self.d_model = hidden_size  # For compatibility
+        self.encoder_layers = num_hidden_layers  # For compatibility
+        self.encoder_attention_heads = num_attention_heads  # For compatibility
+        self.encoder_ffn_dim = intermediate_size  # For compatibility
 
         # Calculate output sequence length after subsampling
         # This is a simplified calculation based on the subsampling factor
@@ -109,14 +115,14 @@ class FastConformerModelTester:
     def get_config(self):
         return FastConformerConfig(
             vocab_size=self.vocab_size,
-            d_model=self.d_model,
-            encoder_layers=self.encoder_layers,
-            encoder_attention_heads=self.encoder_attention_heads,
-            encoder_ffn_dim=self.encoder_ffn_dim,
+            hidden_size=self.hidden_size,  # Changed from d_model
+            num_hidden_layers=self.num_hidden_layers,  # Changed from encoder_layers
+            num_attention_heads=self.num_attention_heads,  # Changed from encoder_attention_heads
+            intermediate_size=self.intermediate_size,  # Changed from encoder_ffn_dim
             encoder_layerdrop=self.encoder_layerdrop,
-            activation_function=self.activation_function,
-            dropout=self.dropout,
-            attention_dropout=self.attention_dropout,
+            hidden_act=self.hidden_act,  # Changed from activation_function
+            hidden_dropout_prob=self.hidden_dropout_prob,  # Changed from dropout
+            attention_dropout=self.attention_dropout,  # LlamaConfig uses attention_dropout
             activation_dropout=self.activation_dropout,
             initializer_range=self.initializer_range,
             conv_kernel_size=self.conv_kernel_size,
@@ -136,7 +142,7 @@ class FastConformerModelTester:
 
         # Check output shape - should be reduced due to subsampling
         expected_seq_length = input_features.shape[1] // config.subsampling_factor
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, expected_seq_length, self.d_model))
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, expected_seq_length, self.hidden_size))
 
     def create_and_check_model_with_attention_mask(self, config, input_features, attention_mask, input_lengths):
         model = FastConformerModel(config=config)
@@ -207,13 +213,13 @@ class FastConformerModelTester:
         )
 
         # Should have hidden states for each layer + input
-        expected_num_hidden_states = config.encoder_layers + 1  # +1 for input embeddings
+        expected_num_hidden_states = config.num_hidden_layers + 1  # +1 for input embeddings
         self.parent.assertEqual(len(result.hidden_states), expected_num_hidden_states)
 
         # Each hidden state should have the correct shape
         for hidden_state in result.hidden_states:
             expected_seq_length = input_features.shape[1] // config.subsampling_factor
-            self.parent.assertEqual(hidden_state.shape, (self.batch_size, expected_seq_length, self.d_model))
+            self.parent.assertEqual(hidden_state.shape, (self.batch_size, expected_seq_length, self.hidden_size))
 
     def create_and_check_attentions_output(self, config, input_features, attention_mask, input_lengths):
         model = FastConformerModel(config)
@@ -225,7 +231,7 @@ class FastConformerModelTester:
         )
 
         # Should have attention weights for each layer
-        self.parent.assertEqual(len(result.attentions), config.encoder_layers)
+        self.parent.assertEqual(len(result.attentions), config.num_hidden_layers)
 
         # Each attention tensor should have the correct shape
         for attention in result.attentions:
@@ -233,7 +239,7 @@ class FastConformerModelTester:
                 expected_seq_length = input_features.shape[1] // config.subsampling_factor
                 self.parent.assertEqual(
                     attention.shape,
-                    (self.batch_size, config.encoder_attention_heads, expected_seq_length, expected_seq_length),
+                    (self.batch_size, config.num_attention_heads, expected_seq_length, expected_seq_length),
                 )
 
     def prepare_config_and_inputs_for_common(self):
@@ -256,7 +262,7 @@ class FastConformerModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = FastConformerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=FastConformerConfig, d_model=37)
+        self.config_tester = ConfigTester(self, config_class=FastConformerConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -414,10 +420,288 @@ class FastConformerModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        # This test would check loading a real pretrained model
-        # For now, we skip it since we don't have a guaranteed available model
-        pass
+        """Test loading the actual nvidia/parakeet-ctc-1.1b model from the Hub."""
+        model_name = "nvidia/parakeet-ctc-1.1b"
+        
+        # Test AutoModel loading
+        auto_model = AutoModel.from_pretrained(model_name).to(torch_device)
+        self.assertIsInstance(auto_model, ParakeetCTC)
+        self.assertEqual(auto_model.config.model_type, "parakeet_ctc")
+        self.assertEqual(auto_model.config.vocab_size, 1025)
+        
+        # Test direct ParakeetCTC loading (this was previously broken, now fixed)
+        ctc_model = ParakeetCTC.from_pretrained(model_name).to(torch_device)
+        self.assertIsInstance(ctc_model, ParakeetCTC)
+        self.assertEqual(ctc_model.config.model_type, "parakeet_ctc")
+        self.assertEqual(ctc_model.config.vocab_size, 1025)
+        
+        # Test config loading
+        config = AutoConfig.from_pretrained(model_name)
+        self.assertIsInstance(config, ParakeetCTCConfig)
+        self.assertEqual(config.model_type, "parakeet_ctc")
+        self.assertEqual(config.vocab_size, 1025)
+        
+        # Test feature extractor loading
+        feature_extractor = AutoFeatureExtractor.from_pretrained(model_name)
+        self.assertIsInstance(feature_extractor, FastConformerFeatureExtractor)
+        self.assertEqual(feature_extractor.feature_size, 80)
+        self.assertEqual(feature_extractor.sampling_rate, 16000)
+        
+        # Test forward pass with real model
+        auto_model.eval()
+        ctc_model.eval()
+        
+        # Create test input
+        batch_size, seq_len, mel_bins = 1, 100, 80
+        input_features = torch.randn(batch_size, seq_len, mel_bins).to(torch_device)
+        input_lengths = torch.tensor([seq_len], dtype=torch.long).to(torch_device)
+        
+        with torch.no_grad():
+            # Test AutoModel forward pass
+            auto_outputs = auto_model(
+                input_features=input_features,
+                input_lengths=input_lengths,
+            )
+            self.assertIsNotNone(auto_outputs.logits)
+            self.assertEqual(auto_outputs.logits.shape[0], batch_size)
+            self.assertEqual(auto_outputs.logits.shape[2], 1025)  # vocab_size
+            
+            # Test ParakeetCTC forward pass
+            ctc_outputs = ctc_model(
+                input_features=input_features,
+                input_lengths=input_lengths,
+            )
+            self.assertIsNotNone(ctc_outputs.logits)
+            self.assertEqual(ctc_outputs.logits.shape[0], batch_size)
+            self.assertEqual(ctc_outputs.logits.shape[2], 1025)  # vocab_size
+            
+            # Test that both models produce the same output (they should be identical)
+            torch.testing.assert_close(auto_outputs.logits, ctc_outputs.logits, rtol=1e-5, atol=1e-5)
+            
+            # Test CTC generation
+            decoded_sequences = ctc_model.generate_speech_recognition_outputs(
+                input_features=input_features,
+                input_lengths=input_lengths,
+            )
+            self.assertEqual(len(decoded_sequences), batch_size)
+            self.assertIsInstance(decoded_sequences[0], list)
+            
+        # Test with feature extractor integration
+        with torch.no_grad():
+            # Create dummy audio (1 second at 16kHz)
+            raw_audio = torch.randn(1, 16000)
+            
+            # Extract features
+            features = feature_extractor(
+                raw_audio,
+                audio_lengths=torch.tensor([16000]),
+                return_tensors="pt"
+            )
+            
+            # Forward pass with extracted features
+            features_on_device = {k: v.to(torch_device) if hasattr(v, 'to') else v for k, v in features.items()}
+            outputs = ctc_model(**features_on_device)
+            self.assertIsNotNone(outputs.logits)
+            self.assertEqual(outputs.logits.shape[2], 1025)  # vocab_size
 
     def test_equivalence_pt_jax(self):
         # Skip JAX equivalence test for now
         pass
+
+    def test_ctc_model_with_ctc_config(self):
+        """Test that ParakeetCTC works with ParakeetCTCConfig."""
+        from transformers.models.fastconformer import ParakeetCTCConfig
+        
+        # Create ParakeetCTCConfig
+        fastconformer_config = FastConformerConfig(
+            hidden_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_mel_bins=80,
+        )
+        
+        ctc_config = ParakeetCTCConfig(
+            vocab_size=128,
+            blank_token_id=1,
+            ctc_loss_reduction="sum",
+            ctc_zero_infinity=False,
+            fastconformer_config=fastconformer_config,
+        )
+        
+        model = ParakeetCTC(ctc_config)
+        model.to(torch_device)
+        model.eval()
+        
+        # Create test input
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        _, input_features, attention_mask, input_lengths = config_and_inputs
+        
+        # Adjust input features for smaller configs
+        input_features = input_features[:, :200, :80]  # Smaller for testing
+        attention_mask = attention_mask[:, :200]
+        input_lengths = torch.clamp(input_lengths, max=200)
+        
+        with torch.no_grad():
+            outputs = model(
+                input_features.to(torch_device),
+                attention_mask=attention_mask.to(torch_device),
+                input_lengths=input_lengths.to(torch_device),
+            )
+        
+        # Should produce outputs
+        self.assertIsNotNone(outputs.logits)
+        self.assertEqual(outputs.logits.shape[-1], 128)
+        
+        # Check that CTC parameters are set correctly
+        self.assertEqual(model.blank_token_id, 1)  # Custom
+        self.assertEqual(model.ctc_loss_reduction, "sum")  # Custom
+        self.assertEqual(model.ctc_zero_infinity, False)  # Custom
+
+    def test_ctc_model_loss_computation(self):
+        """Test CTC loss computation."""
+        from transformers.models.fastconformer import ParakeetCTCConfig
+        
+        fastconformer_config = FastConformerConfig(
+            hidden_size=32,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            num_mel_bins=40,
+        )
+        
+        config = ParakeetCTCConfig(
+            vocab_size=10,
+            blank_token_id=0,
+            ctc_loss_reduction="mean",
+            fastconformer_config=fastconformer_config,
+        )
+        
+        model = ParakeetCTC(config)
+        model.to(torch_device)
+        model.eval()
+        
+        # Create test input and labels
+        batch_size, seq_len, mel_bins = 2, 100, 40
+        input_features = torch.randn(batch_size, seq_len, mel_bins).to(torch_device)
+        input_lengths = torch.tensor([seq_len, seq_len // 2], dtype=torch.long).to(torch_device)
+        
+        # Create dummy labels (non-blank tokens)
+        labels = torch.tensor([
+            [1, 2, 3, -100, -100],  # First sequence
+            [4, 5, -100, -100, -100],  # Second sequence (shorter)
+        ], dtype=torch.long).to(torch_device)
+        
+        # Forward pass with labels should compute loss
+        outputs = model(
+            input_features=input_features,
+            input_lengths=input_lengths,
+            labels=labels,
+        )
+        
+        # Check that loss is computed and finite
+        self.assertIsNotNone(outputs.loss)
+        self.assertTrue(torch.isfinite(outputs.loss))
+        # Check that logits have the right dimensions (output sequence length varies based on exact subsampling)
+        self.assertEqual(outputs.logits.shape[0], batch_size)  # Batch size
+        self.assertEqual(outputs.logits.shape[2], 10)  # Vocab size
+        self.assertGreater(outputs.logits.shape[1], 0)  # Some positive sequence length
+
+    def test_ctc_model_generation(self):
+        """Test CTC generation method."""
+        from transformers.models.fastconformer import ParakeetCTCConfig
+        
+        fastconformer_config = FastConformerConfig(
+            hidden_size=32,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            num_mel_bins=40,
+        )
+        
+        config = ParakeetCTCConfig(
+            vocab_size=10,
+            blank_token_id=9,  # Custom blank token
+            fastconformer_config=fastconformer_config,
+        )
+        
+        model = ParakeetCTC(config)
+        model.to(torch_device)
+        model.eval()
+        
+        # Create test input
+        batch_size, seq_len, mel_bins = 2, 80, 40
+        input_features = torch.randn(batch_size, seq_len, mel_bins).to(torch_device)
+        input_lengths = torch.tensor([seq_len, seq_len // 2], dtype=torch.long).to(torch_device)
+        
+        # Generate speech recognition outputs
+        decoded_sequences = model.generate_speech_recognition_outputs(
+            input_features=input_features,
+            input_lengths=input_lengths,
+        )
+        
+        # Should return a list of sequences for each batch item
+        self.assertEqual(len(decoded_sequences), batch_size)
+        self.assertIsInstance(decoded_sequences[0], list)
+        self.assertIsInstance(decoded_sequences[1], list)
+        
+        # Check that blank tokens (9) are not in the output
+        for sequence in decoded_sequences:
+            for token_id in sequence:
+                self.assertNotEqual(token_id, 9)  # Custom blank token should be removed
+
+    def test_ctc_model_config_access(self):
+        """Test accessing config through the model."""
+        from transformers.models.fastconformer import ParakeetCTCConfig
+        
+        fastconformer_config = FastConformerConfig(hidden_size=128)
+        ctc_config = ParakeetCTCConfig(
+            vocab_size=256,
+            fastconformer_config=fastconformer_config,
+        )
+        model = ParakeetCTC(ctc_config)
+        
+        # Check config access - model.config is now the CTC config
+        self.assertEqual(model.config, ctc_config)
+        self.assertEqual(model.encoder_config, fastconformer_config)
+        self.assertEqual(model.config.vocab_size, 256)
+        self.assertEqual(model.encoder_config.hidden_size, 128)
+
+    def test_parakeet_ctc_config(self):
+        """Test ParakeetCTCConfig specific functionality."""
+        from transformers.models.fastconformer import ParakeetCTCConfig
+
+        # Test default values
+        config = ParakeetCTCConfig()
+        self.assertEqual(config.vocab_size, 1024)
+        self.assertEqual(config.blank_token_id, 0)
+        self.assertEqual(config.ctc_loss_reduction, "mean")
+        self.assertEqual(config.ctc_zero_infinity, True)
+        self.assertEqual(config.model_type, "parakeet_ctc")
+        self.assertIsInstance(config.fastconformer_config, FastConformerConfig)
+
+        # Test custom values
+        fastconformer_config = FastConformerConfig(hidden_size=256, num_hidden_layers=4)
+        config = ParakeetCTCConfig(
+            vocab_size=512,
+            blank_token_id=1,
+            ctc_loss_reduction="sum",
+            ctc_zero_infinity=False,
+            fastconformer_config=fastconformer_config,
+        )
+        self.assertEqual(config.vocab_size, 512)
+        self.assertEqual(config.blank_token_id, 1)
+        self.assertEqual(config.ctc_loss_reduction, "sum")
+        self.assertEqual(config.ctc_zero_infinity, False)
+        self.assertEqual(config.fastconformer_config.hidden_size, 256)
+        self.assertEqual(config.fastconformer_config.num_hidden_layers, 4)
+
+        # Test with dict fastconformer_config
+        config = ParakeetCTCConfig(
+            vocab_size=128,
+            fastconformer_config={"hidden_size": 128, "num_hidden_layers": 2},
+        )
+        self.assertEqual(config.vocab_size, 128)
+        self.assertEqual(config.fastconformer_config.hidden_size, 128)
+        self.assertEqual(config.fastconformer_config.num_hidden_layers, 2)
+
+        # Test invalid fastconformer_config
+        with self.assertRaises(ValueError):
+            ParakeetCTCConfig(fastconformer_config="invalid")
