@@ -33,7 +33,7 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import AttentionInterface
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, is_torch_flex_attn_available, logging
+from ...utils import TransformersKwargs, is_torch_flex_attn_available, logging
 from ..llama.modeling_llama import (
     LlamaForSequenceClassification,
     LlamaMLP,
@@ -49,11 +49,6 @@ from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel
 
 if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import BlockMask
-
-
-logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "DogeConfig"
 
 
 class DogeConfig(PretrainedConfig):
@@ -608,19 +603,9 @@ class DogeDecoderLayer(GradientCheckpointingLayer):
 
 
 class DogePreTrainedModel(LlamaPreTrainedModel):
-    config_class = DogeConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["DogeDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_3 = False
     _supports_flash_attn_2 = False
-    _supports_sdpa = True
-    _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
     _supports_static_cache = False
-    _supports_attention_backend = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -636,12 +621,8 @@ class DogePreTrainedModel(LlamaPreTrainedModel):
                 module.post_attention_residual.data.fill_(1.0)
 
 
-class DogeModel(DogePreTrainedModel, MixtralModel):
-    def __init__(self, config: DogeConfig):
-        super().__init__(config)
-        self.layers = nn.ModuleList(
-            [DogeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
+class DogeModel(MixtralModel):
+    pass
 
 
 def load_balancing_loss_func(
@@ -750,10 +731,7 @@ def load_balancing_loss_func(
     return overall_loss * num_experts
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
-
-class DogeForCausalLM(DogePreTrainedModel, MixtralForCausalLM):
+class DogeForCausalLM(MixtralForCausalLM):
     def __init__(self, config):
         super().__init__(config)
         self.model = DogeModel(config)
@@ -773,7 +751,7 @@ class DogeForCausalLM(DogePreTrainedModel, MixtralForCausalLM):
         output_router_logits: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> MoeCausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
