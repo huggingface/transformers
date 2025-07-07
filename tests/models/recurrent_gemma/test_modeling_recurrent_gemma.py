@@ -218,10 +218,10 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         set_seed(0)
         expectations = Expectations(
             {
-                ("xpu", 3): [
+                (None, None): [
                     "What is Deep learning ?\n\nDeep learning is the next frontier in computer vision. It is an Artificial Intelligence (AI) discipline that is rapidly being adopted across industries. The success of Deep"
                 ],
-                ("cuda", None): [
+                ("cuda", 8): [
                     "What is Deep learning ?\n\nDeep learning is the next frontier in computer vision. It is an Artificial Intelligence-derived technique allowing machines to perform actions typically performed only by humans. Deep learning"
                 ],
             }
