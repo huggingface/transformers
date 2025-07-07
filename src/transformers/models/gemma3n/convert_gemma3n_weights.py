@@ -18,9 +18,9 @@ r"""Utility to convert Gemma models from Orbax to HF Transformers checkpoint.
 
 python src/transformers/models/gemma3n/convert_gemma3n_weights.py \
     --variant='gemma3n_e4b' \
-    --tokenizer_path="$HOME/nano3/checkpoints/tokenizer/gemma-3n-tokenizer.model" \
-    --checkpoint_path="$HOME/nano3/checkpoints/g251_orbax/" \
-    --output_path="$HOME/nano3/checkpoints/g251_vision_encoder/"
+    --tokenizer_path="$HOME/tokenizers/gemma-3n-tokenizer.model" \
+    --checkpoint_path="$HOME/checkpoints/gemma-3n-orbax/" \
+    --output_path="$HOME/checkpoints/gemma-3n-safetensors/"
 """
 
 import json
