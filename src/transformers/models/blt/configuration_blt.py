@@ -66,9 +66,10 @@ class BLTLocalEncoderConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling or {"rope_type": "default"}
         self.hidden_act = hidden_act
-        self._attn_implementation = _attn_implementation
         
         super().__init__(**kwargs)
+
+        self._attn_implementation = _attn_implementation
     
 class BLTLocalDecoderConfig(PretrainedConfig):
     """
@@ -117,6 +118,9 @@ class BLTLocalDecoderConfig(PretrainedConfig):
 
         super().__init__(**kwargs)
 
+        self._attn_implementation = _attn_implementation
+
+
 
 class BLTGlobalTransformerConfig(PretrainedConfig):
     """
@@ -153,9 +157,11 @@ class BLTGlobalTransformerConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling or {"rope_type": "default"}
         self.hidden_act = hidden_act
-        self._attn_implementation = _attn_implementation
         
         super().__init__(**kwargs)
+
+        self._attn_implementation = _attn_implementation
+
 
 
 class BLTPatcherConfig(PretrainedConfig):
@@ -187,7 +193,7 @@ class BLTPatcherConfig(PretrainedConfig):
             Make feedforward dimension multiple of this for the entropy model.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             RoPE theta parameter for the entropy model.
-        attn_impl (`str`, *optional*, defaults to "sdpa"):
+        _attn_implementation (`str`, *optional*, defaults to "sdpa"):
             Attention implementation for the entropy model.
         attn_bias_type (`str`, *optional*, defaults to "causal"):
             Attention bias type for the entropy model.
@@ -206,7 +212,7 @@ class BLTPatcherConfig(PretrainedConfig):
         norm_eps=1e-5,
         dropout=0.0,
         rope_theta=10000.0,
-        attn_impl="sdpa",
+        _attn_implementation="sdpa",
         attn_bias_type="causal",
         intermediate_size=None,
         **kwargs,
@@ -221,12 +227,14 @@ class BLTPatcherConfig(PretrainedConfig):
         self.norm_eps = norm_eps
         self.dropout = dropout
         self.rope_theta = rope_theta
-        self.attn_impl = attn_impl
         self.attn_bias_type = attn_bias_type
         self.hidden_act = "silu"  # BLT uses silu activation
         self.intermediate_size = intermediate_size or int(8 * self.hidden_size / 3)
         self.rope_scaling = {"rope_type": "default"}
         super().__init__(**kwargs)
+
+        self._attn_implementation = _attn_implementation
+
 
 
 class BLTConfig(PretrainedConfig):
@@ -242,6 +250,9 @@ class BLTConfig(PretrainedConfig):
             Vocabulary size of the BLT model. Defines the number of different tokens (bytes) that can be represented.
         max_position_embeddings (`int`, *optional*, defaults to 1024):
             The maximum sequence length that this model can handle.
+        _attn_implementation (`str`, *optional*, defaults to "sdpa"):
+            The attention implementation to use. Can be "eager", "sdpa", etc. This setting is propagated to all 
+            sub-components (encoder, decoder, global transformer, patcher).
 
         # Patching configuration
         patch_in_forward (`bool`, *optional*, defaults to False):
@@ -322,6 +333,7 @@ class BLTConfig(PretrainedConfig):
         decoder_config=None,
         global_config=None,
         tie_word_embeddings=False,
+        _attn_implementation="sdpa",
         **kwargs,
     ):
         
@@ -329,6 +341,7 @@ class BLTConfig(PretrainedConfig):
         self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
+        self._attn_implementation = _attn_implementation
 
         # Patching configuration
         self.patch_in_forward = patch_in_forward
@@ -348,7 +361,7 @@ class BLTConfig(PretrainedConfig):
 
         # Initialize component configurations
         if patcher_config is None:
-            self.patcher_config = BLTPatcherConfig()
+            self.patcher_config = BLTPatcherConfig(_attn_implementation=_attn_implementation)
             logger.info("patcher_config is None, using default BLT patcher config")
         elif isinstance(patcher_config, dict):
             self.patcher_config = BLTPatcherConfig(**patcher_config)
@@ -356,7 +369,7 @@ class BLTConfig(PretrainedConfig):
             self.patcher_config = patcher_config
 
         if encoder_config is None:
-            self.encoder_config = BLTLocalEncoderConfig()
+            self.encoder_config = BLTLocalEncoderConfig(_attn_implementation=_attn_implementation)
             logger.info("encoder_config is None, using default BLT encoder config")
         elif isinstance(encoder_config, dict):
             self.encoder_config = BLTLocalEncoderConfig(**encoder_config)
@@ -364,7 +377,7 @@ class BLTConfig(PretrainedConfig):
             self.encoder_config = encoder_config
 
         if decoder_config is None:
-            self.decoder_config = BLTLocalDecoderConfig()
+            self.decoder_config = BLTLocalDecoderConfig(_attn_implementation=_attn_implementation)
             logger.info("decoder_config is None, using default BLT decoder config")
         elif isinstance(decoder_config, dict):
             self.decoder_config = BLTLocalDecoderConfig(**decoder_config)
@@ -372,7 +385,7 @@ class BLTConfig(PretrainedConfig):
             self.decoder_config = decoder_config
 
         if global_config is None:
-            self.global_config = BLTGlobalTransformerConfig()
+            self.global_config = BLTGlobalTransformerConfig(_attn_implementation=_attn_implementation)
             logger.info("global_config is None, using default BLT global config")
         elif isinstance(global_config, dict):
             self.global_config = BLTGlobalTransformerConfig(**global_config)

@@ -250,7 +250,7 @@ class BLTSelfAttention(nn.Module):
         self.num_key_value_heads = config.num_key_value_heads
         self.head_dim = config.hidden_size // self.num_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.scaling = None
+        self.scaling = self.head_dim ** -0.5
         self.rope_theta = config.rope_theta
         self.layer_idx = layer_idx
 
@@ -291,7 +291,6 @@ class BLTSelfAttention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         output_attentions = False
-        self.config._attn_implementation = "sdpa"
         if self.config._attn_implementation != "eager":
             if self.config._attn_implementation == "sdpa" and output_attentions:
                 logger.warning_once(
@@ -732,7 +731,7 @@ class BLTCrossAttention(nn.Module):
         self.num_key_value_heads = config.num_attention_heads  # Assuming same for cross attention
         self.head_dim = self.hidden_size // self.num_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.scaling = None #self.head_dim ** -0.5
+        self.scaling = self.head_dim ** -0.5
         self.dropout = config.dropout
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
@@ -784,7 +783,6 @@ class BLTCrossAttention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
 
-        self.config._attn_implementation = "sdpa" 
         if self.config._attn_implementation != "eager":
             if self.config._attn_implementation == "sdpa" and output_attentions:
                 logger.warning_once(
@@ -978,14 +976,14 @@ class BLTModel(BLTPreTrainedModel):
                     self.config.max_patch_length
                 )
         patch_ids = self._patch_ids_from_lengths(patch_lengths, sequence_length)
-        cross_attn_mask_enc, full_text_row_masked_out_mask_enc = _prepare_patch_cross_attention_mask(
-            patch_ids, patch_lengths.shape[1], sequence_length, True, self.config.cross_attn_k, torch.float32
-        )
         encoder_embeds = compute_hash_embeddings(
             tokens, self.local_encoder, self.encoder_hash_tok_embedding,
             self.config.encoder_hash_byte_group_nb_functions,
             self.config.encoder_hash_byte_group_size,
             self.config.encoder_hash_byte_group_vocab,
+        )
+        cross_attn_mask_enc, full_text_row_masked_out_mask_enc = _prepare_patch_cross_attention_mask(
+            patch_ids, patch_lengths.shape[1], sequence_length, True, self.config.cross_attn_k, encoder_embeds.dtype
         )
         encoder_hidden_states, encoder_cross_states = self.local_encoder(
             input_ids=tokens,
@@ -1002,7 +1000,7 @@ class BLTModel(BLTPreTrainedModel):
         )
         decoder_patch_ids = self._patch_ids_from_lengths(patch_lengths[:, 1:], sequence_length)
         cross_attn_mask_dec, full_text_row_masked_out_mask_dec = _prepare_patch_cross_attention_mask(
-            decoder_patch_ids, patch_lengths.shape[1], sequence_length, False, self.config.cross_attn_k, torch.float32
+            decoder_patch_ids, patch_lengths.shape[1], sequence_length, False, self.config.cross_attn_k, encoder_embeds.dtype
         )
         output, _ = self.local_decoder(
             tokens=tokens,

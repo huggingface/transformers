@@ -79,18 +79,16 @@ class BLTTokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         boe_token="<boe>",
         add_bos_token=True,
-        add_eos_token=True,
+        add_eos_token=False,
         clean_up_tokenization_spaces=False,
         spaces_between_special_tokens=False,
         **kwargs,
     ):
-        # Store BLT-specific parameters first
         self.add_bos_token = add_bos_token
         self.add_eos_token = add_eos_token
         self.vocab_size_unit_1 = BYTE_UNITS
         self.offsetting_special_char = OFFSET
         
-        # BLT token IDs (exactly like original)
         self.boe_id = BOE_ID
         self.bos_id = BOS_ID  
         self.eos_id = EOS_ID
@@ -98,7 +96,6 @@ class BLTTokenizer(PreTrainedTokenizer):
         self.bpe_id = BPE_ID
         self.n_words = self.vocab_size_unit_1 + self.offsetting_special_char
 
-        # Convert string tokens to AddedToken objects
         bos_token = AddedToken(bos_token, normalized=False, special=True) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, normalized=False, special=True) if isinstance(eos_token, str) else eos_token
         pad_token = AddedToken(pad_token, normalized=False, special=True) if isinstance(pad_token, str) else pad_token
@@ -175,14 +172,13 @@ class BLTTokenizer(PreTrainedTokenizer):
             return self.boe_id
         else:
             try:
-                # Convert byte value string to int and add offset (like original)
+                # Convert byte value string to int and add offset 
                 byte_val = int(token)
                 if 0 <= byte_val <= 255:
                     return byte_val + self.offsetting_special_char
             except ValueError:
                 pass
             
-            # Check if it's in added tokens
             return self.added_tokens_encoder.get(token, self.unk_token_id)
 
     def _convert_id_to_token(self, index: int) -> str:
@@ -197,7 +193,7 @@ class BLTTokenizer(PreTrainedTokenizer):
         elif index == self.boe_id:
             return str(self.boe_token)
         elif index >= self.offsetting_special_char and index < self.vocab_size:
-            # Convert back to byte value (like original)
+            # Convert back to byte value 
             byte_val = index - self.offsetting_special_char
             return str(byte_val)
         else:
@@ -217,31 +213,27 @@ class BLTTokenizer(PreTrainedTokenizer):
                 continue
             
             try:
-                # Convert token back to byte value (like original decode method)
+                # Convert token back to byte value 
                 byte_val = int(token)
                 if 0 <= byte_val <= 255:
                     byte_values.append(byte_val)
             except ValueError:
                 continue
                     
-        # Convert byte values back to string (exactly like original)
+        # Convert byte values back to string 
         try:
             return bytes(byte_values).decode("utf-8", errors="ignore")
         except (UnicodeDecodeError, ValueError):
             return ""
 
     def encode(self, text: str, add_special_tokens: bool = True, **kwargs):
-        """
-        Encode text exactly like the original BLT tokenizer.
-        """
-        # Handle the standard PreTrainedTokenizer interface
         add_bos = kwargs.get('add_bos', self.add_bos_token if add_special_tokens else False)
         add_eos = kwargs.get('add_eos', self.add_eos_token if add_special_tokens else False)
 
         # Since bpe_delim=False, we use the simple byte encoding
         tokens = bytes(text, encoding="utf-8", errors="ignore")
 
-        # Offsetting (exactly like original)
+        # Offsetting 
         tokens = [int(unit) + self.offsetting_special_char for unit in tokens]
 
         if add_bos:
@@ -251,10 +243,7 @@ class BLTTokenizer(PreTrainedTokenizer):
 
         return tokens
 
-    def decode(self, tokens: list[int], cut_at_eos: bool = False):
-        """
-        Decode tokens exactly like the original BLT tokenizer.
-        """
+    def decode(self, tokens, cut_at_eos: bool = False):
         if cut_at_eos:
             for k, t in enumerate(tokens):
                 if t == self.eos_id:
@@ -264,6 +253,30 @@ class BLTTokenizer(PreTrainedTokenizer):
             [tok - self.offsetting_special_char for tok in tokens if tok - self.offsetting_special_char >= 0]
         ).decode("utf-8", errors="ignore")
     
+    def build_inputs_with_special_tokens(self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None) -> List[int]:
+        """
+        Build model inputs from a sequence or a pair of sequences for sequence classification tasks by concatenating and
+        adding special tokens. A BLT sequence has the following format:
+
+        - single sequence: `<s> X </s>`
+        - pair of sequences: `<s> A </s> B </s>`
+
+        Args:
+            token_ids_0 (`List[int]`):
+                List of IDs to which the special tokens will be added.
+            token_ids_1 (`List[int]`, *optional*):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+        """
+        bos = [self.bos_id] if self.add_bos_token else []
+        eos = [self.eos_id] if self.add_eos_token else []
+
+        if token_ids_1 is None:
+            return bos + token_ids_0 + eos
+        return bos + token_ids_0 + eos + token_ids_1 + eos
+
     def get_vocab_size(self) -> int:
         """Get vocab size like the original tokenizer."""
         return self.vocab_size_unit_1 + self.offsetting_special_char

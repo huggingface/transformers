@@ -72,6 +72,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("blip-2", "Blip2Model"),
         ("blip_2_qformer", "Blip2QFormerModel"),
         ("bloom", "BloomModel"),
+        ("blt", "BLTModel"),
         ("bridgetower", "BridgeTowerModel"),
         ("bros", "BrosModel"),
         ("camembert", "CamembertModel"),

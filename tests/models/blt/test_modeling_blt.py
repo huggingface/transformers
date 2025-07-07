@@ -18,13 +18,12 @@ import unittest
 from packaging import version
 
 from transformers import AutoTokenizer, StaticCache, is_torch_available
-from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
-    Expectations,
     cleanup,
     require_read_token,
     require_torch,
     require_torch_accelerator,
+    require_torch_bf16,
     slow,
     torch_device,
 )
@@ -42,16 +41,6 @@ if is_torch_available():
         BLTTokenizer
     )
     from transformers.models.blt.modeling_blt import BLTRotaryEmbedding
-
-# import os
-# import gc
-# gc.collect()
-# torch.cuda.empty_cache()
-
-
-# os.environ["BLT_SUPPRESS_ATTN_ERROR"] = "1"
-# os.environ["TORCH_USE_CUDA_DSA"] = "1"
-
 
 class BLTModelTester(CausalLMModelTester):
     if is_torch_available():
@@ -92,7 +81,7 @@ class BLTModelTest(CausalLMModelTest, unittest.TestCase):
     _torch_compile_train_cls = BLTForCausalLM if is_torch_available() else None
 
 
-# @require_torch_accelerator
+@require_torch_accelerator
 class BLTIntegrationTest(unittest.TestCase):
     def tearDown(self):
         # TODO (joao): automatic compilation, i.e. compilation when `cache_implementation="static"` is used, leaves
@@ -104,43 +93,30 @@ class BLTIntegrationTest(unittest.TestCase):
     @slow
     @require_read_token
     def test_blt(self):
+        NUM_TOKENS_TO_GENERATE = 200
+        EXPECTED_TEXT = "my name is alex and i am a student at the university of michigan. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan math club and the michigan computer s"
+
         prompt = "my name is"
 
-        EXPECTED_TEXT = " alex and i am a student at the university of michigan. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan math club and the michigan computer s"
-
         model = BLTForCausalLM.from_pretrained(
-            "itazap/blt-1b", device_map="auto" #, torch_dtype=torch.bfloat16
+            "itazap/blt-1b", 
+            device_map="auto",
         )
 
         tokenizer = AutoTokenizer.from_pretrained("itazap/blt-1b")
 
-        input_ids = torch.tensor([tokenizer.encode(prompt, add_eos=False)]).to(torch_device)
+        inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
-        output_ids = model.generate(
-            input_ids, 
-            max_new_tokens=200
-        )
+        old_input_ids = torch.tensor([tokenizer.encode(prompt, add_eos=False)]).to(torch_device)
+        generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
 
-        generated_ids = output_ids[0][len(input_ids[0]):]
-        output_text = tokenizer.decode(generated_ids.tolist())
-        
-        print(f'Prompt: "{prompt}"')
-        print(f'Completion: "{output_text}"')
-        print('here')
-
+        output_text = tokenizer.decode(generated_ids[0])
         self.assertEqual(output_text, EXPECTED_TEXT)
+
 
     @slow
     @require_read_token
     def test_model_logits(self):
-        input_ids = [1, 42, 21, 12, 43, 23, 1, 4]
-
-        model = BLTForCausalLM.from_pretrained(
-            "itazap/blt-1b", device_map="auto"
-        )
-
-        with torch.no_grad():
-            output = model(torch.tensor([input_ids]).to(torch_device))[0] 
 
         EXPECTED_OUTPUT = torch.tensor([[-10.4948, -10.7065,  -6.1813, -10.5545, -10.3428,  -9.1493,  -8.4937,
           -8.6382,  -9.2159,  -9.5907,  -9.3679,  -8.4184,  -9.0655,  -3.4436,
@@ -153,4 +129,118 @@ class BLTIntegrationTest(unittest.TestCase):
          -11.4807, -11.2128, -10.9615, -10.5806, -10.8873, -11.0651, -11.3471,
          -10.5437,  -9.9688]]).to(torch_device) 
         
+        input_ids = [1, 42, 21, 12, 43, 23, 1, 4]
+
+        model = BLTForCausalLM.from_pretrained(
+            "itazap/blt-1b", device_map="auto"
+        )
+
+        with torch.no_grad():
+            output = model(torch.tensor([input_ids]).to(torch_device))[0] 
+        
         torch.testing.assert_close(EXPECTED_OUTPUT, output[0, :2, :30], rtol=1e-4, atol=1e-4)
+
+    @slow
+    @require_read_token
+    @require_torch_bf16
+    def test_model_bf16(self):
+        """Test BLT model with bfloat16 precision."""
+        NUM_TOKENS_TO_GENERATE = 200
+        EXPECTED_TEXT = "my name is alex and i am a student at the university of michigan in the college of arts and sciences. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan m"
+        
+        prompt = "my name is"
+
+        model = BLTForCausalLM.from_pretrained(
+            "itazap/blt-1b", 
+            device_map="auto",
+            torch_dtype=torch.bfloat16
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained("itazap/blt-1b")
+
+        inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+
+        generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
+
+        output_text = tokenizer.decode(generated_ids[0])
+        self.assertEqual(output_text, EXPECTED_TEXT)
+
+    @slow
+    @require_read_token
+    @require_torch_bf16
+    def test_model_logits_bf16(self):
+        """Test BLT model logits with bfloat16 precision."""
+        EXPECTED_OUTPUT = torch.tensor([[-10.5000, -10.7500,  -6.2188, -10.5625, -10.3750,  -9.1875,  -8.5000,
+          -8.6250,  -9.1875,  -9.6250,  -9.3750,  -8.5000,  -9.0625,  -3.4219,
+           2.9688, -10.3125,  -6.4062,  -6.0000,  -9.6875,  -9.2500,  -8.8125,
+          -9.8750,  -9.7500,  -9.5000,  -9.8125,  -9.5000,  -9.0625,  -9.8750,
+          -9.5000,  -9.3750],
+        [-13.3750, -13.2500,  -5.5938, -13.3750, -13.5000,  -8.7500,  -7.0312,
+          -7.0000, -10.1875, -10.3750,  -9.8750,  -7.8125,  -8.8750,  -5.3125,
+          -3.5469, -12.5625,  -9.1875,  -6.7812, -10.3750,  -9.2500, -10.6250,
+         -11.5000, -11.2500, -11.0000, -10.6250, -10.9375, -11.1250, -11.3750,
+         -10.5625, -10.0000]], dtype=torch.bfloat16).to(torch_device)
+        
+        input_ids = [1, 42, 21, 12, 43, 23, 1, 4]
+
+        model = BLTForCausalLM.from_pretrained(
+            "itazap/blt-1b", 
+            device_map="auto",
+            torch_dtype=torch.bfloat16
+        )
+
+        with torch.no_grad():
+            output = model(torch.tensor([input_ids]).to(torch_device))[0]
+
+        torch.testing.assert_close(EXPECTED_OUTPUT, output[0, :2, :30], rtol=1e-3, atol=1e-3)
+
+    @slow
+    @require_read_token
+    def test_model_eager(self):
+        """Test BLT model with bfloat16 precision using eager attention implementation."""
+        NUM_TOKENS_TO_GENERATE = 200
+        EXPECTED_TEXT = "my name is alex and i am a student at the university of michigan. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan math club and the michigan computer s"
+
+        prompt = "my name is"
+
+        model = BLTForCausalLM.from_pretrained(
+            "itazap/blt-1b", 
+            device_map="auto",
+            attn_implementation="eager"
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained("itazap/blt-1b")
+
+        inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+
+        generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
+
+        output_text = tokenizer.decode(generated_ids[0])
+        self.assertEqual(output_text, EXPECTED_TEXT)
+
+    @slow
+    @require_read_token
+    @require_torch_bf16
+    def test_model_bf16_static_cache(self):
+        """Test BLT model with bfloat16 precision and static cache."""
+        NUM_TOKENS_TO_GENERATE = 200
+        EXPECTED_TEXT = "my name is alex and i am a student at the university of michigan in the college of arts and sciences. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan m"
+
+        prompt = "my name is"
+
+        model = BLTForCausalLM.from_pretrained(
+            "itazap/blt-1b", 
+            device_map="auto",
+            torch_dtype=torch.bfloat16
+        )
+
+        model.generation_config.cache_implementation = "static"
+
+        tokenizer = AutoTokenizer.from_pretrained("itazap/blt-1b")
+
+        inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+
+        generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
+
+        output_text = tokenizer.decode(generated_ids[0])
+        self.assertEqual(output_text, EXPECTED_TEXT)
