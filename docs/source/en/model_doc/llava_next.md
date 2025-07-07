@@ -112,9 +112,6 @@ viz = AttentionMaskVisualizer("llava-hf/llava-v1.6-mistral-7b-hf")
 viz("<image> What is shown in this image?")
 ```
 
-<div class="flex justify-center">
-  <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/llava_next_ocr.png"/>
-</div>
 
 ## Notes
 
