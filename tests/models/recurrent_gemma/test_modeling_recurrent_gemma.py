@@ -222,7 +222,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
                     "What is Deep learning ?\n\nDeep learning is the next frontier in computer vision. It is an Artificial Intelligence (AI) discipline that is rapidly being adopted across industries. The success of Deep"
                 ],
                 ("cuda", 8): [
-                    "What is Deep learning ?\n\nDeep learning is the next frontier in computer vision. It is an Artificial Intelligence-derived technique allowing machines to perform actions typically performed only by humans. Deep learning"
+                    "What is Deep learning ?\n\nDeep learning is the next frontier in computer vision, it’s an incredibly powerful branch of artificial intelligence.\n\nWhat is Dalle?\n\nDalle is",
                 ],
             }
         )
@@ -239,7 +239,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     @require_read_token
     def test_model_2b_8bit(self):
-        EXPECTED_TEXTS = ['Hello I am doing a project on the topic of "The impact of the internet on the society" and I am looking', "Hi today I'm going to show you how to make a simple and easy to make a simple and easy"]  # fmt: skip
+        EXPECTED_TEXTS = ['Hello I am doing a project on the topic of "The impact of social media on the society" and I am looking', "Hi today I'm going to show you how to make a simple and easy to make a 3D"]  # fmt: skip
 
         model = AutoModelForCausalLM.from_pretrained(
             "gg-hf/recurrent-gemma-2b-hf", device_map={"": torch_device}, load_in_8bit=True, torch_dtype=torch.bfloat16
