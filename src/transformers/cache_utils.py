@@ -1150,9 +1150,10 @@ class StaticCache(Cache):
             else config.num_key_value_heads
         )
         if tp_size is not None and tp_size > 1:
-            assert self.num_key_value_heads % tp_size == 0, (
-                f"Number of key value heads {self.num_key_value_heads} must be divisible by tensor parallel size {tp_size}."
-            )
+            if self.num_key_value_heads % tp_size != 0:
+                raise ValueError(
+                    f"Number of key value heads {self.num_key_value_heads} must be divisible by tensor parallel size {tp_size}."
+                )
             # If the model is using tensor parallelism, we need to adjust the number of heads accordingly.
             self.num_key_value_heads //= tp_size
 
