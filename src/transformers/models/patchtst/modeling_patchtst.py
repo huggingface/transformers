@@ -559,24 +559,25 @@ class PatchTSTPreTrainedModel(PreTrainedModel):
     main_input_name = "past_values"
     supports_gradient_checkpointing = False
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """
         Initialize weights
         """
         if isinstance(module, PatchTSTPositionalEncoding):
+            num_patches = PatchTSTPatchify(self.config).num_patches
             # initialize cls_token
             if self.config.use_cls_token:
                 nn.init.normal_(module.cls_token, std=0.02)
+                num_patches += 1
             # initialize positional encoding
-            if self.config.positional_encoding_type == "random":
-                nn.init.normal_(module.position_enc, mean=0.0, std=0.1)
+            module.position_enc = module._init_pe(self.config, num_patches)
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, PatchTSTBatchNorm):
             module.batchnorm.bias.data.zero_()
             module.batchnorm.weight.data.fill_(1.0)
-        elif isinstance(module, (nn.Linear, nn.Conv1d)):
+        elif isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=self.config.init_std)
             if module.bias is not None:
                 module.bias.data.zero_()
