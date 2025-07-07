@@ -1530,16 +1530,14 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
         ```python
         >>> from transformers import AutoProcessor, TFWav2Vec2Model
         >>> from datasets import load_dataset
-        >>> from torchcodec.decoders import AudioDecoder
 
         >>> processor = AutoProcessor.from_pretrained("facebook/wav2vec2-base-960h")
         >>> model = TFWav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
 
 
-        >>> def map_to_array(batch):
-        ...     decoder = AudioDecoder(batch["file"])
-        ...     batch["speech"] = torch.mean(decoder.get_all_samples().data, axis=0)
-        ...     return batch
+        >>> def map_to_array(example):
+        ...     example["speech"] = example["audio"]["array"]
+        ...     return example
 
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -1648,10 +1646,9 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
         >>> model = TFWav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
 
 
-        >>> def map_to_array(batch):
-        ...     decoder = AudioDecoder(batch["file"])
-        ...     batch["speech"] = torch.mean(decoder.get_all_samples().data, axis=0)
-        ...     return batch
+        >>> def map_to_array(example):
+        ...     example["speech"] = example["audio"]["array"]
+        ...     return example
 
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")

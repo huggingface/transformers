@@ -1064,16 +1064,14 @@ FLAX_WAV2VEC2_MODEL_DOCSTRING = """
     ```python
     >>> from transformers import AutoProcessor, FlaxWav2Vec2Model
     >>> from datasets import load_dataset
-    >>> from torchcodec.decoders import AudioDecoder
 
     >>> processor = AutoProcessor.from_pretrained("facebook/wav2vec2-large-lv60")
     >>> model = FlaxWav2Vec2Model.from_pretrained("facebook/wav2vec2-large-lv60")
 
 
-    >>> def map_to_array(batch):
-    ...     decoder = AudioDecoder(batch["file"])
-    ...     batch["speech"] = torch.mean(decoder.get_all_samples().data, axis=0)
-    ...     return batch
+    >>> def map_to_array(example):
+    ...     example["speech"] = example["audio"]["array"]
+    ...     return example
 
 
     >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -1183,16 +1181,14 @@ FLAX_WAV2VEC2_FOR_CTC_DOCSTRING = """
     >>> import jax.numpy as jnp
     >>> from transformers import AutoProcessor, FlaxWav2Vec2ForCTC
     >>> from datasets import load_dataset
-        >>> from torchcodec.decoders import AudioDecoder
 
     >>> processor = AutoProcessor.from_pretrained("facebook/wav2vec2-large-960h-lv60")
     >>> model = FlaxWav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-large-960h-lv60")
 
 
-    >>> def map_to_array(batch):
-    ...     decoder = AudioDecoder(batch["file"])
-    ...     batch["speech"] = torch.mean(decoder.get_all_samples().data, axis=0)
-    ...     return batch
+    >>> def map_to_array(example):
+    ...     example["speech"] = example["audio"]["array"]
+    ...     return example
 
 
     >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -1384,16 +1380,14 @@ FLAX_WAV2VEC2_FOR_PRETRAINING_DOCSTRING = """
     >>> from transformers import AutoFeatureExtractor, FlaxWav2Vec2ForPreTraining
     >>> from transformers.models.wav2vec2.modeling_flax_wav2vec2 import _compute_mask_indices
     >>> from datasets import load_dataset
-    >>> from torchcodec.decoders import AudioDecoder
 
     >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-large-lv60")
     >>> model = FlaxWav2Vec2ForPreTraining.from_pretrained("facebook/wav2vec2-large-lv60")
 
 
-    >>> def map_to_array(batch):
-    ...     decoder = AudioDecoder(batch["file"])
-    ...     batch["speech"] = torch.mean(decoder.get_all_samples().data, axis=0)
-    ...     return batch
+    >>> def map_to_array(example):
+    ...     example["speech"] = example["audio"]["array"]
+    ...     return example
 
 
     >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")

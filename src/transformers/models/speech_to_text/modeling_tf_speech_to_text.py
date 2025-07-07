@@ -1470,7 +1470,6 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
         >>> import tensorflow as tf
         >>> from transformers import Speech2TextProcessor, TFSpeech2TextForConditionalGeneration
         >>> from datasets import load_dataset
-        >>> from torchcodec.decoders import AudioDecoder
 
         >>> model = TFSpeech2TextForConditionalGeneration.from_pretrained(
         ...     "facebook/s2t-small-librispeech-asr", from_pt=True
@@ -1478,10 +1477,9 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
         >>> processor = Speech2TextProcessor.from_pretrained("facebook/s2t-small-librispeech-asr")
 
 
-        >>> def map_to_array(batch):
-        ...     decoder = AudioDecoder(batch["file"])
-        ...     batch["speech"] = torch.mean(decoder.get_all_samples().data, axis=0)
-        ...     return batch
+        >>> def map_to_array(example):
+        ...     example["speech"] = example["audio"]["array"]
+        ...     return example
 
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")

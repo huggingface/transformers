@@ -1459,16 +1459,14 @@ class TFHubertModel(TFHubertPreTrainedModel):
         ```python
         >>> from transformers import AutoProcessor, TFHubertModel
         >>> from datasets import load_dataset
-        >>> from torchcodec.decoders import AudioDecoder
 
         >>> processor = AutoProcessor.from_pretrained("facebook/hubert-large-ls960-ft")
         >>> model = TFHubertModel.from_pretrained("facebook/hubert-large-ls960-ft")
 
 
-        >>> def map_to_array(batch):
-        ...     decoder = AudioDecoder(batch["file"])
-        ...     batch["speech"] = torch.mean(decoder.get_all_samples().data, axis=0)
-        ...     return batch
+        >>> def map_to_array(example):
+        ...     example["speech"] = example["audio"]["array"]
+        ...     return example
 
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -1571,16 +1569,14 @@ class TFHubertForCTC(TFHubertPreTrainedModel):
         >>> import tensorflow as tf
         >>> from transformers import AutoProcessor, TFHubertForCTC
         >>> from datasets import load_dataset
-        >>> from torchcodec.decoders import AudioDecoder
 
         >>> processor = AutoProcessor.from_pretrained("facebook/hubert-large-ls960-ft")
         >>> model = TFHubertForCTC.from_pretrained("facebook/hubert-large-ls960-ft")
 
 
-        >>> def map_to_array(batch):
-        ...     decoder = AudioDecoder(batch["file"])
-        ...     batch["speech"] = torch.mean(decoder.get_all_samples().data, axis=0)
-        ...     return batch
+        >>> def map_to_array(example):
+        ...     example["speech"] = example["audio"]["array"]
+        ...     return example
 
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
