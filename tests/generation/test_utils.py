@@ -2308,6 +2308,16 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             if not getattr(model_class, support_flag[attn_implementation]):
                 self.skipTest(f"{model_class.__name__} does not support `attn_implementation={attn_implementation}`")
+            
+            # If not all sub-models support flex, skip the test. We could potentially set not supported backbones
+            # to "eager" attention, leaving it for future updates on multimodality tests
+            sub_models_supporting_attn = [
+                getattr(module, support_flag[attn_implementation])
+                for name, module in model.named_modules()
+                if isinstance(module, PreTrainedModel) and name != ""
+            ]
+            if not all(sub_models_supporting_attn) and len(sub_models_supporting_attn) > 0:
+                self.skipTest(f"One of {model_class.__name__}'s backbones does not support `attn_implementation={attn_implementation}`")
 
             config, original_inputs_dict = self.prepare_config_and_inputs_for_generate()
             inputs_dict = {}
