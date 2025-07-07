@@ -14,31 +14,28 @@
 # limitations under the License.
 """PyTorch GLM-4-MOE model."""
 
-from typing import Optional, Union
-
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, logging
-from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel, load_balancing_loss_func
-from ..qwen3_moe.modular_qwen3_moe import Qwen3MoeMLP, Qwen3MoeDecoderLayer
+from ...configuration_utils import PretrainedConfig
+from ...modeling_rope_utils import rope_config_validation
+from ...utils import logging
 from ..glm4.modeling_glm4 import (
     Glm4Attention,
     Glm4RMSNorm,
-    Glm4ForTokenClassification,
-    Glm4ForSequenceClassification,
 )
-from .configuration_glm4_moe import Glm4MoeConfig
-from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ..llama.modeling_llama import (
+    LlamaForQuestionAnswering,
+    LlamaForSequenceClassification,
+    LlamaForTokenClassification,
+)
+from ..qwen3_moe.modular_qwen3_moe import Qwen3MoeDecoderLayer, Qwen3MoeForCausalLM, Qwen3MoeMLP, Qwen3MoeModel
 
 
 logger = logging.get_logger(__name__)
+
 
 class Glm4MoeConfig(PretrainedConfig):
     r"""
@@ -124,10 +121,6 @@ class Glm4MoeConfig(PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        use_sliding_window (`bool`, *optional*, defaults to `False`):
-            Whether to use sliding window attention.
-        sliding_window (`int`, *optional*, defaults to 4096):
-            Sliding window attention (SWA) window size. If not specified, will default to `4096`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         decoder_sparse_step (`int`, *optional*, defaults to 1):
@@ -187,32 +180,28 @@ class Glm4MoeConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=151936,
-        hidden_size=2048,
-        intermediate_size=6144,
-        num_hidden_layers=24,
-        num_attention_heads=32,
-        num_key_value_heads=4,
+        vocab_size=151552,
+        hidden_size=4096,
+        intermediate_size=10944,
+        num_hidden_layers=46,
+        num_attention_heads=96,
+        partial_rotary_factor=0.5,
+        num_key_value_heads=8,
         hidden_act="silu",
-        max_position_embeddings=32768,
+        max_position_embeddings=131072,
         initializer_range=0.02,
-        rms_norm_eps=1e-6,
+        rms_norm_eps=1e-5,
         use_cache=True,
         tie_word_embeddings=False,
         rope_theta=10000.0,
         rope_scaling=None,
         attention_bias=False,
-        use_sliding_window=False,
-        sliding_window=4096,
         attention_dropout=0.0,
         decoder_sparse_step=1,
-        moe_intermediate_size=768,
+        moe_intermediate_size=1408,
         num_experts_per_tok=8,
         num_experts=128,
         norm_topk_prob=False,
-        output_router_logits=False,
-        router_aux_loss_coef=0.001,
-        mlp_only_layers=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -221,8 +210,7 @@ class Glm4MoeConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.use_sliding_window = use_sliding_window
-        self.sliding_window = sliding_window if use_sliding_window else None
+        self.partial_rotary_factor = partial_rotary_factor
 
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
@@ -245,9 +233,6 @@ class Glm4MoeConfig(PretrainedConfig):
         self.num_experts_per_tok = num_experts_per_tok
         self.num_experts = num_experts
         self.norm_topk_prob = norm_topk_prob
-        self.output_router_logits = output_router_logits
-        self.router_aux_loss_coef = router_aux_loss_coef
-        self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,
@@ -275,9 +260,7 @@ class Glm4MoeSparseMoeBlock(nn.Module):
 
         # gating
         self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
-        self.experts = nn.ModuleList(
-            [Glm4MoeMLP(config=config) for _ in range(self.num_experts)]
-        )
+        self.experts = nn.ModuleList([Glm4MoeMLP(config=config) for _ in range(self.num_experts)])
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """ """
@@ -337,118 +320,27 @@ class Glm4MoeDecoderLayer(Qwen3MoeDecoderLayer):
             self.mlp = Glm4MoeMLP(config, intermediate_size=config.intermediate_size)
 
 
-class Glm4MoeModel(MixtralModel):
+class Glm4MoeModel(Qwen3MoeModel):
     def __init__(self, config: Glm4MoeConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(
             [Glm4MoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
 
-class Glm4MoeForCausalLM(MixtralForCausalLM):
-    def __init__(self, config):
-        super().__init__(config)
-        self.model = Glm4MoeModel(config)
-        self.num_experts = config.num_experts
 
-    def forward(
-            self,
-            input_ids: Optional[torch.LongTensor] = None,
-            attention_mask: Optional[torch.Tensor] = None,
-            position_ids: Optional[torch.LongTensor] = None,
-            past_key_values: Optional[list[torch.FloatTensor]] = None,
-            inputs_embeds: Optional[torch.FloatTensor] = None,
-            labels: Optional[torch.LongTensor] = None,
-            use_cache: Optional[bool] = None,
-            output_attentions: Optional[bool] = None,
-            output_hidden_states: Optional[bool] = None,
-            output_router_logits: Optional[bool] = None,
-            cache_position: Optional[torch.LongTensor] = None,
-            logits_to_keep: Union[int, torch.Tensor] = 0,
-            **kwargs: Unpack[TransformersKwargs],
-    ) -> MoeCausalLMOutputWithPast:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        Example:
-
-        ```python
-        >>> from transformers import AutoTokenizer, Glm4MoeForCausalLM
-
-        >>> model = Glm4MoeForCausalLM.from_pretrained("Qwen/Qwen3-MoE-100B-A9B")
-        >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-MoE-15B-A2B")
-
-        >>> prompt = "Hey, are you conscious? Can you talk to me?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
-        ```"""
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_router_logits = (
-            output_router_logits if output_router_logits is not None else self.config.output_router_logits
-        )
-
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs: MoeModelOutputWithPast = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            output_router_logits=output_router_logits,
-            cache_position=cache_position,
-            **kwargs,
-        )
-
-        hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
-
-        aux_loss = None
-        if output_router_logits:
-            aux_loss = load_balancing_loss_func(
-                outputs.router_logits,
-                self.num_experts,
-                self.num_experts_per_tok,
-                attention_mask,
-            )
-            if labels is not None:
-                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
-
-        return MoeCausalLMOutputWithPast(
-            loss=loss,
-            aux_loss=aux_loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            router_logits=outputs.router_logits,
-        )
-
-
-class Glm4MoeForSequenceClassification(Glm4ForSequenceClassification):
+class Glm4MoeForCausalLM(Qwen3MoeForCausalLM):
     pass
 
 
-class Glm4MoeForTokenClassification(Glm4ForTokenClassification):
+class Glm4MoeForSequenceClassification(LlamaForSequenceClassification):
+    pass
+
+
+class Glm4MoeForTokenClassification(LlamaForTokenClassification):
+    pass
+
+
+class Glm4MoeForQuestionAnswering(LlamaForQuestionAnswering):
     pass
 
 
@@ -458,4 +350,5 @@ __all__ = [
     "Glm4MoePreTrainedModel",  # noqa: F822
     "Glm4MoeForSequenceClassification",
     "Glm4MoeForTokenClassification",
+    "Glm4MoeForQuestionAnswering",
 ]

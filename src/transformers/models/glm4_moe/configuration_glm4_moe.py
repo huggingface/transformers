@@ -18,6 +18,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 
@@ -106,10 +107,6 @@ class Glm4MoeConfig(PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        use_sliding_window (`bool`, *optional*, defaults to `False`):
-            Whether to use sliding window attention.
-        sliding_window (`int`, *optional*, defaults to 4096):
-            Sliding window attention (SWA) window size. If not specified, will default to `4096`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         decoder_sparse_step (`int`, *optional*, defaults to 1):
@@ -169,32 +166,28 @@ class Glm4MoeConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=151936,
-        hidden_size=2048,
-        intermediate_size=6144,
-        num_hidden_layers=24,
-        num_attention_heads=32,
-        num_key_value_heads=4,
+        vocab_size=151552,
+        hidden_size=4096,
+        intermediate_size=10944,
+        num_hidden_layers=46,
+        num_attention_heads=96,
+        partial_rotary_factor=0.5,
+        num_key_value_heads=8,
         hidden_act="silu",
-        max_position_embeddings=32768,
+        max_position_embeddings=131072,
         initializer_range=0.02,
-        rms_norm_eps=1e-6,
+        rms_norm_eps=1e-5,
         use_cache=True,
         tie_word_embeddings=False,
         rope_theta=10000.0,
         rope_scaling=None,
         attention_bias=False,
-        use_sliding_window=False,
-        sliding_window=4096,
         attention_dropout=0.0,
         decoder_sparse_step=1,
-        moe_intermediate_size=768,
+        moe_intermediate_size=1408,
         num_experts_per_tok=8,
         num_experts=128,
         norm_topk_prob=False,
-        output_router_logits=False,
-        router_aux_loss_coef=0.001,
-        mlp_only_layers=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -203,8 +196,7 @@ class Glm4MoeConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.use_sliding_window = use_sliding_window
-        self.sliding_window = sliding_window if use_sliding_window else None
+        self.partial_rotary_factor = partial_rotary_factor
 
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
@@ -227,9 +219,6 @@ class Glm4MoeConfig(PretrainedConfig):
         self.num_experts_per_tok = num_experts_per_tok
         self.num_experts = num_experts
         self.norm_topk_prob = norm_topk_prob
-        self.output_router_logits = output_router_logits
-        self.router_aux_loss_coef = router_aux_loss_coef
-        self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,

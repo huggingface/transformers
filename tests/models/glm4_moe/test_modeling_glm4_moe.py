@@ -39,7 +39,8 @@ if is_torch_available():
         Glm4MoeForCausalLM,
         Glm4MoeForQuestionAnswering,
         Glm4MoeForSequenceClassification,
-        Glm4MoeForTokenClassification
+        Glm4MoeForTokenClassification,
+        Glm4MoeModel,
     )
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
