@@ -521,6 +521,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
             input_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
+            position_ids=position_ids,
             past_key_values=past_key_values,
         )
 
