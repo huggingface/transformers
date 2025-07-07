@@ -71,8 +71,8 @@ class HqqHfQuantizer(HfQuantizer):
                 " sure the weights are in PyTorch format."
             )
 
-        if not torch.cuda.is_available():
-            raise RuntimeError("No GPU found. A GPU is needed for quantization.")
+        if not (torch.cuda.is_available() or torch.xpu.is_available()):
+            raise RuntimeError("No GPU or XPU found. A GPU or XPU is needed for quantization.")
 
         if self.torch_dtype is None:
             if "torch_dtype" in kwargs:
