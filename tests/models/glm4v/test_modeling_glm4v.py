@@ -264,11 +264,10 @@ class Glm4vModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
             torch.testing.assert_close(out_embeds, out_ids)
 
 
-@unittest.skip("Model checkpoint not yet released")
 @require_torch
 class Glm4vIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("z")
+        self.processor = AutoProcessor.from_pretrained("THDUM/GLM-4.1V-9B-Thinking")
         self.messages = [
             {
                 "role": "user",
@@ -278,7 +277,7 @@ class Glm4vIntegrationTest(unittest.TestCase):
                 ],
             }
         ]
-        url = "https://qianwen-res.oss-accelerate-overseas.aliyuncs.com/Qwen2-VL/demo_small.jpg"
+        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
         self.image = Image.open(requests.get(url, stream=True).raw)
 
     def tearDown(self):
@@ -288,23 +287,22 @@ class Glm4vIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test(self):
         model = Glm4vForConditionalGeneration.from_pretrained(
-            "THUDM/GLM-4.1V-9B-Thinking", torch_dtype="auto", device_map="auto"
+            "THDUM/GLM-4.1V-9B-Thinking", torch_dtype="auto", device_map="auto"
         )
 
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(text=[text], images=[self.image], return_tensors="pt")
-
-        expected_input_ids = [151644, 8948, 198, 2610, 525, 264, 10950, 17847, 13, 151645, 198, 151644, 872, 198, 151652, 151655, 151655]  # fmt: skip
+        expected_input_ids = [151331, 151333, 151336, 198, 151339, 151343, 151343, 151343, 151343, 151343, 151343, 151343, 151343, 151343, 151343, 151343, 151343]  # fmt: skip
         assert expected_input_ids == inputs.input_ids[0].tolist()[:17]
 
         expected_pixel_slice = torch.tensor(
             [
-                [0.8792, 0.8792, 0.9084],
-                [1.1858, 1.1858, 1.2296],
-                [1.2004, 1.2004, 1.2150],
-                [1.4340, 1.4340, 1.4194],
-                [1.3902, 1.4048, 1.4194],
-                [1.5216, 1.5362, 1.5362],
+                [-0.0988, -0.0842, -0.0842],
+                [-0.5660, -0.5514, -0.4200],
+                [-0.0259, -0.0259, -0.0259],
+                [-0.1280, -0.0988, -0.2010],
+                [-0.4638, -0.5806, -0.6974],
+                [-1.2083, -1.2229, -1.2083],
             ],
             dtype=torch.float32,
             device="cpu",
@@ -315,17 +313,16 @@ class Glm4vIntegrationTest(unittest.TestCase):
         inputs = inputs.to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=30)
-        EXPECTED_DECODED_TEXT = "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices"
-
+        EXPECTED_DECODED_TEXT = "What kind of dog is this?<|assistant|>\n<think>Got it, let's look at the image. The animal in the picture is not a dog; it's a cat. Specifically, it looks"
         self.assertEqual(
-            self.processor.decode(output[0], skip_special_tokens=True),
+            self.processor.decode(output[0][-39:], skip_special_tokens=False),
             EXPECTED_DECODED_TEXT,
         )
 
     @slow
     def test_small_model_integration_test_batch(self):
         model = Glm4vForConditionalGeneration.from_pretrained(
-            "THUDM/GLM-4.1V-9B-Thinking", torch_dtype="auto", device_map="auto"
+            "THDUM/GLM-4.1V-9B-Thinking", torch_dtype="auto", device_map="auto"
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(text=[text, text], images=[self.image, self.image], return_tensors="pt").to(
@@ -347,7 +344,7 @@ class Glm4vIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_expand(self):
         model = Glm4vForConditionalGeneration.from_pretrained(
-            "THUDM/GLM-4.1V-9B-Thinking", torch_dtype="auto", device_map="auto"
+            "THDUM/GLM-4.1V-9B-Thinking", torch_dtype="auto", device_map="auto"
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(text=[text], images=[self.image], return_tensors="pt").to(torch_device)
@@ -367,7 +364,7 @@ class Glm4vIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_batch_wo_image(self):
         model = Glm4vForConditionalGeneration.from_pretrained(
-            "THUDM/GLM-4.1V-9B-Thinking", torch_dtype="auto", device_map="auto"
+            "THDUM/GLM-4.1V-9B-Thinking", torch_dtype="auto", device_map="auto"
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         messages2 = [
@@ -394,7 +391,7 @@ class Glm4vIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_batch_different_resolutions(self):
         model = Glm4vForConditionalGeneration.from_pretrained(
-            "THUDM/GLM-4.1V-9B-Thinking", torch_dtype="auto", device_map="auto"
+            "THDUM/GLM-4.1V-9B-Thinking", torch_dtype="auto", device_map="auto"
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         text2 = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
@@ -420,7 +417,7 @@ class Glm4vIntegrationTest(unittest.TestCase):
     @require_torch_gpu
     def test_small_model_integration_test_batch_flashatt2(self):
         model = Glm4vForConditionalGeneration.from_pretrained(
-            "THUDM/GLM-4.1V-9B-Thinking",
+            "THDUM/GLM-4.1V-9B-Thinking",
             torch_dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
             device_map="auto",
@@ -447,7 +444,7 @@ class Glm4vIntegrationTest(unittest.TestCase):
     @require_torch_gpu
     def test_small_model_integration_test_batch_wo_image_flashatt2(self):
         model = Glm4vForConditionalGeneration.from_pretrained(
-            "THUDM/GLM-4.1V-9B-Thinking",
+            "THDUM/GLM-4.1V-9B-Thinking",
             torch_dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
             device_map="auto",
