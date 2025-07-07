@@ -215,7 +215,15 @@ def _compute_dynamic_ntk_parameters(
     attention_factor = 1.0  # Unused in this type of RoPE
 
     # seq_len: default to max_position_embeddings, e.g. at init time
-    seq_len = seq_len if seq_len is not None and seq_len > max_position_embeddings else max_position_embeddings
+    if seq_len is None:
+        seq_len = max_position_embeddings
+    elif isinstance(seq_len, torch.Tensor):
+        seq_len = torch.maximum(
+            seq_len,
+            torch.tensor(max_position_embeddings, dtype=seq_len.dtype, device=seq_len.device),
+        )
+    else:
+        seq_len = max(seq_len, max_position_embeddings)
 
     # Compute the inverse frequencies
     base = base * ((factor * seq_len / max_position_embeddings) - (factor - 1)) ** (dim / (dim - 2))

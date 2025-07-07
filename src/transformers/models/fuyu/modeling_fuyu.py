@@ -21,11 +21,10 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...generation import GenerationMixin
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...models.auto.modeling_auto import AutoModel
-from ...utils import LossKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import auto_docstring, can_return_tuple, logging
 from .configuration_fuyu import FuyuConfig
 
 
@@ -54,9 +53,6 @@ class FuyuPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 @auto_docstring(
@@ -206,14 +202,22 @@ class FuyuModel(FuyuPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
-            if image_patches is not None and past_key_values is None:
-                patch_embeddings = self.get_image_features(image_patches)
-                patch_embeddings = torch.cat(patch_embeddings, dim=0)
 
-                special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
-                special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-                patch_embeddings = patch_embeddings.to(inputs_embeds.device, inputs_embeds.dtype)
-                inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, patch_embeddings)
+        if image_patches is not None:
+            patch_embeddings = self.get_image_features(image_patches)
+            patch_embeddings = torch.cat(patch_embeddings, dim=0)
+
+            if input_ids is None:
+                special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+                special_image_mask = special_image_mask.all(-1)
+            else:
+                special_image_mask = input_ids == self.config.image_token_id
+
+            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+            patch_embeddings = patch_embeddings.to(inputs_embeds.device, inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, patch_embeddings)
 
         outputs = self.language_model(
             inputs_embeds=inputs_embeds,

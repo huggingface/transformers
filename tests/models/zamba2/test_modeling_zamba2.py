@@ -22,6 +22,7 @@ from parameterized import parameterized
 
 from transformers import AutoTokenizer, Zamba2Config, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
@@ -678,14 +679,23 @@ class Zamba2ModelIntegrationTest(unittest.TestCase):
             ]
             , dtype=torch.float32)  # fmt: skip
 
-        EXPECTED_LOGITS_NO_GRAD_1 = torch.tensor(
-            [
-               0.1966,  6.3449,  3.8350, -5.7291, -6.5106, -6.5104, -6.5103, -6.5104,
-               -6.5103, -6.5104, -6.5106, -6.5105,  7.8700, 13.5434, -6.5104, -6.5096,
-               -6.5106, -6.5102, -6.5106, -6.5106, -6.5105, -6.5106, -6.5104, -6.5106,
-               -6.5105, -6.5106, -6.5106, -6.5113, -6.5102, -6.5105, -6.5108, -6.5105,
-               -6.5104, -6.5106, -6.5106, -6.5104, -6.5106, -6.5107, -6.5103, -6.5105          ]
-            , dtype=torch.float32)  # fmt: skip
+        EXPECTED_LOGITS_NO_GRAD_1S = Expectations(
+            {
+                ("xpu", 3): torch.tensor([0.2027,  6.3481,  3.8392, -5.7279, -6.5090, -6.5088, -6.5087, -6.5088,
+                                          -6.5087, -6.5088, -6.5090, -6.5089,  7.8796, 13.5483, -6.5088, -6.5080,
+                                          -6.5090, -6.5086, -6.5090, -6.5090, -6.5089, -6.5090, -6.5088, -6.5090,
+                                          -6.5089, -6.5090, -6.5090, -6.5097, -6.5086, -6.5089, -6.5092, -6.5089,
+                                          -6.5088, -6.5090, -6.5090, -6.5088, -6.5090, -6.5091, -6.5087, -6.5089],
+                                         dtype=torch.float32),
+                ("cuda", None): torch.tensor([0.1966,  6.3449,  3.8350, -5.7291, -6.5106, -6.5104, -6.5103, -6.5104,
+                                              -6.5103, -6.5104, -6.5106, -6.5105,  7.8700, 13.5434, -6.5104, -6.5096,
+                                              -6.5106, -6.5102, -6.5106, -6.5106, -6.5105, -6.5106, -6.5104, -6.5106,
+                                              -6.5105, -6.5106, -6.5106, -6.5113, -6.5102, -6.5105, -6.5108, -6.5105,
+                                              -6.5104, -6.5106, -6.5106, -6.5104, -6.5106, -6.5107, -6.5103, -6.5105],
+                                             dtype=torch.float32),
+            }
+        )  # fmt: skip
+        EXPECTED_LOGITS_NO_GRAD_1 = EXPECTED_LOGITS_NO_GRAD_1S.get_expectation()
 
         torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_0, rtol=1e-3, atol=1e-3)
         torch.testing.assert_close(

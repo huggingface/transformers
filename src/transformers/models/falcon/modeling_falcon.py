@@ -15,7 +15,7 @@
 """PyTorch Falcon model."""
 
 import math
-from typing import TYPE_CHECKING, Optional, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -46,9 +46,6 @@ from ...utils import (
 )
 from .configuration_falcon import FalconConfig
 
-
-if TYPE_CHECKING:
-    from ...configuration_utils import PretrainedConfig
 
 if is_flash_attn_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
@@ -107,7 +104,7 @@ class FalconRotaryEmbedding(nn.Module):
     def __init__(self, config: FalconConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
             self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
         else:
             self.rope_type = "default"
@@ -688,7 +685,7 @@ class FalconPreTrainedModel(PreTrainedModel):
 
     # Adapted from transformers.modeling_utils.PreTrainedModel._check_and_enable_sdpa
     @classmethod
-    def _check_and_enable_sdpa(cls, config, hard_check_only: bool = False) -> "PretrainedConfig":
+    def _check_and_enable_sdpa(cls, config, hard_check_only: bool = False):
         _is_bettertransformer = getattr(cls, "use_bettertransformer", False)
         if _is_bettertransformer:
             return config

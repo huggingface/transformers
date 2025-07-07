@@ -19,7 +19,7 @@ import unittest
 import requests
 
 from transformers import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig, pipeline
-from transformers.testing_utils import cleanup, require_torch, require_torch_sdpa, slow, torch_device
+from transformers.testing_utils import Expectations, cleanup, require_torch, require_torch_sdpa, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -587,6 +587,7 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config = model.config
             model.to(torch_device)
             model.eval()
+            print(model.__class__, model._can_record_outputs)
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
@@ -598,8 +599,10 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
+            config.mask_decoder_config.output_attentions = True
+            config.vision_config.output_attentions = True
             config.output_attentions = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -771,9 +774,18 @@ class SamModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
         scores = outputs.iou_scores.squeeze().cpu()
-        masks = outputs.pred_masks[0, 0, 0, 0, :3].cpu()
+        masks = outputs.pred_masks[0, 0, 0, 0, :3]
+
+        expectations = Expectations(
+            {
+                (None, None): [-12.7729, -12.3665, -12.6061],
+                ("cuda", 8): [-12.7657, -12.3683, -12.5983],
+            }
+        )
+        expected_masks = torch.tensor(expectations.get_expectation()).to(torch_device)
+
         torch.testing.assert_close(scores[-1], torch.tensor(0.9566), rtol=2e-4, atol=2e-4)
-        torch.testing.assert_close(masks, torch.tensor([-12.7729, -12.3665, -12.6061]), rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(masks, expected_masks, rtol=2e-4, atol=2e-4)
 
     def test_inference_mask_generation_batched_points_batched_images(self):
         model = SamModel.from_pretrained("facebook/sam-vit-base")
