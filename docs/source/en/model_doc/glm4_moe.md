@@ -14,11 +14,11 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# glm4_moe
+# Glm4Moe
 
 ## Overview
 
-The glm4_moe model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
+The Glm4Moe model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
 <INSERT SHORT SUMMARY HERE>
 
 The abstract from the paper is the following:
@@ -33,31 +33,31 @@ This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface
 The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 
-## Glm4_moeConfig
+## Glm4MoeConfig
 
-[[autodoc]] Glm4_moeConfig
+[[autodoc]] Glm4MoeConfig
 
-## Glm4_moeModel
+## Glm4MoeModel
 
-[[autodoc]] Glm4_moeModel
+[[autodoc]] Glm4MoeModel
     - forward
 
-## Glm4_moeForCausalLM
+## Glm4MoeForCausalLM
 
-[[autodoc]] Glm4_moeForCausalLM
+[[autodoc]] Glm4MoeForCausalLM
     - forward
 
-## Glm4_moeForSequenceClassification
+## Glm4MoeForSequenceClassification
 
-[[autodoc]] Glm4_moeForSequenceClassification
+[[autodoc]] Glm4MoeForSequenceClassification
     - forward
 
-## Glm4_moeForTokenClassification
+## Glm4MoeForTokenClassification
 
-[[autodoc]] Glm4_moeForTokenClassification
+[[autodoc]] Glm4MoeForTokenClassification
     - forward
 
-## Glm4_moeForQuestionAnswering
+## Glm4MoeForQuestionAnswering
 
-[[autodoc]] Glm4_moeForQuestionAnswering
+[[autodoc]] Glm4MoeForQuestionAnswering
     - forward
