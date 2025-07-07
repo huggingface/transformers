@@ -656,6 +656,7 @@ class GenerationMixin(ContinuousMixin):
             # If it's not defined, it means the model uses the new general mask API
             if causal_mask_creation_function is None:  # can't be found
                 token_type_ids = getattr(model_input, "token_type_ids", None)
+                position_ids = getattr(model_input, position_ids_key, None)
                 # Some models may overwrite the general one
                 causal_mask_creation_function = getattr(self, "create_masks_for_generate", create_masks_for_generate)
                 attention_mask = causal_mask_creation_function(
@@ -665,6 +666,7 @@ class GenerationMixin(ContinuousMixin):
                     attention_mask=attention_mask,
                     cache_position=cache_position,
                     past_key_values=past_key_values,
+                    position_ids=position_ids,
                     token_type_ids=token_type_ids,
                 )
             else:
@@ -1776,6 +1778,10 @@ class GenerationMixin(ContinuousMixin):
                     ):
                         modified_values[key] = model_gen_config_value
                         setattr(generation_config, key, model_gen_config_value)
+                # edge case: we may set `temperature=0.0` and `do_sample=False`, but the model defaults to
+                # `do_sample=True`
+                if generation_config.temperature == 0.0:
+                    generation_config.do_sample = False
                 if use_model_defaults is None and len(modified_values) > 0:
                     logger.warning_once(
                         f"`generation_config` default values have been modified to match model-specific defaults: "
