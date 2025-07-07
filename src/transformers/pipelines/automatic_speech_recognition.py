@@ -371,10 +371,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
             if isinstance(inputs, torchcodec.decoders.AudioDecoder):
                 _audio_samples = inputs.get_all_samples()
-                _data = _audio_samples.data
-                # to mono
-                _data = torch.mean(_data, 0) if _data.ndim > 1 else _data
-                inputs = {"array": _data, "sampling_rate": _audio_samples.sample_rate}
+                _array = _audio_samples.data
+                inputs = {"array": _array, "sampling_rate": _audio_samples.sample_rate}
 
         if isinstance(inputs, dict):
             stride = inputs.pop("stride", None)
