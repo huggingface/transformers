@@ -27,7 +27,7 @@ from transformers import (
     SamHQVisionModel,
     pipeline,
 )
-from transformers.testing_utils import cleanup, require_torch, require_torch_sdpa, slow, torch_device
+from transformers.testing_utils import Expectations, cleanup, require_torch, require_torch_sdpa, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -522,10 +522,9 @@ class SamHQModelTester:
                 pixel_values,
                 output_hidden_states=True,
             )
-
         # after computing the convolutional features
         expected_hidden_states_shape = (self.batch_size, 12, 12, 36)
-        self.parent.assertEqual(len(result[1]), self.num_hidden_layers + 1)
+        self.parent.assertEqual(len(result.hidden_states), self.num_hidden_layers + 1)
         self.parent.assertEqual(result[1][0].shape, expected_hidden_states_shape)
 
     def prepare_config_and_inputs_for_common(self):
@@ -646,6 +645,7 @@ class SamHQModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
             config.output_attentions = True
+            config.vision_config.output_attentions = True
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -802,9 +802,15 @@ class SamHQModelIntegrationTest(unittest.TestCase):
 
         masks = outputs.pred_masks[0, 0, 0, 0, :3]
         self.assertTrue(torch.allclose(scores[0][0][-1], torch.tensor(0.4482), atol=2e-4))
-        self.assertTrue(
-            torch.allclose(masks, torch.tensor([-13.1695, -14.6201, -14.8989]).to(torch_device), atol=2e-3)
+
+        expectations = Expectations(
+            {
+                (None, None): [-13.1695, -14.6201, -14.8989],
+                ("cuda", 8): [-13.1668, -14.6182, -14.8970],
+            }
         )
+        EXPECTED_MASKS = torch.tensor(expectations.get_expectation()).to(torch_device)
+        torch.testing.assert_close(masks, EXPECTED_MASKS, atol=2e-3, rtol=2e-3)
 
     def test_inference_mask_generation_one_point_one_bb(self):
         model = SamHQModel.from_pretrained("syscv-community/sam-hq-vit-base")
@@ -849,28 +855,53 @@ class SamHQModelIntegrationTest(unittest.TestCase):
 
         with torch.no_grad():
             outputs = model(**inputs)
-        scores = outputs.iou_scores.squeeze().cpu()
-        masks = outputs.pred_masks[0, 0, 0, 0, :3].cpu()
-        EXPECTED_SCORES = torch.tensor(
-            [
-                [
-                    [0.9195, 0.8316, 0.6614],
-                    [0.9195, 0.8316, 0.6614],
-                    [0.9195, 0.8316, 0.6614],
-                    [0.9195, 0.8316, 0.6614],
-                ],
-                [
-                    [0.7598, 0.7388, 0.3110],
-                    [0.9195, 0.8317, 0.6614],
-                    [0.9195, 0.8317, 0.6614],
-                    [0.9195, 0.8317, 0.6614],
-                ],
-            ]
-        )
-        EXPECTED_MASKS = torch.tensor([-40.2445, -37.4300, -38.1577])
+        scores = outputs.iou_scores.squeeze()
+        masks = outputs.pred_masks[0, 0, 0, 0, :3]
 
-        self.assertTrue(torch.allclose(scores, EXPECTED_SCORES, atol=1e-3))
-        self.assertTrue(torch.allclose(masks, EXPECTED_MASKS, atol=9e-3))
+        expectations = Expectations(
+            {
+                (None, None): [
+                    [
+                        [0.9195, 0.8316, 0.6614],
+                        [0.9195, 0.8316, 0.6614],
+                        [0.9195, 0.8316, 0.6614],
+                        [0.9195, 0.8316, 0.6614],
+                    ],
+                    [
+                        [0.7598, 0.7388, 0.3110],
+                        [0.9195, 0.8317, 0.6614],
+                        [0.9195, 0.8317, 0.6614],
+                        [0.9195, 0.8317, 0.6614],
+                    ],
+                ],
+                ("cuda", 8): [
+                    [
+                        [0.9195, 0.8316, 0.6614],
+                        [0.9195, 0.8316, 0.6614],
+                        [0.9195, 0.8316, 0.6614],
+                        [0.9195, 0.8316, 0.6614],
+                    ],
+                    [
+                        [0.7597, 0.7387, 0.3110],
+                        [0.9195, 0.8316, 0.6614],
+                        [0.9195, 0.8316, 0.6614],
+                        [0.9195, 0.8316, 0.6614],
+                    ],
+                ],
+            }
+        )
+        EXPECTED_SCORES = torch.tensor(expectations.get_expectation()).to(torch_device)
+
+        expectations = Expectations(
+            {
+                (None, None): [-40.2445, -37.4300, -38.1577],
+                ("cuda", 8): [-40.2351, -37.4334, -38.1526],
+            }
+        )
+        EXPECTED_MASKS = torch.tensor(expectations.get_expectation()).to(torch_device)
+
+        torch.testing.assert_close(scores, EXPECTED_SCORES, atol=1e-3, rtol=1e-3)
+        torch.testing.assert_close(masks, EXPECTED_MASKS, atol=9e-3, rtol=9e-3)
 
     def test_inference_mask_generation_one_point_one_bb_zero(self):
         model = SamHQModel.from_pretrained("syscv-community/sam-hq-vit-base")

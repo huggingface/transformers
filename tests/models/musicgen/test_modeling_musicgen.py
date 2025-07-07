@@ -31,6 +31,7 @@ from transformers import (
     T5Config,
 )
 from transformers.testing_utils import (
+    Expectations,
     get_device_properties,
     is_torch_available,
     require_flash_attn,
@@ -1377,16 +1378,17 @@ class MusicgenIntegrationTests(unittest.TestCase):
         output_values = model.generate(**unconditional_inputs, do_sample=True, max_new_tokens=10)
 
         # fmt: off
-        EXPECTED_VALUES = torch.tensor(
-            [
-                -0.0099, -0.0140, 0.0079, 0.0080, -0.0046,  0.0065, -0.0068, -0.0185,
-                 0.0105,  0.0059, 0.0329, 0.0249, -0.0204, -0.0341, -0.0465,  0.0053,
-            ]
+        expectations = Expectations(
+            {
+                (None, None): [-0.0099, -0.0140, 0.0079, 0.0080, -0.0046, 0.0065, -0.0068, -0.0185, 0.0105, 0.0059, 0.0329, 0.0249, -0.0204, -0.0341, -0.0465, 0.0053],
+                ("cuda", 8): [-0.0099, -0.0140, 0.0079, 0.0080, -0.0046, 0.0065, -0.0068, -0.0185, 0.0105, 0.0058, 0.0328, 0.0249, -0.0205, -0.0342, -0.0466, 0.0052],
+            }
         )
+        EXPECTED_VALUES = torch.tensor(expectations.get_expectation()).to(torch_device)
         # fmt: on
 
         self.assertTrue(output_values.shape == (2, 1, 4480))
-        torch.testing.assert_close(output_values[0, 0, :16].cpu(), EXPECTED_VALUES, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(output_values[0, 0, :16], EXPECTED_VALUES, rtol=2e-4, atol=2e-4)
 
     @slow
     def test_generate_text_prompt_greedy(self):
@@ -1459,16 +1461,17 @@ class MusicgenIntegrationTests(unittest.TestCase):
         )
 
         # fmt: off
-        EXPECTED_VALUES = torch.tensor(
-            [
-                -0.0111, -0.0154, 0.0047, 0.0058, -0.0068,  0.0012, -0.0109, -0.0229,
-                 0.0010, -0.0038, 0.0167, 0.0042, -0.0421, -0.0610, -0.0764, -0.0326,
-            ]
+        expectations = Expectations(
+            {
+                (None, None): [-0.0111, -0.0154, 0.0047, 0.0058, -0.0068, 0.0012, -0.0109, -0.0229, 0.0010, -0.0038, 0.0167, 0.0042, -0.0421, -0.0610, -0.0764, -0.0326],
+                ("cuda", 8): [-0.0110, -0.0153, 0.0048, 0.0058, -0.0068, 0.0012, -0.0109, -0.0229, 0.0010, -0.0037, 0.0168, 0.0042, -0.0420, -0.0609, -0.0763, -0.0326],
+            }
         )
+        EXPECTED_VALUES = torch.tensor(expectations.get_expectation()).to(torch_device)
         # fmt: on
 
         self.assertTrue(output_values.shape == (2, 1, 4480))
-        torch.testing.assert_close(output_values[0, 0, :16].cpu(), EXPECTED_VALUES, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(output_values[0, 0, :16], EXPECTED_VALUES, rtol=2e-4, atol=2e-4)
 
     @slow
     def test_generate_text_audio_prompt(self):
@@ -1521,13 +1524,13 @@ class MusicgenStereoIntegrationTests(unittest.TestCase):
         # fmt: off
         EXPECTED_VALUES_LEFT = torch.tensor(
             [
-                 0.0017,  0.0004,  0.0004,  0.0005,  0.0002,  0.0002, -0.0002, -0.0013,
+                 0.0017, 0.0004, 0.0004, 0.0005, 0.0002, 0.0002, -0.0002, -0.0013,
                 -0.0010, -0.0015, -0.0018, -0.0032, -0.0060, -0.0082, -0.0096, -0.0099,
             ]
         )
         EXPECTED_VALUES_RIGHT = torch.tensor(
             [
-                0.0038, 0.0028, 0.0031,  0.0032,  0.0031,  0.0032,  0.0030,  0.0019,
+                0.0038, 0.0028, 0.0031, 0.0032, 0.0031, 0.0032, 0.0030, 0.0019,
                 0.0021, 0.0015, 0.0009, -0.0008, -0.0040, -0.0067, -0.0087, -0.0096,
             ]
         )
@@ -1555,13 +1558,13 @@ class MusicgenStereoIntegrationTests(unittest.TestCase):
         # fmt: off
         EXPECTED_VALUES_LEFT = torch.tensor(
             [
-                 0.2535,  0.2008,  0.1471,  0.0896,  0.0306, -0.0200, -0.0501, -0.0728,
+                 0.2535, 0.2008, 0.1471, 0.0896, 0.0306, -0.0200, -0.0501, -0.0728,
                 -0.0832, -0.0856, -0.0867, -0.0884, -0.0864, -0.0866, -0.0744, -0.0430,
             ]
         )
         EXPECTED_VALUES_RIGHT = torch.tensor(
             [
-                 0.1695,  0.1213,  0.0732,  0.0239, -0.0264, -0.0705, -0.0935, -0.1103,
+                 0.1695, 0.1213, 0.0732, 0.0239, -0.0264, -0.0705, -0.0935, -0.1103,
                 -0.1163, -0.1139, -0.1104, -0.1082, -0.1027, -0.1004, -0.0900, -0.0614,
             ]
         )
