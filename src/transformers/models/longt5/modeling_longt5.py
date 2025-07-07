@@ -1456,7 +1456,9 @@ class LongT5Stack(LongT5PreTrainedModel):
                 attention_mask,
                 inputs_embeds,
                 cache_position,
-                past_key_values.self_attention_cache if isinstance(past_key_values, EncoderDecoderCache) else None,
+                past_key_values.self_attention_cache
+                if isinstance(past_key_values, EncoderDecoderCache)
+                else past_key_values,
                 output_attentions,
             )
         # We use local attention in encoder self-attention, otherwise standard self & cross attentions are used
@@ -1706,10 +1708,12 @@ class LongT5Model(LongT5PreTrainedModel):
         encoder_config = copy.deepcopy(config)
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
+        encoder_config.tie_encoder_decoder = False
         self.encoder = LongT5Stack(encoder_config, self.shared)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
+        decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
         self.decoder = LongT5Stack(decoder_config, self.shared)
 
@@ -1905,10 +1909,12 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel, GenerationMixin):
         encoder_config = copy.deepcopy(config)
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
+        encoder_config.tie_encoder_decoder = False
         self.encoder = LongT5Stack(encoder_config, self.shared)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
+        decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
         self.decoder = LongT5Stack(decoder_config, self.shared)
 
@@ -2150,6 +2156,7 @@ class LongT5EncoderModel(LongT5PreTrainedModel):
 
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
+        encoder_config.tie_encoder_decoder = False
         self.encoder = LongT5Stack(encoder_config, self.shared)
 
         # Initialize weights and apply final processing

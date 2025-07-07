@@ -1194,7 +1194,9 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
                 attention_mask,
                 inputs_embeds,
                 cache_position,
-                past_key_values.self_attention_cache if isinstance(past_key_values, EncoderDecoderCache) else None,
+                past_key_values.self_attention_cache
+                if isinstance(past_key_values, EncoderDecoderCache)
+                else past_key_values,
                 output_attentions,
             )
         else:
