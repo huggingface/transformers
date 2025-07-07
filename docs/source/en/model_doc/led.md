@@ -23,14 +23,14 @@ rendered properly in your Markdown viewer.
 
 # LED
 
-[Longformer-Encoder-Decoder (LED)](https://huggingface.co/papers/2004.05150) is an encoder-decoder (sequence-to-sequence) transformer model for long-input summarization. It extends [Longformer](.longformer), an encoder-only model designed to handle long inputs, by adding a decoder layer for summarization tasks. Because of Longformer's linear self-attention mechanism, LED is more efficient than standard encoder-decoder models when summarizing long sequences.
+[Longformer-Encoder-Decoder (LED)](https://huggingface.co/papers/2004.05150) is an encoder-decoder  transformer model for sequence-to-sequence tasks like summarization. It extends [Longformer](.longformer), an encoder-only model designed to handle long inputs, by adding a decoder layer. The decoder uses full self-attention on the encoded tokens and previously decoded locations. Because of Longformer's linear self-attention mechanism, LED is more efficient than standard encoder-decoder models when processing long sequences.
 
 You can find all the original [LED] checkpoints under the [Ai2](https://huggingface.co/allenai/models?search=led) organization.
 
 > [!TIP]
 > This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten).
 >
-> Click on the [LED] models in the right sidebar for more examples of how to apply [LED] to different language tasks.
+> Click on the LED models in the right sidebar for more examples of how to apply LED to different language tasks.
 
 The example below demonstrates how to summarize text with [`Pipeline`], [`AutoModel`], and from the command line.
 
@@ -106,14 +106,14 @@ quantization_config = BitsAndBytesConfig(
     bnb_4bit_quant_type="nf4"
 )
 model = AutoModelForSeq2SeqLM.from_pretrained(
-    "allenai/led-base-16384",
+    "allenai/led-large-16384",
     torch_dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )
 
 tokenizer = AutoTokenizer.from_pretrained(
-    "allenai/led-base-16384"
+    "allenai/led-large-16384"
 )
 
 input_text = """Plants are among the most remarkable and essential life forms on Earth, possessing a unique ability to produce their own food through a process known as photosynthesis. This complex biochemical process is fundamental not only to plant life but to virtually all life on the planet.
@@ -133,10 +133,10 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ## Notes
 
 - [`LEDForConditionalGeneration`] is an extension of [`BartForConditionalGeneration`] exchanging the traditional self-attention layer with Longformer's chunked self-attention layer. [`LEDTokenizer`] is an alias of [`BartTokenizer`].
-- LED pads the `input_ids` to be a multiple of `config.attention_window` if required. Therefore a small speed-up is gained when [`LEDTokenizer`] is used with the `pad_to_multiple_of` argument.
-- LED works best on long-range sequence-to-sequence tasks where the `input_ids` largely exceed a length of 1024 tokens.
-- LED makes use of global attention by means of the `global_attention_mask` (see [`LongformerModel`]). For summarization, it is advised to put global attention only on the first `<s>` token. For question answering, it is advised to put global attention on all tokens of the question.
-- To fine-tune LED on all 16384 parameters, gradient checkpointing can be enabled in case training leads to out-of-memory (OOM) errors. This can be done by executing `model.gradient_checkpointing_enable()`. Moreover, the `use_cache=False` flag can be used to disable the caching mechanism to save memory.
+- LED pads the `input_ids` to be a multiple of `config.attention_window` if required. A small speedup is gained when [`LEDTokenizer`] is used with the `pad_to_multiple_of` argument.
+- LED works best on long-range sequence-to-sequence tasks where the `input_ids` are significantly longer than 1024 tokens.
+- LED uses global attention by means of the `global_attention_mask` (see [`LongformerModel`]). For summarization, it is advised to put global attention only on the first `<s>` token. For question answering, it is advised to put global attention on all tokens of the question.
+- To fine-tune LED on all 16384 parameters, gradient checkpointing can be enabled in case training leads to out-of-memory (OOM) errors. Enable gradient checkpointing by adding `model.gradient_checkpointing_enable()` and setting `use_cache=False` to disable the caching mechanism to save memory.
 - Inputs should be padded on the right because LED uses absolute position embeddings.
 
 ## Resources
