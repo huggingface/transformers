@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Run the test: CUDA_VISIBLE_DEVICES=0,1 RUN_SLOW=1 pytest -sv tests/tensor_parallel/test_tensor_parallel.py
+
 import os
 import subprocess
 import tempfile
@@ -62,7 +64,6 @@ class TestTensorParallelUtils(TestCasePlus):
         assert torch.allclose(unpacked_weights, original_packed_weights)
 
 
-# RUN_SLOW=1 pytest -sv tests/tensor_parallel/test_tensor_parallel.py
 class TestTensorParallel(TestCasePlus):
     nproc_per_node = 2
 
