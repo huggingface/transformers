@@ -94,23 +94,354 @@ class Sam2Processor(ProcessorMixin):
 
         # pop arguments that are not used in the foward but used nevertheless
         original_sizes = encoding_image_processor["original_sizes"]
+        # Check original_sizes is of length 1 or len(images)
+        if len(original_sizes) != 1 and len(original_sizes) != len(images):
+            raise ValueError(
+                "original_sizes must be of length 1 or len(images). If you are passing a single image, you must pass a single original_size."
+            )
 
-        input_points, input_labels, input_boxes = self._check_and_preprocess_points(
-            input_points=input_points,
-            input_labels=input_labels,
-            input_boxes=input_boxes,
-        )
+        # Process input points, labels, and boxes if provided
+        if input_points is not None or input_labels is not None or input_boxes is not None:
+            # Validate and convert inputs to standardized format
+            processed_points = self._process_single_input(
+                input_points,
+                expected_depth=4,
+                input_name="points",
+                expected_format="[image_idx, object_idx, point_idx, point_coords]",
+                expected_coord_size=2,
+            )
+            processed_labels = self._process_single_input(
+                input_labels,
+                expected_depth=3,
+                input_name="labels",
+                expected_format="[image_idx, object_idx, point_idx]",
+            )
+            processed_boxes = self._process_single_input(
+                input_boxes,
+                expected_depth=3,
+                input_name="boxes",
+                expected_format="[image_idx, box_idx, box_coords]",
+                expected_coord_size=4,
+            )
 
-        encoding_image_processor = self._normalize_and_convert(
-            encoding_image_processor,
-            original_sizes,
-            input_points=input_points,
-            input_labels=input_labels,
-            input_boxes=input_boxes,
-            return_tensors=return_tensors,
-        )
+            # Get padding requirements for all inputs
+            padding_info = {}
+            if processed_points is not None:
+                padding_info["points"] = self._get_nested_dimensions(processed_points)[:3]
+            if processed_labels is not None:
+                padding_info["labels"] = self._get_nested_dimensions(processed_labels)[:3]
+            if processed_boxes is not None:
+                padding_info["boxes"] = self._get_nested_dimensions(processed_boxes)[:2]
+
+            # Ensure points and labels have consistent dimensions
+            if processed_points is not None and processed_labels is not None:
+                if padding_info["points"] != padding_info["labels"]:
+                    raise ValueError(
+                        "Input points and labels have inconsistent dimensions. Please ensure they have the same dimensions."
+                    )
+
+            # Check that boxes don't need padding (model limitation)
+            if processed_boxes is not None and len(processed_boxes) >= 2:
+                max_boxes = padding_info["boxes"][1]
+                if any(len(img_boxes) < max_boxes for img_boxes in processed_boxes):
+                    raise ValueError(
+                        "Input boxes have inconsistent dimensions that would require padding, "
+                        "but boxes cannot be padded due to model limitations. "
+                        "Please ensure all images have the same number of boxes."
+                    )
+
+            # Pad and normalize all inputs to final tensor format
+            if processed_points is not None:
+                padded_points = self._pad_nested_list(processed_points, padding_info["points"] + [2])
+                final_points = torch.tensor(padded_points, dtype=torch.float32)
+                self._normalize_tensor_coordinates(final_points, original_sizes, preserve_padding=True)
+                encoding_image_processor.update({"input_points": final_points})
+
+            if processed_labels is not None:
+                padded_labels = self._pad_nested_list(processed_labels, padding_info["labels"])
+                final_labels = torch.tensor(padded_labels, dtype=torch.int64)
+                encoding_image_processor.update({"input_labels": final_labels})
+
+            if processed_boxes is not None:
+                final_boxes = torch.tensor(processed_boxes, dtype=torch.float32)
+                self._normalize_tensor_coordinates(final_boxes, original_sizes, is_bounding_box=True)
+                encoding_image_processor.update({"input_boxes": final_boxes})
 
         return encoding_image_processor
+
+    def _normalize_coordinates(
+        self, target_size: int, coords: "torch.Tensor", original_size, is_bounding_box=False
+    ) -> "torch.Tensor":
+        """
+        Expects a numpy array of length 2 in the final dimension. Requires the original image size in (H, W) format.
+        """
+        old_h, old_w = original_size
+        new_h, new_w = target_size, target_size
+        coords = deepcopy(coords).float()
+
+        if is_bounding_box:
+            coords = coords.reshape(-1, 2, 2)
+        coords[..., 0] = coords[..., 0] * (new_w / old_w)
+        coords[..., 1] = coords[..., 1] * (new_h / old_h)
+
+        if is_bounding_box:
+            coords = coords.reshape(-1, 4)
+
+        return coords
+
+    def _convert_to_nested_list(self, data, expected_depth, current_depth=0):
+        """
+        Recursively convert various input formats (tensors, numpy arrays, lists) to nested lists.
+
+        Args:
+            data: Input data in any format
+            expected_depth: Expected nesting depth
+            current_depth: Current depth in recursion
+
+        Returns:
+            Nested list representation of the data
+        """
+        if data is None:
+            return None
+
+        # Convert tensor/numpy to list if we're at a leaf level or if it's a multi-dimensional array
+        if isinstance(data, torch.Tensor):  # PyTorch tensor
+            if current_depth == expected_depth - 2 or len(data.shape) <= 2:  # At coordinate level or small tensor
+                return data.numpy().tolist()
+            else:
+                return [self._convert_to_nested_list(item, expected_depth, current_depth + 1) for item in data]
+        elif isinstance(data, np.ndarray):  # NumPy array
+            if current_depth == expected_depth - 2 or len(data.shape) <= 2:  # At coordinate level or small array
+                return data.tolist()
+            else:
+                return [self._convert_to_nested_list(item, expected_depth, current_depth + 1) for item in data]
+        elif isinstance(data, list):
+            if current_depth == expected_depth:
+                # We've reached the expected depth, return as is
+                return data
+            else:
+                # Continue recursion
+                return [self._convert_to_nested_list(item, expected_depth, current_depth + 1) for item in data]
+        elif isinstance(data, (int, float)):
+            return data
+        else:
+            raise ValueError(f"Unsupported data type: {type(data)}")
+
+    def _get_nested_dimensions(self, nested_list, max_dims=None):
+        """
+        Get the maximum dimensions at each level of nesting.
+
+        Args:
+            nested_list: Nested list structure
+            max_dims: Current maximum dimensions (for recursion)
+
+        Returns:
+            List of maximum dimensions for each nesting level
+        """
+        if max_dims is None:
+            max_dims = []
+
+        if not isinstance(nested_list, list):
+            return max_dims
+
+        if len(max_dims) == 0:
+            max_dims.append(len(nested_list))
+        else:
+            max_dims[0] = max(max_dims[0], len(nested_list))
+
+        if len(nested_list) > 0:
+            for item in nested_list:
+                if isinstance(item, list):
+                    sub_dims = self._get_nested_dimensions(item)
+                    # Merge sub_dims into max_dims
+                    for i, dim in enumerate(sub_dims):
+                        if i + 1 >= len(max_dims):
+                            max_dims.append(dim)
+                        else:
+                            max_dims[i + 1] = max(max_dims[i + 1], dim)
+
+        return max_dims
+
+    def _pad_nested_list(self, nested_list, target_dims, current_level=0, pad_value=None):
+        """
+        Recursively pad a nested list to match target dimensions.
+
+        Args:
+            nested_list: Nested list to pad
+            target_dims: Target dimensions for each level
+            current_level: Current nesting level
+            pad_value: Value to use for padding
+
+        Returns:
+            Padded nested list
+        """
+        if pad_value is None:
+            pad_value = self.point_pad_value
+
+        if current_level >= len(target_dims):
+            return nested_list
+
+        # Ensure we have a list
+        if not isinstance(nested_list, list):
+            nested_list = [nested_list]
+
+        # Pad current level
+        current_size = len(nested_list)
+        target_size = target_dims[current_level]
+
+        # Pad with appropriate values
+        if current_level == len(target_dims) - 1:
+            # At the coordinate level, pad with pad_value
+            nested_list.extend([pad_value] * (target_size - current_size))
+        else:
+            # At higher levels, pad with nested structures
+            if current_size > 0:
+                # Create appropriately sized template
+                if current_level < len(target_dims) - 2:
+                    # For non-coordinate levels, create empty nested structure
+                    template_dims = target_dims[current_level + 1 :]
+                    template = self._create_empty_nested_structure(template_dims, pad_value)
+                else:
+                    # For coordinate level, create list of pad_values
+                    template = [pad_value] * target_dims[current_level + 1]
+
+                nested_list.extend([deepcopy(template) for _ in range(target_size - current_size)])
+            else:
+                # Create from scratch
+                template_dims = target_dims[current_level + 1 :]
+                template = self._create_empty_nested_structure(template_dims, pad_value)
+                nested_list.extend([deepcopy(template) for _ in range(target_size)])
+
+        # Recursively pad sublists
+        if current_level < len(target_dims) - 1:
+            for i in range(len(nested_list)):
+                if isinstance(nested_list[i], list):
+                    nested_list[i] = self._pad_nested_list(nested_list[i], target_dims, current_level + 1, pad_value)
+
+        return nested_list
+
+    def _create_empty_nested_structure(self, dims, pad_value):
+        """Create an empty nested structure with given dimensions filled with pad_value."""
+        if len(dims) == 1:
+            return [pad_value] * dims[0]
+        else:
+            return [self._create_empty_nested_structure(dims[1:], pad_value) for _ in range(dims[0])]
+
+    def _get_nesting_level(self, input_list):
+        """Get the nesting level of a list structure."""
+        if isinstance(input_list, list):
+            if len(input_list) == 0:
+                return 1
+            return 1 + self._get_nesting_level(input_list[0])
+        elif isinstance(input_list, (np.ndarray, torch.Tensor)):
+            # For arrays/tensors, the nesting level is the number of dimensions
+            return len(input_list.shape)
+        return 0
+
+    def _ensure_proper_nesting(self, data, expected_depth):
+        """
+        Ensure data has the proper nesting level by unsqueezing from the first dimensions if needed.
+
+        Args:
+            data: Input data (tensor, numpy array, or nested list)
+            expected_depth: Expected nesting depth
+            data_type: Type of data for error messages ("points", "labels", "boxes")
+
+        Returns:
+            Data with proper nesting level
+        """
+        if data is None:
+            return None
+
+        # Handle tensors and numpy arrays first
+        if isinstance(data, (torch.Tensor, np.ndarray)):
+            # For tensors/arrays, we can directly check the number of dimensions
+            current_depth = len(data.shape)
+            # Unsqueeze from the beginning if needed
+            while current_depth < expected_depth:
+                if isinstance(data, torch.Tensor):  # PyTorch tensor
+                    data = data.unsqueeze(0)
+                else:  # NumPy array
+                    data = np.expand_dims(data, axis=0)
+                current_depth += 1
+            return data
+
+        # Handle nested lists
+        if isinstance(data, list):
+            current_depth = self._get_nesting_level(data)
+            # Unsqueeze from the beginning if needed
+            while current_depth < expected_depth:
+                data = [data]
+                current_depth += 1
+            return data
+
+        # Handle scalar values (wrap in appropriate nesting)
+        else:
+            # Create the appropriate nesting level
+            result = data
+            for _ in range(expected_depth):
+                result = [result]
+            return result
+
+    def _process_single_input(self, data, expected_depth, input_name, expected_format, expected_coord_size=None):
+        """
+        Process a single input by ensuring proper nesting and converting to nested list format.
+
+        Args:
+            data: Input data to process
+            expected_depth: Expected nesting depth
+            input_name: Name of the input for error messages
+            expected_coord_size: Expected coordinate size (2 for points, 4 for boxes, None for labels)
+
+        Returns:
+            Processed nested list or None if data is None
+        """
+        if data is None:
+            return None
+
+        try:
+            data = self._ensure_proper_nesting(data, expected_depth)
+            return self._convert_to_nested_list(data, expected_depth)
+        except ValueError as e:
+            coord_info = f" Coordinates must be length {expected_coord_size}." if expected_coord_size else ""
+            raise ValueError(
+                f"Input {input_name} must be a nested list with the specified dimensions and format {expected_format}.{coord_info} "
+                f"Missing dimensions are automatically unsqueezed from the beginning. Error: {e}"
+            )
+
+    def _normalize_tensor_coordinates(self, tensor, original_sizes, is_bounding_box=False, preserve_padding=False):
+        """
+        Helper method to normalize coordinates in a tensor across multiple images.
+
+        Args:
+            tensor: Input tensor with coordinates
+            original_sizes: Original image sizes
+            is_bounding_box: Whether coordinates are bounding boxes
+            preserve_padding: Whether to preserve padding values (for points)
+        """
+        if preserve_padding:
+            # For points: avoid normalizing pad values
+            mask = tensor != self.point_pad_value
+            coord_mask = mask.all(dim=-1, keepdim=True)
+
+        for img_idx in range(len(original_sizes)):
+            if img_idx < tensor.shape[0]:
+                original_size = original_sizes[img_idx] if img_idx < len(original_sizes) else original_sizes[0]
+                normalized_coords = self._normalize_coordinates(
+                    self.target_size, tensor[img_idx], original_size, is_bounding_box=is_bounding_box
+                )
+
+                if preserve_padding:
+                    # Only update non-padded values
+                    img_mask = coord_mask[img_idx]
+                    tensor[img_idx] = torch.where(
+                        img_mask.expand_as(tensor[img_idx]), normalized_coords, tensor[img_idx]
+                    )
+                else:
+                    tensor[img_idx] = normalized_coords
+
+    def post_process_masks(self, *args, **kwargs):
+        return self.image_processor.post_process_masks(*args, **kwargs)
 
     def init_video_session(
         self,
@@ -137,161 +468,6 @@ class Sam2Processor(ProcessorMixin):
             inference_state_device=inference_state_device,
         )
         return inference_state
-
-    def _normalize_and_convert(
-        self,
-        encoding_image_processor,
-        original_sizes,
-        input_points=None,
-        input_labels=None,
-        input_boxes=None,
-        return_tensors="pt",
-    ):
-        if input_points is not None:
-            if len(original_sizes) != len(input_points):
-                input_points = [
-                    self._normalize_coordinates(self.target_size, point, original_sizes[0]) for point in input_points
-                ]
-            else:
-                input_points = [
-                    self._normalize_coordinates(self.target_size, point, original_size)
-                    for point, original_size in zip(input_points, original_sizes)
-                ]
-            # check that all arrays have the same shape
-            if not all(point.shape[-2] == input_points[0].shape[-2] for point in input_points):
-                if input_labels is not None:
-                    input_points, input_labels = self._pad_points_and_labels(input_points, input_labels)
-
-            input_points = torch.stack(input_points)
-            input_points = input_points.unsqueeze(1) if len(input_points.shape) != 4 else input_points
-            encoding_image_processor.update({"input_points": input_points})
-
-        if input_labels is not None:
-            input_labels = torch.stack(input_labels)
-            input_labels = input_labels.unsqueeze(1) if len(input_labels.shape) != 3 else input_labels
-            encoding_image_processor.update({"input_labels": input_labels})
-
-        if input_boxes is not None:
-            if len(original_sizes) != len(input_boxes):
-                input_boxes = [
-                    self._normalize_coordinates(self.target_size, box, original_sizes[0], is_bounding_box=True)
-                    for box in input_boxes
-                ]
-            else:
-                input_boxes = [
-                    self._normalize_coordinates(self.target_size, box, original_size, is_bounding_box=True)
-                    for box, original_size in zip(input_boxes, original_sizes)
-                ]
-            input_boxes = torch.stack(input_boxes)
-            input_boxes = input_boxes.unsqueeze(1) if len(input_boxes.shape) != 3 else input_boxes
-            encoding_image_processor.update({"input_boxes": input_boxes})
-
-        return encoding_image_processor
-
-    def _pad_points_and_labels(self, input_points, input_labels):
-        r"""
-        The method pads the 2D points and labels to the maximum number of points in the batch.
-        """
-        expected_nb_points = max([point.shape[-2] for point in input_points])
-        processed_input_points = []
-        for i, point in enumerate(input_points):
-            if point.shape[-2] != expected_nb_points:
-                shape_point = point.shape[:-2]
-                shape_label = input_labels[i].shape[:-1]
-                point = torch.cat(
-                    [
-                        point,
-                        torch.zeros((*shape_point, expected_nb_points - point.shape[-2], 2)) + self.point_pad_value,
-                    ],
-                    axis=-2,
-                )
-                input_labels[i] = torch.cat(
-                    [
-                        input_labels[i],
-                        torch.zeros((*shape_label, expected_nb_points - input_labels[i].shape[-1]))
-                        + self.point_pad_value,
-                    ],
-                    axis=-1,
-                )
-            processed_input_points.append(point)
-        input_points = processed_input_points
-        return input_points, input_labels
-
-    def _normalize_coordinates(
-        self, target_size: int, coords: "torch.Tensor", original_size, is_bounding_box=False
-    ) -> "torch.Tensor":
-        """
-        Expects a numpy array of length 2 in the final dimension. Requires the original image size in (H, W) format.
-        """
-        old_h, old_w = original_size
-        new_h, new_w = target_size, target_size
-        coords = deepcopy(coords).float()
-
-        if is_bounding_box:
-            coords = coords.reshape(-1, 2, 2)
-        coords[..., 0] = coords[..., 0] * (new_w / old_w)
-        coords[..., 1] = coords[..., 1] * (new_h / old_h)
-
-        if is_bounding_box:
-            coords = coords.reshape(-1, 4)
-
-        return coords
-
-    def _check_and_preprocess_points(
-        self,
-        input_points=None,
-        input_labels=None,
-        input_boxes=None,
-    ):
-        r"""
-        Check and preprocesses the 2D points, labels and bounding boxes. It checks if the input is valid and if they
-        are, it converts the coordinates of the points and bounding boxes. If a user passes directly a `torch.Tensor`,
-        it is converted to a `numpy.ndarray` and then to a `list`.
-        """
-        if input_points is not None:
-            if hasattr(input_points, "numpy"):  # Checks for TF or Torch tensor
-                input_points = input_points.numpy().tolist()
-            elif hasattr(input_points, "tolist"):
-                input_points = input_points.tolist()
-
-            if not isinstance(input_points, list) or not isinstance(input_points[0], list):
-                raise ValueError("Input points must be a list of list of floating points.")
-            input_points = [torch.tensor(input_point) for input_point in input_points]
-        else:
-            input_points = None
-
-        if input_labels is not None:
-            if hasattr(input_labels, "numpy"):
-                input_labels = input_labels.numpy().tolist()
-            elif hasattr(input_labels, "tolist"):
-                input_labels = input_labels.tolist()
-
-            if not isinstance(input_labels, list) or not isinstance(input_labels[0], list):
-                raise ValueError("Input labels must be a list of list integers.")
-            input_labels = [torch.tensor(label) for label in input_labels]
-        else:
-            input_labels = None
-
-        if input_boxes is not None:
-            if hasattr(input_boxes, "numpy"):
-                input_boxes = input_boxes.numpy().tolist()
-            elif hasattr(input_boxes, "tolist"):
-                input_boxes = input_boxes.tolist()
-
-            if (
-                not isinstance(input_boxes, list)
-                or not isinstance(input_boxes[0], list)
-                or not isinstance(input_boxes[0][0], list)
-            ):
-                raise ValueError("Input boxes must be a list of list of list of floating points.")
-            input_boxes = [torch.tensor(box).float() for box in input_boxes]
-        else:
-            input_boxes = None
-
-        return input_points, input_labels, input_boxes
-
-    def post_process_masks(self, *args, **kwargs):
-        return self.image_processor.post_process_masks(*args, **kwargs)
 
     def process_new_points_or_box(
         self,

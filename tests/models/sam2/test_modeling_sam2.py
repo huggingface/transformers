@@ -760,6 +760,12 @@ def prepare_image():
     return raw_image
 
 
+def prepare_groceries_image():
+    img_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/groceries.jpg"
+    raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+    return raw_image
+
+
 def prepare_dog_img():
     img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/dog-sam.png"
     raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
@@ -862,7 +868,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             rtol=1e-4,
         )
 
-    def test_inference_mask_generation_batched_points_batched_images(self):
+    def test_inference_mask_generation_batched_images_multi_points(self):
         raw_image1 = prepare_image()
         raw_image2 = prepare_dog_img()
         input_points = [[[[500, 375]]], [[[770, 200], [730, 120]]]]
@@ -908,6 +914,85 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             rtol=1e-4,
         )
 
+    def test_inference_mask_generation_batched_images_batched_points_multi_points(self):
+        raw_image1 = prepare_image()
+        raw_image2 = prepare_groceries_image()
+        input_points = [[[[500, 375]], [[650, 750]]], [[[400, 300]], [[630, 300], [550, 300]]]]
+        input_labels = [[[1], [1]], [[1], [1, 1]]]
+        inputs = self.processor(
+            images=[raw_image1, raw_image2], input_points=input_points, input_labels=input_labels, return_tensors="pt"
+        ).to(torch_device)
+        with torch.no_grad():
+            outputs = self.model(**inputs, multimask_output=False)
+        self.assertEqual(outputs.iou_scores.shape, (2, 2, 1))
+        self.assertEqual(outputs.low_res_masks.shape, (2, 2, 1, 256, 256))
+
+        print(outputs.iou_scores)
+        print(outputs.low_res_masks[:, :, :, :2, :2])
+
+        torch.testing.assert_close(
+            outputs.iou_scores,
+            torch.tensor([[[0.9499], [0.9718]], [[0.9568], [0.9114]]]).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
+        torch.testing.assert_close(
+            outputs.low_res_masks[:, :, :, :2, :2],
+            torch.tensor(
+                [
+                    [[[[-5.9315, -11.3817], [-8.7964, -8.0970]]], [[[-4.8636, -8.8059], [-6.3548, -7.0945]]]],
+                    [[[[-13.8652, -19.1238], [-20.2494, -14.1600]]], [[[-8.8231, -10.2768], [-11.3808, -8.7182]]]],
+                ],
+            ).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
+
+    def test_inference_batched_images_batched_boxes(self):
+        raw_image1 = prepare_image()
+        raw_image2 = prepare_groceries_image()
+        input_boxes = [
+            [[[75, 275, 1725, 850], [425, 600, 700, 875], [1375, 550, 1650, 800], [1240, 675, 1400, 750]]],
+            [[[450, 170, 520, 350], [350, 190, 450, 350], [500, 170, 580, 350], [580, 170, 640, 350]]],
+        ]
+        inputs = self.processor(images=[raw_image1, raw_image2], input_boxes=input_boxes, return_tensors="pt").to(
+            torch_device
+        )
+        with torch.no_grad():
+            outputs = self.model(**inputs, multimask_output=False)
+        self.assertEqual(outputs.iou_scores.shape, (2, 4, 1))
+        self.assertEqual(outputs.low_res_masks.shape, (2, 4, 1, 256, 256))
+
+        torch.testing.assert_close(
+            outputs.iou_scores,
+            torch.tensor([[[0.9873], [0.9265], [0.9495], [0.9207]], [[0.9445], [0.9496], [0.9497], [0.9481]]]).to(
+                torch_device
+            ),
+            atol=1e-4,
+            rtol=1e-4,
+        )
+        torch.testing.assert_close(
+            outputs.low_res_masks[:, :, :, :2, :2],
+            torch.tensor(
+                [
+                    [
+                        [[[-7.6887, -11.9033], [-8.8828, -10.4974]]],
+                        [[[-17.1057, -23.3219], [-21.0064, -19.4283]]],
+                        [[[-20.6077, -29.3705], [-26.1830, -24.1720]]],
+                        [[[-19.6094, -28.7768], [-24.4176, -23.2746]]],
+                    ],
+                    [
+                        [[[-18.5219, -23.5192], [-25.1876, -17.2496]]],
+                        [[[-20.1199, -25.4224], [-25.7887, -19.1165]]],
+                        [[[-21.0868, -24.7951], [-27.5652, -19.2626]]],
+                        [[[-20.5161, -22.5330], [-26.0963, -17.7497]]],
+                    ],
+                ]
+            ).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
+
     def test_inference_mask_generation_from_existing_points_and_mask(self):
         raw_image = prepare_image()
         input_points = [[[[500, 375]]]]
@@ -921,8 +1006,8 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         # best mask to use as input for new points
         mask_input = outputs.low_res_masks[:, :, torch.argmax(outputs.iou_scores)]
 
-        new_input_points = [[[500, 375], [1125, 625]]]
-        new_input_labels = [[1, 1]]
+        new_input_points = [[[[500, 375], [1125, 625]]]]
+        new_input_labels = [[[1, 1]]]
         inputs = self.processor(
             input_points=new_input_points,
             input_labels=new_input_labels,
@@ -952,8 +1037,8 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         )
 
         # with negative point
-        new_input_points = [[[500, 375], [1125, 625]]]
-        new_input_labels = [[1, 0]]
+        new_input_points = [[[[500, 375], [1125, 625]]]]
+        new_input_labels = [[[1, 0]]]
         inputs = self.processor(
             input_points=new_input_points,
             input_labels=new_input_labels,

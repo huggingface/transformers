@@ -2446,7 +2446,7 @@ class Sam2Model(Sam2PreTrainedModel):
 
         if input_points is not None and len(input_points.shape) != 4:
             raise ValueError(
-                "The input_points must be a 4D tensor. Of shape `batch_size`, `point_batch_size`, `nb_points_per_image`, `2`.",
+                "The input_points must be a 4D tensor. Of shape `batch_size`, `point_batch_size`, `point_per_mask`, `2`.",
                 " got {}.".format(input_points.shape),
             )
         if input_boxes is not None and len(input_boxes.shape) != 3:
