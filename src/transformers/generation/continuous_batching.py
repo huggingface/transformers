@@ -1020,11 +1020,9 @@ class ContinuousBatchProcessor:
                 state.status = RequestStatus.DECODING
                 token = out_tokens[self.logits_indices[i]]
 
-                # Check completion conditions before adding the token to avoid off-by-one errors
                 is_eos = token == state.eos_token_id and state.eos_token_id != -1
                 is_max_len = state.generated_len() >= state.max_new_tokens
                 is_finished = is_eos or is_max_len
-
                 # Only add the token if we're not finishing due to max length
                 # (EOS tokens should still be added to the output)
                 if not (is_max_len and not is_eos):
