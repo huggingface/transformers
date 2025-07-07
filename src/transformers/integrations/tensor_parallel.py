@@ -470,9 +470,6 @@ class ReplicateParallel(TensorParallelLayer):
         return param
 
 class VocabParallel(TensorParallelLayer):
-    """
-    VocabParallel is used to shard the embedding table.
-    """
 
     def __init__(
         self,
@@ -480,59 +477,16 @@ class VocabParallel(TensorParallelLayer):
         input_layouts: Optional[Placement] = None,
         output_layouts: Optional[Placement] = None,
         use_local_output: bool = True,
-        use_dtensor=True,):
+        use_dtensor=True,
+    ):
         super().__init__()
         self.input_layouts = (input_layouts or Replicate(),)
         self.desired_input_layouts = (Replicate(),)
         self.output_layouts = (output_layouts or Replicate(),)
         self.use_local_output = use_local_output
         self.use_dtensor = use_dtensor
-    
-    @staticmethod
-    def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
-        rank = device_mesh.get_rank()
-        world_size = device_mesh.size()
-        vocab_size = mod.num_embeddings 
-        local_vocab_size = vocab_size // world_size
-        vocab_start = rank * local_vocab_size
-        vocab_end = vocab_start + local_vocab_size
 
-        input_tensor = inputs if isinstance(inputs, torch.Tensor) else inputs[0]
-
-        input_mask = (input_tensor < vocab_start) | (input_tensor >= vocab_end)
-        masked_input = input_tensor.clone() - vocab_start
-        masked_input[input_mask] = 0  # Set invalid tokens to 0
-        # Store the mask for use in _prepare_output_fn
-        mod._vocab_parallel_input_mask = input_mask
-        if not isinstance(input_tensor, DTensor):
-            masked_input = DTensor.from_local(masked_input, device_mesh, input_layouts, run_check=False)
-
-        return masked_input
-
-    @staticmethod
-    def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
-        output_tensor = outputs if isinstance(outputs, DTensor) else outputs[0]
-
-        # Retrieve the input mask from the module
-        input_mask = getattr(mod, '_vocab_parallel_input_mask', None)
-        if input_mask is not None:                        
-            #TODO(3outeille): double check if there is another workaround
-            if isinstance(output_tensor, DTensor):
-                local_tensor = output_tensor.to_local()
-                input_mask = input_mask.to(local_tensor.device)
-                local_tensor[input_mask] = 0.0
-            else:
-                output_tensor[input_mask] = 0.0
-
-        if not isinstance(output_tensor, DTensor):
-            output_tensor = DTensor.from_local(output_tensor, device_mesh, [Shard(0)], run_check=False)
-
-        if output_tensor.placements != output_layouts:
-            output_tensor = output_tensor.redistribute(placements=output_layouts, async_op=False)
-        return output_tensor.to_local() if use_local_output else output_tensor
-    
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
-        #TODO(3outeille): if several device_mesh dims, should be shard given TP axes
         # Shard the embedding table along dim 0 (vocab dimension)
         parameter = get_tensor_shard(param, empty_param, device_mesh, rank, 0)
         placements = [Shard(0)]
@@ -542,6 +496,23 @@ class VocabParallel(TensorParallelLayer):
         if self.use_dtensor:
             parameter = DTensor.from_local(parameter, device_mesh, placements, run_check=False)
         return nn.Parameter(parameter)
+
+    @staticmethod
+    def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
+        #NOTE(3outeille): no need to do input masking as embedding would be stored in `_MaskPartial` which handles it (https://github.com/pytorch/pytorch/blob/main/torch/distributed/tensor/_ops/_embedding_ops.py#L70)
+        input_tensor = inputs[0]
+        if not isinstance(input_tensor, DTensor):
+            input_tensor = DTensor.from_local(input_tensor, device_mesh, input_layouts, run_check=False)
+
+        if input_layouts != desired_input_layouts:
+            input_tensor = input_tensor.redistribute(placements=desired_input_layouts, async_op=True)
+        return input_tensor
+
+    @staticmethod
+    def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
+        if outputs.placements != output_layouts:
+            outputs = outputs.redistribute(placements=output_layouts, async_op=True)
+        return outputs.to_local() if use_local_output else outputs
 
 class ColwiseParallel(TensorParallelLayer):
     """
