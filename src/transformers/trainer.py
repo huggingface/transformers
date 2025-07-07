@@ -3937,10 +3937,9 @@ class Trainer:
                 # remove the dummy state_dict
                 remove_dummy_checkpoint(self.args.should_save, output_dir, [WEIGHTS_NAME, SAFE_WEIGHTS_NAME])
                 self.model_wrapped.save_checkpoint(output_dir)
-        
-        # TODO: check why this is failing if we don't remove that
-        # elif self.args.should_save:
-        self._save(output_dir)
+
+        elif self.args.should_save:
+            self._save(output_dir)
 
         # Push to the Hub when `save_model` is called by the user.
         if self.args.push_to_hub and not _internal_call:
