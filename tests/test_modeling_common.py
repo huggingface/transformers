@@ -855,7 +855,7 @@ class ModelTesterMixin:
             # For now, skip everything older than 2025 and "important models" (too much models to patch otherwise)
             # Use `supports_cache_class` as a proxy to judge "important" models in order to prioritize them
             # TODO: relax this as we patch more and more models
-            if addition_year < 2025 and not model_class._supports_cache_class:
+            if addition_year < 2024 and not model_class._supports_cache_class:
                 self.skipTest(reason=f"{model_class} is not a priorited model for now.")
 
             # Monkey patch the method to add a seed (we do it on PreTrainedModel._initialize_weights, which wraps
@@ -895,6 +895,11 @@ class ModelTesterMixin:
                 model_from_config.state_dict().items(), model_from_pretrained.state_dict().items()
             ):
                 self.assertEqual(k1, k2, "The keys from each model should be the same")
+
+                # In case using torch.nn.utils.parametrizations on a module, we should skip the resulting keys
+                if re.search(r"\.parametrizations\..*?\.original[01]", k1):
+                    continue
+
                 # Since we added the seed, they should be exactly the same (i.e. using allclose maybe be wrong due
                 # to very low std in init function)
                 if not (v1 == v2).all():
@@ -1246,6 +1251,9 @@ class ModelTesterMixin:
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
             config.output_attentions = True
+            for k in config.sub_configs:
+                getattr(config, k).output_attentions = True
+
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -1968,13 +1976,21 @@ class ModelTesterMixin:
             # check that output_hidden_states also work using config
             del inputs_dict["output_hidden_states"]
             config.output_hidden_states = True
+            for k in config.sub_configs:
+                getattr(config, k).output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for k in config.sub_configs:
+            getattr(config, k).output_hidden_states = True
+
         config.output_hidden_states = True
         config.output_attentions = self.has_attentions
+
+        for k in config.sub_configs:
+            getattr(config, k).output_attentions = self.has_attentions
 
         # force eager attention to support output attentions
         if self.has_attentions:
