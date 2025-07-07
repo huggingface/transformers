@@ -1170,7 +1170,7 @@ class BertLMHeadModel(BertPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **loss_kwargs,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1203,7 +1203,7 @@ class BertLMHeadModel(BertPreTrainedModel, GenerationMixin):
 
         lm_loss = None
         if labels is not None:
-            lm_loss = self.loss_function(prediction_scores, labels, self.config.vocab_size, **loss_kwargs)
+            lm_loss = self.loss_function(prediction_scores, labels, self.config.vocab_size, **kwargs)
 
         if not return_dict:
             output = (prediction_scores,) + outputs[2:]

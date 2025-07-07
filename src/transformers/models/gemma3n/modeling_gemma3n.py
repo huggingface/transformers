@@ -41,6 +41,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     ModelOutput,
+    TransformersKwargs,
     auto_docstring,
     can_return_tuple,
     is_torchdynamo_compiling,
@@ -1485,7 +1486,6 @@ class Gemma3nPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["Gemma3nTextDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_3 = True
     _supports_flash_attn_2 = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -1493,6 +1493,10 @@ class Gemma3nPreTrainedModel(PreTrainedModel):
     _supports_quantized_cache = True
     _supports_static_cache = True
     _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": Gemma3nTextDecoderLayer,
+        "attentions": Gemma3nTextAttention,
+    }
 
     def _init_weights(self, module):
         # important: this ported version of Gemma2 isn't meant for training from scratch - only
@@ -1599,7 +1603,7 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         r"""
         per_layer_inputs (torch.Tensor, *optional*, defaults to None):
@@ -1702,7 +1706,7 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                **flash_attn_kwargs,
+                **kwargs,
             )
 
             hidden_states = layer_outputs[0]
@@ -1823,7 +1827,7 @@ class Gemma3nForCausalLM(Gemma3nPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **loss_kwargs,
+        **kwargs,
     ) -> CausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1868,7 +1872,7 @@ class Gemma3nForCausalLM(Gemma3nPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             cache_position=cache_position,
-            **loss_kwargs,
+            **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
@@ -1882,7 +1886,7 @@ class Gemma3nForCausalLM(Gemma3nPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size, **loss_kwargs)
+            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
 
         return CausalLMOutputWithPast(
             loss=loss,
