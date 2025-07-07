@@ -16,7 +16,6 @@
 import copy
 import gc
 import tempfile
-import tempfile
 import unittest
 
 import requests
