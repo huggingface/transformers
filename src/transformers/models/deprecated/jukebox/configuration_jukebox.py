@@ -15,7 +15,7 @@
 """Jukebox configuration"""
 
 import os
-from typing import List, Union
+from typing import Union
 
 from ....configuration_utils import PretrainedConfig
 from ....utils import logging
@@ -345,9 +345,7 @@ class JukeboxPriorConfig(PretrainedConfig):
         self.zero_out = zero_out
 
     @classmethod
-    def from_pretrained(
-        cls, pretrained_model_name_or_path: Union[str, os.PathLike], level=0, **kwargs
-    ) -> "PretrainedConfig":
+    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], level=0, **kwargs):
         cls._set_token_in_kwargs(kwargs)
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
@@ -394,7 +392,7 @@ class JukeboxVQVAEConfig(PretrainedConfig):
             Number of hierarchical levels that used in the VQVAE.
         lmu (`float`, *optional*, defaults to 0.99):
             Used in the codebook update, exponential moving average coefficient. For more detail refer to Appendix A.1
-            of the original [VQVAE paper](https://arxiv.org/pdf/1711.00937v2.pdf)
+            of the original [VQVAE paper](https://huggingface.co/papers/1711.00937v2.pdf)
         multipliers (`List[int]`, *optional*, defaults to `[2, 1, 1]`):
             Depth and width multipliers used for each level. Used on the `res_conv_width` and `res_conv_depth`
         res_conv_depth (`int`, *optional*, defaults to 4):
@@ -470,7 +468,7 @@ class JukeboxVQVAEConfig(PretrainedConfig):
         self.zero_out = zero_out
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs):
         cls._set_token_in_kwargs(kwargs)
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
@@ -592,7 +590,7 @@ class JukeboxConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
     @classmethod
-    def from_configs(cls, prior_configs: List[JukeboxPriorConfig], vqvae_config: JukeboxVQVAEConfig, **kwargs):
+    def from_configs(cls, prior_configs: list[JukeboxPriorConfig], vqvae_config: JukeboxVQVAEConfig, **kwargs):
         r"""
         Instantiate a [`JukeboxConfig`] (or a derived class) from clip text model configuration and clip vision model
         configuration.

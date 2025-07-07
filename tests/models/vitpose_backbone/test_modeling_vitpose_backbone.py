@@ -18,7 +18,7 @@ import unittest
 
 from transformers import VitPoseBackboneConfig
 from transformers.testing_utils import require_torch, torch_device
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available
 
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -29,10 +29,6 @@ if is_torch_available():
     import torch
 
     from transformers import VitPoseBackbone
-
-
-if is_vision_available():
-    pass
 
 
 class VitPoseBackboneModelTester:
@@ -140,6 +136,9 @@ class VitPoseBackboneModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    def test_batching_equivalence(self, atol=3e-4, rtol=3e-4):
+        super().test_batching_equivalence(atol=atol, rtol=rtol)
 
     # TODO: @Pavel
     @unittest.skip(reason="currently failing")

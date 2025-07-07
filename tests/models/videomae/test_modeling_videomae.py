@@ -24,6 +24,7 @@ from pytest import mark
 from transformers import VideoMAEConfig
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
+    Expectations,
     is_flaky,
     require_flash_attn,
     require_torch,
@@ -190,7 +191,8 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         if is_torch_available()
         else {}
     )
-
+    # Addition keys that are required for forward, used in tests where we manipulate and create new input dict from scratch
+    additional_model_inputs = ["bool_masked_pos"]
     test_pruning = False
     test_torchscript = False
     test_resize_embeddings = False
@@ -441,9 +443,14 @@ class VideoMAEModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 400))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([0.3669, -0.0688, -0.2421]).to(torch_device)
-
-        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        expectations = Expectations(
+            {
+                (None, None): [0.3669, -0.0688, -0.2421],
+                ("cuda", 8): [0.3668, -0.0690, -0.2421],
+            }
+        )
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=2e-4, atol=2e-4)
 
     @slow
     def test_inference_for_pretraining(self):

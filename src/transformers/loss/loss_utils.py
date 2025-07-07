@@ -28,13 +28,16 @@ from .loss_rt_detr import RTDetrForObjectDetectionLoss
 def fixed_cross_entropy(
     source: torch.Tensor,
     target: torch.Tensor,
-    num_items_in_batch: Optional[int] = None,
+    num_items_in_batch: Optional[torch.Tensor] = None,
     ignore_index: int = -100,
     **kwargs,
 ) -> torch.Tensor:
     reduction = "sum" if num_items_in_batch is not None else "mean"
     loss = nn.functional.cross_entropy(source, target, ignore_index=ignore_index, reduction=reduction)
     if reduction == "sum":
+        # just in case users pass an int for num_items_in_batch, which could be the case for custom trainer
+        if torch.is_tensor(num_items_in_batch):
+            num_items_in_batch = num_items_in_batch.to(loss.device)
         loss = loss / num_items_in_batch
     return loss
 
@@ -43,7 +46,7 @@ def ForCausalLMLoss(
     logits,
     labels,
     vocab_size: int,
-    num_items_in_batch: Optional[int] = None,
+    num_items_in_batch: Optional[torch.Tensor] = None,
     ignore_index: int = -100,
     shift_labels: Optional[torch.Tensor] = None,
     **kwargs,
@@ -69,7 +72,7 @@ def ForMaskedLMLoss(
     logits: torch.Tensor,
     labels: torch.Tensor,
     vocab_size: int,
-    num_items_in_batch: Optional[int] = None,
+    num_items_in_batch: Optional[torch.Tensor] = None,
     ignore_index: int = -100,
     **kwargs,
 ):
@@ -147,6 +150,7 @@ LOSS_MAPPING = {
     "ForQuestionAnswering": ForQuestionAnsweringLoss,
     "ForSequenceClassification": ForSequenceClassificationLoss,
     "ForImageClassification": ForSequenceClassificationLoss,
+    "ForVideoClassification": ForSequenceClassificationLoss,
     "ForTokenClassification": ForTokenClassification,
     "ForSegmentation": ForSegmentationLoss,
     "ForObjectDetection": ForObjectDetectionLoss,

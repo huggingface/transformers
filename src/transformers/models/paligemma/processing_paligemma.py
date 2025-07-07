@@ -16,7 +16,7 @@
 Processor class for PaliGemma.
 """
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -42,7 +42,7 @@ EXTRA_TOKENS = [f"<loc{i:0>4}>" for i in range(1024)] + [f"<seg{i:0>3}>" for i i
 
 
 class PaliGemmaTextKwargs(TextKwargs):
-    suffix: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]]
+    suffix: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]]
 
 
 class PaliGemmaImagesKwargs(ImagesKwargs):
@@ -90,7 +90,7 @@ def build_string_from_input(prompt, bos_token, image_seq_len, image_token, num_i
     The output will be:
     "<im><im><im><s>Initial str"
     Args:
-        prompt (`List[Union[str, ImageInput]]`): The input prompt.
+        prompt (`list[Union[str, ImageInput]]`): The input prompt.
         bos_token (`str`): The beginning of sentence token.
         image_seq_len (`int`): The length of the image sequence.
         image_token (`str`): The image token.
@@ -154,7 +154,7 @@ class PaliGemmaProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[PaliGemmaProcessorKwargs],
@@ -186,11 +186,11 @@ class PaliGemmaProcessor(ProcessorMixin):
 
 
         Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
@@ -201,7 +201,7 @@ class PaliGemmaProcessor(ProcessorMixin):
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
-            suffix (`str`, `List[str]`, `List[List[str]]`):
+            suffix (`str`, `list[str]`, `list[list[str]]`):
                 The suffixes or batch of suffixes to be encoded. Only necessary for finetuning. See https://github.com/google-research/big_vision/blob/main/big_vision/configs/proj/paligemma/README.md
                 for more information. If your prompt is "<image> What is on the image", the suffix corresponds to the expected prediction "a cow sitting on a bench".
 
@@ -250,7 +250,7 @@ class PaliGemmaProcessor(ProcessorMixin):
                     "each text has and add special tokens."
                 )
 
-                if isinstance(text, List) and isinstance(images, List):
+                if isinstance(text, list) and isinstance(images, list):
                     if len(images) != len(text):
                         raise ValueError(
                             f"Received {len(images)} images for {len(text)} prompts. Each prompt should be associated with an image or list of images."
@@ -327,10 +327,10 @@ class PaliGemmaProcessor(ProcessorMixin):
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
 
         Args:
-            image_sizes (List[List[str]], *optional*):
+            image_sizes (list[list[str]], *optional*):
                 The input sizes formatted as (height, width) per each image.
         Returns:
-            Dict[str, List[int]]: A dictionary mapping each modality ("image", "video", "audio")
+            dict[str, list[int]]: A dictionary mapping each modality ("image", "video", "audio")
             to a list containing the number of placeholder tokens required. If the model doesn't accept
             a certain modality or no input sizes are provided, the dict value is set to an empty list.
         """

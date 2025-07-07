@@ -17,7 +17,7 @@ import gc
 import json
 import math
 import os
-from typing import List, Optional
+from typing import Optional
 
 import regex as re
 import torch
@@ -475,7 +475,7 @@ class MllamaConverter(TikTokenConverter):
     def __init__(
         self,
         vocab_file,
-        special_tokens: List[str],
+        special_tokens: list[str],
         pattern: str,
         model_max_length: int,
         chat_template: Optional[str] = None,
@@ -605,7 +605,7 @@ def main():
     parser.add_argument(
         "--special_tokens",
         default=None,
-        type=List[str],
+        type=list[str],
         help="The list of special tokens that should be added to the model.",
     )
     parser.add_argument(

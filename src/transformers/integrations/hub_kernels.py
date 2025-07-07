@@ -11,9 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Dict, Union
-
-from ..utils import is_torchdynamo_compiling
+from typing import Union
 
 
 try:
@@ -22,12 +20,12 @@ try:
         LayerRepository,
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
+        use_kernel_forward_from_hub,
     )
-    from kernels import use_kernel_forward_from_hub
 
     _hub_kernels_available = True
 
-    _KERNEL_MAPPING: Dict[str, Dict[Union[Device, str], LayerRepository]] = {
+    _KERNEL_MAPPING: dict[str, dict[Union[Device, str], LayerRepository]] = {
         "MultiScaleDeformableAttention": {
             "cuda": LayerRepository(
                 repo_id="kernels-community/deformable-detr",
@@ -43,9 +41,9 @@ try:
         },
         "RMSNorm": {
             "cuda": LayerRepository(
-                repo_id="kernels-community/triton-layer-norm",
-                layer_name="LlamaRMSNorm",
-                revision="pure-layer-test",
+                repo_id="kernels-community/liger_kernels",
+                layer_name="LigerRMSNorm",
+                # revision="pure-layer-test",
             )
         },
         "MLP": {
@@ -63,6 +61,7 @@ try:
     }
 
     register_kernel_mapping(_KERNEL_MAPPING)
+
 
 except ImportError:
     # Stub to make decorators int transformers work when `kernels`

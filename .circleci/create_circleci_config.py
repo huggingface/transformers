@@ -110,7 +110,6 @@ class CircleCIJob:
             print(f"Using {self.docker_image} docker image")
         if self.install_steps is None:
             self.install_steps = ["uv venv && uv pip install ."]
-        self.install_steps.append("uv venv && uv pip install git+https://github.com/ydshieh/pytest.git@8.3.5-ydshieh git+https://github.com/ydshieh/pluggy.git@1.5.0-ydshieh")
         if self.pytest_options is None:
             self.pytest_options = {}
         if isinstance(self.tests_to_run, str):
@@ -214,7 +213,7 @@ generate_job = CircleCIJob(
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
     # networkx==3.3 (after #36957) cause some issues
     # TODO: remove this once it works directly
-    install_steps=["uv venv && uv pip install . && uv pip install networkx==3.2.1"],
+    install_steps=["uv venv && uv pip install ."],
     marker="generate",
     parallelism=6,
 )
@@ -231,22 +230,6 @@ processor_job = CircleCIJob(
     parallelism=8,
 )
 
-tf_job = CircleCIJob(
-    "tf",
-    docker_image=[{"image":"huggingface/transformers-tf-light"}],
-    parallelism=6,
-)
-
-
-flax_job = CircleCIJob(
-    "flax",
-    docker_image=[{"image":"huggingface/transformers-jax-light"}],
-    parallelism=6,
-    pytest_num_workers=16,
-    resource_class="2xlarge",
-)
-
-
 pipelines_torch_job = CircleCIJob(
     "pipelines_torch",
     additional_env={"RUN_PIPELINE_TESTS": True},
@@ -254,16 +237,6 @@ pipelines_torch_job = CircleCIJob(
     marker="is_pipeline_test",
     parallelism=4,
 )
-
-
-pipelines_tf_job = CircleCIJob(
-    "pipelines_tf",
-    additional_env={"RUN_PIPELINE_TESTS": True},
-    docker_image=[{"image":"huggingface/transformers-tf-light"}],
-    marker="is_pipeline_test",
-    parallelism=4,
-)
-
 
 custom_tokenizers_job = CircleCIJob(
     "custom_tokenizers",
@@ -280,15 +253,6 @@ examples_torch_job = CircleCIJob(
     install_steps=["uv venv && uv pip install . && uv pip install -r examples/pytorch/_tests_requirements.txt"],
     pytest_num_workers=4,
 )
-
-
-examples_tensorflow_job = CircleCIJob(
-    "examples_tensorflow",
-    additional_env={"OMP_NUM_THREADS": 8},
-    docker_image=[{"image":"huggingface/transformers-examples-tf"}],
-    pytest_num_workers=2,
-)
-
 
 hub_job = CircleCIJob(
     "hub",
@@ -310,7 +274,7 @@ onnx_job = CircleCIJob(
     docker_image=[{"image":"huggingface/transformers-torch-tf-light"}],
     install_steps=[
         "uv venv",
-        "uv pip install .[torch,tf,testing,sentencepiece,onnxruntime,vision,rjieba]",
+        "uv pip install .[testing,sentencepiece,onnxruntime,vision,rjieba]",
     ],
     pytest_options={"k onnx": None},
     pytest_num_workers=1,
@@ -339,7 +303,7 @@ non_model_job = CircleCIJob(
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
     # networkx==3.3 (after #36957) cause some issues
     # TODO: remove this once it works directly
-    install_steps=["uv venv && uv pip install . && uv pip install networkx==3.2.1"],
+    install_steps=["uv venv && uv pip install ."],
     marker="not generate",
     parallelism=6,
 )
@@ -369,7 +333,7 @@ doc_test_job = CircleCIJob(
     pytest_num_workers=1,
 )
 
-REGULAR_TESTS = [torch_job, flax_job, hub_job, onnx_job, tokenization_job, processor_job, generate_job, non_model_job] # fmt: skip
+REGULAR_TESTS = [torch_job, hub_job, onnx_job, tokenization_job, processor_job, generate_job, non_model_job] # fmt: skip
 EXAMPLES_TESTS = [examples_torch_job]
 PIPELINE_TESTS = [pipelines_torch_job]
 REPO_UTIL_TESTS = [repo_utils_job]
