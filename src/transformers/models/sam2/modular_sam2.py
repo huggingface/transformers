@@ -740,11 +740,13 @@ class Sam2MaskDecoder(nn.Module):
         # The best mask from multimask output tokens (1~3)
         multimask_logits = all_mask_logits[:, :, 1:, :, :]
         multimask_iou_scores = all_iou_scores[:, :, 1:]
-        best_scores_inds = torch.argmax(multimask_iou_scores, dim=-1)
-        batch_inds = torch.arange(multimask_iou_scores.size(0), device=all_iou_scores.device)
-        point_batch_inds = torch.arange(multimask_iou_scores.size(1), device=all_iou_scores.device)
-        best_multimask_logits = multimask_logits[batch_inds, point_batch_inds, best_scores_inds].unsqueeze(2)
-        best_multimask_iou_scores = multimask_iou_scores[batch_inds, point_batch_inds, best_scores_inds].unsqueeze(2)
+        best_scores_inds = torch.argmax(multimask_iou_scores, dim=-1)  # [B, P]
+        best_scores_inds_expanded = best_scores_inds.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
+        best_scores_inds_expanded = best_scores_inds_expanded.expand(
+            -1, -1, 1, multimask_logits.size(-2), multimask_logits.size(-1)
+        )
+        best_multimask_logits = torch.gather(multimask_logits, 2, best_scores_inds_expanded)  # [B, P, 1, H, W]
+        best_multimask_iou_scores = torch.gather(multimask_iou_scores, 2, best_scores_inds.unsqueeze(-1))  # [B, P, 1]
 
         # The mask from singlemask output token 0 and its stability score
         singlemask_logits = all_mask_logits[:, :, 0:1, :, :]
@@ -834,6 +836,8 @@ class Sam2MaskDecoder(nn.Module):
         )
 
         feat_s0, feat_s1 = high_resolution_features
+        feat_s0 = feat_s0.repeat_interleave(point_batch_size, dim=0)
+        feat_s1 = feat_s1.repeat_interleave(point_batch_size, dim=0)
         upscaled_embedding = self.upscale_conv1(image_embeddings) + feat_s1
         upscaled_embedding = self.activation(self.upscale_layer_norm(upscaled_embedding))
         upscaled_embedding = self.activation(self.upscale_conv2(upscaled_embedding) + feat_s0)
