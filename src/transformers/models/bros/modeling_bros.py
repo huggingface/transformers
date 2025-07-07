@@ -476,7 +476,7 @@ class BrosEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([BrosLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([BrosLayer(config) for _ in range(config.num_hidden_layers)])
 
     @deprecate_kwarg("past_key_values", version="4.54.0")
     @deprecate_kwarg("use_cache", version="4.54.0")

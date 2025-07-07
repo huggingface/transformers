@@ -361,8 +361,7 @@ class BertGenerationLayer(GradientCheckpointingLayer):
         return layer_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->BertGeneration
-class BertGenerationEncoder(nn.Module):
+class BertEncoder(nn.Module):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         self.config = config
