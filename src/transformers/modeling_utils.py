@@ -106,7 +106,6 @@ from .utils import (
     is_accelerate_available,
     is_bitsandbytes_available,
     is_flash_attn_2_available,
-    is_flash_attn_3_available,
     is_kernels_available,
     is_offline_mode,
     is_optimum_available,
