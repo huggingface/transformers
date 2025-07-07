@@ -762,14 +762,10 @@ class Aimv2Model(Aimv2PreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        return_loss: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> Aimv2Output:
         r"""
-        return_loss (`bool`, *optional*):
-            Whether or not to return the loss.
-
         Examples:
 
         ```python
