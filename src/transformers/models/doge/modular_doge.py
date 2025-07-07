@@ -27,13 +27,12 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...configuration_utils import PretrainedConfig
 from ...integrations.flex_attention import compile_friendly_flex_attention
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import AttentionInterface
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, is_torch_flex_attn_available
+from ...utils import OutputRecorder, TransformersKwargs, is_torch_flex_attn_available
 from ..llama.modeling_llama import (
     LlamaForSequenceClassification,
     LlamaMLP,
@@ -528,53 +527,25 @@ class DogeDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[tuple[torch.Tensor]] = None,
-        output_attentions: Optional[bool] = False,
-        output_router_logits: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
-                `(batch, sequence_length)` where padding elements are indicated by 0.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_router_logits (`bool`, *optional*):
-                Whether or not to return the logits of all the routers. They are useful for computing the router loss,
-                and should not be returned during inference.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence.
-            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
-                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
-                with `head_dim` being the embedding dimension of each attention head.
-            kwargs (`dict`, *optional*):
-                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
-                into the model
-        """
-
         # sequence transformation
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
+            position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_value=past_key_value,
-            output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
-            position_embeddings=position_embeddings,
             **kwargs,
         )
         hidden_states = F.dropout(hidden_states, p=self.hidden_dropout, training=self.training)
@@ -584,28 +555,21 @@ class DogeDecoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        if isinstance(hidden_states, tuple):
-            hidden_states, router_logits = hidden_states
-        else:
-            router_logits = None
         hidden_states = F.dropout(hidden_states, p=self.hidden_dropout, training=self.training)
         hidden_states = self.post_attention_residual * residual + hidden_states
 
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        if output_router_logits:
-            outputs += (router_logits,)
-
-        return outputs
+        return hidden_states
 
 
 class DogePreTrainedModel(LlamaPreTrainedModel):
     _supports_flash_attn_3 = False
     _supports_flash_attn_2 = False
     _supports_static_cache = False
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(DogeCDMoE, index=1),
+        "hidden_states": DogeDecoderLayer,
+        "attentions": DogeAttention,
+    }
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -746,11 +710,9 @@ class DogeForCausalLM(MixtralForCausalLM):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_router_logits: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
+        output_router_logits: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeCausalLMOutputWithPast:
         r"""
@@ -775,14 +737,8 @@ class DogeForCausalLM(MixtralForCausalLM):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.output_router_logits
-        )
-
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
@@ -793,9 +749,6 @@ class DogeForCausalLM(MixtralForCausalLM):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            output_router_logits=output_router_logits,
             cache_position=cache_position,
             **kwargs,
         )
