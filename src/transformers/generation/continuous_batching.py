@@ -308,7 +308,7 @@ class PagedAttentionCache:
         read_index,
         write_index,
         reshaping_function,
-        kernel=True,
+        kernel=False,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         total_slots = self.num_blocks * self.block_size
@@ -332,7 +332,8 @@ class PagedAttentionCache:
                 self._k_scale_tensor,  # k_scale
                 self._v_scale_tensor,  # v_scale
             )
-            if kwargs.get("max_seqlen_q", -1) == 1:
+
+            if kwargs.get("max_seqlen_q") == 1:
                 return self.key_cache[layer_idx], self.value_cache[layer_idx]
             else:
                 k = self.key_cache[layer_idx].view(total_slots, self.num_key_value_heads, self.head_dim)
@@ -343,8 +344,8 @@ class PagedAttentionCache:
             v_cache_flat = self.value_cache[layer_idx].view(total_slots, self.num_key_value_heads, self.head_dim)
             k_cache_flat[write_index, :, :] = key
             v_cache_flat[write_index, :, :] = value
-            if kwargs.get("max_seqlen_q", -1) == 1:
-                return self.key_cache[layer_idx], self.value_cache[layer_idx]
+            # if kwargs.get("max_seqlen_q", -1) == 1:
+            #     return self.key_cache[layer_idx], self.value_cache[layer_idx]
             return k_cache_flat[read_index, :, :], v_cache_flat[read_index, :, :]
 
 
