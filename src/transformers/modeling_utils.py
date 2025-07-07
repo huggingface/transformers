@@ -231,6 +231,8 @@ TORCH_INIT_FUNCTIONS = {
 VLMS = [
     "aria",
     "ayavision",
+    "colpali",
+    "colqwen",
     "emu3",
     "fuyu",
     "gotocr2",

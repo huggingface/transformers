@@ -20,7 +20,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
-from transformers import AutoModelForImageTextToText
+from transformers import AutoModel
 
 from ...cache_utils import Cache
 from ...modeling_utils import PreTrainedModel
@@ -97,15 +97,14 @@ class ColPaliForRetrievalOutput(ModelOutput):
     """
 )
 class ColPaliForRetrieval(ColPaliPreTrainedModel):
+    _checkpoint_conversion_mapping = {"vlm.language_model.model": "vlm.language_model"}
+
     def __init__(self, config: ColPaliConfig):
         super().__init__(config)
         self.config = config
         self.vocab_size = config.vlm_config.text_config.vocab_size
 
-        vlm = AutoModelForImageTextToText.from_config(config.vlm_config)
-        if vlm._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"vlm.{k}" for k in vlm._tied_weights_keys]
-        self.vlm = vlm
+        self.vlm = AutoModel.from_config(config.vlm_config)
 
         self.embedding_dim = self.config.embedding_dim
         self.embedding_proj_layer = nn.Linear(
@@ -148,7 +147,7 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         vlm_hidden_states = vlm_output.hidden_states if output_hidden_states else None
         vlm_image_hidden_states = vlm_output.image_hidden_states if pixel_values is not None else None
 
-        last_hidden_states = vlm_output.hidden_states[-1]  # (batch_size, sequence_length, hidden_size)
+        last_hidden_states = vlm_output.last_hidden_state  # (batch_size, sequence_length, hidden_size)
         embeddings = self.embedding_proj_layer(last_hidden_states)  # (batch_size, sequence_length, dim)
 
         # L2 normalization
@@ -176,12 +175,6 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.vlm.set_output_embeddings(new_embeddings)
-
-    def set_decoder(self, decoder):
-        self.vlm.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.vlm.get_decoder()
 
     def tie_weights(self):
         return self.vlm.tie_weights()

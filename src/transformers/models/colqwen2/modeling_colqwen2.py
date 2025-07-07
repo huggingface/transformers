@@ -24,7 +24,7 @@ from typing import Optional, Union
 
 from torch import nn
 
-from transformers import AutoModelForImageTextToText
+from transformers import AutoModel
 
 from ...cache_utils import Cache
 from ...modeling_utils import PreTrainedModel
@@ -104,15 +104,14 @@ class ColQwen2ForRetrievalOutput(ModelOutput):
     """
 )
 class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
+    _checkpoint_conversion_mapping = {"vlm.language_model.model": "vlm.language_model"}
+
     def __init__(self, config: ColQwen2Config):
         super().__init__(config)
         self.config = config
         self.vocab_size = config.vlm_config.text_config.vocab_size
 
-        vlm = AutoModelForImageTextToText.from_config(config.vlm_config)
-        if vlm._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"vlm.{k}" for k in vlm._tied_weights_keys]
-        self.vlm = vlm
+        self.vlm = AutoModel.from_config(config.vlm_config)
 
         self.embedding_dim = self.config.embedding_dim
         self.embedding_proj_layer = nn.Linear(
@@ -163,7 +162,7 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        position_ids, rope_deltas = self.vlm.model.get_rope_index(
+        position_ids, rope_deltas = self.vlm.get_rope_index(
             input_ids=input_ids,
             image_grid_thw=image_grid_thw,
             video_grid_thw=None,
@@ -172,7 +171,7 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
 
         # Custom data preparation to fix an issue with the gradient flow when training with multiple GPUs.
         if inputs_embeds is None:
-            inputs_embeds = self.vlm.model.language_model.embed_tokens(input_ids)
+            inputs_embeds = self.vlm.language_model.embed_tokens(input_ids)
 
             if pixel_values is not None:
                 pixel_values = pixel_values.type(self.vlm.visual.get_dtype())
@@ -186,7 +185,7 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
             if attention_mask is not None:
                 attention_mask = attention_mask.to(inputs_embeds.device)
 
-        vlm_output = self.vlm.model(
+        vlm_output = self.vlm(
             input_ids=None,
             position_ids=position_ids,
             attention_mask=attention_mask,
@@ -227,12 +226,6 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.vlm.set_output_embeddings(new_embeddings)
-
-    def set_decoder(self, decoder):
-        self.vlm.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.vlm.get_decoder()
 
     def tie_weights(self):
         return self.vlm.tie_weights()
