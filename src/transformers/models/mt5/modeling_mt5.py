@@ -1925,6 +1925,7 @@ class MT5EncoderModel(MT5PreTrainedModel):
 
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
+        encoder_config.is_encoder_decoder = False
         self.encoder = MT5Stack(encoder_config, self.shared)
 
         # Initialize weights and apply final processing
