@@ -475,6 +475,7 @@ class Aimv2PreTrainedModel(PreTrainedModel):
 )
 class Aimv2VisionModel(Aimv2PreTrainedModel):
     main_input_name = "pixel_values"
+    config_class = Aimv2VisionConfig
 
     def __init__(self, config: Aimv2VisionConfig):
         super().__init__(config)
@@ -590,13 +591,15 @@ class Aimv2TextModel(Aimv2PreTrainedModel):
         )
 
         hidden_states = self.embeddings(input_ids)
-        _, seq_len, _ = hidden_states.shape
+        batch_size, seq_len, _ = hidden_states.shape
 
-        cache_position = torch.arange(seq_len, device=hidden_states.device)
+        cache_position = torch.arange(seq_len, dtype=torch.long, device=hidden_states.device)
+        position_ids = cache_position.unsqueeze(0).expand(batch_size, -1)
         if attention_mask is not None:
             attention_mask = create_causal_mask(
                 config=self.config,
                 input_embeds=hidden_states,
+                position_ids=position_ids,
                 attention_mask=attention_mask,
                 cache_position=cache_position,
                 past_key_values=None,
