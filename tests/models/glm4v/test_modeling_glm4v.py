@@ -13,10 +13,14 @@
 # limitations under the License.
 """Testing suite for the PyTorch GLM-4.1V model."""
 
+import copy
 import gc
+import tempfile
+import tempfile
 import unittest
 
 import requests
+from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -26,6 +30,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
+from transformers.utils import is_cv2_available
 from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
@@ -41,6 +46,9 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
 )
+
+if is_cv2_available():
+    import cv2
 
 
 if is_torch_available():
@@ -235,6 +243,11 @@ class Glm4vModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
+    @parameterized.expand([("greedy", 1), ("beam search", 2)])
+    @unittest.skip("Cannot generate from inputs embeds with pixel values")
+    def test_generate_from_inputs_embeds(self):
+        pass
+
     @unittest.skip(reason="Size mismatch")
     def test_multi_gpu_data_parallel_forward(self):
         pass
@@ -243,11 +256,34 @@ class Glm4vModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     def test_model_is_small(self):
         pass
 
-    @unittest.skip("Error with compilation")
+    @unittest.skip("Cannot generate from inputs embeds with pixel values")
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
-    # RoPE index doesn't match when using embeddings
+    # The multimodal base model embeds will not match ids, due to pixel values. We can't change base test
+    # because in some models `pixel_values` are required. Will be fixed when we add support for merging `embeds+pixels`
+    # TODO: @raushan
+
+    def test_inputs_embeds(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+
+            input_ids = inputs["input_ids"]
+            del inputs["input_ids"]
+            del inputs["pixel_values"]
+            del inputs["image_grid_thw"]
+
+            wte = model.get_input_embeddings()
+            inputs["inputs_embeds"] = wte(input_ids)
+            with torch.no_grad():
+                model(**inputs)[0]
+
     def test_inputs_embeds_matches_input_ids(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -344,6 +380,84 @@ class Glm4vIntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = [
             'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices',
             'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices',
+        ]  # fmt: skip
+        self.assertEqual(
+            self.processor.batch_decode(output, skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
+
+    @slow
+    def test_small_model_integration_test_with_video(self):
+        def prepare_video_metadata(videos):
+            video_metadata = []
+            for video in videos:
+                if isinstance(video, list):
+                    num_frames = len(video)
+                elif hasattr(video, "shape"):
+                    if len(video.shape) == 4:  # (T, H, W, C)
+                        num_frames = video.shape[0]
+                    else:
+                        num_frames = 1
+                else:
+                    num_frames = 8
+
+                metadata = {
+                    "fps": 2,
+                    "duration": num_frames / 2,
+                    "total_frames": num_frames,
+                }
+                video_metadata.append(metadata)
+            return video_metadata
+
+        model = Glm4vForConditionalGeneration.from_pretrained(
+            "THUDM/GLM-4.1V-9B-Thinking", torch_dtype=torch.float16, device_map="auto"
+        )
+        questions = ["Describe this video.", "Describe this video."]
+        video_urls = [
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
+        ] * 2
+        messages_batch = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "video",
+                            "video": video_url,
+                        },
+                        {"type": "text", "text": question},
+                    ],
+                }
+            ]
+            for question, video_url in zip(questions, video_urls)
+        ]
+        texts = [
+            self.processor.apply_chat_template(msg, tokenize=False, add_generation_prompt=True)
+            for msg in messages_batch
+        ]
+        with tempfile.NamedTemporaryFile(suffix=".mp4") as f:
+            f.write(requests.get(video_urls[0]).content)
+            f.flush()
+            cap = cv2.VideoCapture(f.name)
+
+            frames = []
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                frames.append(Image.fromarray(frame_rgb).resize((224, 224), Image.BICUBIC))
+
+            cap.release()
+
+        video_metadata = prepare_video_metadata([frames, frames])
+        inputs = self.processor(
+            text=texts, videos=[frames, frames], video_metadata=video_metadata, return_tensors="pt", padding=True
+        ).to(torch_device)
+        output = model.generate(**inputs, max_new_tokens=30)
+        EXPECTED_DECODED_TEXT = [
+            "\n0123456789101112131415161718192021222324252627282930313233343536373839404142434445464748495051525354555657585960616263646566676869707172737475767778798081828384858687888990Describe this video.\n<think>Got it, let's analyze the video. First, the scene is an indoor tennis court with a high ceiling and wooden beams. The player is",
+            "\n0123456789101112131415161718192021222324252627282930313233343536373839404142434445464748495051525354555657585960616263646566676869707172737475767778798081828384858687888990Describe this video.\n<think>Got it, let's analyze the video. First, the scene is an indoor tennis court with a high ceiling and wooden beams. The player is"
         ]  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
