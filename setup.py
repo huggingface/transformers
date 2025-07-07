@@ -365,6 +365,7 @@ extras["testing"] = (
     )
     + extras["retrieval"]
     + extras["modelcreation"]
+    + extras["mistral-common"]
 )
 
 extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"] + extras["sentencepiece"]

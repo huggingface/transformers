@@ -106,5 +106,5 @@ deps = {
     "opentelemetry-api": "opentelemetry-api",
     "opentelemetry-exporter-otlp": "opentelemetry-exporter-otlp",
     "opentelemetry-sdk": "opentelemetry-sdk",
-    "mistral-common": "mistral-common>=1.6.3",
+    "mistral-common[open-cv]": "mistral-common[open-cv]>=1.6.3",
 }
