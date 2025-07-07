@@ -23,6 +23,38 @@ rendered properly in your Markdown viewer.
 
 # GLM-4.1V
 
+## Overview
+
+Based on the [GLM-4-9B-0414](https://github.com/THUDM/GLM-4) foundation model, we present the new open-source VLM model
+[GLM-4.1V-9B-Thinking](https://huggingface.co/papers/2507.01006), 
+designed to explore the upper limits of reasoning in vision-language models. By introducing
+a "thinking paradigm" and leveraging reinforcement learning, the model significantly enhances its capabilities. It
+achieves state-of-the-art performance among 10B-parameter VLMs, matching or even surpassing the 72B-parameter
+Qwen-2.5-VL-72B on 18 benchmark tasks. We are also open-sourcing the base model GLM-4.1V-9B-Base to
+support further research into the boundaries of VLM capabilities.
+
+![rl](https://raw.githubusercontent.com/THUDM/GLM-4.1V-Thinking/refs/heads/main/resources/rl.jpeg)
+
+Compared to the previous generation models CogVLM2 and the GLM-4V series, **GLM-4.1V-Thinking** offers the
+following improvements:
+
+1. The first reasoning-focused model in the series, achieving world-leading performance not only in mathematics but also
+   across various sub-domains.
+2. Supports **64k** context length.
+3. Handles **arbitrary aspect ratios** and up to **4K** image resolution.
+4. Provides an open-source version supporting both **Chinese and English bilingual** usage.
+
+## Benchmark Performance
+
+By incorporating the Chain-of-Thought reasoning paradigm, GLM-4.1V-9B-Thinking significantly improves answer accuracy,
+richness, and interpretability. It comprehensively surpasses traditional non-reasoning visual models.
+Out of 28 benchmark tasks, it achieved the best performance among 10B-level models on 23 tasks,
+and even outperformed the 72B-parameter Qwen-2.5-VL-72B on 18 tasks.
+
+![bench](https://raw.githubusercontent.com/THUDM/GLM-4.1V-Thinking/refs/heads/main/resources/bench.jpeg)
+
+## Usage
+
 The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
 
 <hfoptions id="usage">
