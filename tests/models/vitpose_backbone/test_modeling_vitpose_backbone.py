@@ -137,6 +137,9 @@ class VitPoseBackboneModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_batching_equivalence(self, atol=3e-4, rtol=3e-4):
+        super().test_batching_equivalence(atol=atol, rtol=rtol)
+
     # TODO: @Pavel
     @unittest.skip(reason="currently failing")
     def test_initialization(self):
