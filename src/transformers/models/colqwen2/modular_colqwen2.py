@@ -272,6 +272,8 @@ class ColQwen2ForRetrievalOutput(ModelOutput):
     """
 )
 class ColQwen2ForRetrieval(ColPaliForRetrieval):
+    _checkpoint_conversion_mapping = {}
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -313,7 +315,7 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        position_ids, rope_deltas = self.vlm.get_rope_index(
+        position_ids, rope_deltas = self.vlm.model.get_rope_index(
             input_ids=input_ids,
             image_grid_thw=image_grid_thw,
             video_grid_thw=None,
@@ -336,7 +338,7 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
             if attention_mask is not None:
                 attention_mask = attention_mask.to(inputs_embeds.device)
 
-        vlm_output = self.vlm(
+        vlm_output = self.vlm.model(
             input_ids=None,
             position_ids=position_ids,
             attention_mask=attention_mask,

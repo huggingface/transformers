@@ -24,7 +24,7 @@ from typing import Optional, Union
 
 from torch import nn
 
-from transformers import AutoModel
+from transformers import AutoModelForImageTextToText
 
 from ...cache_utils import Cache
 from ...modeling_utils import PreTrainedModel
@@ -104,14 +104,14 @@ class ColQwen2ForRetrievalOutput(ModelOutput):
     """
 )
 class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
-    _checkpoint_conversion_mapping = {"vlm.language_model.model": "vlm.language_model"}
+    _checkpoint_conversion_mapping = {}
 
     def __init__(self, config: ColQwen2Config):
         super().__init__(config)
         self.config = config
         self.vocab_size = config.vlm_config.text_config.vocab_size
 
-        self.vlm = AutoModel.from_config(config.vlm_config)
+        self.vlm = AutoModelForImageTextToText.from_config(config.vlm_config)
 
         self.embedding_dim = self.config.embedding_dim
         self.embedding_proj_layer = nn.Linear(
@@ -162,7 +162,7 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        position_ids, rope_deltas = self.vlm.get_rope_index(
+        position_ids, rope_deltas = self.vlm.model.get_rope_index(
             input_ids=input_ids,
             image_grid_thw=image_grid_thw,
             video_grid_thw=None,
@@ -185,7 +185,7 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
             if attention_mask is not None:
                 attention_mask = attention_mask.to(inputs_embeds.device)
 
-        vlm_output = self.vlm(
+        vlm_output = self.vlm.model(
             input_ids=None,
             position_ids=position_ids,
             attention_mask=attention_mask,
