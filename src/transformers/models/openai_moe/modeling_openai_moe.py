@@ -257,10 +257,15 @@ def eager_attention_forward(
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
-    attn_weights = torch.cat([attn_weights, sinks], dim=-1)
-    attn_weights = torch.softmax(attn_weights, dim=-1)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights[..., :-1], value_states)  # ignore the sinks
+    # scale the logits to prevent overflows
+    logits_max = torch.max(attn_weights, dim=-1, keepdim=True).values
+    sinks = torch.exp(sinks - logits_max)
+    unnormalized_scores = torch.exp(attn_weights - logits_max)
+    normalizer = unnormalized_scores.sum(dim=-1, keepdim=True) + sinks
+    scores = unnormalized_scores / normalizer
+
+    attn_weights = nn.functional.dropout(scores, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
     return attn_output, attn_weights
 
