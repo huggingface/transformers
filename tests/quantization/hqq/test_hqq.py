@@ -24,9 +24,7 @@ from transformers.testing_utils import (
     require_deterministic_for_xpu,
     require_hqq,
     require_torch_accelerator,
-    require_torch_gpu,
     require_torch_multi_accelerator,
-    require_torch_multi_gpu,
     slow,
     torch_device,
 )
@@ -134,7 +132,6 @@ class HQQTest(unittest.TestCase):
             model_id=MODEL_ID, quant_config=quant_config, compute_dtype=torch.float16, device=torch_device
         )
 
-        original_device = hqq_runner.model.model.layers[0].self_attn.v_proj.device
         check_hqqlayer(self, hqq_runner.model.model.layers[0].self_attn.v_proj)
         check_forward(self, hqq_runner.model)
 
