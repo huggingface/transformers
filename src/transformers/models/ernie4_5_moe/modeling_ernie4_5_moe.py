@@ -22,6 +22,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
@@ -37,7 +38,7 @@ from .configuration_ernie4_5_moe import Ernie4_5_MoEConfig
 if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import BlockMask
 
-    from transformers.integrations.flex_attention import make_flex_block_causal_mask
+    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 logger = logging.get_logger(__name__)
 
@@ -58,12 +59,84 @@ class Erine4_5_MoeModelOutputWithPast(ModelOutput):
 class Ernie4_5_MoeCausalLMOutputWithPast(MoeCausalLMOutputWithPast):
     router_loss: Optional[torch.FloatTensor] = None
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
 
+# copy llama
+class Ernie4_5_RMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
+# copy qwen3 moe (except bias)
+class Ernie4_5_MLP(nn.Module):
+    def __init__(self, config, intermediate_size=None):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = intermediate_size if intermediate_size is not None else config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
+
+
+# copy llama (with modification on complex view + fp32 - forward + rotate half)
+class Ernie4_5_RopeEmbedding(nn.Module):
+    def __init__(self, config: Ernie4_5_MoEConfig, device=None):
+        super().__init__()
+        # BC: "rope_type" was originally "type"
+        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+        else:
+            self.rope_type = "default"
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = self.inv_freq
+
+    @torch.no_grad()
+    #@dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            # key difference to llama rope happens here to force an even/odd pattern instead
+            freqs = (inv_freq_expanded.float() * position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.stack((freqs, freqs), dim=-1).reshape(*freqs.shape[:2], -1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
+
+        return cos, sin
+        #return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
+def rotate_half(x):
+    """Rotates half (in even/odd pattern) the hidden dims of the input."""
+    input_shape = x.shape[:-1]
     x1 = x[..., 0::2]
     x2 = x[..., 1::2]
-    return torch.stack((-x2, x1), dim=-1).reshape(x.shape)
+    return torch.stack((-x2, x1), dim=-1).reshape(*input_shape, -1)
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -99,10 +172,11 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
     orig_dtype = q.dtype
-    sin_pos = torch.stack([sin, sin], dim=-1).reshape(*sin.shape[:-1],-1)
-    cos_pos = torch.stack([cos, cos], dim=-1).reshape(*sin.shape[:-1],-1)
-    q_embed = (q.float() * cos_pos) + (rotate_half(q).float() * sin_pos)
-    k_embed = (k.float() * cos_pos) + (rotate_half(k).float() * sin_pos)
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q.float() * cos) + (rotate_half(q).float() * sin)
+    k_embed = (k.float() * cos) + (rotate_half(k).float() * sin)
+    #return q_embed, k_embed
     return q_embed.to(orig_dtype), k_embed.to(orig_dtype)
 
 
@@ -176,6 +250,7 @@ class Ernie4_5_ResidualWithDropout(nn.Module):
         return output
 
 
+# copy llama
 class Ernie4_5_Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -265,43 +340,6 @@ class Ernie4_5_Attention(nn.Module):
         attn_output = self.o_proj(attn_output)
 
         return attn_output, attn_weights
-
-
-class Ernie4_5_MLP(nn.Module):
-    """
-    Ernie4_5_MLP - Gated Multi-Layer Perceptron module used in Ernie model.
-    """
-
-    def __init__(self, config,intermediate_size=None):
-        """
-        Initialize the MLP module with configuration options.
-
-        Args:
-            config: Model configuration object with attributes:
-                - hidden_size: int
-                - intermediate_size: int
-                - use_bias: bool
-            layer_idx (int): Index of current layer (default: 0)
-        """
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = intermediate_size if intermediate_size is not None else config.intermediate_size
-        self.gate_proj =  nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
-        self.up_proj =  nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
-
-
-    def forward(self, x):
-        """
-        Args:
-            x (Tensor): shape [batch_size, seq_len, hidden_size]
-
-        Returns:
-            Tensor: shape [batch_size, seq_len, hidden_size]
-        """
-        down_proj = self.down_proj(F.silu(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
 
 
 class Ernie4_5_MoeStatics(nn.Module):
@@ -611,75 +649,6 @@ class Ernie4_5_MoeMLP(nn.Module):
         return capacity
 
 
-class Ernie4_5_RMSNorm(nn.Module):
-    """
-    Ernie Root Mean Square Layer Normalization (Ernie4_5_RMSNorm) implementation.
-
-    Ernie4_5_RMSNorm is a simplified version of LayerNorm that focuses on the root mean square of inputs,
-    omitting the mean-centering operation. This provides computational efficiency while maintaining
-    good performance.
-
-    """
-
-    def __init__(self, config):
-        """
-        Initialize RMSNorm layer.
-
-        Args:
-            config (ErnieConfig): Model configuration.
-        """
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.weight = nn.Parameter(torch.ones(config.hidden_size))
-        self.variance_epsilon = config.rms_norm_eps
-
-    def forward(self, hidden_states):
-        """
-        Apply RMS normalization to input hidden states.
-
-        Args:
-            hidden_states (Tensor): Input tensor of shape [batch_size, seq_len, hidden_size]
-
-        Returns:
-            Tensor: Normalized output tensor of same shape as input
-        """
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(dim=-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-
-        return self.weight * hidden_states.to(input_dtype)
-
-
-class Ernie4_5_RopeEmbedding(nn.Module):
-    def __init__(self, config: Ernie4_5_MoEConfig, device=None):
-        super().__init__()
-        # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
-
-    @torch.no_grad()
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None,None,:].float()
-        position_ids_expanded = position_ids[...,None].float()
-        freqs = (inv_freq_expanded.float() * position_ids_expanded.float())
-        cos = torch.cos(freqs) * self.attention_scaling
-        sin = torch.sin(freqs) * self.attention_scaling
-        return cos, sin
-        # return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-
 class Ernie4_5_DecoderLayer(nn.Module):
     """A single transformer decoder layer in ERNIE-MoE model.
 
@@ -698,7 +667,7 @@ class Ernie4_5_DecoderLayer(nn.Module):
         self.hidden_size = config.hidden_size
         self.layer_idx = layer_idx
         self.config = config
-        self.use_moe = config.use_moe
+        self.use_moe = True
         self.self_attn = Ernie4_5_Attention(config, layer_idx)
 
         moe_layer_start_index = (
@@ -722,8 +691,8 @@ class Ernie4_5_DecoderLayer(nn.Module):
         else:
             self.mlp = Ernie4_5_MLP(config)
 
-        self.input_layernorm = Ernie4_5_RMSNorm(config)
-        self.post_attention_layernorm = Ernie4_5_RMSNorm(config)
+        self.input_layernorm = Ernie4_5_RMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.post_attention_layernorm = Ernie4_5_RMSNorm(config.hidden_size, config.rms_norm_eps)
 
         self.residual_add1 = Ernie4_5_ResidualWithDropout(0.0)
         self.residual_add2 = Ernie4_5_ResidualWithDropout(0.0)
@@ -1019,7 +988,7 @@ class Ernie4_5_Model(Ernie4_5_PretrainedModel):
                 for i in range(config.num_hidden_layers)
             ]
         )
-        self.norm = Ernie4_5_RMSNorm(config)
+        self.norm = Ernie4_5_RMSNorm(config.hidden_size, config.rms_norm_eps)
         self.rotary_emb = Ernie4_5_RopeEmbedding(config=config)
 
         self.gradient_checkpointing = False
@@ -1091,7 +1060,7 @@ class Ernie4_5_Model(Ernie4_5_PretrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        all_router_loss = torch.tensor(0.0, device=inputs_embeds.device) if self.config.use_moe else None
+        all_router_loss = torch.tensor(0.0, device=inputs_embeds.device)# if self.config.use_moe else None
         all_gate_logits = ()
 
         for decoder_layer in self.layers:
@@ -1128,7 +1097,8 @@ class Ernie4_5_Model(Ernie4_5_PretrainedModel):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
-            if self.config.use_moe:
+            #if self.config.use_moe:
+            if True:
                 layer_outputs, gate_logits = layer_outputs[:-1], layer_outputs[-1]
                 all_gate_logits = all_gate_logits + (gate_logits,)
 
@@ -1190,7 +1160,7 @@ class Ernie4_5_Model(Ernie4_5_PretrainedModel):
                 attention_mask,
                 inputs_embeds=input_tensor,
                 past_key_values_length=past_seen_tokens,
-                sliding_window=self.config.sliding_window,
+                #sliding_window=self.config.sliding_window,
                 is_training=self.training,
             ):
                 return None

@@ -198,8 +198,6 @@ class Ernie4_5_MoEConfig(PretrainedConfig):
         moe_capacity=[64, 64, 64],
         output_router_logits=False,
         router_aux_loss_coef=0.001,
-        sliding_window=None,
-        use_moe=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -238,9 +236,6 @@ class Ernie4_5_MoEConfig(PretrainedConfig):
         self.moe_capacity = moe_capacity
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
-
-        self.sliding_window = sliding_window
-        self.use_moe = use_moe
 
         super().__init__(
             pad_token_id=pad_token_id,
