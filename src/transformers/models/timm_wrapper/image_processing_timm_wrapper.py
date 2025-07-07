@@ -15,9 +15,9 @@
 
 import os
 from typing import Any, Optional, Union
-from packaging import version
 
 import torch
+from packaging import version
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import to_pil_image
