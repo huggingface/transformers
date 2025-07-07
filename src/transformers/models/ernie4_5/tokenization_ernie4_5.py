@@ -19,7 +19,6 @@ from typing import Optional, Union
 
 import numpy as np
 import sentencepiece as spm
-import torch
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import PaddingStrategy
@@ -243,6 +242,8 @@ class Ernie4_5Tokenizer(PreTrainedTokenizer):
         Raises:
             ValueError: If attention_mask has unexpected type or invalid padding strategy.
         """
+        import torch
+
         if return_attention_mask is None:
             return_attention_mask = "attention_mask" in self.model_input_names
         if return_attention_mask:
