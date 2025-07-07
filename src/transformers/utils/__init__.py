@@ -47,10 +47,10 @@ from .doc import (
 from .generic import (
     ContextManagers,
     ExplicitEnum,
-    LossKwargs,
     ModelOutput,
     PaddingStrategy,
     TensorType,
+    TransformersKwargs,
     cached_property,
     can_return_loss,
     can_return_tuple,
