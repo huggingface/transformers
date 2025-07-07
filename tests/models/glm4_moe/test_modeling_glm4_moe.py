@@ -11,13 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch glm4_moe model."""
+"""Testing suite for the PyTorch Glm4Moe model."""
 
 import unittest
 
 import pytest
 
-from transformers import AutoTokenizer, Glm4_moeConfig, is_torch_available, set_seed
+from transformers import AutoTokenizer, Glm4MoeConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
     cleanup,
     require_bitsandbytes,
@@ -36,35 +36,33 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        Qwen3ForQuestionAnswering,
-        Glm4_moeForCausalLM,
-        Glm4_moeForQuestionAnswering,
-        Glm4_moeForSequenceClassification,
-        Glm4_moeForTokenClassification,
-        Glm4_moeModel,
+        Glm4MoeForCausalLM,
+        Glm4MoeForQuestionAnswering,
+        Glm4MoeForSequenceClassification,
+        Glm4MoeForTokenClassification
     )
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
-class Glm4_moeModelTester(CausalLMModelTester):
-    config_class = Glm4_moeConfig
+class Glm4MoeModelTester(CausalLMModelTester):
+    config_class = Glm4MoeConfig
     if is_torch_available():
-        base_model_class = Glm4_moeModel
-        causal_lm_class = Glm4_moeForCausalLM
-        sequence_class = Glm4_moeForSequenceClassification
-        token_class = Glm4_moeForTokenClassification
-        question_answering_class = Glm4_moeForQuestionAnswering
+        base_model_class = Glm4MoeModel
+        causal_lm_class = Glm4MoeForCausalLM
+        sequence_class = Glm4MoeForSequenceClassification
+        token_class = Glm4MoeForTokenClassification
+        question_answering_class = Glm4MoeForQuestionAnswering
 
 
 @require_torch
-class Glm4_moeModelTest(CausalLMModelTest, unittest.TestCase):
+class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
     all_model_classes = (
         (
-            Glm4_moeModel,
-            Glm4_moeForCausalLM,
-            Glm4_moeForSequenceClassification,
-            Glm4_moeForTokenClassification,
-            Glm4_moeForQuestionAnswering,
+            Glm4MoeModel,
+            Glm4MoeForCausalLM,
+            Glm4MoeForSequenceClassification,
+            Glm4MoeForTokenClassification,
+            Glm4MoeForQuestionAnswering,
         )
         if is_torch_available()
         else ()
@@ -73,14 +71,14 @@ class Glm4_moeModelTest(CausalLMModelTest, unittest.TestCase):
     test_headmasking = False
     test_pruning = False
     test_all_params_have_gradient = False
-    model_tester_class = Glm4_moeModelTester
+    model_tester_class = Glm4MoeModelTester
 
     @require_flash_attn
     @require_torch_gpu
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(reason="Glm4_moe flash attention does not support right padding")
+        self.skipTest(reason="Glm4Moe flash attention does not support right padding")
 
     # Ignore copy
     def test_load_balancing_loss(self):
@@ -94,7 +92,7 @@ class Glm4_moeModelTest(CausalLMModelTest, unittest.TestCase):
         config.output_router_logits = True
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
-        model = Glm4_moeForCausalLM(config)
+        model = Glm4MoeForCausalLM(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask)
@@ -124,7 +122,7 @@ class Glm4_moeModelTest(CausalLMModelTest, unittest.TestCase):
 @require_torch_multi_accelerator
 @require_torch_large_accelerator
 @require_torch
-class Glm4_moeIntegrationTest(unittest.TestCase):
+class Glm4MoeIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.model = None
@@ -140,7 +138,7 @@ class Glm4_moeIntegrationTest(unittest.TestCase):
     @classmethod
     def get_model(cls):
         if cls.model is None:
-            cls.model = Glm4_moeForCausalLM.from_pretrained(
+            cls.model = Glm4MoeForCausalLM.from_pretrained(
                 "Qwen/Qwen3-30B-A3B-Base", device_map="auto", load_in_4bit=True
             )
 
@@ -183,7 +181,7 @@ class Glm4_moeIntegrationTest(unittest.TestCase):
         EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
         # An input with 4097 tokens that is above the size of the sliding window
         input_ids = [1] + [306, 338] * 2048
-        model = Glm4_moeForCausalLM.from_pretrained(
+        model = Glm4MoeForCausalLM.from_pretrained(
             "Qwen/Qwen3-30B-A3B-Base",
             device_map="auto",
             load_in_4bit=True,
