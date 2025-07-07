@@ -499,9 +499,8 @@ class SamHQPreTrainedModel(PreTrainedModel):
             if module.use_rel_pos:
                 module.rel_pos_h.data.zero_()
                 module.rel_pos_w.data.zero_()
-        if isinstance(module, SamHQVisionEncoder):
-            if module.pos_embed is not None:
-                module.pos_embed.data.zero_()
+        elif isinstance(module, SamHQVisionEncoder):
+            nn.init.normal_(module.pos_embed, mean=0.0, std=std)
 
 
 class SamHQVisionEncoder(SamHQPreTrainedModel):

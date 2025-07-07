@@ -547,19 +547,17 @@ class OwlViTPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["OwlViTEncoderLayer"]
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         factor = self.config.initializer_factor
         if isinstance(module, OwlViTTextEmbeddings):
             module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
             module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
         elif isinstance(module, OwlViTVisionEmbeddings):
-            factor = self.config.initializer_factor
             nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
             nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
             nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
         elif isinstance(module, OwlViTAttention):
-            factor = self.config.initializer_factor
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             out_proj_std = (module.embed_dim**-0.5) * factor
             nn.init.normal_(module.q_proj.weight, std=in_proj_std)
@@ -567,7 +565,6 @@ class OwlViTPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.v_proj.weight, std=in_proj_std)
             nn.init.normal_(module.out_proj.weight, std=out_proj_std)
         elif isinstance(module, OwlViTMLP):
-            factor = self.config.initializer_factor
             in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
             nn.init.normal_(module.fc1.weight, std=fc_std)
@@ -575,12 +572,13 @@ class OwlViTPreTrainedModel(PreTrainedModel):
         elif isinstance(module, OwlViTModel):
             nn.init.normal_(
                 module.text_projection.weight,
-                std=module.text_embed_dim**-0.5 * self.config.initializer_factor,
+                std=module.text_embed_dim**-0.5 * factor,
             )
             nn.init.normal_(
                 module.visual_projection.weight,
-                std=module.vision_embed_dim**-0.5 * self.config.initializer_factor,
+                std=module.vision_embed_dim**-0.5 * factor,
             )
+            module.logit_scale.data.fill_(self.config.logit_scale_init_value)
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)

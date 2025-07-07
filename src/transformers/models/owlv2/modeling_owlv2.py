@@ -560,7 +560,7 @@ class Owlv2PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["Owlv2EncoderLayer"]
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         factor = self.config.initializer_factor
         if isinstance(module, Owlv2TextEmbeddings):
