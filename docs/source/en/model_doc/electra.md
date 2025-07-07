@@ -32,6 +32,18 @@ This approach is super efficient because ELECTRA learns from every single token 
 
 You can find all the original ELECTRA checkpoints under the [ELECTRA](https://huggingface.co/collections/google/electra-release-64ff6e8b18830fabea30a1ab) release.
 
+## Quick Links
+
+🤗 **Popular ELECTRA Models on HuggingFace Hub:**
+- [google/electra-small-discriminator](https://huggingface.co/google/electra-small-discriminator) - Small model, 14M parameters
+- [google/electra-base-discriminator](https://huggingface.co/google/electra-base-discriminator) - Base model, 110M parameters
+- [google/electra-large-discriminator](https://huggingface.co/google/electra-large-discriminator) - Large model, 335M parameters
+- [bhadresh-savani/electra-base-emotion](https://huggingface.co/bhadresh-savani/electra-base-emotion) - Fine-tuned for emotion detection
+
+📖 **Additional Resources:**
+- [Original ELECTRA Paper](https://huggingface.co/papers/2003.10555)
+- [All ELECTRA Models](https://huggingface.co/models?search=electra)
+
 > [!TIP]
 > Click on the right sidebar for more examples of how to use ELECTRA for different language tasks like sequence classification, token classification, and question answering.
 
@@ -41,39 +53,50 @@ The example below demonstrates how to classify text with [`Pipeline`] or the [`A
 <hfoption id="Pipeline">
 
 ```py
-import torch
-from transformers import pipeline
+# Import required libraries
+import torch  # PyTorch for tensor operations and GPU support
+from transformers import pipeline  # HuggingFace's high-level interface for AI models
 
+# Create a text classification pipeline with ELECTRA
 classifier = pipeline(
-    task="text-classification",
-    model="bhadresh-savani/electra-base-emotion",
-    torch_dtype=torch.float16,
-    device=0
+    task="text-classification",  # Task: classify text into categories
+    model="bhadresh-savani/electra-base-emotion",  # ELECTRA model fine-tuned for emotion detection
+    torch_dtype=torch.float16,  # Use half-precision to save memory
+    device=0  # Use GPU device 0 (or CPU if no GPU available)
 )
-classifier("This restaurant has amazing food!")
+
+# Classify the emotional tone of the text
+result = classifier("This restaurant has amazing food!")
+print(result)
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
 ```py
-import torch
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+# Import required libraries
+import torch  # PyTorch for tensor operations and GPU support
+from transformers import AutoTokenizer, AutoModelForSequenceClassification  # HuggingFace model and tokenizer classes
 
+# Load the tokenizer and model
 tokenizer = AutoTokenizer.from_pretrained(
-    "bhadresh-savani/electra-base-emotion",
+    "bhadresh-savani/electra-base-emotion",  # Load ELECTRA's tokenizer
 )
 model = AutoModelForSequenceClassification.from_pretrained(
-    "bhadresh-savani/electra-base-emotion",
-    torch_dtype=torch.float16
+    "bhadresh-savani/electra-base-emotion",  # Load ELECTRA model for sequence classification
+    torch_dtype=torch.float16  # Use half-precision to save memory
 )
+
+# Tokenize input text
 inputs = tokenizer("ELECTRA is more efficient than BERT", return_tensors="pt")
 
+# Generate predictions without computing gradients (inference mode)
 with torch.no_grad():
-    outputs = model(**inputs)
-    logits = outputs.logits
-    predicted_class_id = logits.argmax(dim=-1).item()
-    predicted_label = model.config.id2label[predicted_class_id]
+    outputs = model(**inputs)  # Forward pass through the model
+    logits = outputs.logits  # Get prediction scores for each class
+    predicted_class_id = logits.argmax(dim=-1).item()  # Get the highest scoring class
+    predicted_label = model.config.id2label[predicted_class_id]  # Convert class ID to label
+
 print(f"Predicted label: {predicted_label}")
 ```
 
