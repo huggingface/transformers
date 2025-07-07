@@ -164,6 +164,7 @@ class OpenAIMoeMLP(nn.Module):
         self.router = TopKRouter(config)
         self.experts = OpenAIMoeExperts(config)
         self.token_dispatcher = TokenDispatcher(config)
+
     def forward(self, hidden_states):
         # we don't slice weight as its not compile compatible
         router_scores, router_indices = self.router(hidden_states) # (num_experts, seq_len)
