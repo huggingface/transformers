@@ -21,14 +21,21 @@ import argparse
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, Union
 
 import nemo.collections.asr as nemo_asr
 import torch
 
-from transformers.models.fastconformer.configuration_fastconformer import FastConformerConfig
+from transformers.models.fastconformer.configuration_fastconformer import (
+    FastConformerConfig, 
+    ParakeetCTCConfig,
+)
 from transformers.models.fastconformer.feature_extraction_fastconformer import FastConformerFeatureExtractor
-from transformers.models.fastconformer.modeling_fastconformer import FastConformerEncoder, FastConformerModel
+from transformers.models.fastconformer.modeling_fastconformer import (
+    FastConformerEncoder, 
+    FastConformerModel, 
+    ParakeetCTC,
+)
 
 
 # Set up logging
@@ -62,7 +69,7 @@ class NeMoFastConformerConverter:
         # Determine model type from name or config
         model_type = "unknown"
         if "parakeet" in self.model_name.lower():
-            model_type = "parakeet"
+            model_type = "parakeet_ctc"
         elif "canary" in self.model_name.lower():
             model_type = "canary"
         elif "conformer" in self.model_name.lower():
@@ -96,11 +103,35 @@ class NeMoFastConformerConverter:
         # Get types
         encoder_type = encoder_cfg.get("_target_", "unknown") if encoder_cfg else "unknown"
         decoder_type = decoder_cfg.get("_target_", "unknown") if decoder_cfg else "none"
+        
+        # Additional CTC detection methods
+        is_ctc_model = False
+        
+        # Method 1: Check decoder type target
+        if "ctc" in decoder_type.lower():
+            is_ctc_model = True
+            
+        # Method 2: Check model name
+        elif "ctc" in self.model_name.lower():
+            is_ctc_model = True
+            
+        # Method 3: Check actual decoder class
+        elif hasattr(self.nemo_model, 'decoder'):
+            decoder_class_name = self.nemo_model.decoder.__class__.__name__
+            if "ctc" in decoder_class_name.lower() or "conv" in decoder_class_name.lower():
+                is_ctc_model = True
+                decoder_type = f"detected_ctc_{decoder_class_name}"
+                
+        # Method 4: Check if decoder has CTC-specific attributes
+        elif hasattr(self.nemo_model, 'decoder') and hasattr(self.nemo_model.decoder, 'num_classes_with_blank'):
+            is_ctc_model = True
+            decoder_type = "detected_ctc_by_attributes"
 
         return {
             "model_type": model_type,
             "encoder_type": encoder_type,
             "decoder_type": decoder_type,
+            "is_ctc_model": is_ctc_model,
             "encoder_cfg": encoder_cfg,
             "decoder_cfg": decoder_cfg,
             "preprocessor_cfg": preprocessor_cfg,
@@ -112,39 +143,84 @@ class NeMoFastConformerConverter:
         encoder_cfg = self.model_info["encoder_cfg"]
         preprocessor_cfg = self.model_info["preprocessor_cfg"]
 
-        # Extract encoder parameters with fallbacks
-        # Try to get actual number of layers from the encoder
-        actual_layers = 24  # default
+        # Extract encoder parameters by inspecting the actual model
+        logger.info("Detecting model architecture from NeMo model...")
+        
+        # Detect actual number of layers from the encoder
+        actual_layers = 24  # fallback default
         if hasattr(self.nemo_model, "encoder") and hasattr(self.nemo_model.encoder, "layers"):
             actual_layers = len(self.nemo_model.encoder.layers)
+            logger.info(f"Detected {actual_layers} encoder layers from model structure")
         elif encoder_cfg and hasattr(encoder_cfg, "n_layers"):
             actual_layers = encoder_cfg.n_layers
+            logger.info(f"Detected {actual_layers} encoder layers from config")
+        else:
+            logger.warning(f"Could not detect layer count, using default: {actual_layers}")
+
+        # Detect actual hidden size
+        actual_hidden_size = 1024  # fallback default
+        if encoder_cfg and hasattr(encoder_cfg, "d_model"):
+            actual_hidden_size = encoder_cfg.d_model
+            logger.info(f"Detected hidden size: {actual_hidden_size}")
+        elif hasattr(self.nemo_model, "encoder") and hasattr(self.nemo_model.encoder, "layers") and len(self.nemo_model.encoder.layers) > 0:
+            # Try to infer from first layer's linear projections
+            first_layer = self.nemo_model.encoder.layers[0]
+            if hasattr(first_layer, "self_attention") and hasattr(first_layer.self_attention, "linear_q"):
+                actual_hidden_size = first_layer.self_attention.linear_q.in_features
+                logger.info(f"Detected hidden size from model weights: {actual_hidden_size}")
+
+        # Detect actual number of attention heads
+        actual_num_heads = 8  # fallback default
+        if encoder_cfg and hasattr(encoder_cfg, "n_heads"):
+            actual_num_heads = encoder_cfg.n_heads
+            logger.info(f"Detected attention heads: {actual_num_heads}")
+        elif hasattr(self.nemo_model, "encoder") and hasattr(self.nemo_model.encoder, "layers") and len(self.nemo_model.encoder.layers) > 0:
+            # Try to infer from attention weights
+            first_layer = self.nemo_model.encoder.layers[0]
+            if hasattr(first_layer, "self_attention") and hasattr(first_layer.self_attention, "linear_q"):
+                # Assume head_dim = hidden_size / num_heads, and linear_q projects to same hidden_size
+                head_dim = actual_hidden_size // actual_num_heads  # current assumption
+                # This is harder to detect automatically, so rely on config when possible
+
+        # Detect actual FFN dimension
+        actual_ffn_dim = actual_hidden_size * 4  # fallback default
+        if encoder_cfg and hasattr(encoder_cfg, "ff_expansion_factor"):
+            actual_ffn_dim = actual_hidden_size * getattr(encoder_cfg, "ff_expansion_factor", 4)
+            logger.info(f"Detected FFN dimension: {actual_ffn_dim}")
+        elif hasattr(self.nemo_model, "encoder") and hasattr(self.nemo_model.encoder, "layers") and len(self.nemo_model.encoder.layers) > 0:
+            # Try to infer from first layer's feed forward
+            first_layer = self.nemo_model.encoder.layers[0]
+            if hasattr(first_layer, "feed_forward_1") and hasattr(first_layer.feed_forward_1, "linear1"):
+                actual_ffn_dim = first_layer.feed_forward_1.linear1.out_features
+                logger.info(f"Detected FFN dimension from model weights: {actual_ffn_dim}")
 
         # Detect use_bias from actual model weights
-        actual_use_bias = True  # default
+        actual_use_bias = False  # default to False to match typical FastConformer
         if hasattr(self.nemo_model, "encoder"):
             encoder_state = self.nemo_model.encoder.state_dict()
             # Check if any linear layer has bias
             for name, tensor in encoder_state.items():
                 if "linear_q.bias" in name or "linear_k.bias" in name:
                     actual_use_bias = True
+                    logger.info("Detected bias=True from model weights")
                     break
                 elif "linear_q.weight" in name:
                     # If we see weight but no corresponding bias, it's False
                     bias_name = name.replace(".weight", ".bias")
                     if bias_name not in encoder_state:
                         actual_use_bias = False
+                        logger.info("Detected bias=False from model weights")
                         break
 
         config_params = {
             "vocab_size": getattr(self.nemo_model, "vocab_size", 1024),
-            "d_model": getattr(encoder_cfg, "d_model", 1024),
-            "encoder_layers": actual_layers,
-            "encoder_attention_heads": getattr(encoder_cfg, "n_heads", 8),
-            "encoder_ffn_dim": getattr(encoder_cfg, "d_model", 1024) * getattr(encoder_cfg, "ff_expansion_factor", 4),
-            "activation_function": "silu",  # FastConformer uses SiLU
-            "dropout": getattr(encoder_cfg, "dropout", 0.1),
-            "attention_dropout": getattr(encoder_cfg, "dropout_att", 0.1),
+            "hidden_size": actual_hidden_size,
+            "num_hidden_layers": actual_layers,
+            "num_attention_heads": actual_num_heads,
+            "intermediate_size": actual_ffn_dim,
+            "hidden_act": "silu",  # FastConformer uses SiLU
+            "hidden_dropout_prob": getattr(encoder_cfg, "dropout", 0.1),
+            "attention_probs_dropout_prob": getattr(encoder_cfg, "dropout_att", 0.1),
             "conv_kernel_size": getattr(encoder_cfg, "conv_kernel_size", 9),
             "subsampling_factor": getattr(encoder_cfg, "subsampling_factor", 8),
             "subsampling_conv_channels": getattr(encoder_cfg, "subsampling_conv_channels", 256),
@@ -157,11 +233,17 @@ class NeMoFastConformerConverter:
             "eos_token_id": 2,
         }
 
+        # Determine the architecture name based on model type  
+        if self.model_info["is_ctc_model"]:
+            architectures = ["ParakeetCTC"]
+        else:
+            architectures = ["FastConformerModel"]
+
         # Add model-specific metadata
         config_params.update(
             {
-                "model_type": "fastconformer",
-                "architectures": ["FastConformerModel"],  # Base model for all FastConformer-based models
+                "model_type": self.model_info["model_type"] if self.model_info["model_type"] != "unknown" else "fastconformer",
+                "architectures": architectures,
                 "nemo_model_name": self.model_name,
                 "nemo_model_type": self.model_info["model_type"],
                 "nemo_encoder_type": self.model_info["encoder_type"],
@@ -189,7 +271,7 @@ class NeMoFastConformerConverter:
                 "f_min": getattr(preprocessor_cfg, "lowfreq", 0),
                 "f_max": getattr(preprocessor_cfg, "highfreq", sample_rate // 2),
                 "normalize": getattr(preprocessor_cfg, "normalize", "per_feature"),
-                "mel_scale": "htk",
+                "mel_scale": "slaney",
                 "return_attention_mask": True,
                 "padding_value": 0.0,
             }
@@ -206,7 +288,7 @@ class NeMoFastConformerConverter:
                 "f_min": 0,
                 "f_max": 8000,
                 "normalize": "per_feature",
-                "mel_scale": "htk",
+                "mel_scale": "slaney",
                 "return_attention_mask": True,
                 "padding_value": 0.0,
             }
@@ -289,18 +371,68 @@ class NeMoFastConformerConverter:
 
     def _create_full_model(
         self, hf_config: FastConformerConfig, hf_encoder: FastConformerEncoder
-    ) -> FastConformerModel:
-        """Create the base FastConformer model with the converted encoder."""
-        logger.info("Creating HuggingFace FastConformer base model...")
+    ) -> Union[FastConformerModel, ParakeetCTC]:
+        """Create the appropriate model based on the detected NeMo model type."""
+        model_type = self.model_info["model_type"]
+        is_ctc_model = self.model_info["is_ctc_model"]
+        
+        if is_ctc_model:
+            # Get vocab_size from NeMo decoder
+            vocab_size = 1024  # Default fallback
+            if hasattr(self.nemo_model, 'decoder') and hasattr(self.nemo_model.decoder, 'num_classes_with_blank'):
+                vocab_size = self.nemo_model.decoder.num_classes_with_blank
+                logger.info(f"Set vocab_size to {vocab_size} (NeMo num_classes_with_blank)")
+            
+            # Create ParakeetCTC model for all CTC models
+            logger.info("Creating HuggingFace ParakeetCTC model...")
+            
+            # Create ParakeetCTCConfig
+            ctc_config = ParakeetCTCConfig(
+                vocab_size=vocab_size,
+                blank_token_id=0,  # Standard CTC blank token
+                ctc_loss_reduction="mean",
+                ctc_zero_infinity=True,
+                fastconformer_config=hf_config,
+            )
+            
+            # Create Parakeet CTC model
+            hf_model = ParakeetCTC(ctc_config)
+            
+            # Replace encoder with converted one
+            hf_model.encoder = hf_encoder
+            
+            # Convert CTC head weights if available
+            if hasattr(self.nemo_model, 'decoder') and hasattr(self.nemo_model.decoder, 'decoder_layers'):
+                nemo_decoder_state_dict = self.nemo_model.decoder.state_dict()
+                
+                # Map decoder weights (CTC head is typically a linear layer)
+                if 'decoder_layers.0.weight' in nemo_decoder_state_dict:
+                    nemo_weight = nemo_decoder_state_dict['decoder_layers.0.weight']
+                    # NeMo uses Conv1d (shape: [out_channels, in_channels, kernel_size])
+                    # HF uses Linear (shape: [out_features, in_features])
+                    if nemo_weight.dim() == 3 and nemo_weight.size(2) == 1:
+                        nemo_weight = nemo_weight.squeeze(2)
+                    
+                    # Check if the model has a ctc_head attribute
+                    if hasattr(hf_model, 'ctc_head'):
+                        hf_model.ctc_head.weight.data = nemo_weight
+                        
+                        if 'decoder_layers.0.bias' in nemo_decoder_state_dict:
+                            nemo_bias = nemo_decoder_state_dict['decoder_layers.0.bias']
+                            hf_model.ctc_head.bias.data = nemo_bias
+                            
+                        logger.info("Loaded CTC head weights from NeMo decoder")
+                    else:
+                        logger.warning(f"Model {type(hf_model).__name__} does not have ctc_head attribute")
+            
+        else:
+            logger.info("Creating HuggingFace FastConformer base model...")
 
-        # Create base FastConformer model
-        hf_model = FastConformerModel(hf_config)
+            # Create base FastConformer model
+            hf_model = FastConformerModel(hf_config)
 
-        # Replace encoder with converted one
-        hf_model.encoder = hf_encoder
-
-        # Note: This is the base model for all FastConformer-based NeMo ASR models
-        # It contains the FastConformer encoder and is numerically equivalent to NeMo's encoder
+            # Replace encoder with converted one
+            hf_model.encoder = hf_encoder
 
         return hf_model
 
@@ -340,13 +472,19 @@ class NeMoFastConformerConverter:
         conversion_info = {
             "nemo_model_name": self.model_name,
             "nemo_model_type": self.model_info["model_type"],
+            "nemo_decoder_type": self.model_info["decoder_type"],
+            "hf_model_type": type(hf_model).__name__,
+            "hf_config_type": type(hf_model.config).__name__ if hasattr(hf_model, 'config') else "Unknown",
+            "is_ctc_model": self.model_info["is_ctc_model"],
             "encoder_params_loaded": encoder_params_loaded,
             "encoder_params_total": len(hf_encoder.state_dict()),
             "conversion_success": encoder_params_loaded > 0,
             "notes": [
                 "Encoder weights loaded from NeMo model",
-                "Base FastConformer model - supports all FastConformer-based models",
-                "Can be used for feature extraction and as foundation for NeMo ASR models",
+                f"Converted to {type(hf_model).__name__}",
+                f"Uses {type(hf_model.config).__name__ if hasattr(hf_model, 'config') else 'FastConformerConfig'} configuration",
+                "CTC head weights loaded from NeMo decoder" if isinstance(hf_model, ParakeetCTC) else "Base model for feature extraction",
+                "Supports composed configuration pattern for task-specific models" if isinstance(hf_model, ParakeetCTC) else "Base encoder model",
                 "Numerically equivalent to NeMo FastConformer encoder",
             ],
         }
@@ -362,8 +500,26 @@ class NeMoFastConformerConverter:
         """Verify that the conversion was successful by comparing encoder outputs."""
         logger.info("Verifying conversion...")
 
-        # Load converted model
-        hf_model = FastConformerModel.from_pretrained(self.output_dir)
+        # Load converted model - handle both base and CTC models
+        try:
+            from transformers import AutoModelForCTC, AutoModel, AutoConfig
+            
+            # Check what type of model we have
+            config = AutoConfig.from_pretrained(self.output_dir)
+            is_ctc_model = self.model_info["is_ctc_model"]
+            
+            if is_ctc_model:
+                # For CTC models, load using AutoModelForCTC which will use the fastconformer_for_ctc mapping
+                hf_model = AutoModelForCTC.from_pretrained(self.output_dir)
+                logger.info("Loaded as FastConformerForCTC")
+            else:
+                hf_model = AutoModel.from_pretrained(self.output_dir)
+                logger.info("Loaded as FastConformerModel")
+                
+        except Exception as e:
+            logger.error(f"Failed to load converted model: {e}")
+            return False
+
         hf_model.eval()
 
         # Ensure both models are on CPU for comparison
@@ -384,11 +540,17 @@ class NeMoFastConformerConverter:
             )
             nemo_encoded = nemo_encoded.transpose(1, 2)  # Convert back to (B, T, D)
 
-            # HF encoder
-            hf_outputs = hf_model.encoder(test_input)
-            hf_encoded = hf_outputs.last_hidden_state
+            # HF encoder - handle both model types
+            if hasattr(hf_model, 'encoder'):
+                # CTC model or base model with encoder attribute
+                hf_outputs = hf_model.encoder(test_input)
+                hf_encoded = hf_outputs.last_hidden_state
+            else:
+                # Direct model call for base model
+                hf_outputs = hf_model(test_input)
+                hf_encoded = hf_outputs.last_hidden_state
 
-        # Compare
+        # Compare encoder outputs
         mean_diff = torch.abs(nemo_encoded - hf_encoded).mean().item()
         correlation = torch.corrcoef(torch.stack([nemo_encoded.flatten(), hf_encoded.flatten()]))[0, 1].item()
 
@@ -444,10 +606,25 @@ def main():
 
         # Usage example
         logger.info("\nUsage example:")
-        logger.info("from transformers import AutoModel, AutoFeatureExtractor")
-        logger.info(f"model = AutoModel.from_pretrained('{args.output_dir}')")
-        logger.info(f"feature_extractor = AutoFeatureExtractor.from_pretrained('{args.output_dir}')")
-        logger.info("encoder_features = model(input_features).last_hidden_state")
+        if conversion_info.get("is_ctc_model", False):
+            logger.info("# For CTC models:")
+            logger.info("from transformers import AutoModelForCTC, AutoFeatureExtractor")
+            logger.info(f"model = AutoModelForCTC.from_pretrained('{args.output_dir}')")
+            logger.info(f"feature_extractor = AutoFeatureExtractor.from_pretrained('{args.output_dir}')")
+            logger.info("# For speech recognition:")
+            logger.info("outputs = model(input_features)")
+            logger.info("ctc_logits = outputs.logits")
+            logger.info("# Or generate decoded sequences:")
+            logger.info("decoded = model.generate_speech_recognition_outputs(input_features)")
+            logger.info("# Or use ParakeetCTC directly:")
+            logger.info("from transformers import ParakeetCTC")
+            logger.info(f"model = ParakeetCTC.from_pretrained('{args.output_dir}')")
+        else:
+            logger.info("# For base models:")
+            logger.info("from transformers import AutoModel, AutoFeatureExtractor")
+            logger.info(f"model = AutoModel.from_pretrained('{args.output_dir}')")
+            logger.info(f"feature_extractor = AutoFeatureExtractor.from_pretrained('{args.output_dir}')")
+            logger.info("encoder_features = model(input_features).last_hidden_state")
 
     except Exception as e:
         logger.error(f"Conversion failed: {e}")
@@ -456,3 +633,27 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# Future Model-Specific Improvements:
+#
+# 1. Additional Model Classes:
+#    - ParakeetTDT (FastConformer + TDT decoder)
+#    - ParakeetRNNT (FastConformer + RNN-T decoder)
+#    - CanaryAED (FastConformer + AED decoder)
+#
+# 2. Enhanced Auto Model Registration:
+#    - ("parakeet_tdt", "ParakeetTDT") in MODEL_FOR_TDT_MAPPING
+#    - ("parakeet_rnnt", "ParakeetRNNT") in MODEL_FOR_RNNT_MAPPING
+#    - ("canary", "CanaryAED") in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING
+#
+# 3. Decoder-Specific Converters:
+#    - TDT decoder weight conversion logic
+#    - RNN-T decoder weight conversion logic
+#    - AED decoder weight conversion logic
+#
+# 4. Current Implementation:
+#    - ParakeetCTC (FastConformer + CTC) - COMPLETE
+#    - ParakeetTDT (FastConformer + TDT) - PLANNED
+#    - ParakeetRNNT (FastConformer + RNN-T) - PLANNED
+#    - CanaryAED (FastConformer + AED) - PLANNED

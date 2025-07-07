@@ -16,15 +16,36 @@ from typing import TYPE_CHECKING
 from ...utils import _LazyModule
 from ...utils.import_utils import define_import_structure
 
+# Import structure for lazy loading
+_import_structure = {
+    "configuration_fastconformer": [
+        "FastConformerConfig",
+        "ParakeetCTCConfig",
+    ],
+    "feature_extraction_fastconformer": ["FastConformerFeatureExtractor"],
+}
+
+_import_structure["modeling_fastconformer"] = [
+    "FastConformerModel",
+    "FastConformerEncoder",
+    "FastConformerPreTrainedModel",
+    "ParakeetCTC",
+]
 
 if TYPE_CHECKING:
-    from .configuration_fastconformer import *
-    from .feature_extraction_fastconformer import *
-    from .modeling_fastconformer import *
-
+    from .configuration_fastconformer import (
+        FastConformerConfig,
+        ParakeetCTCConfig,
+    )
+    from .feature_extraction_fastconformer import FastConformerFeatureExtractor
+    from .modeling_fastconformer import (
+        FastConformerEncoder,
+        FastConformerModel,
+        FastConformerPreTrainedModel,
+        ParakeetCTC,
+    )
 
 else:
     import sys
 
-    _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)

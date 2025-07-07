@@ -313,8 +313,8 @@ class FastConformerFeatureExtractionTest(unittest.TestCase):
     @require_torch
     def test_preemphasis(self):
         # Test with and without preemphasis
-        feat_extract_with_preemph = self.feature_extraction_class(preemph=0.97)
-        feat_extract_without_preemph = self.feature_extraction_class(preemph=0.0)
+        feat_extract_with_preemph = self.feature_extraction_class(preemphasis=0.97)
+        feat_extract_without_preemph = self.feature_extraction_class(preemphasis=0.0)
 
         audio = torch.randn(1, 8000)
         audio_lengths = torch.tensor([8000], dtype=torch.long)

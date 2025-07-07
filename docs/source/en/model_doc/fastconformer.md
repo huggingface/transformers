@@ -8,17 +8,19 @@ The original implementation can be found in [NVIDIA NeMo](https://github.com/NVI
 
 ## Usage
 
-FastConformer is primarily designed for automatic speech recognition tasks. The model processes mel-spectrogram features extracted from raw audio and produces contextualized representations suitable for downstream ASR tasks. Here you can load all parakeet, canary based models encoder for getting outputs from fastconformer encoder. Full pipeline will be added seperately for Parakeet and Canary models with their respective decoders. 
+FastConformer is primarily designed for automatic speech recognition tasks. The model processes mel-spectrogram features extracted from raw audio and produces contextualized representations suitable for downstream ASR tasks. The implementation includes both encoder-only models for feature extraction and Parakeet CTC models for speech recognition.
 
-### Basic usage
+### CTC Speech Recognition
+
+For speech recognition tasks, use the complete CTC models that include both the FastConformer encoder and CTC decoder:
 
 ```python
 import torch
-from transformers import AutoModel, AutoFeatureExtractor
+from transformers import AutoModelForCTC, AutoFeatureExtractor
 
-# Load model and feature extractor
-model = AutoModel.from_pretrained("nvidia/parakeet-tdt-0.6b-v2") #also works with other parakeet and Canary models
-feature_extractor = AutoFeatureExtractor.from_pretrained("nvidia/parakeet-tdt-0.6b-v2") #also works with other parakeet and Canary models
+# Load CTC model and feature extractor
+model = AutoModelForCTC.from_pretrained("nvidia/parakeet-ctc-1.1b")
+feature_extractor = AutoFeatureExtractor.from_pretrained("nvidia/parakeet-ctc-1.1b")
 
 # Prepare audio input (example with random data)
 # In practice, you would load real audio data
@@ -33,7 +35,7 @@ features = feature_extractor(
     return_tensors="pt"
 )
 
-# Get model outputs
+# Get CTC outputs
 with torch.no_grad():
     outputs = model(
         input_features=features.input_features,
@@ -41,17 +43,99 @@ with torch.no_grad():
         input_lengths=features.input_lengths
     )
 
-encoder_hidden_states = outputs.last_hidden_state
+# CTC logits for each time step
+ctc_logits = outputs.logits  # Shape: (batch, time, vocab_size)
+
+# Generate decoded token sequences using CTC decoding
+decoded_sequences = model.generate_speech_recognition_outputs(
+    input_features=features.input_features,
+    attention_mask=features.attention_mask,
+    input_lengths=features.input_lengths,
+)
+print("Decoded tokens:", decoded_sequences[0])
+```
+
+### Direct ParakeetCTC Usage
+
+You can also use the ParakeetCTC model directly:
+
+```python
+import torch
+from transformers import ParakeetCTC, AutoFeatureExtractor
+
+# Load model and feature extractor
+model = ParakeetCTC.from_pretrained("nvidia/parakeet-ctc-1.1b")
+feature_extractor = AutoFeatureExtractor.from_pretrained("nvidia/parakeet-ctc-1.1b")
+
+# Process audio
+raw_audio = torch.randn(1, 16000)
+audio_lengths = torch.tensor([16000])
+
+features = feature_extractor(
+    raw_audio, 
+    audio_lengths=audio_lengths, 
+    sampling_rate=16000,
+    return_tensors="pt"
+)
+
+# Forward pass
+with torch.no_grad():
+    outputs = model(
+        input_features=features.input_features,
+        attention_mask=features.attention_mask,
+        input_lengths=features.input_lengths
+    )
+
+# CTC decoding
+decoded_sequences = model.generate_speech_recognition_outputs(
+    input_features=features.input_features,
+    attention_mask=features.attention_mask,
+    input_lengths=features.input_lengths,
+)
+```
+
+### Encoder-Only Usage
+
+For feature extraction or as a base for custom decoders, you can use the encoder directly:
+
+```python
+import torch
+from transformers import AutoModel, AutoFeatureExtractor
+
+# Load encoder model and feature extractor
+model = AutoModel.from_pretrained("nvidia/parakeet-ctc-1.1b")
+feature_extractor = AutoFeatureExtractor.from_pretrained("nvidia/parakeet-ctc-1.1b")
+
+# Extract features
+raw_audio = torch.randn(1, 16000)
+audio_lengths = torch.tensor([16000])
+
+features = feature_extractor(
+    raw_audio, 
+    audio_lengths=audio_lengths, 
+    sampling_rate=16000,
+    return_tensors="pt"
+)
+
+# Get encoder outputs
+with torch.no_grad():
+    outputs = model(
+        input_features=features.input_features,
+        attention_mask=features.attention_mask,
+        input_lengths=features.input_lengths
+    )
+
+encoder_hidden_states = outputs.last_hidden_state  # Shape: (batch, time, hidden_size)
 ```
 
 ### Processing batches with different lengths
 
 ```python
 import torch
-from transformers import AutoModel, AutoFeatureExtractor
+from transformers import AutoModelForCTC, AutoFeatureExtractor
 
-model = AutoModel.from_pretrained("nvidia/parakeet-tdt-0.6b-v2") # also works with other parakeet and Canary models
-feature_extractor = AutoFeatureExtractor.from_pretrained("nvidia/parakeet-tdt-0.6b-v2")
+model = AutoModelForCTC.from_pretrained("nvidia/parakeet-ctc-1.1b")
+feature_extractor = AutoFeatureExtractor.from_pretrained("nvidia/parakeet-ctc-1.1b")
 
 # Example with two audio samples of different lengths
 audio1 = torch.randn(8000)   # 0.5 seconds
@@ -80,6 +164,14 @@ with torch.no_grad():
         attention_mask=features.attention_mask,
         input_lengths=features.input_lengths
     )
+
+# Batch CTC decoding
+decoded_sequences = model.generate_speech_recognition_outputs(
+    input_features=features.input_features,
+    attention_mask=features.attention_mask,
+    input_lengths=features.input_lengths,
+)
+print("Batch decoded tokens:", decoded_sequences)
 ```
 
 ## Model Architecture
@@ -102,6 +194,7 @@ FastConformer follows the Conformer architecture but with optimizations for effi
 - **NeMo Compatibility**: Weights can be converted from NVIDIA NeMo models
 - **Flexible Configuration**: Supports various model sizes and architectures
 - **Batch Processing**: Efficient handling of variable-length sequences
+- **CTC Support**: Complete CTC implementation for speech recognition
 
 ## Conversion from NeMo
 
@@ -109,7 +202,7 @@ FastConformer models can be converted from NVIDIA NeMo format using the provided
 
 ```bash
 python convert_nemo_fastconformer_to_hf.py \
-    --model_name nvidia/parakeet-tdt-0.6b-v2 \
+    --model_name nvidia/parakeet-ctc-1.1b \
     --output_dir ./fastconformer-hf \
     --verify
 ```
@@ -136,4 +229,11 @@ The conversion process:
 
 ## FastConformerEncoder
 
-[[autodoc]] FastConformerEncoder 
+[[autodoc]] FastConformerEncoder
+    - forward
+
+## ParakeetCTC
+
+[[autodoc]] ParakeetCTC
+    - forward
+    - generate_speech_recognition_outputs 
