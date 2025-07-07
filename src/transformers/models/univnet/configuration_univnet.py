@@ -40,15 +40,15 @@ class UnivNetConfig(PretrainedConfig):
         num_mel_bins (`int`, *optional*, defaults to 100):
             The number of frequency bins in the conditioning log-mel spectrogram. This should correspond to the value
             used in the [`UnivNetFeatureExtractor`] class.
-        resblock_kernel_sizes (`Tuple[int]` or `List[int]`, *optional*, defaults to `[3, 3, 3]`):
+        resblock_kernel_sizes (`tuple[int]` or `list[int]`, *optional*, defaults to `[3, 3, 3]`):
             A tuple of integers defining the kernel sizes of the 1D convolutional layers in the UnivNet residual
             network. The length of `resblock_kernel_sizes` defines the number of resnet blocks and should match that of
             `resblock_stride_sizes` and `resblock_dilation_sizes`.
-        resblock_stride_sizes (`Tuple[int]` or `List[int]`, *optional*, defaults to `[8, 8, 4]`):
+        resblock_stride_sizes (`tuple[int]` or `list[int]`, *optional*, defaults to `[8, 8, 4]`):
             A tuple of integers defining the stride sizes of the 1D convolutional layers in the UnivNet residual
             network. The length of `resblock_stride_sizes` should match that of `resblock_kernel_sizes` and
             `resblock_dilation_sizes`.
-        resblock_dilation_sizes (`Tuple[Tuple[int]]` or `List[List[int]]`, *optional*, defaults to `[[1, 3, 9, 27], [1, 3, 9, 27], [1, 3, 9, 27]]`):
+        resblock_dilation_sizes (`tuple[tuple[int]]` or `list[list[int]]`, *optional*, defaults to `[[1, 3, 9, 27], [1, 3, 9, 27], [1, 3, 9, 27]]`):
             A nested tuple of integers defining the dilation rates of the dilated 1D convolutional layers in the
             UnivNet residual network. The length of `resblock_dilation_sizes` should match that of
             `resblock_kernel_sizes` and `resblock_stride_sizes`. The length of each nested list in

@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Blender chatbot model was proposed in [Recipes for building an open-domain chatbot](https://arxiv.org/pdf/2004.13637.pdf) Stephen Roller, Emily Dinan, Naman Goyal, Da Ju, Mary Williamson, Yinhan Liu,
+The Blender chatbot model was proposed in [Recipes for building an open-domain chatbot](https://huggingface.co/papers/2004.13637) Stephen Roller, Emily Dinan, Naman Goyal, Da Ju, Mary Williamson, Yinhan Liu,
 Jing Xu, Myle Ott, Kurt Shuster, Eric M. Smith, Y-Lan Boureau, Jason Weston on 30 Apr 2020.
 
 The abstract of the paper is the following:
@@ -67,7 +67,7 @@ An example:
 
 ## Implementation Notes
 
-- Blenderbot uses a standard [seq2seq model transformer](https://arxiv.org/pdf/1706.03762.pdf) based architecture.
+- Blenderbot uses a standard [seq2seq model transformer](https://huggingface.co/papers/1706.03762) based architecture.
 - Available checkpoints can be found in the [model hub](https://huggingface.co/models?search=blenderbot).
 - This is the *default* Blenderbot model class. However, some smaller checkpoints, such as
   `facebook/blenderbot_small_90M`, have a different architecture and consequently should be used with

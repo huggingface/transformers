@@ -50,8 +50,8 @@ class FalconH1Config(PretrainedConfig):
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `8`.
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `8`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -111,7 +111,7 @@ class FalconH1Config(PretrainedConfig):
             The multiplier for the LM head. This is used to scale the output of the LM head.
         embedding_multiplier (`float`, *optional*, defaults to 1.0):
             The multiplier for the embedding layer. This is used to scale the output of the embedding layer.
-        mlp_multipliers (`List[float]`, *optional*):
+        mlp_multipliers (`list[float]`, *optional*):
             The multipliers for the MLP layers. This is used to scale the output of the MLP layers. The first value is
             the multiplier of gate layer, the second value is the multiplier of the down_proj layer.
         key_multiplier (`float`, *optional*):
@@ -120,7 +120,7 @@ class FalconH1Config(PretrainedConfig):
             The multiplier for the attention output layer. This is used to scale the output of the attention output
         attention_in_multiplier (`float`, *optional*):
             The multiplier for the attention input layer. This is used to scale the output of the attention input layer.
-        ssm_multipliers (`List[float]`, *optional*):
+        ssm_multipliers (`list[float]`, *optional*):
             The multipliers for the SSM layers. This is used to scale the output of the SSM layers.
         ssm_in_multiplier (`float`, *optional*):
             The multiplier for the SSM input layer. This is used to scale the output of the SSM input layer.

@@ -27,6 +27,7 @@ from transformers import (
     AutoTokenizer,
     BitsAndBytesConfig,
     pipeline,
+    set_seed,
 )
 from transformers.models.opt.modeling_opt import OPTAttention
 from transformers.testing_utils import (
@@ -113,6 +114,8 @@ class BaseMixedInt8Test(unittest.TestCase):
     MAX_NEW_TOKENS = 10
     # Expected values with offload
     EXPECTED_OUTPUTS.add("Hello my name is John and I am a professional photographer based in")
+    # Expected values on Intel XPU and NV A100
+    EXPECTED_OUTPUTS.add("Hello my name is Alina. I have been working as a professional")
 
     def setUp(self):
         # Models and tokenizer
@@ -649,6 +652,8 @@ class MixedInt8TestPipeline(BaseMixedInt8Test):
             max_new_tokens=self.MAX_NEW_TOKENS,
         )
 
+        # Avoid sampling different outputs
+        set_seed(42)
         # Real second forward pass
         pipeline_output = self.pipe(self.input_text)
         self.assertIn(pipeline_output[0]["generated_text"], self.EXPECTED_OUTPUTS)
@@ -730,7 +735,7 @@ class MixedInt8TestCpuGpu(BaseMixedInt8Test):
         output_text = self.tokenizer.decode(output_parallel[0], skip_special_tokens=True)
         self.assertIn(output_text, self.EXPECTED_OUTPUTS)
 
-    def test_cpu_gpu_loading_random_device_map(self):
+    def test_cpu_accelerator_loading_random_device_map(self):
         r"""
         A test to check is dispatching a model on cpu & gpu works correctly using a random `device_map`.
         """
@@ -778,7 +783,7 @@ class MixedInt8TestCpuGpu(BaseMixedInt8Test):
 
         self.check_inference_correctness(model_8bit)
 
-    def test_cpu_gpu_loading_custom_device_map(self):
+    def test_cpu_accelerator_loading_custom_device_map(self):
         r"""
         A test to check is dispatching a model on cpu & gpu works correctly using a custom `device_map`.
         This time the device map is more organized than the test above and uses the abstraction
@@ -805,7 +810,7 @@ class MixedInt8TestCpuGpu(BaseMixedInt8Test):
 
         self.check_inference_correctness(model_8bit)
 
-    def test_cpu_gpu_disk_loading_custom_device_map(self):
+    def test_cpu_accelerator_disk_loading_custom_device_map(self):
         r"""
         A test to check is dispatching a model on cpu & gpu works correctly using a custom `device_map`.
         This time we also add `disk` on the device_map.
@@ -832,7 +837,7 @@ class MixedInt8TestCpuGpu(BaseMixedInt8Test):
 
             self.check_inference_correctness(model_8bit)
 
-    def test_cpu_gpu_disk_loading_custom_device_map_kwargs(self):
+    def test_cpu_accelerator_disk_loading_custom_device_map_kwargs(self):
         r"""
         A test to check is dispatching a model on cpu & gpu works correctly using a custom `device_map`.
         This time we also add `disk` on the device_map - using the kwargs directly instead of the quantization config
