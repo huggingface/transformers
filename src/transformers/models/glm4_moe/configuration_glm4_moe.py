@@ -34,18 +34,18 @@ class Glm4MoeConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 151936):
+        vocab_size (`int`, *optional*, defaults to 151552):
             Vocabulary size of the Glm4Moe model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`Glm4MoeModel`]
-        hidden_size (`int`, *optional*, defaults to 2048):
+        hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 6144):
+        intermediate_size (`int`, *optional*, defaults to 10944):
             Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 24):
+        num_hidden_layers (`int`, *optional*, defaults to 46):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
+        num_attention_heads (`int`, *optional*, defaults to 96):
             Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 4):
+        num_key_value_heads (`int`, *optional*, defaults to 8):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
@@ -55,11 +55,11 @@ class Glm4MoeConfig(PretrainedConfig):
 
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 32768):
+        max_position_embeddings (`int`, *optional*, defaults to 131072):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
+        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
@@ -111,7 +111,7 @@ class Glm4MoeConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         decoder_sparse_step (`int`, *optional*, defaults to 1):
             The frequency of the MoE layer.
-        moe_intermediate_size (`int`, *optional*, defaults to 768):
+        moe_intermediate_size (`int`, *optional*, defaults to 1408):
             Intermediate size of the routed expert.
         num_experts_per_tok (`int`, *optional*, defaults to 8):
             Number of selected experts.
@@ -119,15 +119,6 @@ class Glm4MoeConfig(PretrainedConfig):
             Number of routed experts.
         norm_topk_prob (`bool`, *optional*, defaults to `False`):
             Whether to normalize the topk probabilities.
-        output_router_logits (`bool`, *optional*, defaults to `False`):
-            Whether or not the router logits should be returned by the model. Enabling this will also
-            allow the model to output the auxiliary loss, including load balancing loss and router z-loss.
-        router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
-            The aux loss factor for the total loss.
-        mlp_only_layers (`list[int]`, *optional*, defaults to `[]`):
-            Indicate which layers use Glm4MoeMLP rather than Glm4MoeSparseMoeBlock
-            The list contains layer index, from 0 to num_layers-1 if we have num_layers layers
-            If `mlp_only_layers` is empty, `decoder_sparse_step` is used to determine the sparsity.
 
     ```python
     >>> from transformers import Glm4MoeModel, Glm4MoeConfig
