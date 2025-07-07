@@ -4648,7 +4648,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             if config.base_model_ep_plan is None:
                 raise ValueError("base_model_ep_plan is required when enable_expert_parallel is True")
             config.base_model_tp_plan = config.base_model_ep_plan # TODO: hack for now
-            config.attach_module_hooks = True # TODO: hack for now
 
         config.device_mesh = device_mesh # Used in post_init
 
