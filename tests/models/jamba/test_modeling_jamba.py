@@ -21,6 +21,7 @@ import pytest
 
 from transformers import AutoTokenizer, JambaConfig, is_torch_available
 from transformers.testing_utils import (
+    DeviceProperties,
     Expectations,
     get_device_properties,
     require_bitsandbytes,
@@ -527,7 +528,6 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                     tmpdirname,
                     torch_dtype=torch.float16,
                     attn_implementation="flash_attention_2",
-                    low_cpu_mem_usage=True,
                     load_in_4bit=True,
                 )
 
@@ -558,12 +558,15 @@ class JambaModelIntegrationTest(unittest.TestCase):
     tokenizer = None
     # This variable is used to determine which acclerator are we using for our runners (e.g. A10 or T4)
     # Depending on the hardware we get different logits / generations
-    device_properties = None
+    device_properties: DeviceProperties = (None, None, None)
 
     @classmethod
     def setUpClass(cls):
         model_id = "ai21labs/Jamba-tiny-dev"
-        cls.model = JambaForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True)
+        cls.model = JambaForCausalLM.from_pretrained(
+            model_id,
+            torch_dtype=torch.bfloat16,
+        )
         cls.tokenizer = AutoTokenizer.from_pretrained(model_id)
         cls.device_properties = get_device_properties()
 
@@ -593,7 +596,7 @@ class JambaModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output_sentence, expected_sentence)
 
         # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
-        if self.device_properties == ("cuda", 8):
+        if self.device_properties[0] == "cuda" and self.device_properties[1] == 8:
             with torch.no_grad():
                 logits = self.model(input_ids=input_ids).logits
 
@@ -636,7 +639,7 @@ class JambaModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output_sentences[1], expected_sentences[1])
 
         # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
-        if self.device_properties == ("cuda", 8):
+        if self.device_properties[0] == "cuda" and self.device_properties[1] == 8:
             with torch.no_grad():
                 logits = self.model(input_ids=inputs["input_ids"]).logits
 

@@ -24,6 +24,7 @@ from transformers.testing_utils import (
     cleanup,
     require_flash_attn,
     require_torch,
+    require_torch_large_accelerator,
     require_torch_large_gpu,
     require_torch_sdpa,
     slow,
@@ -79,7 +80,7 @@ class Glm4ModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 @slow
-@require_torch_large_gpu
+@require_torch_large_accelerator
 class Glm4IntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
     model_id = "THUDM/GLM-4-9B-0414"
@@ -90,6 +91,10 @@ class Glm4IntegrationTest(unittest.TestCase):
     def test_model_9b_fp16(self):
         EXPECTED_TEXTS = Expectations(
             {
+                ("xpu", 3): [
+                    "Hello I am doing a project on the history of the internet and I need to know what the first website was and what",
+                    "Hi today I am going to tell you about the most common disease in the world. This disease is called diabetes",
+                ],
                 ("cuda", 7): [],
                 ("cuda", 8): [
                     "Hello I am doing a project on the history of the internet and I need to know what the first website was and what",
@@ -99,9 +104,7 @@ class Glm4IntegrationTest(unittest.TestCase):
         )
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
 
-        model = AutoModelForCausalLM.from_pretrained(
-            self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16
-        ).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.float16).to(torch_device)
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
@@ -114,6 +117,10 @@ class Glm4IntegrationTest(unittest.TestCase):
     def test_model_9b_bf16(self):
         EXPECTED_TEXTS = Expectations(
             {
+                ("xpu", 3): [
+                    "Hello I am doing a project on the history of the internet and I need to know what the first website was and what",
+                    "Hi today I am going to tell you about the most common mistakes that people make when they are learning English.",
+                ],
                 ("cuda", 7): [],
                 ("cuda", 8): [
                     "Hello I am doing a project on the history of the internet and I need to know what the first website was and what",
@@ -123,9 +130,7 @@ class Glm4IntegrationTest(unittest.TestCase):
         )
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
 
-        model = AutoModelForCausalLM.from_pretrained(
-            self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
-        ).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(torch_device)
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
@@ -138,6 +143,10 @@ class Glm4IntegrationTest(unittest.TestCase):
     def test_model_9b_eager(self):
         EXPECTED_TEXTS = Expectations(
             {
+                ("xpu", 3): [
+                    "Hello I am doing a project on the history of the internet and I need to know what the first website was and who",
+                    "Hi today I am going to tell you about the most common disease in the world. This disease is called diabetes",
+                ],
                 ("cuda", 7): [],
                 ("cuda", 8): [
                     "Hello I am doing a project on the history of the internet and I need to know what the first website was and what",
@@ -149,7 +158,6 @@ class Glm4IntegrationTest(unittest.TestCase):
 
         model = AutoModelForCausalLM.from_pretrained(
             self.model_id,
-            low_cpu_mem_usage=True,
             torch_dtype=torch.bfloat16,
             attn_implementation="eager",
         )
@@ -167,6 +175,10 @@ class Glm4IntegrationTest(unittest.TestCase):
     def test_model_9b_sdpa(self):
         EXPECTED_TEXTS = Expectations(
             {
+                ("xpu", 3): [
+                    "Hello I am doing a project on the history of the internet and I need to know what the first website was and what",
+                    "Hi today I am going to tell you about the most common mistakes that people make when they are learning English.",
+                ],
                 ("cuda", 7): [],
                 ("cuda", 8): [
                     "Hello I am doing a project on the history of the internet and I need to know what the first website was and what",
@@ -178,7 +190,6 @@ class Glm4IntegrationTest(unittest.TestCase):
 
         model = AutoModelForCausalLM.from_pretrained(
             self.model_id,
-            low_cpu_mem_usage=True,
             torch_dtype=torch.bfloat16,
             attn_implementation="sdpa",
         )
@@ -193,6 +204,7 @@ class Glm4IntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXT)
 
     @require_flash_attn
+    @require_torch_large_gpu
     @pytest.mark.flash_attn_test
     def test_model_9b_flash_attn(self):
         EXPECTED_TEXTS = Expectations(
@@ -208,7 +220,6 @@ class Glm4IntegrationTest(unittest.TestCase):
 
         model = AutoModelForCausalLM.from_pretrained(
             self.model_id,
-            low_cpu_mem_usage=True,
             torch_dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
         )

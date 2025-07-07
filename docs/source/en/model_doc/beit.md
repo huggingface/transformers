@@ -25,11 +25,11 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The BEiT model was proposed in [BEiT: BERT Pre-Training of Image Transformers](https://arxiv.org/abs/2106.08254) by
+The BEiT model was proposed in [BEiT: BERT Pre-Training of Image Transformers](https://huggingface.co/papers/2106.08254) by
 Hangbo Bao, Li Dong and Furu Wei. Inspired by BERT, BEiT is the first paper that makes self-supervised pre-training of
 Vision Transformers (ViTs) outperform supervised pre-training. Rather than pre-training the model to predict the class
-of an image (as done in the [original ViT paper](https://arxiv.org/abs/2010.11929)), BEiT models are pre-trained to
-predict visual tokens from the codebook of OpenAI's [DALL-E model](https://arxiv.org/abs/2102.12092) given masked
+of an image (as done in the [original ViT paper](https://huggingface.co/papers/2010.11929)), BEiT models are pre-trained to
+predict visual tokens from the codebook of OpenAI's [DALL-E model](https://huggingface.co/papers/2102.12092) given masked
 patches.
 
 The abstract from the paper is the following:
@@ -76,7 +76,7 @@ contributed by [kamalkraj](https://huggingface.co/kamalkraj). The original code 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/beit_architecture.jpg"
 alt="drawing" width="600"/>
 
-<small> BEiT pre-training. Taken from the <a href="https://arxiv.org/abs/2106.08254">original paper.</a> </small>
+<small> BEiT pre-training. Taken from the <a href="https://huggingface.co/papers/2106.08254">original paper.</a> </small>
 
 ### Using Scaled Dot Product Attention (SDPA)
 
