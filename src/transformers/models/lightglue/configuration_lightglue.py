@@ -137,9 +137,17 @@ class LightGlueConfig(PretrainedConfig):
                         keypoint_detector_config["_name_or_path"], trust_remote_code=self.trust_remote_code
                     ).__class__,
                 )
-            keypoint_detector_config = CONFIG_MAPPING[keypoint_detector_config["model_type"]](
-                **keypoint_detector_config, attn_implementation="eager", trust_remote_code=self.trust_remote_code
-            )
+            keypoint_detector_config_class = CONFIG_MAPPING[keypoint_detector_config["model_type"]]
+
+            if self.trust_remote_code:
+                keypoint_detector_config = keypoint_detector_config_class(
+                    **keypoint_detector_config, attn_implementation="eager", trust_remote_code=self.trust_remote_code
+                )
+            else:
+                keypoint_detector_config = keypoint_detector_config_class(
+                    **keypoint_detector_config, attn_implementation="eager"
+                )
+
         if keypoint_detector_config is None:
             keypoint_detector_config = CONFIG_MAPPING["superpoint"](attn_implementation="eager")
 
