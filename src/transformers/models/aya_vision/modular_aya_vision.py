@@ -20,12 +20,12 @@ import torch
 from torch import nn
 
 from transformers.models.llava.modeling_llava import (
-    KwargsForCausalLM,
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
     LlavaModel,
     LlavaModelOutputWithPast,
     LlavaPreTrainedModel,
+    TransformersKwargs,
 )
 
 from ...activations import ACT2FN
@@ -223,14 +223,14 @@ class AyaVisionModel(LlavaModel):
                 special_image_mask = inputs_embeds == self.get_input_embeddings()(
                     torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
-                n_image_tokens = (special_image_mask).sum(dim=1).sum(dim=0)[0]
+                special_image_mask = special_image_mask.all(-1)
             else:
-                special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
-                special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-                n_image_tokens = (input_ids == self.config.image_token_id).sum()
+                special_image_mask = input_ids == self.config.image_token_id
+
+            n_image_tokens = (special_image_mask).sum(dim=1).sum(dim=0)
+            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
 
             if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
-                n_image_tokens = (input_ids == self.config.image_token_id).sum()
                 n_image_features = image_features.shape[0] * image_features.shape[1]
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
@@ -279,7 +279,7 @@ class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         image_sizes: Optional[torch.Tensor] = None,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, AyaVisionCausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

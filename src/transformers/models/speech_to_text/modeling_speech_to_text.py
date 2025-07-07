@@ -205,7 +205,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Attention with Wav2Vec2->Speech2Text
+# Copied from transformers.models.musicgen.modeling_musicgen.MusicgenAttention with Musicgen->Speech2Text
 class Speech2TextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 

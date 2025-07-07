@@ -20,12 +20,12 @@ import torch
 from torch import nn
 
 from transformers.models.llava_next.modeling_llava_next import (
-    KwargsForCausalLM,
     LlavaNextCausalLMOutputWithPast,
     LlavaNextForConditionalGeneration,
     LlavaNextModel,
     LlavaNextModelOutputWithPast,
     LlavaNextMultiModalProjector,
+    TransformersKwargs,
     image_size_to_num_patches,
 )
 
@@ -440,12 +440,6 @@ class LlavaNextVideoModel(LlavaNextModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if (pixel_values is not None or pixel_values_videos is not None) and inputs_embeds is not None:
-            raise ValueError(
-                "You cannot specify both `pixel_values`/`pixel_values_videos` and `inputs_embeds` at the same time, "
-                "and must specify either one"
-            )
-
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
@@ -458,10 +452,18 @@ class LlavaNextVideoModel(LlavaNextModel):
             )
             image_features = torch.cat(image_features, dim=0)
 
-            special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
-            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+            if input_ids is None:
+                special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+                special_image_mask = special_image_mask.all(-1)
+            else:
+                special_image_mask = input_ids == self.config.image_token_id
+
+            n_image_tokens = (special_image_mask).sum()
+            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+
             if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
-                n_image_tokens = (input_ids == self.config.image_token_id).sum()
                 n_image_features = image_features.shape[0]
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
@@ -480,10 +482,18 @@ class LlavaNextVideoModel(LlavaNextModel):
             video_features = torch.cat(video_features, dim=0)
             video_feature_lens = torch.tensor(video_feature_lens, dtype=torch.long, device=video_features.device)
 
-            special_image_mask = (input_ids == self.config.video_token_id).unsqueeze(-1)
-            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+            if input_ids is None:
+                special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                    torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+                special_image_mask = special_image_mask.all(-1)
+            else:
+                special_image_mask = input_ids == self.config.video_token_id
+
+            n_video_tokens = (special_image_mask).sum()
+            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+
             if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != video_features.numel():
-                n_video_tokens = (input_ids == self.config.video_token_id).sum().item()
                 n_video_features = video_features.shape[0]
                 raise ValueError(
                     f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
@@ -546,7 +556,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, LlavaNextVideoCausalLMOutputWithPast]:
         r"""
         pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, image_size, image_size)):
