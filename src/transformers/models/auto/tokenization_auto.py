@@ -512,6 +512,13 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
                 "Qwen2TokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
+        (
+            "glm4_moe",
+            (
+                "PreTrainedTokenizer",
+                "PreTrainedTokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
         ("rag", ("RagTokenizer", None)),
         ("realm", ("RealmTokenizer", "RealmTokenizerFast" if is_tokenizers_available() else None)),
         (
