@@ -29,7 +29,6 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.utils import is_cv2_available
 from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
@@ -37,6 +36,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils import is_cv2_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -45,6 +45,7 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
 )
+
 
 if is_cv2_available():
     import cv2
