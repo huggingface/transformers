@@ -401,7 +401,8 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
 
@@ -530,7 +531,6 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                     tmpdirname,
                     torch_dtype=torch.float16,
                     attn_implementation="flash_attention_2",
-                    low_cpu_mem_usage=True,
                     load_in_4bit=True,
                 )
 
@@ -564,9 +564,7 @@ class ZambaModelIntegrationTest(unittest.TestCase):
     @slow
     def setUpClass(cls):
         model_id = "Zyphra/Zamba-7B-v1"
-        cls.model = ZambaForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, use_mamba_kernels=False
-        )
+        cls.model = ZambaForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, use_mamba_kernels=False)
         cls.tokenizer = AutoTokenizer.from_pretrained(model_id)
 
     @slow

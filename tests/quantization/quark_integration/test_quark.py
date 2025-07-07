@@ -11,17 +11,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import unittest
 
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, GenerationConfig, QuarkConfig
 from transformers.testing_utils import (
+    cleanup,
     is_torch_available,
     require_accelerate,
     require_quark,
     require_torch_gpu,
     require_torch_multi_gpu,
     slow,
+    torch_device,
 )
 from transformers.utils.import_utils import is_quark_available
 
@@ -76,6 +77,13 @@ class QuarkTest(unittest.TestCase):
             torch_dtype=torch.float16,
             device_map=cls.device_map,
         )
+
+    def tearDown(self):
+        r"""
+        TearDown function needs to be called at the end of each test to free the accelerator memory and cache, also to
+        avoid unexpected behaviors. Please see: https://discuss.pytorch.org/t/how-can-we-release-gpu-memory-cache/14530/27
+        """
+        cleanup(torch_device, gc_collect=True)
 
     def test_memory_footprint(self):
         mem_quantized = self.quantized_model.get_memory_footprint()

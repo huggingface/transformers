@@ -5,33 +5,22 @@
 #                          modular_ijepa.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 import collections.abc
-from typing import Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Callable, Optional, Union
 
 import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    torch_int,
-)
+from ...utils import auto_docstring, logging, torch_int
 from .configuration_ijepa import IJepaConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-_CHECKPOINT_FOR_DOC = "facebook/ijepa_vith14_1k"
-
-# General docstring
-_CONFIG_FOR_DOC = "IJepaConfig"
 
 
 class IJepaPatchEmbeddings(nn.Module):
@@ -154,12 +143,8 @@ class IJepaEmbeddings(nn.Module):
         return embeddings
 
 
+@auto_docstring
 class IJepaPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = IJepaConfig
     base_model_prefix = "ijepa"
     main_input_name = "pixel_values"
@@ -167,6 +152,8 @@ class IJepaPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["IJepaEmbeddings", "IJepaLayer"]
     _supports_sdpa = True
     _supports_flash_attn_2 = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
@@ -249,7 +236,7 @@ class IJepaSelfAttention(nn.Module):
 
     def forward(
         self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         key_layer = self.transpose_for_scores(self.key(hidden_states))
         value_layer = self.transpose_for_scores(self.value(hidden_states))
         query_layer = self.transpose_for_scores(self.query(hidden_states))
@@ -308,7 +295,7 @@ class IJepaAttention(nn.Module):
         self.output = IJepaSelfOutput(config)
         self.pruned_heads = set()
 
-    def prune_heads(self, heads: Set[int]) -> None:
+    def prune_heads(self, heads: set[int]) -> None:
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
@@ -331,7 +318,7 @@ class IJepaAttention(nn.Module):
         hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         self_outputs = self.attention(hidden_states, head_mask, output_attentions)
 
         attention_output = self.output(self_outputs[0], hidden_states)
@@ -371,7 +358,7 @@ class IJepaOutput(nn.Module):
         return hidden_states
 
 
-class IJepaLayer(nn.Module):
+class IJepaLayer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the timm implementation."""
 
     def __init__(self, config: IJepaConfig) -> None:
@@ -389,7 +376,7 @@ class IJepaLayer(nn.Module):
         hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in IJepa, layernorm is applied before self-attention
             head_mask,
@@ -437,15 +424,7 @@ class IJepaEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    layer_head_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
+            layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -479,51 +458,15 @@ class IJepaPooler(nn.Module):
         return pooled_output
 
 
-IJEPA_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`IJepaImageProcessor.__call__`]
-            for details.
-
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        interpolate_pos_encoding (`bool`, *optional*):
-            Whether to interpolate the pre-trained position encodings.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-_EXPECTED_OUTPUT_SHAPE = [1, 256, 1280]
-
-IJEPA_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`IJepaConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare IJepa Model transformer outputting raw hidden-states without any specific head on top.",
-    IJEPA_START_DOCSTRING,
-)
+@auto_docstring
 class IJepaModel(IJepaPreTrainedModel):
     def __init__(self, config: IJepaConfig, add_pooling_layer: bool = False, use_mask_token: bool = False):
+        r"""
+        add_pooling_layer (bool, *optional*, defaults to `True`):
+            Whether to add a pooling layer
+        use_mask_token (`bool`, *optional*, defaults to `False`):
+            Whether to use a mask token for masked image modeling.
+        """
         super().__init__(config)
         self.config = config
         self.embeddings = IJepaEmbeddings(config, use_mask_token=use_mask_token)
@@ -538,7 +481,7 @@ class IJepaModel(IJepaPreTrainedModel):
     def get_input_embeddings(self) -> IJepaPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
-    def _prune_heads(self, heads_to_prune: Dict[int, List[int]]) -> None:
+    def _prune_heads(self, heads_to_prune: dict[int, list[int]]) -> None:
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
         class PreTrainedModel
@@ -546,14 +489,7 @@ class IJepaModel(IJepaPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(IJEPA_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPooling,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -563,7 +499,7 @@ class IJepaModel(IJepaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
@@ -616,12 +552,8 @@ class IJepaModel(IJepaPreTrainedModel):
         )
 
 
-_IMAGE_CLASS_CHECKPOINT = "facebook/ijepa_vith14_1k"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
-
-
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     IJepa Model transformer with an image classification head on top (a linear layer on top of the final hidden states)
     e.g. for ImageNet.
 
@@ -632,8 +564,7 @@ _IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
         position embeddings to the higher resolution.
 
     </Tip>
-    """,
-    IJEPA_START_DOCSTRING,
+    """
 )
 class IJepaForImageClassification(IJepaPreTrainedModel):
     def __init__(self, config: IJepaConfig) -> None:
@@ -648,13 +579,7 @@ class IJepaForImageClassification(IJepaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(IJEPA_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ImageClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,

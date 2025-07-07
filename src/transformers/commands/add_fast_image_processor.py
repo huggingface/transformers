@@ -396,9 +396,7 @@ def add_fast_image_processor_file(
 
     content_header = get_fast_image_processing_content_header(content_base_file)
     content_base_file = (
-        f"@add_start_docstrings(\n"
-        f'    "Constructs a fast {fast_image_processor_name.replace("ImageProcessorFast", "")} image processor.",\n'
-        f"    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,\n)\n"
+        f"@auto_docstring\n"
         f"class {fast_image_processor_name}(BaseImageProcessorFast):\n"
         "    # This generated class can be used as a starting point for the fast image processor.\n"
         "    # if the image processor is only used for simple augmentations, such as resizing, center cropping, rescaling, or normalizing,\n"
@@ -422,9 +420,7 @@ def add_fast_image_processor_file(
         f'__all__ = ["{fast_image_processor_name}"]\n'
     )
 
-    imports = (
-        "\n\nfrom ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast\n"
-    )
+    imports = "\n\nfrom ...image_processing_utils_fast import BaseImageProcessorFast\n"
     image_utils_imports = []
     if default_args_dict.get("resample") is not None and "PILImageResampling" in default_args_dict.get("resample"):
         image_utils_imports.append("PILImageResampling")
@@ -442,7 +438,7 @@ def add_fast_image_processor_file(
         image_utils_imports.sort()
         imports += f"from ...image_utils import {', '.join(image_utils_imports)}\n"
 
-    imports += "from ...utils import add_start_docstrings\n"
+    imports += "from ...utils import auto_docstring\n"
 
     content = content_header + imports + "\n\n" + content_base_file
 

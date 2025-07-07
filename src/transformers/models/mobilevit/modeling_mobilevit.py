@@ -17,7 +17,7 @@
 """PyTorch MobileViT model."""
 
 import math
-from typing import Dict, Optional, Set, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -25,6 +25,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithNoAttention,
     BaseModelOutputWithPoolingAndNoAttention,
@@ -33,30 +34,11 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-    torch_int,
-)
+from ...utils import auto_docstring, logging, torch_int
 from .configuration_mobilevit import MobileViTConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-# General docstring
-_CONFIG_FOR_DOC = "MobileViTConfig"
-
-# Base docstring
-_CHECKPOINT_FOR_DOC = "apple/mobilevit-small"
-_EXPECTED_OUTPUT_SHAPE = [1, 640, 8, 8]
-
-# Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "apple/mobilevit-small"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 def make_divisible(value: int, divisor: int = 8, min_value: Optional[int] = None) -> int:
@@ -140,7 +122,7 @@ class MobileViTConvLayer(nn.Module):
 
 class MobileViTInvertedResidual(nn.Module):
     """
-    Inverted residual block (MobileNetv2): https://arxiv.org/abs/1801.04381
+    Inverted residual block (MobileNetv2): https://huggingface.co/papers/1801.04381
     """
 
     def __init__(
@@ -279,7 +261,7 @@ class MobileViTAttention(nn.Module):
         self.output = MobileViTSelfOutput(config, hidden_size)
         self.pruned_heads = set()
 
-    def prune_heads(self, heads: Set[int]) -> None:
+    def prune_heads(self, heads: set[int]) -> None:
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
@@ -369,9 +351,9 @@ class MobileViTTransformer(nn.Module):
         return hidden_states
 
 
-class MobileViTLayer(nn.Module):
+class MobileViTLayer(GradientCheckpointingLayer):
     """
-    MobileViT block: https://arxiv.org/abs/2110.02178
+    MobileViT block: https://huggingface.co/papers/2110.02178
     """
 
     def __init__(
@@ -432,7 +414,7 @@ class MobileViTLayer(nn.Module):
             config, in_channels=2 * in_channels, out_channels=in_channels, kernel_size=config.conv_kernel_size
         )
 
-    def unfolding(self, features: torch.Tensor) -> Tuple[torch.Tensor, Dict]:
+    def unfolding(self, features: torch.Tensor) -> tuple[torch.Tensor, dict]:
         patch_width, patch_height = self.patch_width, self.patch_height
         patch_area = int(patch_width * patch_height)
 
@@ -483,7 +465,7 @@ class MobileViTLayer(nn.Module):
         }
         return patches, info_dict
 
-    def folding(self, patches: torch.Tensor, info_dict: Dict) -> torch.Tensor:
+    def folding(self, patches: torch.Tensor, info_dict: dict) -> torch.Tensor:
         patch_width, patch_height = self.patch_width, self.patch_height
         patch_area = int(patch_width * patch_height)
 
@@ -622,13 +604,7 @@ class MobileViTEncoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
 
         for i, layer_module in enumerate(self.layer):
-            if self.gradient_checkpointing and self.training:
-                hidden_states = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                )
-            else:
-                hidden_states = layer_module(hidden_states)
+            hidden_states = layer_module(hidden_states)
 
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -639,12 +615,8 @@ class MobileViTEncoder(nn.Module):
         return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
 
 
+@auto_docstring
 class MobileViTPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = MobileViTConfig
     base_model_prefix = "mobilevit"
     main_input_name = "pixel_values"
@@ -664,36 +636,14 @@ class MobileViTPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-MOBILEVIT_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`MobileViTConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-MOBILEVIT_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`MobileViTImageProcessor.__call__`] for details.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare MobileViT model outputting raw hidden-states without any specific head on top.",
-    MOBILEVIT_START_DOCSTRING,
-)
+@auto_docstring
 class MobileViTModel(MobileViTPreTrainedModel):
     def __init__(self, config: MobileViTConfig, expand_output: bool = True):
+        r"""
+        expand_output (`bool`, *optional*, defaults to `True`):
+            Whether to expand the output of the model using a 1x1 convolution. If `True`, the model will apply an additional
+            1x1 convolution to expand the output channels from `config.neck_hidden_sizes[5]` to `config.neck_hidden_sizes[6]`.
+        """
         super().__init__(config)
         self.config = config
         self.expand_output = expand_output
@@ -729,14 +679,7 @@ class MobileViTModel(MobileViTPreTrainedModel):
                 for transformer_layer in mobilevit_layer.transformer.layer:
                     transformer_layer.attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(MOBILEVIT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPoolingAndNoAttention,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -779,12 +722,11 @@ class MobileViTModel(MobileViTPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     MobileViT model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
     ImageNet.
-    """,
-    MOBILEVIT_START_DOCSTRING,
+    """
 )
 class MobileViTForImageClassification(MobileViTPreTrainedModel):
     def __init__(self, config: MobileViTConfig) -> None:
@@ -802,13 +744,7 @@ class MobileViTForImageClassification(MobileViTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(MOBILEVIT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ImageClassifierOutputWithNoAttention,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -890,7 +826,7 @@ class MobileViTASPPPooling(nn.Module):
 
 class MobileViTASPP(nn.Module):
     """
-    ASPP module defined in DeepLab papers: https://arxiv.org/abs/1606.00915, https://arxiv.org/abs/1706.05587
+    ASPP module defined in DeepLab papers: https://huggingface.co/papers/1606.00915, https://huggingface.co/papers/1706.05587
     """
 
     def __init__(self, config: MobileViTConfig) -> None:
@@ -949,7 +885,7 @@ class MobileViTASPP(nn.Module):
 
 class MobileViTDeepLabV3(nn.Module):
     """
-    DeepLabv3 architecture: https://arxiv.org/abs/1706.05587
+    DeepLabv3 architecture: https://huggingface.co/papers/1706.05587
     """
 
     def __init__(self, config: MobileViTConfig) -> None:
@@ -975,11 +911,10 @@ class MobileViTDeepLabV3(nn.Module):
         return features
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     MobileViT model with a semantic segmentation head on top, e.g. for Pascal VOC.
-    """,
-    MOBILEVIT_START_DOCSTRING,
+    """
 )
 class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
     def __init__(self, config: MobileViTConfig) -> None:
@@ -992,8 +927,7 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(MOBILEVIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SemanticSegmenterOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -1005,8 +939,6 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
-
-        Returns:
 
         Examples:
 

@@ -29,6 +29,7 @@ from transformers.models.colpali.configuration_colpali import ColPaliConfig
 from transformers.models.colpali.modeling_colpali import ColPaliForRetrieval, ColPaliForRetrievalOutput
 from transformers.models.colpali.processing_colpali import ColPaliProcessor
 from transformers.testing_utils import (
+    backend_empty_cache,
     require_torch,
     require_vision,
     slow,
@@ -167,7 +168,6 @@ class ColPaliForRetrievalModelTester:
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "labels": input_ids,
-            "token_type_ids": torch.zeros_like(input_ids),
         }
         return config, inputs_dict
 
@@ -188,50 +188,6 @@ class ColPaliForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = ColPaliForRetrievalModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ColPaliConfig, has_text_modality=False)
-
-        # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    # while some other models require pixel_values to be present
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            torch.testing.assert_close(out_embeds, out_ids)
 
     @slow
     @require_vision
@@ -275,7 +231,7 @@ class ColPaliForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(
-        reason="PaliGemmma's SigLip encoder uses the same initialization scheme as the Flax original implementation"
+        reason="PaliGemma's SigLip encoder uses the same initialization scheme as the Flax original implementation"
     )
     def test_initialization(self):
         pass
@@ -303,7 +259,7 @@ class ColPaliModelIntegrationTest(unittest.TestCase):
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
 
     @slow
     def test_model_integration_test(self):
@@ -332,7 +288,7 @@ class ColPaliModelIntegrationTest(unittest.TestCase):
         scores = self.processor.score_retrieval(
             query_embeddings=query_embeddings,
             passage_embeddings=image_embeddings,
-        )  # (len(qs), len(ps))
+        )  # (num_queries, num_passages)
 
         assert scores.ndim == 2, f"Expected 2D tensor, got {scores.ndim}"
         assert scores.shape == (len(ds), len(ds)), f"Expected shape {(len(ds), len(ds))}, got {scores.shape}"

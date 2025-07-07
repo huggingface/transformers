@@ -16,16 +16,17 @@
 Processor class for LLaVa-NeXT-Video.
 """
 
-from typing import List, Union
+from typing import Union
 
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils import select_best_resolution
-from ...image_utils import ImageInput, VideoInput, get_image_size, to_numpy_array
+from ...image_utils import ImageInput, get_image_size, to_numpy_array
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
+from ...video_utils import VideoInput
 
 
 logger = logging.get_logger(__name__)
@@ -52,7 +53,7 @@ class LlavaNextVideoProcessor(ProcessorMixin):
     [`LlamaTokenizerFast`]. See the [`~LlavaNextVideoProcessor.__call__`] and [`~LlavaNextVideoProcessor.decode`] for more information.
 
     Args:
-        video_processor ([`LlavaNextVideoImageProcessor`], *optional*):
+        video_processor ([`LlavaNextVideoVideoProcessor`], *optional*):
             The video processor is a required input.
         image_processor ([`LlavaNextImageProcessor`], *optional*):
             The image processor is a required input.
@@ -77,16 +78,8 @@ class LlavaNextVideoProcessor(ProcessorMixin):
     # video and image processor share same args, but have different processing logic
     # only image processor config is saved in the hub
     attributes = ["video_processor", "image_processor", "tokenizer"]
-    valid_kwargs = [
-        "chat_template",
-        "patch_size",
-        "vision_feature_select_strategy",
-        "image_token",
-        "video_token",
-        "num_additional_image_tokens",
-    ]
     image_processor_class = ("LlavaNextImageProcessor", "LlavaNextImageProcessorFast")
-    video_processor_class = "LlavaNextVideoImageProcessor"
+    video_processor_class = "AutoVideoProcessor"
     tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
 
     def __init__(
@@ -122,7 +115,7 @@ class LlavaNextVideoProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos: VideoInput = None,
         **kwargs: Unpack[LlavaNextVideoProcessorKwargs],
@@ -137,14 +130,14 @@ class LlavaNextVideoProcessor(ProcessorMixin):
         of the above two methods for more information.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
-            videos (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            videos (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of videos to be prepared. Each video can be a 4D NumPy array or PyTorch
                 tensor, or a nested list of 3D frames. Both channels-first and channels-last formats are supported.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):

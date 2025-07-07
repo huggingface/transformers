@@ -14,14 +14,12 @@
 # limitations under the License.
 """Fast Image processor class for SigLIP2."""
 
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
     SizeDict,
@@ -33,7 +31,7 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    add_start_docstrings,
+    auto_docstring,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
@@ -71,7 +69,7 @@ def convert_image_to_patches(image: "torch.Tensor", patch_size: int) -> "torch.T
 
 def pad_along_first_dim(
     tensor: "torch.Tensor", target_length: int, pad_value: int = 0
-) -> Tuple["torch.Tensor", "torch.Tensor"]:
+) -> tuple["torch.Tensor", "torch.Tensor"]:
     """
     Pad the tensor along the first dimension.
     """
@@ -86,21 +84,19 @@ def pad_along_first_dim(
 
 
 class Siglip2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    """
+    patch_size (`int`, *optional*, defaults to 16):
+        The size (resolution) of each patch the image will be split to.
+    max_num_patches (`int`, *optional*, defaults to 256):
+        The image will be resized to have at most this number of patches,
+        and then padded in "patch" dimension to match this number exactly.
+    """
+
     patch_size: Optional[int]
     max_num_patches: Optional[int]
 
 
-@add_start_docstrings(
-    r"Constructs a fast Siglip2 image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    """
-        patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each patch the image will be split to.
-        max_num_patches (`int`, *optional*, defaults to 256):
-            The image will be resized to have at most this number of patches,
-            and then padded in "patch" dimension to match this number exactly.
-    """,
-)
+@auto_docstring
 class Siglip2ImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = [0.5, 0.5, 0.5]
@@ -121,22 +117,13 @@ class Siglip2ImageProcessorFast(BaseImageProcessorFast):
         kwargs.pop("do_resize", None)
         return super()._validate_preprocess_kwargs(**kwargs)
 
-    @add_start_docstrings(
-        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-        """
-        patch_size (`int`, *optional*, defaults to `self.patch_size`):
-            The size (resolution) of each patch the image will be split to.
-        max_num_patches (`int`, *optional*, defaults to `self.max_num_patches`):
-            The image will be resized to have at most this number of patches,
-            and then padded in "patch" dimension to match this number exactly.
-        """,
-    )
+    @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[Siglip2FastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _preprocess(
         self,
-        images: List["torch.Tensor"],
+        images: list["torch.Tensor"],
         do_resize: bool,
         patch_size: int,
         max_num_patches: int,
@@ -144,8 +131,8 @@ class Siglip2ImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> BatchFeature:

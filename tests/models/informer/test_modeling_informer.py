@@ -170,8 +170,9 @@ class InformerModelTester:
 
         embed_positions = InformerSinusoidalPositionalEmbedding(
             config.context_length + config.prediction_length, config.d_model
-        ).to(torch_device)
+        )
         embed_positions._init_weight()
+        embed_positions = embed_positions.to(torch_device)
         self.parent.assertTrue(torch.equal(model.encoder.embed_positions.weight, embed_positions.weight))
         self.parent.assertTrue(torch.equal(model.decoder.embed_positions.weight, embed_positions.weight))
 
@@ -383,7 +384,8 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
