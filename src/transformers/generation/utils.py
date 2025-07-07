@@ -3795,6 +3795,10 @@ class GenerationMixin(ContinuousMixin):
         2. `early_stopping == "never"`:
         -> Estimate the best score using either `max_length` or `cur_len`, depending on the sign of `length_penalty`.
         -> A positive length penalty favors longer sequences, so we use `max_length` in that case.
+        
+        NOTE: the canonical beam search implementation can be replicated with `early_stopping="never"` and
+        `length_penalty=0.0`, which are NOT the default flags. The default behavior was empirically found to produce 
+        better sequences (prior to 2022), and changing it is BC breaking.
         """
         if early_stopping == "never" and length_penalty > 0.0:
             best_hypothetical_length = max_length - decoder_prompt_len
