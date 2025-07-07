@@ -35,7 +35,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, logging
+from ...utils import TransformersKwargs, logging
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaForCausalLM,
@@ -212,7 +212,6 @@ class CohereDecoderLayer(GradientCheckpointingLayer):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
@@ -238,33 +237,22 @@ class CohereDecoderLayer(GradientCheckpointingLayer):
                 with `head_dim` being the embedding dimension of each attention head.
         """
         residual = hidden_states
-
         hidden_states = self.input_layernorm(hidden_states)
 
-        # Self Attention
-        hidden_states_attention, self_attn_weights = self.self_attn(
+        hidden_states_attention, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_value=past_key_value,
-            output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
         )
 
-        # Fully Connected
         hidden_states_mlp = self.mlp(hidden_states)
-
-        # Add everything together
         hidden_states = residual + hidden_states_attention + hidden_states_mlp
-
-        outputs = (hidden_states,)
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        return outputs
+        return hidden_states
 
 
 class CoherePreTrainedModel(LlamaPreTrainedModel):
@@ -292,9 +280,6 @@ class CohereModel(LlamaModel):
         self.norm = CohereLayerNorm(hidden_size=(config.hidden_size), eps=config.layer_norm_eps)
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
-
 class CohereForCausalLM(LlamaForCausalLM):
     def __init__(self, config):
         super().__init__(config)
@@ -315,7 +300,7 @@ class CohereForCausalLM(LlamaForCausalLM):
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

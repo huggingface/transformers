@@ -42,7 +42,9 @@ from ...modeling_outputs import (
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
+from ...utils.generic import TransformersKwargs
 from .configuration_qwen2_moe import Qwen2MoeConfig
 
 
@@ -1115,7 +1117,7 @@ class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel, GenerationMixin):
         output_router_logits: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **loss_kwargs,
+        **kwargs,
     ) -> MoeCausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1169,7 +1171,7 @@ class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size, **loss_kwargs)
+            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
 
         aux_loss = None
         if output_router_logits:
@@ -1235,8 +1237,7 @@ class Qwen2MoeForSequenceClassification(Qwen2MoePreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> SequenceClassifierOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1252,8 +1253,7 @@ class Qwen2MoeForSequenceClassification(Qwen2MoePreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            **kwargs,
         )
         hidden_states = transformer_outputs.last_hidden_state
         logits = self.score(hidden_states)
@@ -1330,8 +1330,7 @@ class Qwen2MoeForTokenClassification(Qwen2MoePreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> TokenClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1347,8 +1346,7 @@ class Qwen2MoeForTokenClassification(Qwen2MoePreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            **kwargs,
         )
         sequence_output = outputs.last_hidden_state
         sequence_output = self.dropout(sequence_output)
@@ -1396,8 +1394,6 @@ class Qwen2MoeForQuestionAnswering(Qwen2MoePreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         **kwargs,
     ) -> QuestionAnsweringModelOutput:
         outputs: MoeModelOutputWithPast = self.model(
@@ -1406,8 +1402,7 @@ class Qwen2MoeForQuestionAnswering(Qwen2MoePreTrainedModel):
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            **kwargs,
         )
 
         sequence_output = outputs.last_hidden_state

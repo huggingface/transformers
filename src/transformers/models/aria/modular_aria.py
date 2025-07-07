@@ -37,7 +37,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils import PreTokenizedInput, TextInput
-from ...utils import LossKwargs, TensorType, auto_docstring, can_return_tuple, logging
+from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.import_utils import is_torch_available
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoTokenizer
 from ..llama.configuration_llama import LlamaConfig
@@ -1329,9 +1329,6 @@ class AriaTextModel(LlamaModel):
         self.post_init()
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
-
 class AriaTextForCausalLM(AriaTextPreTrainedModel, LlamaForCausalLM):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1528,7 +1525,7 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
         return_dict: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, AriaCausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

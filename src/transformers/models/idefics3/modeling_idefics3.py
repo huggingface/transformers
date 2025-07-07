@@ -30,7 +30,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import AutoModel
 from .configuration_idefics3 import Idefics3Config, Idefics3VisionConfig
 
@@ -821,9 +821,6 @@ class Idefics3Model(Idefics3PreTrainedModel):
         )
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
-
 @auto_docstring(
     custom_intro="""
     The Idefics3 Model with a language modeling head. It is made up a SigLIP vision encoder, with a language modeling head on top.
@@ -902,7 +899,7 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
         cache_position: Optional[torch.LongTensor] = None,
         return_dict: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Idefics3CausalLMOutputWithPast]:
         r"""
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):

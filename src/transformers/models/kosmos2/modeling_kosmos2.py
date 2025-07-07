@@ -35,7 +35,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, ModelOutput, auto_docstring, can_return_tuple, logging, torch_int
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
 from .configuration_kosmos2 import Kosmos2Config, Kosmos2TextConfig, Kosmos2VisionConfig
 
 
@@ -1009,7 +1009,6 @@ class Kosmos2TextTransformer(nn.Module):
 
         return hidden_states
 
-    @can_return_tuple
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1035,7 +1034,6 @@ class Kosmos2TextTransformer(nn.Module):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -1358,9 +1356,6 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
         )
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
-
 @auto_docstring(
     custom_intro="""
     The text model from KOSMOS-2 with a language modeling head on top (linear layer with weights tied to the input
@@ -1413,7 +1408,7 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
@@ -1767,7 +1762,7 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Kosmos2ForConditionalGenerationModelOutput]:
         r"""
         image_embeds_position_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
