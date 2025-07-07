@@ -673,11 +673,24 @@ class ModuleMapper(CSTVisitor, ABC):
         simple_top_level_assign_structure = m.SimpleStatementLine(
             body=[m.Assign(targets=[m.AssignTarget(target=m.Name())])]
         )
+        simple_top_level_variable_indexing = m.SimpleStatementLine(
+            body=[m.Assign(targets=[m.AssignTarget(target=m.Subscript(value=m.Name()) | m.Attribute(value=m.Name()))])]
+        )
+
         if m.matches(parent_node, m.Module()):
             if m.matches(node, simple_top_level_assign_structure):
                 left_hand_side = node.body[0].targets[0].target.value
                 self.current_assignment = left_hand_side
                 self.assignments[left_hand_side] = node
+            # This corresponds to a global variable being indexed or having an attribute look-up
+            elif m.matches(node, simple_top_level_variable_indexing):
+                indexed_variable = node.body[0].targets[0].target.value.value
+                # We should follow any dependencies relative to the variable being indexed
+                self.current_assignment = indexed_variable
+                # The indexing node should be directly added as a dependency of the indexed variable (register the node with a "fake" name)
+                node_name = self.python_module.code_for_node(node)
+                self.assignments[node_name] = node
+                self.object_dependency_mapping[indexed_variable].add(node_name)
             elif m.matches(node, m.SimpleStatementLine(body=[m.Import() | m.ImportFrom()])):
                 self.imports.append(node)
 
@@ -1315,6 +1328,10 @@ class ModularFileMapper(ModuleMapper):
         simple_top_level_assign_structure = m.SimpleStatementLine(
             body=[m.Assign(targets=[m.AssignTarget(target=m.Name())])]
         )
+        simple_top_level_variable_indexing = m.SimpleStatementLine(
+            body=[m.Assign(targets=[m.AssignTarget(target=m.Subscript(value=m.Name()) | m.Attribute(value=m.Name()))])]
+        )
+
         if m.matches(parent_node, m.Module()):
             if m.matches(node, m.SimpleStatementLine(body=[m.Import()])):
                 self.imports.append(node)
@@ -1334,6 +1351,15 @@ class ModularFileMapper(ModuleMapper):
                 else:
                     self.current_assignment = assigned_variable
                     self.assignments[assigned_variable] = node
+            # This corresponds to a global variable being indexed or having an attribute look-up
+            elif m.matches(node, simple_top_level_variable_indexing):
+                indexed_variable = node.body[0].targets[0].target.value.value
+                # We should follow any dependencies relative to the variable being indexed
+                self.current_assignment = indexed_variable
+                # The indexing node should be directly added as a dependency of the indexed variable (register the node with a "fake" name)
+                node_name = self.python_module.code_for_node(node)
+                self.assignments[node_name] = node
+                self.object_dependency_mapping[indexed_variable].add(node_name)
 
     def leave_Module(self, node):
         """When we leave the modular file, we do the following in order:
