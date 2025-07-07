@@ -93,8 +93,8 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "video_processor", "feature_extractor", "tokenizer"]
-    image_processor_class = "Qwen2VLImageProcessor"
-    video_processor_class = "Qwen2VLVideoProcessor"
+    image_processor_class = "AutoImageProcessor"
+    video_processor_class = "AutoVideoProcessor"
     feature_extractor_class = "WhisperFeatureExtractor"
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
 
