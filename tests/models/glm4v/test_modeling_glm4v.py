@@ -267,7 +267,7 @@ class Glm4vModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
 @require_torch
 class Glm4vIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("THDUM/GLM-4.1V-9B-Thinking")
+        self.processor = AutoProcessor.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
         self.messages = [
             {
                 "role": "user",
@@ -287,7 +287,7 @@ class Glm4vIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test(self):
         model = Glm4vForConditionalGeneration.from_pretrained(
-            "THDUM/GLM-4.1V-9B-Thinking", torch_dtype="auto", device_map="auto"
+            "THUDM/GLM-4.1V-9B-Thinking", torch_dtype="auto", device_map="auto"
         )
 
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
@@ -322,7 +322,7 @@ class Glm4vIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_batch(self):
         model = Glm4vForConditionalGeneration.from_pretrained(
-            "THDUM/GLM-4.1V-9B-Thinking", torch_dtype="auto", device_map="auto"
+            "THUDM/GLM-4.1V-9B-Thinking", torch_dtype="auto", device_map="auto"
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(text=[text, text], images=[self.image, self.image], return_tensors="pt").to(
@@ -344,7 +344,7 @@ class Glm4vIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_expand(self):
         model = Glm4vForConditionalGeneration.from_pretrained(
-            "THDUM/GLM-4.1V-9B-Thinking", torch_dtype="auto", device_map="auto"
+            "THUDM/GLM-4.1V-9B-Thinking", torch_dtype="auto", device_map="auto"
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(text=[text], images=[self.image], return_tensors="pt").to(torch_device)
@@ -364,7 +364,7 @@ class Glm4vIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_batch_wo_image(self):
         model = Glm4vForConditionalGeneration.from_pretrained(
-            "THDUM/GLM-4.1V-9B-Thinking", torch_dtype="auto", device_map="auto"
+            "THUDM/GLM-4.1V-9B-Thinking", torch_dtype="auto", device_map="auto"
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         messages2 = [
@@ -391,7 +391,7 @@ class Glm4vIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_batch_different_resolutions(self):
         model = Glm4vForConditionalGeneration.from_pretrained(
-            "THDUM/GLM-4.1V-9B-Thinking", torch_dtype="auto", device_map="auto"
+            "THUDM/GLM-4.1V-9B-Thinking", torch_dtype="auto", device_map="auto"
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         text2 = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
@@ -417,7 +417,7 @@ class Glm4vIntegrationTest(unittest.TestCase):
     @require_torch_gpu
     def test_small_model_integration_test_batch_flashatt2(self):
         model = Glm4vForConditionalGeneration.from_pretrained(
-            "THDUM/GLM-4.1V-9B-Thinking",
+            "THUDM/GLM-4.1V-9B-Thinking",
             torch_dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
             device_map="auto",
@@ -444,7 +444,7 @@ class Glm4vIntegrationTest(unittest.TestCase):
     @require_torch_gpu
     def test_small_model_integration_test_batch_wo_image_flashatt2(self):
         model = Glm4vForConditionalGeneration.from_pretrained(
-            "THDUM/GLM-4.1V-9B-Thinking",
+            "THUDM/GLM-4.1V-9B-Thinking",
             torch_dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
             device_map="auto",
