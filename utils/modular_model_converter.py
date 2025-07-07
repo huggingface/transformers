@@ -365,6 +365,7 @@ class SuperTransformer(cst.CSTTransformer):
             return updated_node.with_changes(body=new_body, params=updated_node.params)
         return updated_node
 
+
 def find_all_dependencies(
     dependency_mapping: dict[str, set],
     start_entity: Optional[str] = None,
