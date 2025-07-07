@@ -19,7 +19,6 @@ from transformers import AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     Expectations,
     cleanup,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -80,41 +79,46 @@ class Ernie4_5ModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 @require_torch_accelerator
-@require_read_token
 class Ernie4_5IntegrationTest(unittest.TestCase):
     def setup(self):
         cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
-        # TODO (joao): automatic compilation, i.e. compilation when `cache_implementation="static"` is used, leaves
-        # some memory allocated in the cache, which means some object is not being released properly. This causes some
-        # unoptimal memory usage, e.g. after certain tests a 7B model in FP16 no longer fits in a 24GB GPU.
-        # Investigate the root cause.
         cleanup(torch_device, gc_collect=True)
 
-    # TODO: overwrite to something with ernie4_5 model
-    # e.g. (30 tokens A100) "Hey, are you conscious? Can you talk to me?" with template --> "Hey! I'm here to help you with whatever you need. Are you feeling a bit overwhelmed or stressed? I'm here to listen"
     @slow
-    def test_ernie4_5_3_1_hard(self):
+    def test_ernie4_5_0p3B(self):
         """
-        An integration test for ernie4_5 3.1. It tests against a long output to ensure the subtle numerical differences
-        from ernie4_5 3.1.'s RoPE can be detected
+        An integration test for Ernie 4.5 0.3B.
         """
         expected_texts = Expectations(
             {
-                ("rocm", (9, 5)): 'Tell me about the french revolution. The french revolution was a period of radical social and political upheaval in France that lasted from 1789 until 1799. It was a time of great change and upheaval, marked by the overthrow of the monarchy, the rise of the middle class, and the eventual establishment of the First French Republic.\nThe revolution began in 1789 with the Estates-General, a representative assembly that had not met since 1614. The Third Estate, which represented the common people, demanded greater representation and eventually broke away to form the National Assembly. This marked the beginning of the end of the absolute monarchy and the rise of the middle class.\n',
-                ("cuda", None): 'Tell me about the french revolution. The french revolution was a period of radical political and social upheaval in France that lasted from 1789 until 1799. It was a time of great change and upheaval, marked by the overthrow of the monarchy, the rise of the middle class, and the eventual establishment of the First French Republic.\nThe revolution began in 1789 with the Estates-General, a representative assembly that had not met since 1614. The Third Estate, which represented the common people, demanded greater representation and eventually broke away to form the National Assembly. The National Assembly adopted the Declaration of the Rights of Man and of the Citizen, which enshr',
+                ("cuda", None): "User: Hey, are you conscious? Can you talk to me?\nAssistant: Hey! I'm here to help you with whatever you need. Are you feeling a bit overwhelmed or stressed? I'm here to listen and provide support.",
             }
         )  # fmt: skip
         EXPECTED_TEXT = expected_texts.get_expectation()
 
-        tokenizer = AutoTokenizer.from_pretrained("meta-ernie4_5/Meta-Ernie4_5-3.1-8B-Instruct")
+        tokenizer = AutoTokenizer.from_pretrained("AntonV/ERNIE-4.5-0.3B-PT")
         model = Ernie4_5ForCausalLM.from_pretrained(
-            "meta-ernie4_5/Meta-Ernie4_5-3.1-8B-Instruct", device_map="auto", torch_dtype=torch.bfloat16
+            "AntonV/ERNIE-4.5-0.3B-PT", device_map="auto", torch_dtype=torch.bfloat16
         )
-        input_text = ["Tell me about the french revolution."]
-        model_inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
 
-        generated_ids = model.generate(**model_inputs, max_new_tokens=128, do_sample=False)
+        prompt = "Hey, are you conscious? Can you talk to me?"
+        messages = [
+            {"role": "user", "content": prompt}
+        ]
+        text = tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True
+        )
+        model_inputs = tokenizer([text], add_special_tokens=False, return_tensors="pt").to(model.device)
+
+        generated_ids = model.generate(
+            model_inputs.input_ids,
+            max_new_tokens=128,
+            do_sample=False,
+        )
+
         generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(generated_text, EXPECTED_TEXT)

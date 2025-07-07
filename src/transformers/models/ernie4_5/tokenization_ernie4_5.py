@@ -22,13 +22,18 @@ import sentencepiece as spm
 import torch
 
 from ...tokenization_utils import PreTrainedTokenizer
-from ...tokenization_utils_base import (
-    PaddingStrategy,
-)
+from ...tokenization_utils_base import PaddingStrategy
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
+
+
+"""
+NOTE: this will take more work especially since bos/eos is not used but cls/sep
+and more of those little edge cases. Init is also not congruent to actual passed kwargs
+    -> {'bos_token': AddedToken("<s>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True), 'cls_token': AddedToken("<|begin_of_sentence|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True), 'eos_token': AddedToken("</s>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True), 'mask_token': AddedToken("<mask:1>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True), 'pad_token': AddedToken("<unk>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True), 'sep_token': AddedToken("<|end_of_sentence|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True), 'unk_token': AddedToken("<unk>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True), 'additional_special_tokens': ['<|IMAGE_PLACEHOLDER|>', '<|AUDIO_PLACEHOLDER|>', '<|LOC_0|>', '<|LOC_1|>', '<|LOC_2|>', '<|LOC_3|>', '<|LOC_4|>', '<|LOC_5|>', '<|LOC_6|>', '<|LOC_7|>', '<|LOC_8|>', '<|LOC_9|>', '<|LOC_10|>', '<|LOC_11|>', '<|LOC_12|>', '<|LOC_13|>', '<|LOC_14|>', '<|LOC_15|>', '<|LOC_16|>', ...], 'verbose': False, 'auto_map': {'AutoTokenizer': [...]}, 'clean_up_tokenization_spaces': False, 'extra_special_tokens': {}, 'header_end_token': '<mask:7>', 'header_start_token': '<mask:6>', 'model_max_length': 1000000000000000019884624838656, 'padding_side': 'left', 'sys_end_token': '<mask:5>', 'sys_start_token': '<mask:4>', 'chat_template': '{%- if not add_generation_prompt is defined -%}\n    {%- set add_generation_prompt = true -%}\n{%- endif -%}\n{%- if not cls_token is defined -%}\n    {%- set cls_token = "<|begin_of_sentence|>" -%}\n{%- endif -%}\n{%- if not sep_token is defined -%}\n    {%- set sep_token = "<|end_of_sentence|>" -%}\n{%- endif -%}\n{{- cls_token -}}\n{%- for message in messages -%}\n    {%- if message["role"] == "user" -%}\n        {{- "User: " + message["content"] + "\n" -}}\n    {%- elif message["role"] == "assistant" -%}\n        {{- "Assistant: " + message["content"] + sep_token -}}\n    {%- elif message["role"] == "system" -%}\n        {{- message["content"] + "\n" -}}\n    {%- endif -%}\n{%- endfor -%}\n{%- if add_generation_prompt -%}\n    {{- "Assistant: " -}}\n{%- endif -%}', 'tokenizer_file': None, 'name_or_path': 'AntonV/ERNIE-4.5-0.3B-PT'}
+"""
 
 
 class Ernie4_5Tokenizer(PreTrainedTokenizer):
