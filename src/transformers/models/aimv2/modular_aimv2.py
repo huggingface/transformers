@@ -655,6 +655,11 @@ class Aimv2Model(CLIPModel, nn.Module):
         output_hidden_states: Optional[bool] = None,
     ) -> Aimv2Output:
         r"""
+        return_loss (`bool`, *optional*):
+            Whether or not to return the loss.
+
+        Examples:
+
         ```python
         >>> from PIL import Image
         >>> import requests
