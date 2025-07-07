@@ -53,7 +53,7 @@ pipe = pipeline(
 messages = [
     {"role": "user", "content": "Tell me an unknown interesting biology fact about the brain."},
 ]
-prompt = pipe.tokenizer.apply_chat_template(messages, tokenize=False)
+prompt = pipe.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 
 pipe(prompt, max_new_tokens=32)
 ```
@@ -76,7 +76,7 @@ model = AutoModelForSeq2SeqLM.from_pretrained(
 messages = [
     {"role": "user", "content": "Tell me an unknown interesting biology fact about the brain."},
 ]
-input_ids = tokenizer.apply_chat_template(messages, return_tensors="pt", return_dict=True).to("cuda")
+input_ids = tokenizer.apply_chat_template(messages, return_tensors="pt", return_dict=True, add_generation_prompt=True).to("cuda")
 
 outputs = model.generate(**input_ids, max_new_tokens=32)
 print(tokenizer.decode(outputs[0]))
