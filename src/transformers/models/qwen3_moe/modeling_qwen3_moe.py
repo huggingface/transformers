@@ -210,7 +210,7 @@ class Qwen3MoeMLP(nn.Module):
 
     def forward(self, x):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj, None  # We return None here to mimic the MoE module, as we alternate
+        return down_proj
 
 
 class Qwen3MoeSparseMoeBlock(nn.Module):
@@ -358,44 +358,13 @@ class Qwen3MoeDecoderLayer(GradientCheckpointingLayer):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states, _ = self.mlp(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        # For the MoE layers, we need to unpack
+        if isinstance(hidden_states, tuple):
+            hidden_states, _ = hidden_states
         hidden_states = residual + hidden_states
 
         return hidden_states
-
-
-@auto_docstring
-class Qwen3MoePreTrainedModel(PreTrainedModel):
-    config_class = Qwen3MoeConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["Qwen3MoeDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
-    _supports_static_cache = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
-    _supports_attention_backend = True
-    _can_record_outputs = {
-        "router_logits": [OutputRecorder(Qwen3MoeSparseMoeBlock, index=1), OutputRecorder(Qwen3MoeMLP, index=1)],
-        "hidden_states": Qwen3MoeDecoderLayer,
-        "attentions": Qwen3MoeAttention,
-    }
-
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, Qwen3MoeRMSNorm):
-            module.weight.data.fill_(1.0)
 
 
 class Qwen3MoeRotaryEmbedding(nn.Module):
@@ -430,6 +399,40 @@ class Qwen3MoeRotaryEmbedding(nn.Module):
             sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
+@auto_docstring
+class Qwen3MoePreTrainedModel(PreTrainedModel):
+    config_class = Qwen3MoeConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["Qwen3MoeDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_cache_class = True
+    _supports_quantized_cache = True
+    _supports_static_cache = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(Qwen3MoeSparseMoeBlock, index=1),
+        "hidden_states": Qwen3MoeDecoderLayer,
+        "attentions": Qwen3MoeAttention,
+    }
+
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, Qwen3MoeRMSNorm):
+            module.weight.data.fill_(1.0)
 
 
 @auto_docstring
