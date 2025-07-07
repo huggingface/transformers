@@ -206,39 +206,6 @@ def eager_attention_forward(
     attn_output = attn_output.transpose(1, 2).contiguous()
     return attn_output, attn_weights
 
-# def openai_flex_attention_forward(
-#     module: nn.Module,
-#     query: torch.Tensor,
-#     key: torch.Tensor,
-#     value: torch.Tensor,
-#     attention_mask: Optional[torch.Tensor],
-#     scaling: float,
-#     dropout: float = 0.0,
-#     **kwargs,
-# ):
-#     sinks = module.sinks.view(1, -1, 1, 1).expand(-1, -1, key.shape[-2], -1)
-
-#     def attention_sink(score, b, h, q_idx, kv_idx):
-#         score = torch.cat([score, sinks], dim=-1)
-#         return score
-
-#     # TODO I need to remove the -1 sinks
-#     return flex_attention_forward(
-#         module,
-#         query,
-#         key,
-#         value,
-#         attention_mask,
-#         scaling=scaling,
-#         dropout=dropout,
-#         attention_sink=attention_sink,
-#         score_mod=attention_sink,
-#         **kwargs,
-#     )
-
-# ALL_ATTENTION_FUNCTIONS.register("openai_flex_attention", openai_flex_attention_forward)
-
-
 class OpenAIMoeAttention(Qwen2Attention):
     def __init__(self, config: OpenAIMoeConfig, layer_idx: int):
         super().__init__(config, layer_idx)
@@ -312,7 +279,13 @@ class OpenAIMoeDecoderLayer(LlamaDecoderLayer):
 
 class OpenAIMoePreTrainedModel(LlamaPreTrainedModel):
     _keep_in_fp32_modules = ["post_attention_layernorm", "input_layernorm", "norm"]
-
+    _supports_sdpa = False
+    _supports_flex_attention = False
+    _can_record_outputs = {
+        "router_logits": OpenAIMoeExperts,
+        "hidden_states": OpenAIMoeDecoderLayer,
+        "attentions": OpenAIMoeAttention
+    }
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
