@@ -25,6 +25,7 @@ from typing import Any, Dict, List, Optional, Union
 
 import requests
 from get_ci_error_statistics import get_jobs
+from compare_test_runs import compare_job_sets
 from get_previous_daily_ci import get_last_daily_ci_reports, get_last_daily_ci_run, get_last_daily_ci_workflow_run_id
 from huggingface_hub import HfApi
 from slack_sdk import WebClient
@@ -1502,6 +1503,9 @@ if __name__ == "__main__":
 
     print(current_artifacts_set)
     print(prev_artifacts_set)
+
+    report = compare_job_sets(prev_artifacts_set, current_artifacts_set)
+    print(report)
 
     ci_name_in_report = ""
     if job_name in job_to_test_map:
