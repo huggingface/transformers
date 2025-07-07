@@ -707,7 +707,7 @@ class Aimv2Model(CLIPModel, nn.Module):
         image_embeds = image_embeds / _get_vector_norm(image_embeds)
         text_embeds = text_embeds / _get_vector_norm(text_embeds)
 
-        logit_scale = self.logit_scale.clamp(0.0, self.max_log_logit_scale).exp()
+        logit_scale = self.logit_scale.clamp(0.0, self.max_log_logit_scale).exp().to(text_embeds.device)
         logits_per_text = (logit_scale * text_embeds) @ image_embeds.t()
         logits_per_image = logits_per_text.t()
 
