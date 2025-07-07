@@ -125,8 +125,6 @@ class MyNewModelConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```
-        new_param (`int`, *optional*, defaults to `False`):
-            A fun new parameter
     """
 
     model_type = "my_new_model"

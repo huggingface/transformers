@@ -112,6 +112,9 @@ jobs:
           echo "jobs_to_run=$(tail -n 1 output.txt)" >> $GITHUB_OUTPUT
 
   send_comment:
+    # Will delete the previous comment and send a new one if:
+    #   - either the content is changed
+    #   - or the previous comment is 30 minutes or more old
     name: Send a comment to suggest jobs to run
     if: ${{ needs.get-jobs.outputs.jobs != '' }}
     needs: [get-pr-number, get-jobs]
@@ -119,7 +122,7 @@ jobs:
       pull-requests: write
     runs-on: ubuntu-22.04
     steps:
-      - name: Delete existing comment and send new one
+      - name: Check and update comment if needed
         uses: actions/github-script@v7
         env:
           BODY: "\n\nrun-slow: ${{ needs.get-jobs.outputs.jobs }}"
@@ -127,6 +130,8 @@ jobs:
           script: |
             const prNumber = ${{ needs.get-pr-number.outputs.PR_NUMBER }};
             const commentPrefix = "**[For maintainers]** Suggested jobs to run (before merge)";
+            const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000); // 30 minutes ago
+            const newBody = `${commentPrefix}${process.env.BODY}`;
             
             // Get all comments on the PR
             const { data: comments } = await github.rest.issues.listComments({
@@ -135,15 +140,44 @@ jobs:
               issue_number: prNumber
             });
             
-            // Find existing comment(s) that start with our prefix
+            // Find existing comments that start with our prefix
             const existingComments = comments.filter(comment => 
               comment.user.login === 'github-actions[bot]' && 
               comment.body.startsWith(commentPrefix)
             );
             
-            // Delete existing comment(s)
-            for (const comment of existingComments) {
-              console.log(`Deleting existing comment #${comment.id}`);
+            let shouldCreateNewComment = true;
+            let commentsToDelete = [];
+            
+            if (existingComments.length > 0) {
+              // Get the most recent comment
+              const mostRecentComment = existingComments
+                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+              
+              const commentDate = new Date(mostRecentComment.created_at);
+              const isOld = commentDate < thirtyMinutesAgo;
+              const isDifferentContent = mostRecentComment.body !== newBody;
+              
+              console.log(`Most recent comment created: ${mostRecentComment.created_at}`);
+              console.log(`Is older than 30 minutes: ${isOld}`);
+              console.log(`Has different content: ${isDifferentContent}`);
+              
+              if (isOld || isDifferentContent) {
+                // Delete all existing comments and create new one
+                commentsToDelete = existingComments;
+                console.log(`Will delete ${commentsToDelete.length} existing comment(s) and create new one`);
+              } else {
+                // Content is same and comment is recent, skip
+                shouldCreateNewComment = false;
+                console.log('Comment is recent and content unchanged, skipping update');
+              }
+            } else {
+              console.log('No existing comments found, will create new one');
+            }
+            
+            // Delete old comments if needed
+            for (const comment of commentsToDelete) {
+              console.log(`Deleting comment #${comment.id} (created: ${comment.created_at})`);
               await github.rest.issues.deleteComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -151,13 +185,15 @@ jobs:
               });
             }
             
-            // Create new comment
-            const newBody = `${commentPrefix}${process.env.BODY}`;
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: prNumber,
-              body: newBody
-            });
-            
-            console.log('✅ Comment updated successfully');
+            // Create new comment if needed
+            if (shouldCreateNewComment) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: newBody
+              });
+              console.log('✅ New comment created');
+            } else {
+              console.log('ℹ️ No comment update needed');
+            }
