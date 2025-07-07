@@ -1019,12 +1019,25 @@ class ContinuousBatchProcessor:
                 self.metrics.record_ttft_metric(state.created_time, state.request_id)
                 state.status = RequestStatus.DECODING
                 token = out_tokens[self.logits_indices[i]]
-                state.static_outputs.extend([token])
+
+                # Check completion conditions before adding the token to avoid off-by-one errors
+                is_eos = token == state.eos_token_id and state.eos_token_id != -1
+                is_max_len = state.generated_len() >= state.max_new_tokens
+                is_finished = is_eos or is_max_len
+
+                # Only add the token if we're not finishing due to max length
+                # (EOS tokens should still be added to the output)
+                if not (is_max_len and not is_eos):
+                    state.static_outputs.extend([token])
+
                 state.prompt_ids = [token]
-                if state.update_with_token(token):
+
+                if is_finished:
+                    state.status = RequestStatus.FINISHED
                     self.metrics.record_request_completion(state.created_time, state.request_id)
                     self.scheduler.finish_request(state.request_id, evict_from_cache=(not self.manual_eviction))
                     finished_request_ids.append(req_id)
+
                 self._maybe_send_output(state, token)
             elif state.status == RequestStatus.PREFILLING_SPLIT:
                 state.status = RequestStatus.SPLIT_PENDING_REMAINDER
