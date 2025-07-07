@@ -51,12 +51,12 @@ class Erine4_5_MoeModelOutputWithPast(ModelOutput):
 
 
 @dataclass
-class Ernie4_5_MoeCausalLMOutputWithPast(MoeCausalLMOutputWithPast):
+class Ernie4_5_MoECausalLMOutputWithPast(MoeCausalLMOutputWithPast):
     router_loss: Optional[torch.FloatTensor] = None
 
 
 # copy llama
-class Ernie4_5_RMSNorm(nn.Module):
+class Ernie4_5_MoERMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -74,7 +74,7 @@ class Ernie4_5_RMSNorm(nn.Module):
 
 
 # copy qwen3 moe (except bias)
-class Ernie4_5_MLP(nn.Module):
+class Ernie4_5_MoEMLP(nn.Module):
     def __init__(self, config, intermediate_size=None):
         super().__init__()
         self.config = config
@@ -91,7 +91,7 @@ class Ernie4_5_MLP(nn.Module):
 
 
 # can become majority wise llama copy (except the fp32 consistency)
-class Ernie4_5_RopeEmbedding(nn.Module):
+class Ernie4_5_MoERopeEmbedding(nn.Module):
     def __init__(self, config: Ernie4_5_MoEConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
@@ -203,7 +203,7 @@ def eager_attention_forward(
 
 
 # copy llama (config bias diff + no dropout)
-class Ernie4_5_Attention(nn.Module):
+class Ernie4_5_MoEAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config: Ernie4_5_MoEConfig, layer_idx: int):
@@ -273,7 +273,7 @@ class Ernie4_5_Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class Ernie4_5_MoeStatics(nn.Module):
+class Ernie4_5_MoEStatics(nn.Module):
     """
     Stores MoE (Mixture of Experts) statistics
     and expert usage information.
@@ -309,7 +309,7 @@ def topk_gate_func(
     return logits, capacity, router_loss
 
 
-class Ernie4_5_MoeMLP(nn.Module):
+class Ernie4_5_MoESparseMoEBlock(nn.Module):
     """Mixture of Experts (MoE) variant of ERNIE's MLP layer."""
 
     def __init__(self,config):
@@ -330,14 +330,14 @@ class Ernie4_5_MoeMLP(nn.Module):
         self.gate_act = partial(F.softmax, dim=-1)
 
         self.experts = nn.ModuleList(
-            [Ernie4_5_MLP(config,moe_intermediate_size) for i in range(config.moe_num_experts)]
+            [Ernie4_5_MoEMLP(config,moe_intermediate_size) for i in range(config.moe_num_experts)]
         )
 
         #if config.moe_use_aux_free:
         #    self.moe_statics = Ernie4_5_MoeStatics(config)
 
         #self.use_correction_bias = config.moe_use_aux_free
-        self.moe_statics = Ernie4_5_MoeStatics(config)  # TODO: apparently it's saved but not used
+        self.moe_statics = Ernie4_5_MoEStatics(config)  # TODO: apparently it's saved but not used
         self.num_local_experts = len(self.experts)
 
         self.shared_experts = self._init_shared_experts()
@@ -356,7 +356,7 @@ class Ernie4_5_MoeMLP(nn.Module):
                 cfg.intermediate_size = cfg.moe_intermediate_size * cfg.moe_num_shared_experts
             else:
                 cfg.intermediate_size = cfg.intermediate_size * cfg.moe_num_shared_experts
-            shared_experts = Ernie4_5_MLP(cfg, cfg.intermediate_size)
+            shared_experts = Ernie4_5_MoEMLP(cfg, cfg.intermediate_size)
         else:
             shared_experts = None
         return shared_experts
@@ -580,7 +580,7 @@ class Ernie4_5_MoeMLP(nn.Module):
         return capacity
 
 
-class Ernie4_5_DecoderLayer(nn.Module):
+class Ernie4_5_MoEDecoderLayer(nn.Module):
     """A single transformer decoder layer in ERNIE-MoE model.
 
     Contains self-attention and feed-forward components with optional MoE (Mixture of Experts)
@@ -599,7 +599,7 @@ class Ernie4_5_DecoderLayer(nn.Module):
         self.layer_idx = layer_idx
         self.config = config
         self.use_moe = True
-        self.self_attn = Ernie4_5_Attention(config, layer_idx)
+        self.self_attn = Ernie4_5_MoEAttention(config, layer_idx)
 
         moe_layer_start_index = (
             min(config.moe_layer_start_index)
@@ -618,12 +618,12 @@ class Ernie4_5_DecoderLayer(nn.Module):
             and layer_idx >= moe_layer_start_index
             and layer_idx <= moe_layer_end_index
         ):
-            self.mlp = Ernie4_5_MoeMLP(config)
+            self.mlp = Ernie4_5_MoESparseMoEBlock(config)
         else:
-            self.mlp = Ernie4_5_MLP(config)
+            self.mlp = Ernie4_5_MoEMLP(config)
 
-        self.input_layernorm = Ernie4_5_RMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.post_attention_layernorm = Ernie4_5_RMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.input_layernorm = Ernie4_5_MoERMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.post_attention_layernorm = Ernie4_5_MoERMSNorm(config.hidden_size, config.rms_norm_eps)
 
     def forward(
         self,
@@ -687,7 +687,7 @@ class Ernie4_5_DecoderLayer(nn.Module):
         router_loss = None
         gate_logits = None
 
-        if isinstance(self.mlp, Ernie4_5_MoeMLP):
+        if isinstance(self.mlp, Ernie4_5_MoESparseMoEBlock):
             hidden_states, _, router_loss, gate_logits = self.mlp(hidden_states)
         else:
             hidden_states = self.mlp(hidden_states)
@@ -708,12 +708,12 @@ class Ernie4_5_DecoderLayer(nn.Module):
 
 
 @auto_docstring
-class Ernie4_5_PretrainedModel(PreTrainedModel):
+class Ernie4_5_MoEPretrainedModel(PreTrainedModel):
     """Base class for ERNIE pretrained models."""
     config_class = Ernie4_5_MoEConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Ernie4_5_DecoderLayer"]
+    _no_split_modules = ["Ernie4_5_MoEDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
@@ -893,7 +893,7 @@ class ErniePretrainingCriterion(nn.Module):
 
 
 @auto_docstring
-class Ernie4_5_Model(Ernie4_5_PretrainedModel):
+class Ernie4_5_MoEModel(Ernie4_5_MoEPretrainedModel):
     """The core ERNIE transformer model with MoE (Mixture of Experts) support."""
     _keep_in_fp32_modules = ['gate']
     def __init__(self, config: Ernie4_5_MoEConfig):
@@ -911,12 +911,12 @@ class Ernie4_5_Model(Ernie4_5_PretrainedModel):
 
         self.layers = nn.ModuleList(
             [
-                Ernie4_5_DecoderLayer(config, i)
+                Ernie4_5_MoEDecoderLayer(config, i)
                 for i in range(config.num_hidden_layers)
             ]
         )
-        self.norm = Ernie4_5_RMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.rotary_emb = Ernie4_5_RopeEmbedding(config=config)
+        self.norm = Ernie4_5_MoERMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.rotary_emb = Ernie4_5_MoERopeEmbedding(config=config)
 
         self.gradient_checkpointing = False
 
@@ -1048,7 +1048,7 @@ class Ernie4_5_Model(Ernie4_5_PretrainedModel):
 
 
 @auto_docstring
-class Ernie4_5_MoeForCausalLM(Ernie4_5_PretrainedModel,GenerationMixin):
+class Ernie4_5_MoEForCausalLM(Ernie4_5_MoEPretrainedModel,GenerationMixin):
     """ERNIE Mixture of Experts (MoE) model for causal language modeling."""
 
     _tied_weights_keys = ["lm_head.weight"]
@@ -1064,7 +1064,7 @@ class Ernie4_5_MoeForCausalLM(Ernie4_5_PretrainedModel,GenerationMixin):
         """
         super().__init__(config)
         self.config = config
-        self.model = Ernie4_5_Model(config)
+        self.model = Ernie4_5_MoEModel(config)
         #self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=config.weight_share_add_bias and config.use_bias) # TODO
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=config.use_bias)
         self.loss_function = ErniePretrainingCriterion(config)
@@ -1141,7 +1141,7 @@ class Ernie4_5_MoeForCausalLM(Ernie4_5_PretrainedModel,GenerationMixin):
         if labels is not None:
             loss, _ = self.loss_function(logits, labels, loss_mask, router_loss)
 
-        return Ernie4_5_MoeCausalLMOutputWithPast(
+        return Ernie4_5_MoECausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
@@ -1152,7 +1152,7 @@ class Ernie4_5_MoeForCausalLM(Ernie4_5_PretrainedModel,GenerationMixin):
 
 
 __all__ = [
-    "Ernie4_5_Model",
-    "Ernie4_5_MoeForCausalLM",
-    "Ernie4_5_PretrainedModel"
+    "Ernie4_5_MoEModel",
+    "Ernie4_5_MoEForCausalLM",
+    "Ernie4_5_MoEPretrainedModel"
 ]
