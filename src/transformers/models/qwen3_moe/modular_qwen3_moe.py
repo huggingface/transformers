@@ -26,13 +26,19 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
+from ...utils.generic import OutputRecorder
 from ..llama.modeling_llama import (
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
     LlamaRMSNorm,
 )
-from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel, load_balancing_loss_func
+from ..mixtral.modeling_mixtral import (
+    MixtralForCausalLM,
+    MixtralModel,
+    MixtralPreTrainedModel,
+    load_balancing_loss_func,
+)
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeDecoderLayer
 from ..qwen3.modeling_qwen3 import Qwen3Attention
 from .configuration_qwen3_moe import Qwen3MoeConfig
@@ -60,7 +66,7 @@ class Qwen3MoeMLP(nn.Module):
 
     def forward(self, x):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
+        return down_proj, None  # We return None here to mimic the MoE module, as we alternate
 
 
 class Qwen3MoeSparseMoeBlock(nn.Module):
@@ -167,14 +173,18 @@ class Qwen3MoeDecoderLayer(Qwen2MoeDecoderLayer, nn.Module):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-
-        hidden_states = self.mlp(hidden_states)
-        if isinstance(hidden_states, tuple):
-            hidden_states, _ = hidden_states
-
+        hidden_states, _ = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
         return hidden_states
+
+
+class Qwen3MoePreTrainedModel(MixtralPreTrainedModel):
+    _can_record_outputs = {
+        "router_logits": [OutputRecorder(Qwen3MoeSparseMoeBlock, index=1), OutputRecorder(Qwen3MoeMLP, index=1)],
+        "hidden_states": Qwen3MoeDecoderLayer,
+        "attentions": Qwen3MoeAttention,
+    }
 
 
 class Qwen3MoeModel(MixtralModel):
