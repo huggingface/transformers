@@ -688,7 +688,8 @@ class Siglip2TextTransformer(nn.Module):
         last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.final_layer_norm(last_hidden_state)
 
-        # Assuming "sticky" EOS tokenization, last token is always EOS.
+        # The pooled output is taken from the last token, which may be <eos> or <pad> depending on input length.
+        # This follows SigLIP2's original training setup, where attention masks were not used.
         pooled_output = last_hidden_state[:, -1, :]
         pooled_output = self.head(pooled_output)
 
