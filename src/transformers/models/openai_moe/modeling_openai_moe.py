@@ -28,14 +28,13 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import OutputRecorder, TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import check_model_inputs
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.generic import check_model_inputs, OutputRecorder
 from .configuration_openai_moe import OpenAIMoeConfig
 
 
@@ -115,16 +114,19 @@ class OpenAIMoeExperts(nn.Module):
                 weighted_output = out * routing_weights[top_x, idx, None]  # (num_tokens, hidden_dim)
                 next_states.index_add_(0, top_x, weighted_output.to(hidden_states.dtype)[0])
             next_states = next_states.view(batch_size, -1, self.hidden_size)
+            routing_weights = torch.ones_like(next_states)
         else:
             hidden_states = hidden_states.repeat(num_experts, 1)
             hidden_states = hidden_states.view(num_experts, -1, self.hidden_size)
             gate_up = torch.bmm(hidden_states, self.gate_up_proj) + self.gate_up_proj_bias[..., None, :]
-            gate, up = gate_up.chunk(2, dim=-1)  # not supported for DTensors
+            gate, up = gate_up.chunk(2, dim=-1)
             glu = gate * torch.sigmoid(gate * self.alpha)
             next_states = torch.bmm(((up + 1) * glu), self.down_proj)
             next_states = next_states + self.down_proj_bias[..., None, :]
             next_states = next_states.view(num_experts, batch_size, -1, self.hidden_size) # (num_experts, batch_size, seq_len, hidden_size)
-        return next_states, None
+            next_states = next_states * routing_weights.view(num_experts, batch_size, -1)[...,None]
+            next_states = next_states.sum(dim=0)
+        return next_states, routing_weights
 
 class TopKRouter(nn.Module):
     def __init__(self, config):
@@ -143,33 +145,17 @@ class TopKRouter(nn.Module):
         router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value).transpose(0, 1) # (num_experts, seq_len)
         return router_scores, router_indices
 
-class TokenDispatcher(nn.Module):
-    # this module is important to add EP hook
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-
-    def forward(self, routed_out, routing_weights):
-        # routed_out is (num_experts, batch_size, seq_len, hidden_size)
-        routed_out = routed_out * routing_weights[:, None, :, None] # we're throwing away computed routed_out for rest of experts
-        routed_out = routed_out.sum(dim=0) # (batch_size, seq_len, hidden_size)
-        return routed_out
-
 @use_kernel_forward_from_hub("MegaBlocksMoeMLP")
 class OpenAIMoeMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.router = TopKRouter(config)
         self.experts = OpenAIMoeExperts(config)
-        self.token_dispatcher = TokenDispatcher(config)
 
     def forward(self, hidden_states):
-        # we don't slice weight as its not compile compatible
         router_scores, router_indices = self.router(hidden_states) # (num_experts, seq_len)
-        routed_out, _ = self.experts(hidden_states, router_indices=router_indices, routing_weights=router_scores) #TODO: router_indices isn't used inside this func
-        hidden_states = self.token_dispatcher(routed_out, router_scores)
-        return hidden_states, router_scores
+        routed_out, router_weights = self.experts(hidden_states, router_indices=router_indices, routing_weights=router_scores) #TODO: router_indices isn't used inside this func
+        return routed_out, router_scores
 
 
 class OpenAIMoeRotaryEmbedding(nn.Module):
@@ -305,8 +291,8 @@ class OpenAIMoeAttention(nn.Module):
         attention_mask: Optional[torch.Tensor],
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -371,7 +357,6 @@ class OpenAIMoeDecoderLayer(GradientCheckpointingLayer):
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_value=past_key_value,
-            output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
             position_embeddings=position_embeddings,
@@ -492,6 +477,7 @@ class OpenAIMoeModel(OpenAIMoePreTrainedModel):
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
+                "position_ids": position_ids
             }
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
@@ -507,12 +493,10 @@ class OpenAIMoeModel(OpenAIMoePreTrainedModel):
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 position_ids=position_ids,
                 past_key_value=past_key_values,
-                output_attentions=output_attentions,
-                output_router_logits=output_router_logits,
                 use_cache=use_cache,
                 cache_position=cache_position,
                 position_embeddings=position_embeddings,
-                **flash_attn_kwargs,
+                **kwargs,
             )
         hidden_states = self.norm(hidden_states)
         return MoeModelOutputWithPast(
@@ -555,7 +539,7 @@ def load_balancing_loss_func(
 
     if isinstance(gate_logits, tuple):
         compute_device = gate_logits[0].device
-        concatenated_gate_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0)
+        concatenated_gate_logits = torch.cat([layer_gate.to(compute_device).transpose(0,1) for layer_gate in gate_logits], dim=0)
 
     routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
 
@@ -572,7 +556,6 @@ def load_balancing_loss_func(
     else:
         batch_size, sequence_length = attention_mask.shape
         num_hidden_layers = concatenated_gate_logits.shape[0] // (batch_size * sequence_length)
-
         # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
         expert_attention_mask = (
             attention_mask[None, :, :, None, None]
@@ -650,8 +633,6 @@ class OpenAIMoeForCausalLM(OpenAIMoePreTrainedModel, GenerationMixin):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
@@ -680,16 +661,6 @@ class OpenAIMoeForCausalLM(OpenAIMoePreTrainedModel, GenerationMixin):
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_router_logits = (
-            output_router_logits if output_router_logits is not None else self.config.output_router_logits
-        )
-
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs: MoeModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -697,8 +668,6 @@ class OpenAIMoeForCausalLM(OpenAIMoePreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             output_router_logits=output_router_logits,
             cache_position=cache_position,
             **kwargs,

@@ -812,7 +812,7 @@ class GroupedGemmParallel(TensorParallelLayer):
 
 class RouterParallel(TensorParallelLayer):
     """
-    Applies Expert Parallelism to MoE router
+    Allows to reshape the router scores to support running expert parallel. 
     """
     def __init__(self, *args, **kwargs):
         self.args = args

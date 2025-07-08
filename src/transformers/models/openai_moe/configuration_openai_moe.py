@@ -54,7 +54,8 @@ class OpenAIMoeConfig(PretrainedConfig):
         "layers.*.self_attn.sinks": "local_rowwise",
 
         # TODO: i shouldn't have to do the above, but when removing it, it doesnt partition them
-        'layers.*.mlp.token_dispatcher': "gather",
+        "layers.*.mlp.experts": "gather", # TODO: same, this should mean i want to allreduce output 
+        # 'layers.*.mlp.token_dispatcher': "gather",
         "layers.*.mlp.router": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.gate_up_proj_bias": "grouped_gemm",
