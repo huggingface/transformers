@@ -21,12 +21,7 @@ from dataclasses import dataclass, field
 from threading import Thread
 from typing import Any, Optional
 
-from huggingface_hub import (
-    ChatCompletionStreamOutputDeltaToolCall,
-    ChatCompletionStreamOutputFunction,
-    ModelInfo,
-    model_info,
-)
+from huggingface_hub import ModelInfo, model_info
 
 from transformers.utils.import_utils import is_fastapi_available, is_pydantic_available, is_uvicorn_available
 
@@ -276,7 +271,7 @@ class ServeCommand(BaseTransformersCLICommand):
         content: Optional[str] = None,
         role: Optional[str] = None,
         finish_reason: Optional[str] = None,
-        tool_calls: Optional[list[ChatCompletionStreamOutputDeltaToolCall]] = None,
+        tool_calls: Optional[list[dict]] = None,
     ) -> str:
         """
         Builds a chunk of a streaming response.
@@ -293,7 +288,7 @@ class ServeCommand(BaseTransformersCLICommand):
                 The role of the next content, until a new role is defined.
             finish_reason (`str`, *optional*):
                 The reason the generation by the model has finished.
-            tool_calls (`list[ChatCompletionStreamOutputDeltaToolCall]`, *optional*):
+            tool_calls (`list[dict]`, *optional*):
                 Data about the tool calls, when they are triggered.
 
         Returns:
@@ -583,14 +578,12 @@ class ServeCommand(BaseTransformersCLICommand):
                                     else:
                                         tool_name = tool_name.group(1)
                                     tool_state.has_tool_name_defined = True
-                                    tool = ChatCompletionStreamOutputDeltaToolCall(
-                                        function=ChatCompletionStreamOutputFunction(
-                                            name=tool_name,
-                                        ),
-                                        index=0,
-                                        type="function",
-                                        id=_request_id + "_tool_call",  # Only the first tool call delta has an id
-                                    )
+                                    tool = {
+                                        "function": {"name": tool_name},
+                                        "index": 0,
+                                        "type": "function",
+                                        "id": _request_id + "_tool_call",  # Only the first tool call delta has an id
+                                    }
 
                                 # Second step: extract tool arguments. The tool arguments can be seen as a json string
                                 # within the tool json string. We emit a delta for the arguments.
@@ -610,13 +603,11 @@ class ServeCommand(BaseTransformersCLICommand):
                                     if tool_state.arg_nesting_level < 0:
                                         result = "".join(result.split("}")[:-2]) + "}"  # e.g. "4}}\n" -> "4}"
 
-                                    tool = ChatCompletionStreamOutputDeltaToolCall(
-                                        function=ChatCompletionStreamOutputFunction(
-                                            arguments=result,
-                                        ),
-                                        index=0,
-                                        type="function",
-                                    )
+                                    tool = {
+                                        "function": {"arguments": result},
+                                        "index": 0,
+                                        "type": "function",
+                                    }
 
                                 yield self.build_chunk(_request_id, tool_calls=[tool])
                                 continue

@@ -24,7 +24,7 @@ from parameterized import parameterized
 import transformers.commands.transformers_cli as cli
 from transformers import GenerationConfig
 from transformers.commands.serving import ServeArguments, ServeCommand
-from transformers.testing_utils import CaptureStd
+from transformers.testing_utils import CaptureStd, slow
 
 
 class ServeCLITest(unittest.TestCase):
@@ -120,6 +120,21 @@ class ServeCompletionsMixin:
             ("default_request", {}),
             ("one_token", {"max_tokens": 1}),
             ("different_model", {"model": "HuggingFaceTB/SmolLM2-135M-Instruct"}),
+            (
+                "tool_call",
+                {
+                    "tools": [
+                        {
+                            "function": {
+                                "name": "foo_bar",
+                                "parameters": {"type": "object"},
+                                "description": "Foo bar",
+                            },
+                            "type": "function",
+                        }
+                    ]
+                },
+            ),
         ]
     )
     def test_requests(self, test_name: str, request_flags: dict):
@@ -154,7 +169,6 @@ class ServeCompletionsMixin:
         contents = [payload.choices[0].delta.content for payload in all_payloads]
         self.assertTrue(contents[0] is None and contents[-1] is None)
         self.assertTrue(any(content is not None for content in contents[1:-1]))
-        # TODO: tool tests
         # TODO: add "usage" field to output and test it
 
     def test_generation_config_in_request(self):
@@ -193,6 +207,81 @@ class ServeCompletionsGenerateTest(ServeCompletionsMixin, unittest.TestCase):
         thread = Thread(target=serve_command.run)
         thread.daemon = True
         thread.start()
+
+    @slow
+    def test_tool_call(self):
+        """Tests that the tool call is correctly handled and that the payloads are correctly structured."""
+        # TODO: move to the mixin when CB also supports tool calls
+
+        request = {
+            # This model is a small model that's very eager to call tools
+            "model": "Menlo/Jan-nano",
+            # The request should produce a tool call
+            "messages": [{"role": "user", "content": "Generate an image of a cat."}],
+            "stream": True,
+            "max_tokens": 50,
+            # Reproducibility
+            "temperature": 0.0,
+            # This tool is a copy from the tool in the original tiny-agents demo
+            "tools": [
+                {
+                    "function": {
+                        "name": "flux1_schnell_infer",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "prompt": {"type": "string"},
+                                "seed": {"type": "number", "description": "numeric value between 0 and 2147483647"},
+                                "randomize_seed": {"type": "boolean", "default": True},
+                                "width": {
+                                    "type": "number",
+                                    "description": "numeric value between 256 and 2048",
+                                    "default": 1024,
+                                },
+                                "height": {
+                                    "type": "number",
+                                    "description": "numeric value between 256 and 2048",
+                                    "default": 1024,
+                                },
+                                "num_inference_steps": {
+                                    "type": "number",
+                                    "description": "numeric value between 1 and 16",
+                                    "default": 4,
+                                },
+                            },
+                        },
+                        "description": "Generate an image using the Flux 1 Schnell Image Generator.",
+                    },
+                    "type": "function",
+                }
+            ],
+        }
+        all_payloads = asyncio.run(self.run_server(request))
+
+        # The first payload should contain the role
+        roles = [payload.choices[0].delta.role for payload in all_payloads]
+        self.assertEqual(roles[0], "assistant")
+        self.assertTrue(all(role is None for role in roles[1:]))
+
+        # All other payloads (except the last one) should be tool call related, for this specific request
+        contents = [payload.choices[0].delta.content for payload in all_payloads]
+        self.assertTrue(all(content is None for content in contents))
+
+        # The first tool call delta should contain the tool name. The other tool call deltas should contain the tool
+        # arguments.
+        tool_calls = [payload.choices[0].delta.tool_calls[0] for payload in all_payloads[1:-1]]
+        first_tool_call = tool_calls[0]
+        self.assertEqual(first_tool_call["function"]["name"], "flux1_schnell_infer")
+        self.assertEqual(first_tool_call["function"]["arguments"], None)
+        other_tool_calls = tool_calls[1:]
+        self.assertTrue(all(tool_call["function"]["name"] is None for tool_call in other_tool_calls))
+        self.assertTrue(all(tool_call["function"]["arguments"] is not None for tool_call in other_tool_calls))
+
+        # Finally, the last payload should contain a finish reason
+        finish_reasons = [payload.choices[0].finish_reason for payload in all_payloads]
+        # TODO: I think the finish reason for a tool call is different? double check this
+        self.assertEqual(finish_reasons[-1], "stop")
+        self.assertTrue(all(reason is None for reason in finish_reasons[:-1]))
 
 
 class ServeCompletionsContinuousBatchingTest(ServeCompletionsMixin, unittest.TestCase):
