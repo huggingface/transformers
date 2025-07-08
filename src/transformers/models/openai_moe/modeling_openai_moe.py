@@ -142,7 +142,7 @@ class TopKRouter(nn.Module):
         router_logits = F.linear(hidden_states, self.weight, self.bias) # (seq_len, num_experts)
         router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1) # (seq_len, top_k)
         router_top_value = torch.nn.functional.softmax(router_top_value, dim=1)
-        router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value).transpose(0, 1) # (num_experts, seq_len)
+        router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value)
         return router_scores, router_indices
 
 @use_kernel_forward_from_hub("MegaBlocksMoeMLP")
