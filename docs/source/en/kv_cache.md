@@ -44,7 +44,7 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", torch_dtype=torch.float16).to("cuda:0")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", torch_dtype=torch.float16, device_map="auto")
 inputs = tokenizer("I like rock music because", return_tensors="pt").to(model.device)
 
 model.generate(**inputs, do_sample=False, max_new_tokens=20, use_cache=False)
@@ -59,7 +59,7 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", torch_dtype=torch.float16).to("cuda:0")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", torch_dtype=torch.float16, device_map="auto")
 inputs = tokenizer("I like rock music because", return_tensors="pt").to(model.device)
 
 past_key_values = DynamicCache()
@@ -142,13 +142,14 @@ Enable [`QuantizedCache`] by configuring `cache_implementation="quantized"` in [
 For [`HQQQuantizedCache`], we recommend setting the `axis-key` and `axis-value` parameters to `1`.
 
 ```py
+import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, HQQQuantizedCache, QuantizedCacheConfig
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", torch_dtype=torch.float16).to("cuda:0")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", torch_dtype=torch.float16, device_map="auto")
 inputs = tokenizer("I like rock music because", return_tensors="pt").to(model.device)
 
-out = model.generate(**inputs, do_sample=False, max_new_tokens=20, cache_implementation="quantized", cache_config={"axis-key": 1, "axis-value": 1, "backend": "hqq"})
+out = model.generate(**inputs, do_sample=False, max_new_tokens=20, cache_implementation="quantized", cache_config={"backend": "HQQ"})
 print(tokenizer.batch_decode(out, skip_special_tokens=True)[0])
 I like rock music because it's loud and energetic. It's a great way to express myself and rel
 ```
@@ -159,13 +160,14 @@ I like rock music because it's loud and energetic. It's a great way to express m
 For [`QuantoQuantizedCache`], we recommend setting the `axis-key` and `axis-value` parameters to `0`.
 
 ```py
+import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, QuantoQuantizedCache, QuantizedCacheConfig
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", torch_dtype=torch.float16).to("cuda:0")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", torch_dtype=torch.float16, device_map="auto")
 inputs = tokenizer("I like rock music because", return_tensors="pt").to(model.device)
 
-out = model.generate(**inputs, do_sample=False, max_new_tokens=20, cache_implementation="quantized", cache_config={"nbits": 4, "axis-key": 0, "axis-value": 0, "backend": "quanto"})
+out = model.generate(**inputs, do_sample=False, max_new_tokens=20, cache_implementation="quantized", cache_config={"nbits": 4, "backend": "quanto"})
 print(tokenizer.batch_decode(out, skip_special_tokens=True)[0])
 I like rock music because it's loud and energetic. It's a great way to express myself and rel
 ```
@@ -207,14 +209,14 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", torch_dtype=torch.float16, device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", torch_dtype=torch.float16, device_map={"": 0})
 inputs = tokenizer("Hello, my name is", return_tensors="pt").to(model.device)
 
 out = model.generate(**inputs, do_sample=False, max_new_tokens=20, cache_implementation="offloaded_static")
 tokenizer.batch_decode(out, skip_special_tokens=True)[0]
 "Hello, my name is [Your Name], and I am a [Your Profession] with [Number of Years] of"
 ```
-Cache offloading requires a CUDA GPU.
+Cache offloading requires a CUDA GPU or Intel XPU.
 
 ### Sliding window cache
 
@@ -227,7 +229,7 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
-model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", torch_dtype=torch.float16).to("cuda:0")
+model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", torch_dtype=torch.float16, device_map="auto")
 inputs = tokenizer("Yesterday I was on a rock concert and.", return_tensors="pt").to(model.device)
 
 out = model.generate(**inputs, do_sample=False, max_new_tokens=30, cache_implementation="sliding_window")
@@ -306,15 +308,15 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, DynamicCache, StaticCache
 
 model_id = "meta-llama/Llama-2-7b-chat-hf"
-model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map="cuda")
+model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map={"": 0})
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 # Init StaticCache with big enough max-length (1024 tokens for the below example)
 # You can also init a DynamicCache, if that suits you better
-prompt_cache = StaticCache(config=model.config, max_batch_size=1, max_cache_len=1024, device="cuda", dtype=torch.bfloat16)
+prompt_cache = StaticCache(config=model.config, max_batch_size=1, max_cache_len=1024, device=model.device.type, dtype=torch.bfloat16)
 
 INITIAL_PROMPT = "You are a helpful assistant. "
-inputs_initial_prompt = tokenizer(INITIAL_PROMPT, return_tensors="pt").to("cuda")
+inputs_initial_prompt = tokenizer(INITIAL_PROMPT, return_tensors="pt").to(model.device.type)
 # This is the common prompt cached, we need to run forward without grad to be able to copy
 with torch.no_grad():
      prompt_cache = model(**inputs_initial_prompt, past_key_values = prompt_cache).past_key_values
@@ -322,7 +324,7 @@ with torch.no_grad():
 prompts = ["Help me to write a blogpost about travelling.", "What is the capital of France?"]
 responses = []
 for prompt in prompts:
-    new_inputs = tokenizer(INITIAL_PROMPT + prompt, return_tensors="pt").to("cuda")
+    new_inputs = tokenizer(INITIAL_PROMPT + prompt, return_tensors="pt").to(model.device.type)
     past_key_values = copy.deepcopy(prompt_cache)
     outputs = model.generate(**new_inputs, past_key_values=past_key_values,max_new_tokens=20)
     response = tokenizer.batch_decode(outputs)[0]

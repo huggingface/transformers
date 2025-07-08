@@ -1153,7 +1153,7 @@ class Gemma3nTextRotaryEmbedding(nn.Module):
     def __init__(self, config: Gemma3nTextConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
             self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
         else:
             self.rope_type = "default"
@@ -1830,11 +1830,6 @@ class Gemma3nForCausalLM(Gemma3nPreTrainedModel, GenerationMixin):
         **kwargs,
     ) -> CausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python

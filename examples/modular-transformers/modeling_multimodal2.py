@@ -289,7 +289,6 @@ class Multimodal2VisionEncoder(nn.Module):
         self.layers = nn.ModuleList([Multimodal2VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    @can_return_tuple
     def forward(
         self,
         inputs_embeds,
@@ -455,7 +454,6 @@ class Multimodal2VisionTransformer(nn.Module):
         self.encoder = Multimodal2VisionEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
-    @can_return_tuple
     @auto_docstring
     def forward(
         self,

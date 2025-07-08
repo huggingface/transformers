@@ -19,7 +19,7 @@ import unittest
 import numpy as np
 import pytest
 
-from transformers import WhisperTokenizer, is_speech_available
+from transformers import WhisperTokenizer, WhisperTokenizerFast, is_speech_available
 from transformers.testing_utils import require_sentencepiece, require_torch, require_torchaudio
 
 from .test_feature_extraction_whisper import floats_list
@@ -60,7 +60,7 @@ class WhisperProcessorTest(unittest.TestCase):
         processor = WhisperProcessor.from_pretrained(self.tmpdirname)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
-        self.assertIsInstance(processor.tokenizer, WhisperTokenizer)
+        self.assertIsInstance(processor.tokenizer, WhisperTokenizerFast)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
         self.assertIsInstance(processor.feature_extractor, WhisperFeatureExtractor)
@@ -77,7 +77,7 @@ class WhisperProcessorTest(unittest.TestCase):
         )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, WhisperTokenizer)
+        self.assertIsInstance(processor.tokenizer, WhisperTokenizerFast)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.feature_extractor, WhisperFeatureExtractor)
