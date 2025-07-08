@@ -417,8 +417,8 @@ class OpenAIMoePreTrainedModel(PreTrainedModel):
 class OpenAIMoeModel(OpenAIMoePreTrainedModel):
     _no_split_modules = ["OpenAIMoeDecoderLayer"]
 
-    def __init__(self, config: OpenAIMoeConfig, **kwargs):
-        super().__init__(config, **kwargs)
+    def __init__(self, config: OpenAIMoeConfig):
+        super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
@@ -430,10 +430,8 @@ class OpenAIMoeModel(OpenAIMoePreTrainedModel):
         self.rotary_emb = OpenAIMoeRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
-        self.device_mesh = kwargs.get("device_mesh")
-
         # Initialize weights and apply final processing
-        self.post_init(self.device_mesh)
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -594,19 +592,17 @@ class OpenAIMoeForCausalLM(OpenAIMoePreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
-    def __init__(self, config, **kwargs):
-        super().__init__(config, **kwargs)
-        self.model = OpenAIMoeModel(config, **kwargs)
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = OpenAIMoeModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.router_aux_loss_coef = config.router_aux_loss_coef
         self.num_experts = config.num_local_experts
         self.num_experts_per_tok = config.num_experts_per_tok
 
-        self.device_mesh = kwargs.get("device_mesh")
-
         # Initialize weights and apply final processing
-        self.post_init(self.device_mesh)
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.model.embed_tokens

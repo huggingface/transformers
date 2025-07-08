@@ -35,7 +35,7 @@ _torch_distributed_available = torch.distributed.is_available()
 
 
 if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
-    from torch.distributed.tensor import DTensor, Placement, Replicate, Shard, Partial
+    from torch.distributed.tensor import DTensor, Placement, Replicate, Shard
 
 
 def initialize_tensor_parallelism(tp_plan, tp_size=None):

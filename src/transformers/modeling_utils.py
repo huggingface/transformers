@@ -2103,7 +2103,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         self._no_split_modules = self._no_split_modules or []
         _CAN_RECORD_REGISTRY[self] = self._can_record_outputs  # added for executorch support only
 
-    def post_init(self, device_mesh):
+    def post_init(self):
         """
         A method executed at the end of each Transformer model initialization, to execute code that needs the model's
         modules properly initialized (such as weight initialization).
@@ -4837,7 +4837,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         with ContextManagers(model_init_context):
             # Let's make sure we don't run the init function of buffer modules
-            model_kwargs["device_mesh"] = device_mesh
             model = cls(config, *model_args, **model_kwargs)
 
         # Make sure to tie the weights correctly
