@@ -215,3 +215,5 @@ class Glm4MoeConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
+__all__ = ["Glm4MoeConfig"]
