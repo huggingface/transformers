@@ -30,6 +30,8 @@ from dataclasses import asdict, fields
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Optional, Union
+import torch
+import torch.distributed as dist
 
 import numpy as np
 import packaging.version
@@ -1062,12 +1064,8 @@ class TrackioCallback(TrainerCallback):
             if hasattr(model, "peft_config") and model.peft_config is not None:
                 peft_config = model.peft_config
                 combined_dict = {**{"peft_config": peft_config}, **combined_dict}
-            trial_name = state.trial_name
             init_args = {}
-            if trial_name is not None:
-                init_args["name"] = trial_name
-                init_args["group"] = args.run_name
-            elif args.run_name is not None:
+            if args.run_name is not None:
                 init_args["name"] = args.run_name
 
             self._trackio.init(
@@ -1103,7 +1101,8 @@ class TrackioCallback(TrainerCallback):
             self.setup(args, state, model, **kwargs)
 
     def on_train_end(self, args: TrainingArguments, state, control, model=None, processing_class=None, **kwargs):
-        self._trackio.finish()
+        if state.is_world_process_zero and self._initialized:
+            self._trackio.finish()
 
     def on_log(self, args, state, control, model=None, logs=None, **kwargs):
         single_value_scalars = [
@@ -1114,12 +1113,26 @@ class TrackioCallback(TrainerCallback):
             "total_flos",
         ]
 
+        device_idx = torch.cuda.current_device()
+        total_memory = torch.cuda.get_device_properties(device_idx).total_memory
+        memory_allocated = torch.cuda.memory_allocated(device_idx)
+
+        gpu_memory_logs = {
+            f"gpu/{device_idx}/allocated_memory": memory_allocated / (1024**3),  # GB
+            f"gpu/{device_idx}/memory_usage": memory_allocated / total_memory,   # ratio
+        }
+
+        if dist.is_initialized():
+            gathered_logs = [None] * dist.get_world_size()
+            dist.all_gather_object(gathered_logs, gpu_memory_logs)
+            gpu_memory_logs = {k: v for d in gathered_logs for k, v in d.items()}
+
         if not self._initialized:
             self.setup(args, state, model)
         if state.is_world_process_zero:
             non_scalar_logs = {k: v for k, v in logs.items() if k not in single_value_scalars}
             non_scalar_logs = rewrite_logs(non_scalar_logs)
-            self._trackio.log({**non_scalar_logs, "train/global_step": state.global_step})
+            self._trackio.log({**non_scalar_logs, **gpu_memory_logs, "train/global_step": state.global_step})
 
     def on_save(self, args, state, control, **kwargs):
         return
@@ -1127,8 +1140,18 @@ class TrackioCallback(TrainerCallback):
     def on_predict(self, args, state, control, metrics, **kwargs):
         if self._trackio is None:
             return
+
+        gpu_memory_logs = {}
+        for device_idx in range(torch.cuda.device_count()):
+            device = torch.device(f"cuda:{device_idx}")
+            total_memory = torch.cuda.get_device_properties(device).total_memory
+            memory_allocated = torch.cuda.memory_allocated(device)
+            gpu_memory_logs[f"gpu/{device_idx}/allocated_memory"] = memory_allocated / (1024**3),  # in GB
+            gpu_memory_logs[f"gpu/{device_idx}/memory_usage"] = memory_allocated / total_memory,  # in percentage
+
         if not self._initialized:
             self.setup(args, state, **kwargs)
+
         if state.is_world_process_zero:
             metrics = rewrite_logs(metrics)
             self._trackio.log(metrics)
