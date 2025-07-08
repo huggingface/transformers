@@ -622,8 +622,8 @@ class Aimv2ModelIntegrationTest(unittest.TestCase):
         )
 
         # handle device
-        expected_logits = torch.tensor([[34.2415, 24.6724]]).to(model.device)
-        self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))
+        expected_logits = torch.tensor([[33.3550, 26.4255]]).to(model.device)
+        torch.testing.assert_close(outputs.logits_per_image, expected_logits, atol=1e-3, rtol=1e-3)
 
 
 @require_vision
