@@ -949,7 +949,7 @@ class Glm4vTextModel(Glm4vPreTrainedModel):
 @auto_docstring
 class Glm4vModel(Glm4vPreTrainedModel):
     base_model_prefix = ""
-    _checkpoint_conversion_mapping = None
+    _checkpoint_conversion_mapping = {}
     config_class = Glm4vConfig
     _no_split_modules = ["Glm4vTextDecoderLayer", "Glm4vVisionBlock"]
 
@@ -1392,7 +1392,7 @@ class Glm4vCausalLMOutputWithPast(ModelOutput):
 
 
 class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = None
+    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
