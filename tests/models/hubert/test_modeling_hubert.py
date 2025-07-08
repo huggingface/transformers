@@ -22,7 +22,7 @@ import unittest
 import pytest
 
 from transformers import HubertConfig, is_torch_available
-from transformers.testing_utils import require_soundfile, require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_torchcodec, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -750,7 +750,7 @@ class HubertUtilsTest(unittest.TestCase):
 
 
 @require_torch
-@require_soundfile
+@require_torchcodec
 @slow
 class HubertModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):

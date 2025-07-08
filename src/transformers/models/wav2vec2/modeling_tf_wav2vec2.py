@@ -1530,16 +1530,14 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
         ```python
         >>> from transformers import AutoProcessor, TFWav2Vec2Model
         >>> from datasets import load_dataset
-        >>> import soundfile as sf
 
         >>> processor = AutoProcessor.from_pretrained("facebook/wav2vec2-base-960h")
         >>> model = TFWav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
 
 
-        >>> def map_to_array(batch):
-        ...     speech, _ = sf.read(batch["file"])
-        ...     batch["speech"] = speech
-        ...     return batch
+        >>> def map_to_array(example):
+        ...     example["speech"] = example["audio"]["array"]
+        ...     return example
 
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -1642,16 +1640,15 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
         >>> import tensorflow as tf
         >>> from transformers import AutoProcessor, TFWav2Vec2ForCTC
         >>> from datasets import load_dataset
-        >>> import soundfile as sf
+        >>> from torchcodec.decoders import AudioDecoder
 
         >>> processor = AutoProcessor.from_pretrained("facebook/wav2vec2-base-960h")
         >>> model = TFWav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
 
 
-        >>> def map_to_array(batch):
-        ...     speech, _ = sf.read(batch["file"])
-        ...     batch["speech"] = speech
-        ...     return batch
+        >>> def map_to_array(example):
+        ...     example["speech"] = example["audio"]["array"]
+        ...     return example
 
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")

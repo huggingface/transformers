@@ -19,7 +19,7 @@ RUN python3 -m pip uninstall -y torch torchvision torchaudio
 # Install **nightly** release PyTorch (flag `--pre`)
 # (PyTorch must be installed before pre-compiling any DeepSpeed c++/cuda ops.)
 # (https://www.deepspeed.ai/tutorials/advanced-install/#pre-install-deepspeed-ops)
-RUN python3 -m pip install --no-cache-dir -U --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/$CUDA
+RUN python3 -m pip install --no-cache-dir -U --pre torch torchvision torchaudio torchcodec --extra-index-url https://download.pytorch.org/whl/nightly/$CUDA
 
 # `datasets` requires pandas, pandas has some modules compiled with numpy=1.x causing errors
 RUN python3 -m pip install --no-cache-dir './transformers[deepspeed-testing]' 'pandas<2' 'numpy<2'

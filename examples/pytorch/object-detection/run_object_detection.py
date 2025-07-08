@@ -399,7 +399,10 @@ def main():
         dataset["validation"] = split["test"]
 
     # Get dataset categories and prepare mappings for label_name <-> label_id
-    categories = dataset["train"].features["objects"].feature["category"].names
+    if isinstance(dataset["train"].features["objects"], dict):
+        categories = dataset["train"].features["objects"]["category"].feature.names
+    else:  # (for old versions of `datasets` that used Sequence({...}) of the objects)
+        categories = dataset["train"].features["objects"].feature["category"].names
     id2label = dict(enumerate(categories))
     label2id = {v: k for k, v in id2label.items()}
 
