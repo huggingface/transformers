@@ -176,10 +176,12 @@ class VideoProcessingTestMixin:
         torch.compiler.reset()
         video_inputs = self.video_processor_tester.prepare_video_inputs(equal_resolution=False, return_tensors="torch")
         video_processor = self.fast_video_processing_class(**self.video_processor_dict)
-        output_eager = video_processor(video_inputs, device=torch_device, return_tensors="pt")
+        output_eager = video_processor(video_inputs, device=torch_device, do_sample_frames=False, return_tensors="pt")
 
         video_processor = torch.compile(video_processor, mode="reduce-overhead")
-        output_compiled = video_processor(video_inputs, device=torch_device, return_tensors="pt")
+        output_compiled = video_processor(
+            video_inputs, device=torch_device, do_sample_frames=False, return_tensors="pt"
+        )
 
         torch.testing.assert_close(
             output_eager[self.input_name], output_compiled[self.input_name], rtol=1e-4, atol=1e-4

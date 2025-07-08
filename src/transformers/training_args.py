@@ -246,7 +246,8 @@ class TrainingArguments:
         prediction_loss_only (`bool`, *optional*, defaults to `False`):
             When performing evaluation and generating predictions, only returns the loss.
         per_device_train_batch_size (`int`, *optional*, defaults to 8):
-            The batch size per device accelerator core/CPU for training.
+            The batch size *per device*. The **global batch size** is computed as:
+            `per_device_train_batch_size * number_of_devices` in multi-GPU or distributed setups.
         per_device_eval_batch_size (`int`, *optional*, defaults to 8):
             The batch size per device accelerator core/CPU for evaluation.
         gradient_accumulation_steps (`int`, *optional*, defaults to 1):

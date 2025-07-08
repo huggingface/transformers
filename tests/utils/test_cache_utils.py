@@ -840,7 +840,7 @@ class CacheExportIntegrationTest(unittest.TestCase):
         input_ids = torch.zeros((1, 3), dtype=torch.long)
         cache_position = torch.tensor([0, 1, 2], dtype=torch.long)
         dynamic_shapes = {"input_ids": {1: torch.export.Dim.DYNAMIC}, "cache_position": {0: torch.export.Dim.DYNAMIC}}
-        strict = version.parse(torch.__version__) != version.parse("2.7.0")
+        strict = version.parse(torch.__version__) < version.parse("2.7.0")
         exported_program = exportable_module.export(
             input_ids=input_ids,
             cache_position=cache_position,

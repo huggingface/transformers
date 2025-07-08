@@ -298,6 +298,7 @@ class JukeboxPriorConfig(PretrainedConfig):
         zero_out=False,
         **kwargs,
     ):
+        super().__init__(**kwargs)
         self.act_fn = act_fn
         self.alignment_head = alignment_head
         self.alignment_layer = alignment_layer
@@ -444,6 +445,7 @@ class JukeboxVQVAEConfig(PretrainedConfig):
         zero_out=False,
         **kwargs,
     ):
+        super().__init__(**kwargs)
         self.hop_fraction = hop_fraction
         self.conv_input_shape = conv_input_shape
         self.sample_length = sample_length

@@ -21,9 +21,10 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, HqqConfig
 from transformers.testing_utils import (
     backend_empty_cache,
     require_accelerate,
+    require_deterministic_for_xpu,
     require_hqq,
-    require_torch_gpu,
-    require_torch_multi_gpu,
+    require_torch_accelerator,
+    require_torch_multi_accelerator,
     slow,
     torch_device,
 )
@@ -87,7 +88,7 @@ def check_forward(test_module, model, batch_size=1, context_size=1024):
 MODEL_ID = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 
 
-@require_torch_gpu
+@require_torch_accelerator
 @require_hqq
 class HqqConfigTest(unittest.TestCase):
     def test_to_dict(self):
@@ -101,7 +102,7 @@ class HqqConfigTest(unittest.TestCase):
 
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 @require_accelerate
 @require_hqq
 class HQQTest(unittest.TestCase):
@@ -131,7 +132,6 @@ class HQQTest(unittest.TestCase):
             model_id=MODEL_ID, quant_config=quant_config, compute_dtype=torch.float16, device=torch_device
         )
 
-        original_device = hqq_runner.model.model.layers[0].self_attn.v_proj.device
         check_hqqlayer(self, hqq_runner.model.model.layers[0].self_attn.v_proj)
         check_forward(self, hqq_runner.model)
 
@@ -142,7 +142,7 @@ class HQQTest(unittest.TestCase):
         check_hqqlayer(self, hqq_runner.model.model.layers[0].self_attn.v_proj)
         check_forward(self, hqq_runner.model)
 
-        hqq_runner.model.cuda(original_device)
+        hqq_runner.model.to(torch_device)
         check_hqqlayer(self, hqq_runner.model.model.layers[0].self_attn.v_proj)
         check_forward(self, hqq_runner.model)
 
@@ -158,8 +158,8 @@ class HQQTest(unittest.TestCase):
 
 
 @slow
-@require_torch_gpu
-@require_torch_multi_gpu
+@require_torch_accelerator
+@require_torch_multi_accelerator
 @require_accelerate
 @require_hqq
 class HQQTestMultiGPU(unittest.TestCase):
@@ -182,7 +182,7 @@ class HQQTestMultiGPU(unittest.TestCase):
 
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 @require_accelerate
 @require_hqq
 class HQQTestBias(unittest.TestCase):
@@ -202,6 +202,7 @@ class HQQTestBias(unittest.TestCase):
         check_hqqlayer(self, hqq_runner.model.model.decoder.layers[0].self_attn.v_proj)
         check_forward(self, hqq_runner.model)
 
+    @require_deterministic_for_xpu
     def test_save_and_load_quantized_model(self):
         """
         Test saving and loading a quantized model with bias
@@ -237,7 +238,7 @@ class HQQTestBias(unittest.TestCase):
 
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 @require_accelerate
 @require_hqq
 class HQQSerializationTest(unittest.TestCase):

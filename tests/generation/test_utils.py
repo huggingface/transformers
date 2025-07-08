@@ -1694,6 +1694,7 @@ class GenerationTesterMixin:
         """Tests that we can generate from `inputs_embeds` instead of `input_ids` in LLMs, VLMs, etc"""
         # When supported, tests that the decoder model can generate from `inputs_embeds` instead of `input_ids`
         # if fails, you should probably update the `prepare_inputs_for_generation` function
+        set_model_tester_for_less_flaky_test(self)
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
 
@@ -1703,8 +1704,10 @@ class GenerationTesterMixin:
                 continue
             config.is_decoder = True
 
+            set_config_for_less_flaky_test(config)
             # Skip models without explicit support
             model = model_class(config).to(torch_device).eval()
+            set_model_for_less_flaky_test(model)
             if "inputs_embeds" not in inspect.signature(model.prepare_inputs_for_generation).parameters.keys():
                 continue
 
@@ -2085,6 +2088,7 @@ class GenerationTesterMixin:
 
         ⚠️ Runs two sequential generations to ensure the cache doesn't get stuck after the first compiled run! ⚠️
         """
+        set_model_tester_for_less_flaky_test(self)
         for model_class in self.all_generative_model_classes:
             # 1. Test exclusion criteria
             if not model_class._supports_static_cache:
@@ -2092,7 +2096,9 @@ class GenerationTesterMixin:
 
             # 2. Prepares two sets of inputs
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=4)
+            set_config_for_less_flaky_test(config)
             model = model_class(config).to(torch_device)
+            set_model_for_less_flaky_test(model)
             model.eval()  # otherwise `self.training` is `True` -- this flag is used at attn mask creation time
 
             # Some composite models have a custom generate and will call an inner model's generate -> that inner model
@@ -2298,13 +2304,14 @@ class GenerationTesterMixin:
         NOTE: despite the test logic being the same, different implementations actually need different decorators, hence
         this separate function.
         """
-        max_new_tokens = 30
+        max_new_tokens = 3
         support_flag = {
             "sdpa": "_supports_sdpa",
             "flash_attention_2": "_supports_flash_attn_2",
             "flash_attention_3": "_supports_flash_attn_3",
         }
 
+        set_model_tester_for_less_flaky_test(self)
         for model_class in self.all_generative_model_classes:
             if not getattr(model_class, support_flag[attn_implementation]):
                 self.skipTest(f"{model_class.__name__} does not support `attn_implementation={attn_implementation}`")
@@ -2330,6 +2337,7 @@ class GenerationTesterMixin:
             if hasattr(config, "max_position_embeddings"):
                 config.max_position_embeddings = max_new_tokens + main_input.shape[1] + 1
 
+            set_config_for_less_flaky_test(config)
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -2350,6 +2358,7 @@ class GenerationTesterMixin:
                     torch_dtype=torch.float16,
                     attn_implementation="eager",
                 ).to(torch_device)
+                set_model_for_less_flaky_test(model_eager)
                 res_eager = model_eager.generate(**inputs_dict, **generate_kwargs)
                 del model_eager
                 gc.collect()
@@ -2359,6 +2368,7 @@ class GenerationTesterMixin:
                     torch_dtype=torch.float16,
                     attn_implementation=attn_implementation,
                 ).to(torch_device)
+                set_model_for_less_flaky_test(model_attn)
                 res_attn = model_attn.generate(**inputs_dict, **generate_kwargs)
                 del model_attn
                 gc.collect()
@@ -2879,6 +2889,53 @@ class GenerationIntegrationTests(unittest.TestCase):
                 " name of Timberlake's maternal grandfather. It's also his own middle name.",
             ],
         )
+
+    @slow
+    def test_beam_search_early_stop_heuristic(self):
+        """Regression test for #38778 (early stopping needs to be tracked at a batch level)"""
+        EXPECTED_OUTPUT = (
+            "<|user|>\nWhat is 3+5?\n<|assistant|>\nThe sum of 3 and 5 is 8. \n\nSo, 3 + 5 = 8. \n\n"
+            "Let's confirm this using Python code:\n\n```python\n# Define the numbers\nnum1 = 3\nnum2 = 5\n\n"
+            "# Calculate the sum\nresult = num1 + num2\n\n# Print the result\nprint(result)\n```\n"
+            "```output\n8\n```\nThe sum of 3 and 5 is \\(\\boxed{8}\\)."
+        )
+
+        model = AutoModelForCausalLM.from_pretrained("allenai/OLMo-2-0425-1B-Instruct").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("allenai/OLMo-2-0425-1B-Instruct", padding_side="left")
+        generation_config = GenerationConfig(
+            num_beams=10,
+            max_new_tokens=256,
+            length_penalty=2,
+        )
+        # batch of 1
+        question = [{"role": "user", "content": "What is 3+5?"}]
+        question = tokenizer.apply_chat_template(
+            question, tokenize=False, add_generation_prompt=True, return_tensors="pt"
+        )
+        inputs = tokenizer(question, return_tensors="pt", padding=True).to("cuda")
+        outputs = model.generate(**inputs, generation_config=generation_config)
+        responses = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        self.assertEqual(responses[0], EXPECTED_OUTPUT)
+
+        # batch of 2
+        question = [{"role": "user", "content": "What is 3+5?"}]
+        cot_question = [
+            {
+                "role": "user",
+                "content": "What is 3+5? Explain your reasoning step by step, and provide the final answer at the end.",
+            }
+        ]
+        question = tokenizer.apply_chat_template(
+            question, tokenize=False, add_generation_prompt=True, return_tensors="pt"
+        )
+        cot_question = tokenizer.apply_chat_template(
+            cot_question, tokenize=False, add_generation_prompt=True, return_tensors="pt"
+        )
+        inputs = tokenizer([question, cot_question], return_tensors="pt", padding=True).to("cuda")
+
+        outputs = model.generate(**inputs, generation_config=generation_config)
+        responses = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        self.assertEqual(responses[0], EXPECTED_OUTPUT)
 
     def test_max_length_if_input_embeds(self):
         article = "Today a dragon flew over Paris."

@@ -148,7 +148,7 @@ def rename_keys(state_dict, architecture):
         )
         name = name.replace("classification_decoder/~/basic_decoder/output/b", "decoder.decoder.final_layer.bias")
         name = name.replace("classification_decoder/~/basic_decoder/output/w", "decoder.decoder.final_layer.weight")
-        name = name = name.replace("classification_decoder/~/basic_decoder/~/", "decoder.decoder.")
+        name = name.replace("classification_decoder/~/basic_decoder/~/", "decoder.decoder.")
         name = name.replace("basic_decoder/cross_attention/", "decoder.decoding_cross_attention.")
         name = name.replace("basic_decoder/~/", "decoder.")
 

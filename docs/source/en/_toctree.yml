@@ -429,6 +429,8 @@
         title: DiffLlama
       - local: model_doc/distilbert
         title: DistilBERT
+      - local: model_doc/doge
+        title: Doge
       - local: model_doc/dots1
         title: dots1
       - local: model_doc/dpr
@@ -689,6 +691,8 @@
         title: Zamba2
       title: Text models
     - sections:
+      - local: model_doc/aimv2
+        title: Aimv2
       - local: model_doc/beit
         title: BEiT
       - local: model_doc/bit
