@@ -26,20 +26,14 @@ import torch.nn as nn
 
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import Unpack
 from ...utils import (
     auto_docstring,
     can_return_tuple,
-    logging,
 )
 from ..auto import AutoModel
 from .configuration_deepseek_vl_hybrid import DeepseekVLHybridConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 @dataclass
@@ -294,38 +288,20 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        high_res_pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor = None,
+        high_res_pixel_values: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        logits_to_keep: Union[int, torch.Tensor] = 0,
+        **kwargs,
     ):
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError(
                 "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
-            )
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
-
-        if pixel_values is not None and inputs_embeds is not None:
-            raise ValueError(
-                "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
             )
 
         if pixel_values is not None and high_res_pixel_values is None:
@@ -335,37 +311,38 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values, high_res_pixel_values)
-            image_attention_mask = input_ids == self.config.image_token_id
+            if input_ids is None:
+                image_attention_mask = inputs_embeds == self.get_input_embeddings()(
+                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+                image_attention_mask = image_attention_mask.all(-1)
+            else:
+                image_attention_mask = input_ids == self.config.image_token_id
 
-            embed_dim = inputs_embeds.shape[-1]
-            image_features = image_features.reshape(-1, embed_dim)
-            image_attention_mask = image_attention_mask.unsqueeze(-1).expand(-1, -1, embed_dim)
-
+            image_attention_mask = image_attention_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+            image_embeds = self.get_image_features(pixel_values, high_res_pixel_values)
+            image_features = image_embeds.reshape(-1, inputs_embeds.shape[-1])
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(image_attention_mask, image_features)
 
         lm_output = self.language_model(
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             cache_position=cache_position,
-            flash_attn_kwargs=flash_attn_kwargs,
+            logits_to_keep=logits_to_keep,
+            **kwargs,
         )
 
-        output = DeepseekVLHybridBaseModelOutputWithPast(
+        return DeepseekVLHybridBaseModelOutputWithPast(
             last_hidden_state=lm_output.last_hidden_state,
             past_key_values=lm_output.past_key_values,
             hidden_states=lm_output.hidden_states,
             attentions=lm_output.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
+            image_hidden_states=image_embeds if pixel_values is not None else None,
         )
-
-        return output
 
     def get_low_res_image_features(self, pixel_values):
         output = self.vision_model(pixel_values)
