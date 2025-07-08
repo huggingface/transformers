@@ -2,14 +2,12 @@ import argparse
 import json
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 import torch
 from huggingface_hub import hf_hub_download, upload_folder
 from safetensors.torch import load_file, save_file
 
-from transformers.models.blt.configuration_blt import BLTConfig
-from transformers.models.blt.modeling_blt import BLTModel, BLTForCausalLM
 from transformers.utils import logging as transformers_logging
 
 
@@ -17,7 +15,7 @@ logger = transformers_logging.get_logger(__name__)
 transformers_logging.set_verbosity_info()
 
 
-def merge_configurations(config_path: str, entropy_params_path: str) -> Dict[str, Any]:
+def merge_configurations(config_path: str, entropy_params_path: str) -> dict[str, Any]:
     logger.info("Merging configurations")
 
     with open(config_path, "r") as f:
@@ -172,7 +170,7 @@ def merge_configurations(config_path: str, entropy_params_path: str) -> Dict[str
     return main_config_dict
 
 
-def apply_weight_mapping(state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+def apply_weight_mapping(state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
     component_mappings = {
         ".attention.": ".self_attn.",
         ".feed_forward.": ".mlp.",
@@ -205,7 +203,7 @@ def apply_weight_mapping(state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch
     return new_state_dict
 
 
-def merge_weights(weights_path: str, entropy_weights_path: str) -> Dict[str, torch.Tensor]:
+def merge_weights(weights_path: str, entropy_weights_path: str) -> dict[str, torch.Tensor]:
     main_weights = load_file(weights_path)
 
     entropy_weights = torch.load(entropy_weights_path, map_location="cpu", weights_only=True)
@@ -242,7 +240,7 @@ def merge_weights(weights_path: str, entropy_weights_path: str) -> Dict[str, tor
     return unified_weights
 
 
-def create_tokenizer_config(output_dir: str, config: Dict[str, Any]):
+def create_tokenizer_config(output_dir: str, config: dict[str, Any]):
     tokenizer_config = {
         "tokenizer_class": "BltTokenizer",
         "vocab_size": config.get("vocab_size", 256),
@@ -393,7 +391,7 @@ def main():
             config_name=args.config_name,
             weights_name=args.weights_name,
             cache_dir=args.cache_dir,
-            push_to_hub_repo=False, #args.push_to_hub,
+            push_to_hub_repo=False,  # args.push_to_hub,
             hub_private=args.hub_private,
             hub_token=args.hub_token,
         )

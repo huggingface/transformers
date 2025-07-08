@@ -14,14 +14,14 @@
 # limitations under the License.
 """Tokenization classes for BLT."""
 
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import TYPE_CHECKING, Optional
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
 
 
 if TYPE_CHECKING:
-    from ...tokenization_utils_base import TextInput
+    pass
 
 logger = logging.get_logger(__name__)
 
@@ -150,7 +150,7 @@ class BLTTokenizer(PreTrainedTokenizer):
 
         return self.decoder.get(index, str(self.unk_token))
 
-    def convert_tokens_to_string(self, tokens: List[str]) -> str:
+    def convert_tokens_to_string(self, tokens: list[str]) -> str:
         """Converts a sequence of tokens to a single string."""
         byte_values = []
 
@@ -173,13 +173,13 @@ class BLTTokenizer(PreTrainedTokenizer):
 
         return bytes(byte_values).decode("utf-8", errors="ignore")
 
-    def _tokenize(self, text: str, **kwargs) -> List[str]:
+    def _tokenize(self, text: str, **kwargs) -> list[str]:
         """Converts a string to a list of tokens. For BLT, we work directly with byte values."""
         return [str(byte_val) for byte_val in text.encode("utf-8", errors="ignore")]
 
     def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequences for sequence classification tasks by concatenating and
         adding special tokens. A BLT sequence has the following format:
@@ -204,8 +204,8 @@ class BLTTokenizer(PreTrainedTokenizer):
         return bos + token_ids_0 + eos + token_ids_1 + eos
 
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` method.
@@ -237,7 +237,7 @@ class BLTTokenizer(PreTrainedTokenizer):
         """Get vocab size like the original tokenizer."""
         return self.vocab_size
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         # BLT doesn't require external vocabulary files since it uses byte-level tokenization
         return ()
 

@@ -14,59 +14,52 @@
 # limitations under the License.
 """BLT modular model, inheriting from Mllama where appropriate."""
 
-from typing import Callable, List, Optional, Tuple, Union
-from enum import Enum
+from typing import Callable, Optional, Union
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn import functional as F
 
 from ...cache_utils import Cache
-from ...activations import ACT2FN
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...modeling_outputs import CausalLMOutputWithPast
 from ...generation.utils import GenerationMixin
-from ...utils import logging, is_torch_flex_attn_available
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_outputs import CausalLMOutputWithPast
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...utils import is_torch_flex_attn_available, logging
 
 # Import configuration classes
 from .configuration_blt import (
     BLTConfig,
-    BLTLocalEncoderConfig,
-    BLTLocalDecoderConfig,
     BLTGlobalTransformerConfig,
+    BLTLocalDecoderConfig,
+    BLTLocalEncoderConfig,
     BLTPatcherConfig,
 )
 
+
 if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import BlockMask
-    from ...integrations.flex_attention import make_flex_block_causal_mask
+
 
 # Import from mllama for inheritance
 from ..mllama.modeling_mllama import (
+    MllamaPreTrainedModel,
+    MllamaRotaryEmbedding,
+    MllamaSelfAttentionDecoderLayer,
     MllamaTextMLP,
     MllamaTextRMSNorm,
-    MllamaRotaryEmbedding,
-    MllamaTextCrossAttention,
-    MllamaSelfAttentionDecoderLayer,
-    MllamaPreTrainedModel,
     eager_attention_forward,
-    repeat_kv,
-    apply_rotary_pos_emb as mllama_apply_rotary_pos_emb,
 )
 
 # Import other utility functions and classes from original BLT
 from .modeling_blt import (
     PatchingModeEnum,
-    byte_group_hash_function,
-    rolling_polynomial_hash,
-    init_hash_embeddings,
-    compute_hash_embeddings,
     _prepare_patch_cross_attention_mask,
-    process_patch_lengths,
     apply_rotary_pos_emb,
+    compute_hash_embeddings,
+    init_hash_embeddings,
+    process_patch_lengths,
 )
+
 
 logger = logging.get_logger(__name__)
 
@@ -74,6 +67,7 @@ logger = logging.get_logger(__name__)
 # ==============================================================================
 # INHERITED COMPONENTS (minimal changes from Mllama)
 # ==============================================================================
+
 
 class BLTMLP(MllamaTextMLP):
     pass
@@ -91,8 +85,10 @@ class BLTRotaryEmbedding(MllamaRotaryEmbedding):
 # INHERITED BUT CUSTOMIZED COMPONENTS
 # ==============================================================================
 
+
 class BLTPreTrainedModel(MllamaPreTrainedModel):
     """BLT PreTrainedModel inheriting from Mllama but with BLT-specific init."""
+
     config_class = BLTConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
@@ -104,7 +100,7 @@ class BLTPreTrainedModel(MllamaPreTrainedModel):
 
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
-            std = getattr(module, '_custom_std', module.in_features ** (-0.5))
+            std = getattr(module, "_custom_std", module.in_features ** (-0.5))
             nn.init.trunc_normal_(
                 module.weight,
                 mean=0.0,
@@ -114,9 +110,9 @@ class BLTPreTrainedModel(MllamaPreTrainedModel):
             )
             if module.bias is not None:
                 nn.init.zeros_(module.bias)
-                
+
         elif isinstance(module, nn.Embedding):
-            std = getattr(module, '_custom_std', module.embedding_dim ** (-0.5))
+            std = getattr(module, "_custom_std", module.embedding_dim ** (-0.5))
             nn.init.trunc_normal_(
                 module.weight,
                 mean=0.0,
@@ -124,26 +120,26 @@ class BLTPreTrainedModel(MllamaPreTrainedModel):
                 a=-3 * std,
                 b=3 * std,
             )
-             
+
         elif isinstance(module, BLTModel):
             if module.encoder_hash_tok_embedding is not None:
                 emb_std = module.config.encoder_config.hidden_size ** (-0.5)
                 for emb in module.encoder_hash_tok_embedding:
                     emb._custom_std = emb_std
-                    
+
         elif isinstance(module, BLTLocalEncoder):
             if module.patch_embedding_projection is not None:
                 module.patch_embedding_projection._custom_std = module.config.hidden_size ** (-0.5)
-                
+
         elif isinstance(module, BLTLocalDecoder):
             if module.patch_embedding_projection is not None:
                 module.patch_embedding_projection._custom_std = module.config.hidden_size ** (-0.5)
-                
+
         elif isinstance(module, BLTPatcher):
             emb_std = module.config.hidden_size ** (-0.5)
             module.embed_tokens._custom_std = emb_std
             module.lm_head._custom_std = emb_std
-            
+
         elif isinstance(module, BLTForCausalLM):
             if module.lm_head is not None:
                 module.lm_head._custom_std = module.config.decoder_config.hidden_size ** (-0.5)
@@ -151,7 +147,7 @@ class BLTPreTrainedModel(MllamaPreTrainedModel):
 
 class BLTSelfAttention(nn.Module):
     """BLT Self Attention that could inherit from Mllama but has some BLT-specific patterns."""
-    
+
     def __init__(self, config, layer_idx: int):
         super().__init__()
         self.config = config
@@ -161,7 +157,7 @@ class BLTSelfAttention(nn.Module):
         self.num_key_value_heads = config.num_key_value_heads
         self.head_dim = config.hidden_size // self.num_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
         self.rope_theta = config.rope_theta
         self.layer_idx = layer_idx
 
@@ -171,30 +167,30 @@ class BLTSelfAttention(nn.Module):
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
     def forward(
-            self,
-            hidden_states: torch.Tensor,
-            attention_mask: torch.Tensor,
-            position_embeddings: torch.Tensor,
-            output_attentions: bool = False,
-            use_cache: bool = False,
-            past_key_value=None,
-            cache_position=None,
-            **kwargs,
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        position_embeddings: torch.Tensor,
+        output_attentions: bool = False,
+        use_cache: bool = False,
+        past_key_value=None,
+        cache_position=None,
+        **kwargs,
     ):
         bsz, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
-        
+
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         cos, sin = position_embeddings
-        
+
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-        
+
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
@@ -236,16 +232,19 @@ class BLTTransformerLayer(MllamaSelfAttentionDecoderLayer):
 
 
 # ==============================================================================
-# BLT-SPECIFIC COMPONENTS (no Mllama equivalent)  
+# BLT-SPECIFIC COMPONENTS (no Mllama equivalent)
 # ==============================================================================
+
 
 class BLTLocalEncoder(nn.Module):
     def __init__(self, config: BLTLocalEncoderConfig):
         super().__init__()
-    
+
         self.config = config
-        
-        self.layers = nn.ModuleList([BLTTransformerLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)])
+
+        self.layers = nn.ModuleList(
+            [BLTTransformerLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
 
         self.rotary_emb = BLTRotaryEmbedding(config=config)
 
@@ -271,10 +270,10 @@ class BLTLocalEncoder(nn.Module):
         patch_embeds: Optional[torch.Tensor] = None,
         mask: Optional[Union["BlockMask", torch.Tensor, str]] = None,
         cross_mask: Optional[torch.Tensor] = None,
-        full_text_row_masked_out_mask: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        full_text_row_masked_out_mask: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         num_patches: Optional[int] = None,
         patch_ids: Optional[torch.Tensor] = None,
-        cache: Optional[List[Tuple[torch.Tensor, torch.Tensor, int]]] = None,
+        cache: Optional[list[tuple[torch.Tensor, torch.Tensor, int]]] = None,
     ):
         """ """
         if input_embeds is None:
@@ -282,10 +281,10 @@ class BLTLocalEncoder(nn.Module):
 
         batch_size, _, _ = input_embeds.shape
 
-        hidden_states = F.dropout(input_embeds, p=self.config.dropout, training=self.training) 
+        hidden_states = F.dropout(input_embeds, p=self.config.dropout, training=self.training)
 
         position_ids = torch.arange(input_ids.shape[1], device=input_embeds.device).unsqueeze(0).expand(batch_size, -1)
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)  
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         hidden_states = F.dropout(hidden_states, p=self.config.dropout, training=self.training)
 
@@ -296,7 +295,9 @@ class BLTLocalEncoder(nn.Module):
             if idx == len(self.layers) - 1 or self.config.cross_attn_all_layers:
                 patch_embeds = self.patch_reduce(hidden_states, num_patches, "amax", patch_ids)
                 patch_embeds = self.patch_embedding_projection(patch_embeds)
-                patch_embeds = patch_embeds.reshape(batch_size, patch_embeds.shape[1] * self.config.cross_attn_k, self.config.hidden_size)
+                patch_embeds = patch_embeds.reshape(
+                    batch_size, patch_embeds.shape[1] * self.config.cross_attn_k, self.config.hidden_size
+                )
 
                 layer_idx = idx if self.config.cross_attn_all_layers else 0
                 cross_attention_output, _, _ = self.cross_attn_layers[layer_idx](
@@ -312,7 +313,7 @@ class BLTLocalEncoder(nn.Module):
 
         encoder_cross_states = patch_embeds
         return hidden_states, encoder_cross_states
-    
+
     def patch_reduce(self, hidden_states, max_num_patches, reduction, patch_ids):
         """
         Reduce variable length patches to single embedding per patch
@@ -328,7 +329,9 @@ class BLTLocalEncoder(nn.Module):
 
         patch_ids = patch_ids.unsqueeze(-1).expand(-1, -1, hidden_states.shape[-1])
 
-        reduced_embeddings = torch.zeros((batch_size, max_num_patches, embedding_dim), dtype=hidden_states.dtype, device=hidden_states.device)
+        reduced_embeddings = torch.zeros(
+            (batch_size, max_num_patches, embedding_dim), dtype=hidden_states.dtype, device=hidden_states.device
+        )
         reduced_embeddings = reduced_embeddings.scatter_reduce(
             src=hidden_states,
             dim=1,
@@ -347,9 +350,11 @@ class BLTLocalDecoder(nn.Module):
 
         # Extract config values to instance attributes
         self.config = config
-        self.cross_attn_decoder = True #config.cross_attn_decoder #TODO: maybe remove
+        self.cross_attn_decoder = True  # config.cross_attn_decoder #TODO: maybe remove
 
-        self.layers = nn.ModuleList([BLTTransformerLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [BLTTransformerLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
 
         self.rotary_emb = BLTRotaryEmbedding(config=config)
 
@@ -374,7 +379,6 @@ class BLTLocalDecoder(nn.Module):
         #     bias=False,
         # )
 
-
     def forward(
         self,
         tokens: torch.Tensor,
@@ -382,21 +386,23 @@ class BLTLocalDecoder(nn.Module):
         patch_embeds: Optional[torch.Tensor] = None,
         mask: Optional[Union["BlockMask", torch.Tensor, str]] = None,
         cross_mask: Optional[torch.Tensor] = None,
-        full_text_row_masked_out_mask: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        cache: Optional[List[Tuple[torch.Tensor, torch.Tensor, int]]] = None,
+        full_text_row_masked_out_mask: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        cache: Optional[list[tuple[torch.Tensor, torch.Tensor, int]]] = None,
     ):
         batch_size, _, _ = embeds.shape
 
         hidden_states = embeds
 
         patch_embeds = self.patch_embedding_projection(patch_embeds)
-        patch_embeds = patch_embeds.reshape(batch_size, patch_embeds.shape[1] * self.config.cross_attn_k, self.config.hidden_size)
+        patch_embeds = patch_embeds.reshape(
+            batch_size, patch_embeds.shape[1] * self.config.cross_attn_k, self.config.hidden_size
+        )
 
         if patch_embeds is not None and not self.cross_attn_decoder:
             hidden_states = hidden_states + patch_embeds
 
         position_ids = torch.arange(tokens.shape[1], device=embeds.device).unsqueeze(0).expand(batch_size, -1)
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)  
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         hidden_states = F.dropout(hidden_states, p=self.config.dropout, training=self.training)
         for i, layer in enumerate(self.layers):
@@ -417,7 +423,7 @@ class BLTLocalDecoder(nn.Module):
             hidden_states = layer_outputs[0]
 
         logits = self.norm(hidden_states)
-      #  logits = self.lm_head(logits)
+        #  logits = self.lm_head(logits)
         return logits, cache
 
 
@@ -434,7 +440,7 @@ class BLTCrossAttention(nn.Module):
         self.num_key_value_heads = config.num_attention_heads  # Assuming same for cross attention
         self.head_dim = self.hidden_size // self.num_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
         self.dropout = config.dropout
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
@@ -451,16 +457,16 @@ class BLTCrossAttention(nn.Module):
         cross_attention_states: Optional[torch.Tensor] = None,
         past_key_value: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        full_text_row_masked_out_mask: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        full_text_row_masked_out_mask: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         output_attentions: bool = False,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
         bsz, q_len, _ = hidden_states.size()
-        
-        query_states = self.q_norm(hidden_states) # BLT normalizes first
+
+        query_states = self.q_norm(hidden_states)  # BLT normalizes first
         query_states = self.q_proj(query_states)
 
         if cross_attention_states is not None:
@@ -536,12 +542,11 @@ class BLTGlobalTransformer(nn.Module):
 
         self.rotary_emb = BLTRotaryEmbedding(config=config)
 
-
     def forward(
         self,
         input_embeds: torch.Tensor,
         mask: Optional[Union[BlockMask, torch.Tensor, str]] = None,
-        cache: Optional[List[Tuple[torch.Tensor, torch.Tensor, int]]] = None,
+        cache: Optional[list[tuple[torch.Tensor, torch.Tensor, int]]] = None,
     ):
         batch_size, seq_len, _ = input_embeds.shape
 
@@ -550,7 +555,7 @@ class BLTGlobalTransformer(nn.Module):
         hidden_states = F.dropout(hidden_states, p=self.config.dropout, training=self.training)
 
         position_ids = torch.arange(seq_len, device=input_embeds.device).unsqueeze(0).expand(batch_size, -1)
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)  
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for i, layer in enumerate(self.layers):
             layer_outputs = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None)
@@ -617,11 +622,13 @@ class BLTModel(BLTPreTrainedModel):
             else:
                 patch_lengths = process_patch_lengths(
                     torch.ones((batch_size, sequence_length + 1), dtype=tokens.dtype, device=tokens.device),
-                    self.config.max_patch_length
+                    self.config.max_patch_length,
                 )
         patch_ids = self._patch_ids_from_lengths(patch_lengths, sequence_length)
         encoder_embeds = compute_hash_embeddings(
-            tokens, self.local_encoder, self.encoder_hash_tok_embedding,
+            tokens,
+            self.local_encoder,
+            self.encoder_hash_tok_embedding,
             self.config.encoder_hash_byte_group_nb_functions,
             self.config.encoder_hash_byte_group_size,
             self.config.encoder_hash_byte_group_vocab,
@@ -644,7 +651,12 @@ class BLTModel(BLTPreTrainedModel):
         )
         decoder_patch_ids = self._patch_ids_from_lengths(patch_lengths[:, 1:], sequence_length)
         cross_attn_mask_dec, full_text_row_masked_out_mask_dec = _prepare_patch_cross_attention_mask(
-            decoder_patch_ids, patch_lengths.shape[1], sequence_length, False, self.config.cross_attn_k, encoder_embeds.dtype
+            decoder_patch_ids,
+            patch_lengths.shape[1],
+            sequence_length,
+            False,
+            self.config.cross_attn_k,
+            encoder_embeds.dtype,
         )
         output, _ = self.local_decoder(
             tokens=tokens,
@@ -660,18 +672,21 @@ class BLTModel(BLTPreTrainedModel):
             else:
                 return (output, None, None)
         return output
-    
+
     def _patch_ids_from_lengths(self, patch_lengths: torch.Tensor, seq_len: int) -> torch.Tensor:
         """Convert patch lengths to patch IDs for each token position."""
         batch_size = patch_lengths.shape[0]
-        patch_starts = torch.cat([
-            torch.zeros(batch_size, 1, dtype=patch_lengths.dtype, device=patch_lengths.device),
-            patch_lengths.cumsum(dim=-1)[:, :-1]
-        ], dim=-1)
-        
+        patch_starts = torch.cat(
+            [
+                torch.zeros(batch_size, 1, dtype=patch_lengths.dtype, device=patch_lengths.device),
+                patch_lengths.cumsum(dim=-1)[:, :-1],
+            ],
+            dim=-1,
+        )
+
         token_positions = torch.arange(seq_len, device=patch_lengths.device)
         return (patch_starts.unsqueeze(1) <= token_positions.unsqueeze(0).unsqueeze(-1)).sum(dim=-1) - 1
-    
+
 
 class BLTPatcher(BLTPreTrainedModel):
     def __init__(self, config: BLTPatcherConfig):
@@ -680,10 +695,9 @@ class BLTPatcher(BLTPreTrainedModel):
         self.rotary_emb = BLTRotaryEmbedding(config=self.config)
 
         self.layers = nn.ModuleList()
-        
+
         for layer_idx in range(self.config.num_hidden_layers):
             self.layers.append(BLTTransformerLayer(self.config, layer_idx))
-
 
         self.embed_tokens = nn.Embedding(self.config.vocab_size, self.config.hidden_size)
 
@@ -704,7 +718,6 @@ class BLTPatcher(BLTPreTrainedModel):
         patching_batch_size: int = 1,
         device: Optional[str] = None,
     ):
-
         # Handle chunked processing for entropy calculation
         entropies = []
         predictions = []
@@ -729,15 +742,15 @@ class BLTPatcher(BLTPreTrainedModel):
             batch_size, _, _ = input_embeds.shape
 
             position_ids = torch.arange(split.shape[1], device=input_embeds.device).unsqueeze(0).expand(batch_size, -1)
-            
-            position_embeddings = self.rotary_emb(hidden_states, position_ids) 
-            
+
+            position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
             for i, layer in enumerate(self.layers):
                 layer_outputs = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None)
                 hidden_states = layer_outputs[0]
 
             logits = self.lm_head(self.norm(hidden_states))
-            logits = logits.reshape(-1, logits.shape[-1])[: split.numel() - pad_size, :] 
+            logits = logits.reshape(-1, logits.shape[-1])[: split.numel() - pad_size, :]
             predictions.append(logits)
             prediction_entropies = torch.distributions.Categorical(logits=logits).entropy()
             entropies.append(prediction_entropies)
@@ -758,7 +771,9 @@ class BLTPatcher(BLTPreTrainedModel):
             )
         else:
             # Default to byte-level patching
-            patch_lengths = torch.ones((batch_size, sequence_length), dtype=token_values.dtype, device=token_values.device)
+            patch_lengths = torch.ones(
+                (batch_size, sequence_length), dtype=token_values.dtype, device=token_values.device
+            )
         patch_lengths = process_patch_lengths(patch_lengths, max_patch_length)
         return concat_entropies, patch_lengths, concat_predictions
 
@@ -780,7 +795,9 @@ class BLTPatcher(BLTPreTrainedModel):
         batch_size = entropies.shape[0]
 
         # Always include token 0 and 1 as starting tokens
-        init_tokens = torch.tensor([0, 1], dtype=torch.long, device=entropies.device).unsqueeze(0).repeat(batch_size, 1)
+        init_tokens = (
+            torch.tensor([0, 1], dtype=torch.long, device=entropies.device).unsqueeze(0).repeat(batch_size, 1)
+        )
         offset = init_tokens.shape[1]
 
         # Ignore first token entropy (BOS)
@@ -923,7 +940,7 @@ __all__ = [
     "BLTModel",
     "BLTPatcher",
     "BLTLocalEncoder",
-    "BLTLocalDecoder", 
+    "BLTLocalDecoder",
     "BLTGlobalTransformer",
     "BLTTransformerLayer",
     "BLTForCausalLM",
@@ -932,4 +949,4 @@ __all__ = [
     "BLTRotaryEmbedding",
     "BLTSelfAttention",
     "BLTCrossAttention",
-] 
+]

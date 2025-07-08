@@ -14,13 +14,8 @@
 # limitations under the License.
 """BLT model."""
 
-from ...utils import is_torch_flex_attn_available, logging
-from typing import Callable, List, Optional, Tuple, Union
-
 from enum import Enum
-
-from ...cache_utils import Cache
-from ...activations import ACT2FN
+from typing import Callable, Optional, Union
 
 import torch
 import torch.distributions
@@ -28,23 +23,25 @@ import torch.nn
 import torch.nn as nn
 from torch.nn import functional as F
 
+from ...activations import ACT2FN
+from ...cache_utils import Cache
+from ...generation.utils import GenerationMixin
+from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...utils import is_torch_flex_attn_available, logging
 from .configuration_blt import (
     BLTConfig,
-    BLTLocalEncoderConfig,
-    BLTLocalDecoderConfig,
     BLTGlobalTransformerConfig,
+    BLTLocalDecoderConfig,
+    BLTLocalEncoderConfig,
     BLTPatcherConfig,
 )
 
-from ...generation.utils import GenerationMixin
-from ...modeling_outputs import CausalLMOutputWithPast
 
 if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import BlockMask
-    from ...integrations.flex_attention import make_flex_block_causal_mask
+
 
 
 logger = logging.get_logger(__name__)
@@ -182,9 +179,9 @@ class BLTTransformerLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -396,7 +393,7 @@ def _prepare_patch_cross_attention_mask(
     patches_as_queries: bool = False,
     cross_attn_k: int = 1,
     dtype: torch.dtype = torch.float32,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Prepare cross-attention mask for patch-based attention, following mllama's robust approach.
 
@@ -584,10 +581,10 @@ class BLTLocalEncoder(nn.Module):
         patch_embeds: Optional[torch.Tensor] = None,
         mask: Optional[Union["BlockMask", torch.Tensor, str]] = None,
         cross_mask: Optional[torch.Tensor] = None,
-        full_text_row_masked_out_mask: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        full_text_row_masked_out_mask: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         num_patches: Optional[int] = None,
         patch_ids: Optional[torch.Tensor] = None,
-        cache: Optional[List[Tuple[torch.Tensor, torch.Tensor, int]]] = None,
+        cache: Optional[list[tuple[torch.Tensor, torch.Tensor, int]]] = None,
     ):
         """ """
         if input_embeds is None:
@@ -700,8 +697,8 @@ class BLTLocalDecoder(nn.Module):
         patch_embeds: Optional[torch.Tensor] = None,
         mask: Optional[Union["BlockMask", torch.Tensor, str]] = None,
         cross_mask: Optional[torch.Tensor] = None,
-        full_text_row_masked_out_mask: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        cache: Optional[List[Tuple[torch.Tensor, torch.Tensor, int]]] = None,
+        full_text_row_masked_out_mask: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        cache: Optional[list[tuple[torch.Tensor, torch.Tensor, int]]] = None,
     ):
         batch_size, _, _ = embeds.shape
 
@@ -771,12 +768,12 @@ class BLTCrossAttention(nn.Module):
         cross_attention_states: Optional[torch.Tensor] = None,
         past_key_value: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        full_text_row_masked_out_mask: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        full_text_row_masked_out_mask: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         output_attentions: bool = False,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
         bsz, q_len, _ = hidden_states.size()
 
@@ -860,7 +857,7 @@ class BLTGlobalTransformer(nn.Module):
         self,
         input_embeds: torch.Tensor,
         mask: Optional[Union[BlockMask, torch.Tensor, str]] = None,
-        cache: Optional[List[Tuple[torch.Tensor, torch.Tensor, int]]] = None,
+        cache: Optional[list[tuple[torch.Tensor, torch.Tensor, int]]] = None,
     ):
         batch_size, seq_len, _ = input_embeds.shape
 

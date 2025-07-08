@@ -14,8 +14,6 @@
 # limitations under the License.
 """BLT model configuration"""
 
-from enum import Enum
-from typing import Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging

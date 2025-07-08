@@ -15,9 +15,7 @@
 
 import unittest
 
-from packaging import version
-
-from transformers import AutoTokenizer, StaticCache, is_torch_available
+from transformers import AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     cleanup,
     require_read_token,
@@ -34,7 +32,7 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 if is_torch_available():
     import torch
 
-    from transformers import BLTConfig, BLTForCausalLM, BLTModel, BLTTokenizer
+    from transformers import BLTConfig, BLTForCausalLM, BLTModel
     from transformers.models.blt.modeling_blt import BLTRotaryEmbedding
 
 
