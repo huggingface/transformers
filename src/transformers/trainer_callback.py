@@ -66,6 +66,8 @@ class TrainerState:
         num_input_tokens_seen (`int`, *optional*, defaults to 0):
             When tracking the inputs tokens, the number of tokens seen during training (number of input tokens, not the
             number of prediction tokens).
+        num_input_image_tokens_seen (`int`, *optional*, defaults to 0):
+            When tracking the inputs tokens, the number of image tokens seen during training.
         total_flos (`float`, *optional*, defaults to 0):
             The total number of floating operations done by the model since the beginning of training (stored as floats
             to avoid overflow).
