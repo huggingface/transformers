@@ -170,6 +170,11 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_model_is_small(self):
         pass
 
+    def test_gradient_checkpointing(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = TimmWrapperModel._from_config(config)
+        self.assertTrue(model.supports_gradient_checkpointing)
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 

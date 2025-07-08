@@ -14,11 +14,12 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Optional, Union, Callable
 
 import torch
 from torch import Tensor, nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch.utils.checkpoint import checkpoint
 
 from ...modeling_outputs import ImageClassifierOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -118,7 +119,12 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         # using num_classes=0 to avoid creating classification head
         extra_init_kwargs = config.model_args or {}
         self.timm_model = timm.create_model(config.architecture, pretrained=False, num_classes=0, **extra_init_kwargs)
+        if hasattr(self.timm_model, "set_grad_checkpointing"):
+            self.supports_gradient_checkpointing = True
         self.post_init()
+
+    def _set_gradient_checkpointing(self, enable: bool = True, gradient_checkpointing_func: Callable = checkpoint):
+        self.timm_model.set_grad_checkpointing(enable)
 
     @auto_docstring
     def forward(
@@ -237,7 +243,12 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
             config.architecture, pretrained=False, num_classes=config.num_labels, **extra_init_kwargs
         )
         self.num_labels = config.num_labels
+        if hasattr(self.timm_model, "set_grad_checkpointing"):
+            self.supports_gradient_checkpointing = True
         self.post_init()
+
+    def _set_gradient_checkpointing(self, enable: bool = True, gradient_checkpointing_func: Callable = checkpoint):
+        self.timm_model.set_grad_checkpointing(enable)
 
     @auto_docstring
     def forward(
