@@ -453,7 +453,7 @@ class PvtPreTrainedModel(PreTrainedModel):
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
             # `trunc_normal_cpu` not implemented in `half` issues
-            module.weight.data = nn.init.trunc_normal_(module.weight.data, mean=0.0, std=std)
+            nn.init.trunc_normal_(module.weight.data, mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):

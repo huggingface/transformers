@@ -1217,8 +1217,6 @@ class SpeechT5PreTrainedModel(PreTrainedModel):
             k = math.sqrt(1 / module.projection.in_features)
             nn.init.uniform_(module.projection.weight, a=-k, b=k)
             nn.init.uniform_(module.projection.bias, a=-k, b=k)
-        elif isinstance(module, SpeechT5SpeechEncoderPrenet):
-            module.masked_spec_embed.copy_(torch.Tensor(self.config.hidden_size).uniform_())
         elif isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
@@ -1235,6 +1233,9 @@ class SpeechT5PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+
+        if hasattr(module, "masked_spec_embed"):
+            module.masked_spec_embed.copy_(torch.Tensor(self.config.hidden_size).uniform_())
 
 
 class SpeechT5Encoder(SpeechT5PreTrainedModel):

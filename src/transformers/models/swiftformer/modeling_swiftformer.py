@@ -406,8 +406,9 @@ class SwiftFormerPreTrainedModel(PreTrainedModel):
         elif isinstance(module, (SwiftFormerConvEncoder, SwiftFormerLocalRepresentation)):
             module.layer_scale.data.fill_(1.0)
         elif isinstance(module, SwiftFormerEncoderBlock):
-            module.layer_scale_1.data.fill_(self.config.layer_scale_init_value)
-            module.layer_scale_2.data.fill_(self.config.layer_scale_init_value)
+            if self.config.use_layer_scale:
+                module.layer_scale_1.data.fill_(self.config.layer_scale_init_value)
+                module.layer_scale_2.data.fill_(self.config.layer_scale_init_value)
         elif isinstance(module, SwiftFormerEfficientAdditiveAttention):
             dim = module.w_g.shape[0]
             module.w_g.copy_(torch.randn(dim, 1))

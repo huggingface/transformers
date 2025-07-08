@@ -1238,10 +1238,11 @@ class VitsPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, VitsAttention):
-            head_dim = self.config.hidden_size // self.config.num_attention_heads
-            scaling = head_dim**-0.5
-            module.emb_rel_k.copy_(torch.randn(1, self.config.window_size * 2 + 1, head_dim) * scaling)
-            module.emb_rel_v.copy_(torch.randn(1, self.config.window_size * 2 + 1, head_dim) * scaling)
+            if self.config.window_size:
+                head_dim = self.config.hidden_size // self.config.num_attention_heads
+                scaling = head_dim**-0.5
+                module.emb_rel_k.copy_(torch.randn(1, self.config.window_size * 2 + 1, head_dim) * scaling)
+                module.emb_rel_v.copy_(torch.randn(1, self.config.window_size * 2 + 1, head_dim) * scaling)
         elif isinstance(module, VitsElementwiseAffine):
             module.translate.data.zero_()
             module.log_scale.data.zero_()
