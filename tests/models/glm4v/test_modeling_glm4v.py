@@ -22,7 +22,6 @@ from transformers import (
     Glm4vForConditionalGeneration,
     Glm4vModel,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
     require_flash_attn,
@@ -43,10 +42,6 @@ from ...test_modeling_common import (
 
 if is_torch_available():
     import torch
-
-
-if is_vision_available():
-    pass
 
 
 class Glm4vVisionText2TextModelTester:
