@@ -754,7 +754,11 @@ class MoonshineModel(WhisperModel):
             obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a
             `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
             `input_values`, the [`AutoFeatureExtractor`] should be used for padding
-            and conversion into a tensor of type `torch.FloatTensor`.
+            and conversion into a tensor of type `torch.FloatTensor`.    
+        decoder_position_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`):
+            Indices of positions of each input sequence tokens in the position embeddings.
+            Used to calculate the position embeddings up to `config.decoder_config.max_position_embeddings`.
+
         Example:
 
         ```python

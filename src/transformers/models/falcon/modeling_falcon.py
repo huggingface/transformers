@@ -373,6 +373,7 @@ class FalconAttention(nn.Module):
                     dropout_p=self.attention_dropout.p if self.training else 0.0,
                     is_causal=is_causal,
                 )
+                attention_probs = None
                 attn_output = attn_output.transpose(1, 2)
                 attn_output = attn_output.reshape(batch_size, query_length, self.num_heads * self.head_dim)
 
