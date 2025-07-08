@@ -197,9 +197,7 @@ The first step to use MCP tools is to let the model know which tools are availab
     "servers": [
         {
             "type": "sse",
-            "config": {
-                "url": "https://evalstate-flux1-schnell.hf.space/gradio_api/mcp/sse"
-            }
+            "url": "https://evalstate-flux1-schnell.hf.space/gradio_api/mcp/sse"
         }
     ]
 }
