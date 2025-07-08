@@ -229,7 +229,9 @@ class CacheIntegrationTest(unittest.TestCase):
 
         EXPECTED_GENERATION = ["A sequence: 1, 2, 3, 4, 5, 6, 7, 8,", "A sequence: A, B, C, D, E, F, G, H"]
 
-        inputs = self.tokenizer(["A sequence: 1, 2, 3, 4, 5", "A sequence: A, B, C"], padding=True, return_tensors="pt")
+        inputs = self.tokenizer(
+            ["A sequence: 1, 2, 3, 4, 5", "A sequence: A, B, C"], padding=True, return_tensors="pt"
+        )
         inputs = inputs.to(self.model.device)
 
         gen_out = self.model.generate(
