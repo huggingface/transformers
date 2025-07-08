@@ -15,3 +15,4 @@ jobs:
       pr_number: ${{ github.event.number }}
       package: transformers
       languages: en
+      doc_builder_revision: parallel_mdx_building
