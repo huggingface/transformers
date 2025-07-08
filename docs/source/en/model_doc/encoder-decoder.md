@@ -100,55 +100,10 @@ output = model.generate(**input_ids)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
-## Initialising `EncoderDecoderModel` from a pretrained encoder and a pretrained decoder.
+## Notes
 
-[`EncoderDecoderModel`] can be initialized from a pretrained encoder checkpoint and a pretrained decoder checkpoint. Note that any pretrained auto-encoding model, *e.g.* BERT, can serve as the encoder and both pretrained auto-encoding models, *e.g.* BERT, pretrained causal language models, *e.g.* GPT2, as well as the pretrained decoder part of sequence-to-sequence models, *e.g.* decoder of BART, can be used as the decoder.
-Depending on which architecture you choose as the decoder, the cross-attention layers might be randomly initialized.
-Initializing [`EncoderDecoderModel`] from a pretrained encoder and decoder checkpoint requires the model to be fine-tuned on a downstream task, as has been shown in [the *Warm-starting-encoder-decoder blog post*](https://huggingface.co/blog/warm-starting-encoder-decoder).
-To do so, the `EncoderDecoderModel` class provides a [`EncoderDecoderModel.from_encoder_decoder_pretrained`] method.
-
-```python
->>> from transformers import EncoderDecoderModel, BertTokenizer
-
->>> tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
->>> model = EncoderDecoderModel.from_encoder_decoder_pretrained("google-bert/bert-base-uncased", "google-bert/bert-base-uncased")
-```
-
-## Loading an existing `EncoderDecoderModel` checkpoint and perform inference.
-
-To load fine-tuned checkpoints of the `EncoderDecoderModel` class, [`EncoderDecoderModel`] provides the `from_pretrained(...)` method just like any other model architecture in Transformers.
-
-To perform inference, one uses the [`generate`] method, which allows to autoregressively generate text. This method supports various forms of decoding, such as greedy, beam search and multinomial sampling.
-
-```python
->>> from transformers import AutoTokenizer, EncoderDecoderModel
-
->>> # load a fine-tuned seq2seq model and corresponding tokenizer
->>> model = EncoderDecoderModel.from_pretrained("patrickvonplaten/bert2bert_cnn_daily_mail")
->>> tokenizer = AutoTokenizer.from_pretrained("patrickvonplaten/bert2bert_cnn_daily_mail")
-
->>> # let's perform inference on a long piece of text
->>> ARTICLE_TO_SUMMARIZE = (
-...     "PG&E stated it scheduled the blackouts in response to forecasts for high winds "
-...     "amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were "
-...     "scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."
-... )
->>> input_ids = tokenizer(ARTICLE_TO_SUMMARIZE, return_tensors="pt").input_ids
-
->>> # autoregressively generate summary (uses greedy decoding by default)
->>> generated_ids = model.generate(input_ids)
->>> generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
->>> print(generated_text)
-nearly 800 thousand customers were affected by the shutoffs. the aim is to reduce the risk of wildfires. nearly 800, 000 customers were expected to be affected by high winds amid dry conditions. pg & e said it scheduled the blackouts to last through at least midday tomorrow.
-
-### Training
-
-Once the model is created, it can be fine-tuned similar to BART, T5 or any other encoder-decoder model.
-As you can see, only 2 inputs are required for the model in order to compute a loss: `input_ids` (which are the
-`input_ids` of the encoded input sequence) and `labels` (which are the `input_ids` of the encoded
-target sequence).
-
-Detailed [colab](https://colab.research.google.com/drive/1WIk2bxglElfZewOHboPFNj8H44_VAyKE?usp=sharing#scrollTo=ZwQIEhKOrJpl) for training.
+- Encoder Decoder models can be fine-tuned similar to BART, T5 or any other encoder-decoder model.
+- The example below below demonstrates how to fine-tune the model with [Transformers](https://huggingface.co/docs/transformers).
 
 ```python
 >>> from transformers import BertTokenizer, EncoderDecoderModel
@@ -171,6 +126,46 @@ Detailed [colab](https://colab.research.google.com/drive/1WIk2bxglElfZewOHboPFNj
 
 >>> # the forward function automatically creates the correct decoder_input_ids
 >>> loss = model(input_ids=input_ids, labels=labels).loss
+```
+- The following [colab example](https://colab.research.google.com/drive/1WIk2bxglElfZewOHboPFNj8H44_VAyKE?usp=sharing#scrollTo=ZwQIEhKOrJpl) for training.
+
+- [`EncoderDecoderModel`] can be randomly initialized from an encoder and a decoder config. In the following example, we show    
+  how to do this using the default [`BertModel`] configuration for the encoder and the default [`BertForCausalLM`] configuration for the decoder.
+
+```python
+>>> from transformers import BertConfig, EncoderDecoderConfig, EncoderDecoderModel
+
+>>> config_encoder = BertConfig()
+>>> config_decoder = BertConfig()
+
+>>> config = EncoderDecoderConfig.from_encoder_decoder_configs(config_encoder, config_decoder)
+>>> model = EncoderDecoderModel(config=config)
+```
+
+- The Encoder Decoder Model can also be used for translation of different languages. The example below demonstrates a 
+English to French model using transformers
+
+```python
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+
+# Load a pre-trained translation model
+model_name = "Helsinki-NLP/opus-mt-en-de" 
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+
+# Input sentence to translate
+input_text = "Plants create energy through a process known as"
+
+# Encode the input text
+inputs = tokenizer(input_text, return_tensors="pt")
+
+# Generate the translated output
+outputs = model.generate(**inputs)
+
+# Decode the output tokens to get the translated sentence
+translated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+print("Translated text:", translated_text)
 ```
 
 ## EncoderDecoderConfig
