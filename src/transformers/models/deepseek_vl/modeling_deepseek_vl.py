@@ -40,6 +40,11 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for DeepseekVL model's outputs that may also contain a past key/values (to speed up sequential decoding).
+    """
+)
 # Copied from transformers.models.idefics.modeling_idefics.IdeficsBaseModelOutputWithPast with Idefics->DeepseekVL
 class DeepseekVLBaseModelOutputWithPast(ModelOutput):
     r"""
@@ -72,6 +77,11 @@ class DeepseekVLBaseModelOutputWithPast(ModelOutput):
 
 
 @dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for DeepseekVL causal language model (or autoregressive) outputs.
+    """
+)
 # Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->DeepseekVL
 class DeepseekVLCausalLMOutputWithPast(ModelOutput):
     r"""

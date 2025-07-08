@@ -43,6 +43,11 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for DeepseekVLHybrid model's outputs that may also contain a past key/values (to speed up sequential decoding).
+    """
+)
 class DeepseekVLHybridBaseModelOutputWithPast(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -74,6 +79,11 @@ class DeepseekVLHybridBaseModelOutputWithPast(ModelOutput):
 
 
 @dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for DeepseekVLHybrid causal language model (or autoregressive) outputs.
+    """
+)
 class DeepseekVLHybridCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

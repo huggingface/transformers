@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
@@ -138,12 +137,10 @@ class DeepseekVLHybridConfig(DeepseekVLConfig):
         self.high_res_vision_config = high_res_vision_config
 
 
-@dataclass
 class DeepseekVLHybridBaseModelOutputWithPast(IdeficsBaseModelOutputWithPast):
     pass
 
 
-@dataclass
 class DeepseekVLHybridCausalLMOutputWithPast(IdeficsCausalLMOutputWithPast):
     pass
 
