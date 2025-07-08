@@ -997,7 +997,7 @@ def check_model_inputs(func):
         if use_cache is None:
             use_cache = getattr(self.config, "use_cache", False)
 
-        return_dict = kwargs.get("return_dict", None)
+        return_dict = kwargs.pop("return_dict", None)
         if return_dict is None:
             return_dict = getattr(self.config, "return_dict", True)
 
@@ -1008,7 +1008,6 @@ def check_model_inputs(func):
             use_cache = False
 
         kwargs["use_cache"] = use_cache
-        kwargs["return_dict"] = return_dict
 
         all_args = kwargs.copy()
         if "kwargs" in all_args:
