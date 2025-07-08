@@ -973,8 +973,7 @@ def is_torchdynamo_compiling():
     try:
         import torch
 
-        compiling_cuda_graph = torch.cuda.graph.default_capture_stream is not None
-        return compiling_cuda_graph or torch.compiler.is_compiling()
+        return torch.compiler.is_compiling()
     except Exception:
         try:
             import torch._dynamo as dynamo  # noqa: F401
