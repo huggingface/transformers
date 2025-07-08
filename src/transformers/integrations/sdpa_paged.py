@@ -124,14 +124,15 @@ def sdpa_attention_paged_forward(
         # Ensure all tensors are on the same device and contiguous
         if query.device != key.device:
             query = query.to(key.device)
-        if _attn_output.device != key.device:
-            _attn_output = _attn_output.to(key.device)
+        if module._attn_output.device != key.device:
+            module._attn_output = module._attn_output.to(key.device)
 
 
         try:
             # torch.cuda.synchronize()
+            # torch.mps.synchronize()
             paged_attention_kernel.paged_attention_v1(
-                _attn_output,
+                module._attn_output,
                 query,
                 key,  # → [num_blocks, num_kv_heads, head_dim // x, block_size, x], x depends on the dtype
                 value,  # # → [num_blocks, num_kv_heads, head_dim, block_size]
@@ -146,6 +147,7 @@ def sdpa_attention_paged_forward(
                 v_scale=module._v_scale_tensor,
                 alibi_slopes=None,
             )
+            # torch.mps.synchronize()
             # torch.cuda.synchronize()
         except RuntimeError as e:
             print(f"Error in paged_attention_v1: {e}")
@@ -154,7 +156,8 @@ def sdpa_attention_paged_forward(
             print(f"block_tables shape: {block_tables.shape if block_tables is not None else None}")
             print(f"seq_lens shape: {seq_lens.shape if seq_lens is not None else None}")
             raise
-    
+
+        module._attn_output = module._attn_output.to(torch.bfloat16)
         attn_output = module._attn_output.view(batch_size, seq_len, num_heads, head_size)
         attn_output = attn_output.transpose(1, 2).contiguous()
         return attn_output, None
