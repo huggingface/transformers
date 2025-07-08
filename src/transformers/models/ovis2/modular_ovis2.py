@@ -240,20 +240,18 @@ class Ovis2PreTrainedModel(PreTrainedModel):
 
 
 class Ovis2Model(LlavaModel):
+    _checkpoint_conversion_mapping = {}
+
     def __init__(self, config: Ovis2Config):
         super().__init__(config)
         self.vision_tower = Ovis2VisionModel(config.vision_config)
         self.visual_table = Ovis2VisualEmbeddingTable(config.vision_config.vocab_size, config.hidden_size)
-        del self.multi_modal_projector
 
         self.visual_vocab_size = config.vision_config.vocab_size
         self.vocab_size = config.vocab_size
-
         self.visual_indicator_token_ids = config.visual_indicator_token_ids
-
         self.language_model = AutoModel.from_config(config.text_config)
-
-        self.post_init()
+        del self.multi_modal_projector
 
     def get_image_features(
         self,
@@ -368,6 +366,8 @@ class Ovis2Model(LlavaModel):
 
 @auto_docstring
 class Ovis2ForConditionalGeneration(LlavaForConditionalGeneration, GenerationMixin):
+    _checkpoint_conversion_mapping = {}
+
     def __init__(self, config: Ovis2Config):
         super().__init__(config)
         self.model = Ovis2Model(config)

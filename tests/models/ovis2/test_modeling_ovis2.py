@@ -62,24 +62,18 @@ class Ovis2VisionText2TextModelTester:
             "model_type": "qwen2",
             "seq_length": 7,
             "is_training": True,
-            "use_input_mask": True,
-            "use_token_type_ids": False,
             "use_labels": True,
             "vocab_size": 99,
             "hidden_size": 32,
             "num_hidden_layers": 2,
             "num_attention_heads": 4,
             "num_key_value_heads": 4,
-            "intermediate_size": 37,
+            "intermediate_size": 27,
             "hidden_act": "gelu",
             "hidden_dropout_prob": 0.1,
-            "attention_probs_dropout_prob": 0.1,
             "max_position_embeddings": 580,
-            "type_vocab_size": 16,
-            "type_sequence_label_size": 2,
             "initializer_range": 0.02,
             "num_labels": 3,
-            "num_choices": 4,
             "pad_token_id": 0,
         },
         is_training=True,
@@ -88,16 +82,13 @@ class Ovis2VisionText2TextModelTester:
             "patch_size": 8,
             "num_channels": 3,
             "hidden_size": 32,
-            "projection_dim": 32,
+            "vocab_size": 99,
             "num_hidden_layers": 2,
             "num_attention_heads": 4,
-            "intermediate_size": 37,
+            "intermediate_size": 27,
             "attention_dropout": 0.1,
-            "projection_dropout": 0.1,
             "hidden_act": "silu",
-            "rms_norm_eps": 1e-5,
             "qkv_bias": False,
-            "use_bias": False,
             "hidden_stride": 1,
             "vision_feature_select_strategy": "full",
             "num_visual_indicator_tokens": 5,
@@ -293,10 +284,6 @@ class Ovis2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
                 out_ids = model(input_ids=input_ids, **inputs)[0]
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
             torch.testing.assert_close(out_embeds, out_ids)
-
-    @unittest.skip(reason="We cannot configure to output a smaller model.")
-    def test_model_is_small(self):
-        pass
 
 
 @require_torch
