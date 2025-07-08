@@ -105,6 +105,16 @@ if is_flash_attn_2_available():
 
     HAS_FA2 = True
     FA_VERSION = 2
+elif is_torch_npu_available():
+    # patch functions in package `flash-attn` when using flash-attention on Ascend NPU.
+    from .integrations.npu_flash_attention import npu_apply_rotary_emb as apply_rotary_emb  # noqa: F401
+    from .integrations.npu_flash_attention import npu_flash_attn_func as flash_attn_2_func
+    from .integrations.npu_flash_attention import npu_flash_attn_varlen_func as flash_attn_2_varlen_func
+    from .integrations.npu_flash_attention import pad_input as pad_input_fa2
+    from .integrations.npu_flash_attention import unpad_input as unpad_input_fa2
+
+    HAS_FA2 = True
+    FA_VERSION = 2
 else:
     flash_attn_2_func = None
     flash_attn_2_varlen_func = None
@@ -135,22 +145,6 @@ if FA_VERSION:
     flash_attn_varlen_func = globals()[f"flash_attn_{FA_VERSION}_varlen_func"]
     unpad_input = globals()[f"unpad_input_fa{FA_VERSION}"]
     pad_input = globals()[f"pad_input_fa{FA_VERSION}"]
-
-# patch functions in package `flash-attn` when using flash-attention on Ascend NPU.
-if is_torch_npu_available():
-    from .integrations.npu_flash_attention import (
-        npu_apply_rotary_emb as apply_rotary_emb,  # noqa: F401
-    )
-    from .integrations.npu_flash_attention import (
-        npu_flash_attn_func as flash_attn_func,
-    )
-    from .integrations.npu_flash_attention import (
-        npu_flash_attn_varlen_func as flash_attn_varlen_func,
-    )
-    from .integrations.npu_flash_attention import (
-        pad_input,
-        unpad_input,
-    )
 
 
 _flash_supports_window_size = False

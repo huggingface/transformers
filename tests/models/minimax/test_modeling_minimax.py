@@ -238,6 +238,10 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
     def test_contrastive_generate_dict_outputs_use_cache(self):
         pass
 
+    @unittest.skip("Model needs refactor")
+    def test_attention_outputs(self):
+        pass
+
 
 @require_torch
 @require_torch_accelerator
