@@ -129,7 +129,7 @@ def sdpa_attention_paged_forward(
 
 
         try:
-            # torch.cuda.synchronize()
+            torch.cuda.synchronize()
             # torch.mps.synchronize()
             paged_attention_kernel.paged_attention_v1(
                 module._attn_output,
@@ -148,11 +148,11 @@ def sdpa_attention_paged_forward(
                 alibi_slopes=None,
             )
             # torch.mps.synchronize()
-            # torch.cuda.synchronize()
+            torch.cuda.synchronize()
         except RuntimeError as e:
             print(f"Error in paged_attention_v1: {e}")
             print(f"Shapes - query: {query.shape}, key: {key.shape}, value: {value.shape}")
-            print(f"Output shape: {_attn_output.shape}")
+            print(f"Output shape: {module._attn_output.shape}")
             print(f"block_tables shape: {block_tables.shape if block_tables is not None else None}")
             print(f"seq_lens shape: {seq_lens.shape if seq_lens is not None else None}")
             raise
