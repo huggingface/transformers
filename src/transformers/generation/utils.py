@@ -3764,11 +3764,11 @@ class GenerationMixin(ContinuousMixin):
         return gathered_tensor
 
     @staticmethod
-    def _beam_search_has_unfinished_sequences(
+    def _check_early_stop_heuristic(
+        is_early_stop_heuristic_unsatisfied: torch.Tensor,
         running_beam_scores: torch.Tensor,
         beam_scores: torch.Tensor,
         is_sent_finished: torch.Tensor,
-        next_token_hits_stopping_criteria: torch.Tensor,
         cur_len: int,
         max_length: int,
         decoder_prompt_len: int,
@@ -3776,34 +3776,52 @@ class GenerationMixin(ContinuousMixin):
         length_penalty: float,
     ):
         """
-        Beam Search stopping condition -- halts the generation loop if any of these conditions becomes False
+        Determine whether early stopping is possible by checking if the best possible score of running beams
+        could still improve upon the finished ones.
+
+        Mechanism:
+        - Without a length penalty, beam scores typically decrease as more tokens are generated.
+        So, if the *best possible* score from any running beam is already worse than the *worst* finished beam,
+        we can safely stop early.
+        - With a length penalty, scores may increase with longer sequences. In this case, we use heuristics
+        to estimate the best possible score — though this estimate may not always be correct — and stop
+        if no further improvement seems likely.
+
+        We apply different heuristics depending on the value of `early_stopping`:
+        1. `early_stopping == False`:
+        -> Use a heuristic that assumes the best score comes from the current length minus the decoder prompt length.
+        -> See detailed discussion: https://github.com/huggingface/transformers/pull/20901#issuecomment-1369845565
+
+        2. `early_stopping == "never"`:
+        -> Estimate the best score using either `max_length` or `cur_len`, depending on the sign of `length_penalty`.
+        -> A positive length penalty favors longer sequences, so we use `max_length` in that case.
+
+        NOTE: the canonical beam search implementation can be replicated with `early_stopping="never"` and
+        `length_penalty=0.0`, which are NOT the default flags. The default behavior was empirically found to produce
+        better sequences (prior to 2022), and changing it is BC breaking.
         """
-        # a. Can the open beams improve the top completed scores?
-        # early_stopping == False -> apply heuristic = always get the best score from `cur_len - decoder_prompt_len`.
-        # early_stopping == "never" -> compute the best score from `max_length` or `cur_len`, depending on the
-        #   sign of `length_penalty`. Positive `length_penalty` favors longer sequences, thus we use
-        #   `max_length` there.
-        # !!
-        # Be sure to check the docstring for `early_stopping` and `length_penalty`. The default parameterization
-        # does NOT correspond to a canonical beam search implementation, and tends to favor shorter output sequences
-        # compared to it (the heuristic active by default underestimates the maximum achievable score, and thus cut
-        # generation short). Also, be mindful that length penalty > 0.0 actually favors longer sequences, despite
-        # its name. These modifications were empirically found in the past (prior to 2022) to produce better quality
-        # generations, and changing them is BC breaking.
-        # For a canonical beam search implementation, set `early_stopping="never"` and `length_penalty=0.0`.
-        # See the discussion below for more details.
-        # https://github.com/huggingface/transformers/pull/20901#issuecomment-1369845565
-        # !!
         if early_stopping == "never" and length_penalty > 0.0:
             best_hypothetical_length = max_length - decoder_prompt_len
         else:
             best_hypothetical_length = cur_len - decoder_prompt_len
-
-        # best-case scenario: the next tokens have logprobs=0 (probability=1), and the score stays the same before
-        # applying length penalty
         best_possible_running_score = running_beam_scores[:, :1] / (best_hypothetical_length**length_penalty)
         worst_finished_score = torch.where(is_sent_finished, torch.min(beam_scores, dim=1, keepdim=True)[0], -1.0e9)
-        improvement_possible = torch.any(best_possible_running_score > worst_finished_score)
+        return is_early_stop_heuristic_unsatisfied & torch.any(
+            best_possible_running_score > worst_finished_score, dim=-1, keepdim=True
+        )
+
+    @staticmethod
+    def _beam_search_has_unfinished_sequences(
+        is_early_stop_heuristic_unsatisfied: torch.Tensor,
+        is_sent_finished: torch.Tensor,
+        next_token_hits_stopping_criteria: torch.Tensor,
+        early_stopping: Union[bool, str],
+    ):
+        """
+        Beam Search stopping condition -- halts the generation loop if any of these conditions becomes False
+        """
+        # a. Can the open beams improve the top completed scores?
+        improvement_possible = torch.any(is_early_stop_heuristic_unsatisfied)
 
         # b. Is there still a beam without fully completed sequences? This is only relevant if early_stopping is
         # enabled, where we want to finish as soon as all beams have a completed sequence.
@@ -3899,6 +3917,7 @@ class GenerationMixin(ContinuousMixin):
         topk_log_probs: torch.Tensor,
         beam_indices: torch.Tensor,
         topk_running_beam_indices: torch.Tensor,
+        is_early_stop_heuristic_unsatisfied: torch.Tensor,
         is_sent_finished: torch.Tensor,
         next_token_hits_stopping_criteria: torch.Tensor,
         top_num_beam_mask: torch.Tensor,
@@ -3923,6 +3942,9 @@ class GenerationMixin(ContinuousMixin):
         # - make sure no scores can be added anymore if beam is full and early stopping is on
         beams_in_batch_are_full = torch.all(is_sent_finished, axis=-1, keepdims=True) & (early_stopping is True)
         topk_log_probs += beams_in_batch_are_full.to(torch.float32) * -1.0e9
+        # - make sure no scores can be added anymore if improvement is not possible
+        topk_log_probs += (~is_early_stop_heuristic_unsatisfied).to(torch.float32) * -1.0e9
+
         # - make sure still running sequences cannot be chosen as finalized beam
         topk_log_probs += (~did_top_num_beams_just_finished) * -1.0e9
 
@@ -4074,6 +4096,9 @@ class GenerationMixin(ContinuousMixin):
         # per batch, beam-item state bit indicating if sentence has finished.
         is_sent_finished = torch.zeros((batch_size, num_beams), dtype=torch.bool, device=input_ids.device)
 
+        # per batch state bit indicating if there is a possibility to improve the best finished sentence.
+        is_early_stop_heuristic_unsatisfied = torch.ones((batch_size, 1), dtype=torch.bool, device=input_ids.device)
+
         # per batch, beam-item state bit indicating if there are valid continuations.
         next_token_hits_stopping_criteria = torch.zeros(
             (batch_size, num_beams), dtype=torch.bool, device=input_ids.device
@@ -4186,6 +4211,7 @@ class GenerationMixin(ContinuousMixin):
                 topk_log_probs=topk_log_probs,
                 beam_indices=beam_indices,
                 topk_running_beam_indices=topk_running_beam_indices,
+                is_early_stop_heuristic_unsatisfied=is_early_stop_heuristic_unsatisfied,
                 is_sent_finished=is_sent_finished,
                 next_token_hits_stopping_criteria=next_token_hits_stopping_criteria,
                 top_num_beam_mask=top_num_beam_mask,
@@ -4207,16 +4233,22 @@ class GenerationMixin(ContinuousMixin):
                 )
 
             cur_len = cur_len + 1
+            is_early_stop_heuristic_unsatisfied = self._check_early_stop_heuristic(
+                is_early_stop_heuristic_unsatisfied=is_early_stop_heuristic_unsatisfied,
+                running_beam_scores=running_beam_scores,
+                beam_scores=beam_scores,
+                is_sent_finished=is_sent_finished,
+                cur_len=cur_len,
+                max_length=max_length,
+                decoder_prompt_len=decoder_prompt_len,
+                early_stopping=early_stopping,
+                length_penalty=length_penalty,
+            )
             this_peer_finished = not self._beam_search_has_unfinished_sequences(
-                running_beam_scores,
-                beam_scores,
+                is_early_stop_heuristic_unsatisfied,
                 is_sent_finished,
                 next_token_hits_stopping_criteria,
-                cur_len,
-                max_length,
-                decoder_prompt_len,
                 early_stopping,
-                length_penalty,
             )
 
         # 5. prepare outputs
