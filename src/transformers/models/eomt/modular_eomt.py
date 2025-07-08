@@ -226,6 +226,8 @@ class EomtForUniversalSegmentationOutput(ModelOutput):
     attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
         Tuple of `tuple(torch.FloatTensor)` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
         sequence_length)`. Self and Cross Attentions weights from transformer decoder.
+    patch_offsets (`list[torch.Tensor]`, *optional*):
+        list of tuples indicating the image index and start and end positions of patches for semantic segementation.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -234,6 +236,7 @@ class EomtForUniversalSegmentationOutput(ModelOutput):
     last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
+    patch_offsets: Optional[list[torch.Tensor]] = None
 
 
 class EomtLoss(Mask2FormerLoss):
@@ -368,7 +371,7 @@ class EomtPreTrainedModel(PreTrainedModel):
     base_model_prefix = "eomt"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
-    _no_split_modules = ["EomtMLP"]
+    _no_split_modules = ["EomtLayer"]
     _supports_sdpa = True
     _supports_flash_attn_2 = True
 
@@ -473,13 +476,16 @@ class EomtForUniversalSegmentation(Mask2FormerForUniversalSegmentation, nn.Modul
         class_labels: Optional[list[Tensor]] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
+        patch_offsets: Optional[list[Tensor]] = None,
     ):
         r"""
-        mask_labels (`List[torch.Tensor]`, *optional*):
-            List of mask labels of shape `(num_labels, height, width)` to be fed to a model
-        class_labels (`List[torch.LongTensor]`, *optional*):
+        mask_labels (`list[torch.Tensor]`, *optional*):
+            list of mask labels of shape `(num_labels, height, width)` to be fed to a model
+        class_labels (`list[torch.LongTensor]`, *optional*):
             list of target class labels of shape `(num_labels, height, width)` to be fed to a model. They identify the
             labels of `mask_labels`, e.g. the label of `mask_labels[i][j]` if `class_labels[i][j]`.
+        patch_offsets (`list[torch.Tensor]`, *optional*):
+            list of tuples indicating the image index and start and end positions of patches for semantic segementation.
         """
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -502,7 +508,7 @@ class EomtForUniversalSegmentation(Mask2FormerForUniversalSegmentation, nn.Modul
                 all_hidden_states += (hidden_states,)
 
             if idx == self.num_hidden_layers - self.config.num_blocks:
-                query = self.query.weight[None, :, :].expand(hidden_states.shape[0], -1, -1)
+                query = self.query.weight[None, :, :].expand(hidden_states.shape[0], -1, -1).to(hidden_states.device)
                 hidden_states = torch.cat((query, hidden_states), dim=1)
 
             if idx >= self.num_hidden_layers - self.config.num_blocks and (
@@ -582,6 +588,7 @@ class EomtForUniversalSegmentation(Mask2FormerForUniversalSegmentation, nn.Modul
             last_hidden_state=sequence_output,
             hidden_states=all_hidden_states,
             attentions=all_attentions,
+            patch_offsets=patch_offsets,
         )
 
 

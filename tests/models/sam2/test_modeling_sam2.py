@@ -559,7 +559,10 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
+            config.mask_decoder_config.output_attentions = True
+            config.vision_config.output_attentions = True
             config.output_attentions = True
+            model = model_class._from_config(config, attn_implementation="eager")
             window_size = config.vision_config.window_spec[0]
             out_dim = self.model_tester.hidden_size
             patch_stride = self.model_tester.patch_stride

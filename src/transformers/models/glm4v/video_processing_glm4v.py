@@ -173,7 +173,10 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
                 timestamps_list.append(timestamps)
                 processed_videos.append(video)
         else:
-            raise AssertionError("Must set `do_sample_frames=True` to sample frames from GLM-4.1V Model.")
+            # Assume 24 fps by default and prepare timestamps for the whole video when all frames are sampled
+            processed_videos = videos
+            timestamps_list = [[idx // 24 for idx in range(len(video))] for video in videos]
+            timestamps_list = timestamps_list[::2]  # mrope
 
         grouped_videos, grouped_videos_index = group_videos_by_shape(processed_videos)
         resized_videos_grouped = {}
