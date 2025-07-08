@@ -18,7 +18,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 
@@ -117,8 +116,15 @@ class Glm4MoeConfig(PretrainedConfig):
             Number of selected experts.
         num_experts (`int`, *optional*, defaults to 128):
             Number of routed experts.
-        norm_topk_prob (`bool`, *optional*, defaults to `False`):
+        norm_topk_prob (`bool`, *optional*, defaults to `True`):
             Whether to normalize the topk probabilities.
+        n_group (`int`, *optional*, defaults to 8):
+            Number of groups for routed experts.
+        topk_group (`int`, *optional*, defaults to 4):
+            Number of selected groups for each token(for each token, ensuring the selected experts is only within `topk_group` groups).
+        output_router_logits (`bool`, *optional*, defaults to `False`):
+            Whether or not the router logits should be returned by the model. Enabling this will also
+            allow the model to output the auxiliary loss. See [here]() for more details.
 
     ```python
     >>> from transformers import Glm4MoeModel, Glm4MoeConfig
@@ -126,7 +132,7 @@ class Glm4MoeConfig(PretrainedConfig):
     >>> # Initializing a Glm4Moe style configuration
     >>> configuration = Glm4MoeConfig()
 
-    >>> # Initializing a model from the Qwen3-15B-A2B" style configuration
+    >>> # Initializing a model from the GLM-4-MOE-100B-A9B style configuration
     >>> model = Glm4MoeModel(configuration)
 
     >>> # Accessing the model configuration
@@ -178,7 +184,10 @@ class Glm4MoeConfig(PretrainedConfig):
         moe_intermediate_size=1408,
         num_experts_per_tok=8,
         num_experts=128,
-        norm_topk_prob=False,
+        n_group=1,
+        topk_group=1,
+        norm_topk_prob=True,
+        output_router_logits=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -208,8 +217,11 @@ class Glm4MoeConfig(PretrainedConfig):
         self.decoder_sparse_step = decoder_sparse_step
         self.moe_intermediate_size = moe_intermediate_size
         self.num_experts_per_tok = num_experts_per_tok
+        self.n_group = n_group
+        self.topk_group = topk_group
         self.num_experts = num_experts
         self.norm_topk_prob = norm_topk_prob
+        self.output_router_logits = output_router_logits
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,

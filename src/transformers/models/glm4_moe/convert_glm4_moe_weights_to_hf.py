@@ -1,228 +1,116 @@
 #!/usr/bin/env python
+"""
+Internal utility to convert a proprietary GLM-4-MoE checkpoint into Hugging Face format.
+
+Steps
+1. Load every *.safetensors file in input_dir and collect all tensors.
+2. Split tensors into ≤5 GiB shards named model-00001-of-000NN.safetensors, etc.
+3. Write model.safetensors.index.json with tensor-to-shard mapping.
+4. Write config.json for Glm4MoeForCausalLM.
+5. Print progress throughout.
+
+Usage
+    python convert_to_hf.py <input_dir> <output_dir>
+"""
+
 import argparse
 import json
-import os
-import re
-from collections import OrderedDict
+from pathlib import Path
 
-import torch
 from safetensors.torch import load_file, save_file
-from tokenizers import processors
-
-from transformers import Glm4Config, PreTrainedTokenizerFast
 
 
-STATE_DICT_MAPPING = OrderedDict(
-    [
-        (r"transformer.output_layer.weight", r"lm_head.weight"),
-        (r"transformer.output_layer.bias", r"lm_head.bias"),
-        (r"transformer.embedding.word_embeddings.weight", r"model.embed_tokens.weight"),
-        (r"transformer.rotary_pos_emb.inv_freq", None),
-        (r"transformer.encoder.final_layernorm.weight", r"model.norm.weight"),
-        (r"transformer.encoder.layers.(\d+).input_layernorm.weight", r"model.layers.\1.input_layernorm.weight"),
-        (r"transformer.encoder.layers.(\d+).post_mlp_layernorm.weight", r"model.layers.\1.post_mlp_layernorm.weight"),
-        (
-            r"transformer.encoder.layers.(\d+).post_self_attn_layernorm.weight",
-            r"model.layers.\1.post_self_attn_layernorm.weight",
-        ),
-        (
-            r"transformer.encoder.layers.(\d+).post_attention_layernorm.weight",
-            r"model.layers.\1.post_attention_layernorm.weight",
-        ),
-        (r"transformer.encoder.layers.(\d+).self_attention.dense.weight", r"model.layers.\1.self_attn.o_proj.weight"),
-        (r"transformer.encoder.layers.(\d+).self_attention.dense.bias", r"model.layers.\1.self_attn.o_proj.bias"),
-        (
-            r"transformer.encoder.layers.(\d+).self_attention.query_key_value.(weight|bias)",
-            r"model.layers.\1.self_attn.qkv_proj.\2",
-        ),
-        (r"transformer.encoder.layers.(\d+).mlp.dense_h_to_4h.weight", r"model.layers.\1.mlp.gate_up_proj.weight"),
-        (r"transformer.encoder.layers.(\d+).mlp.dense_h_to_4h.bias", r"model.layers.\1.mlp.gate_up_proj.bias"),
-        (r"transformer.encoder.layers.(\d+).mlp.dense_4h_to_h.weight", r"model.layers.\1.mlp.down_proj.weight"),
-        (r"transformer.encoder.layers.(\d+).mlp.dense_4h_to_h.bias", r"model.layers.\1.mlp.down_proj.bias"),
-        (r"transformer.encoder.layers.(\d+).mlp.router.weight", r"model.layers.\1.mlp.gate.weight"),
-        (r"transformer.encoder.layers.(\d+).mlp.router.bias", r"model.layers.\1.mlp.gate.bias"),
-        (
-            r"transformer.encoder.layers.(\d+).mlp.experts.(\d+).gate_proj.(weight|bias)",
-            r"model.layers.\1.mlp.experts.\2.gate_proj.\3",
-        ),
-        (
-            r"transformer.encoder.layers.(\d+).mlp.experts.(\d+).up_proj.(weight|bias)",
-            r"model.layers.\1.mlp.experts.\2.up_proj.\3",
-        ),
-        (
-            r"transformer.encoder.layers.(\d+).mlp.experts.(\d+).down_proj.(weight|bias)",
-            r"model.layers.\1.mlp.experts.\2.down_proj.\3",
-        ),
-    ]
-)
+MAX_SHARD_BYTES = 5 * 1024**3
+
+CONFIG = {
+    "architectures": ["Glm4MoeForCausalLM"],
+    "attention_bias": True,
+    "attention_dropout": 0.0,
+    "pad_token_id": 151329,
+    "eos_token_id": [151329, 151336, 151338],
+    "head_dim": 128,
+    "hidden_act": "silu",
+    "hidden_size": 4096,
+    "decoder_sparse_step": 1,
+    "initializer_range": 0.02,
+    "intermediate_size": 10944,
+    "max_position_embeddings": 131072,
+    "model_type": "glm4_moe",
+    "moe_intermediate_size": 1408,
+    "norm_topk_prob": True,
+    "num_attention_heads": 96,
+    "n_group": 1,
+    "topk_group": 1,
+    "n_routed_experts": 128,
+    "n_shared_experts": 1,
+    "routed_scaling_factor": 1.0,
+    "topk_method": "noaux_tc",
+    "moe_router_dtype": "float32",
+    "num_experts_per_tok": 8,
+    "first_k_dense_replace": 1,
+    "num_hidden_layers": 46,
+    "num_key_value_heads": 8,
+    "partial_rotary_factor": 0.5,
+    "output_router_logits": False,
+    "rms_norm_eps": 1e-5,
+    "rope_scaling": None,
+    "rope_theta": 10000,
+    "router_aux_loss_coef": 0.001,
+    "tie_word_embeddings": False,
+    "torch_dtype": "bfloat16",
+    "transformers_version": "4.54.0dev",
+    "use_cache": True,
+    "vocab_size": 151552,
+}
 
 
-def load_raw_state(d):
-    print("Scanning weight files …")
-    fs = sorted(
-        [f for f in os.listdir(d) if f.endswith((".safetensors", ".bin"))],
-        key=lambda x: int(x.rsplit("-", 3)[1]) if "-" in x else 0,
-    )
-    sd = {}
-    for f in fs:
-        p = os.path.join(d, f)
-        print(f"Loading {p}")
-        if f.endswith(".safetensors"):
-            sd.update(load_file(p))
-        else:
-            sd.update(torch.load(p, map_location="cpu"))
-    print(f"Total tensors loaded: {len(sd)}")
-    return sd
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("input_dir", type=str, help="Location of the local folder copied from the Hub.")
+    parser.add_argument("output_dir", type=str, help="Location to write HF model and tokenizer")
+    args = parser.parse_args()
 
+    input_path = Path(args.input_dir)
+    output_path = Path(args.output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
 
-def map_key(k):
-    for pat, rep in STATE_DICT_MAPPING.items():
-        if rep is None and re.fullmatch(pat, k):
-            return None
-        nk, n = re.subn(pat, rep or "", k)
-        if n:
-            return nk
-    return None
+    tensors, total_bytes = [], 0
+    for file in sorted(input_path.glob("*.safetensors")):
+        print(f"Loading {file.name}")
+        data = load_file(file)
+        tensors.extend(data.items())
+        total_bytes += sum(t.numel() * t.element_size() for t in data.values())
 
+    print(f"Total tensors: {len(tensors)}   Total size: {total_bytes / 1024**3:.2f} GiB")
 
-def split_qkv(t, cfg):
-    hd = cfg.hidden_size // cfg.num_attention_heads
-    q = cfg.num_attention_heads * hd
-    k = cfg.num_key_value_heads * hd
-    return t[:q], t[q : q + k], t[q + k :]
+    shards, current, used = [], {}, 0
+    for name, tensor in tensors:
+        size = tensor.numel() * tensor.element_size()
+        if used and used + size > MAX_SHARD_BYTES:
+            shards.append(current)
+            current, used = {}, 0
+        current[name] = tensor
+        used += size
+    shards.append(current)
 
+    total_shards = len(shards)
+    weight_map = {}
+    for idx, shard in enumerate(shards, 1):
+        fname = f"model-{idx:05d}-of-{total_shards:05d}.safetensors"
+        print(f"Saving {fname}")
+        save_file(shard, output_path / fname)
+        weight_map.update(dict.fromkeys(shard, fname))
 
-def convert_state(sd, cfg):
-    new_state = {}
-    dropped = 0
-    for k, v in sd.items():
-        nk = map_key(k)
-        if nk is None:
-            dropped += 1
-            continue
-        if "qkv_proj." in nk:
-            q, k_, v_ = split_qkv(v, cfg)
-            new_state[nk.replace("qkv_proj.", "q_proj.")] = q
-            new_state[nk.replace("qkv_proj.", "k_proj.")] = k_
-            new_state[nk.replace("qkv_proj.", "v_proj.")] = v_
-        else:
-            new_state[nk] = v
-    print(f"Converted tensors: {len(new_state)}, dropped: {dropped}")
-    return new_state
+    with open(output_path / "model.safetensors.index.json", "w") as f:
+        json.dump({"metadata": {"total_size": total_bytes}, "weight_map": weight_map}, f, indent=2)
+    print("Wrote model.safetensors.index.json")
 
+    with open(output_path / "config.json", "w") as f:
+        json.dump(CONFIG, f, indent=2)
+    print("Wrote config.json")
 
-def write_sharded(state, out_dir, size_bytes=5 * 1024**3, prefix="model"):
-    print("Writing sharded safetensors …")
-    os.makedirs(out_dir, exist_ok=True)
-    wm, shards, cur, cur_size = {}, [], {}, 0
-    idx = 1
-    for n, t in state.items():
-        nb = t.numel() * t.element_size()
-        if nb > size_bytes:
-            name = f"{prefix}-{idx:05d}-of-xxxxx.safetensors"
-            save_file({n: t}, os.path.join(out_dir, name))
-            shards.append(name)
-            wm[n] = name
-            idx += 1
-            continue
-        if cur_size + nb > size_bytes and cur:
-            name = f"{prefix}-{idx:05d}-of-xxxxx.safetensors"
-            save_file(cur, os.path.join(out_dir, name))
-            shards.append(name)
-            for k in cur:
-                wm[k] = name
-            idx += 1
-            cur, cur_size = {}, 0
-        cur[n] = t
-        cur_size += nb
-    if cur:
-        name = f"{prefix}-{idx:05d}-of-xxxxx.safetensors"
-        save_file(cur, os.path.join(out_dir, name))
-        shards.append(name)
-        for k in cur:
-            wm[k] = name
-    total = len(shards)
-    print(f"Total shards written: {total}")
-    rename = {}
-    for s in shards:
-        ns = s.replace("xxxxx", f"{total:05d}")
-        os.rename(os.path.join(out_dir, s), os.path.join(out_dir, ns))
-        rename[s] = ns
-    for k in wm:
-        wm[k] = rename[wm[k]]
-    total_size = sum(t.numel() * t.element_size() for t in state.values())
-    index = {"metadata": {"total_size": total_size}, "weight_map": wm}
-    with open(os.path.join(out_dir, f"{prefix}.safetensors.index.json"), "w") as f:
-        json.dump(index, f, indent=2)
-    print("Index file saved")
-
-
-def convert_cfg(o):
-    mp = {
-        "vocab_size": "padded_vocab_size",
-        "intermediate_size": "ffn_hidden_size",
-        "num_hidden_layers": "num_layers",
-        "max_position_embeddings": "seq_length",
-        "rms_norm_eps": "layernorm_epsilon",
-        "head_dim": "kv_channels",
-        "attention_bias": "add_qkv_bias",
-    }
-    keep = [
-        "num_attention_heads",
-        "hidden_size",
-        "attention_dropout",
-        "use_cache",
-        "eos_token_id",
-        "pad_token_id",
-        "tie_word_embeddings",
-    ]
-    kw = {k: o[v] for k, v in mp.items() if v in o}
-    kw.update({k: o[k] for k in keep if k in o})
-    kw["num_key_value_heads"] = (
-        kw["num_attention_heads"] if not o.get("multi_query_attention", False) else o["multi_query_group_num"]
-    )
-    kw["rope_theta"] = 10000.0 * o.get("rope_ratio", 1.0)
-    return Glm4Config(**kw)
-
-
-def build_tok(d, post):
-    print("Building tokenizer …")
-    t = PreTrainedTokenizerFast.from_pretrained(d, model_input_names=["input_ids", "attention_mask"])
-    if post:
-        t._tokenizer.post_processor = processors.Sequence(
-            [
-                processors.ByteLevel(trim_offsets=False),
-                processors.TemplateProcessing(
-                    single="[gMASK]:0 <sop>:0 $A:0",
-                    pair="[gMASK]:0 <sop>:0 $A:0 $B:1",
-                    special_tokens=[("[gMASK]", 151331), ("<sop>", 151333)],
-                ),
-            ]
-        )
-    else:
-        t._tokenizer.post_processor = processors.Sequence([processors.ByteLevel(trim_offsets=False)])
-    return t
-
-
-def convert(src, dst, post):
-    print("Starting conversion …")
-    os.makedirs(dst, exist_ok=True)
-    with open(os.path.join(src, "config.json")) as f:
-        cfg = convert_cfg(json.load(f))
-    cfg.save_pretrained(dst)
-    print("Config saved")
-    raw = load_raw_state(src)
-    new = convert_state(raw, cfg)
-    write_sharded(new, dst)
-    build_tok(src, post).save_pretrained(dst)
-    print("Tokenizer saved")
-    print("Conversion completed successfully")
+    print("Conversion complete.")
 
 
 if __name__ == "__main__":
-    pa = argparse.ArgumentParser()
-    pa.add_argument("input_dir")
-    pa.add_argument("output_dir")
-    pa.add_argument("--use_post_processor", action="store_true")
-    a = pa.parse_args()
-    convert(a.input_dir, a.output_dir, a.use_post_processor)
+    main()

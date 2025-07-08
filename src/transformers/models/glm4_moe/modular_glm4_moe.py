@@ -20,7 +20,9 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
+from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PretrainedConfig
+from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import rope_config_validation
@@ -134,8 +136,15 @@ class Glm4MoeConfig(PretrainedConfig):
             Number of selected experts.
         num_experts (`int`, *optional*, defaults to 128):
             Number of routed experts.
-        norm_topk_prob (`bool`, *optional*, defaults to `False`):
+        norm_topk_prob (`bool`, *optional*, defaults to `True`):
             Whether to normalize the topk probabilities.
+        n_group (`int`, *optional*, defaults to 8):
+            Number of groups for routed experts.
+        topk_group (`int`, *optional*, defaults to 4):
+            Number of selected groups for each token(for each token, ensuring the selected experts is only within `topk_group` groups).
+        output_router_logits (`bool`, *optional*, defaults to `False`):
+            Whether or not the router logits should be returned by the model. Enabling this will also
+            allow the model to output the auxiliary loss. See [here]() for more details.
 
     ```python
     >>> from transformers import Glm4MoeModel, Glm4MoeConfig
@@ -143,7 +152,7 @@ class Glm4MoeConfig(PretrainedConfig):
     >>> # Initializing a Glm4Moe style configuration
     >>> configuration = Glm4MoeConfig()
 
-    >>> # Initializing a model from the Qwen3-15B-A2B" style configuration
+    >>> # Initializing a model from the GLM-4-MOE-100B-A9B style configuration
     >>> model = Glm4MoeModel(configuration)
 
     >>> # Accessing the model configuration
@@ -195,7 +204,10 @@ class Glm4MoeConfig(PretrainedConfig):
         moe_intermediate_size=1408,
         num_experts_per_tok=8,
         num_experts=128,
-        norm_topk_prob=False,
+        n_group=1,
+        topk_group=1,
+        norm_topk_prob=True,
+        output_router_logits=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -225,8 +237,11 @@ class Glm4MoeConfig(PretrainedConfig):
         self.decoder_sparse_step = decoder_sparse_step
         self.moe_intermediate_size = moe_intermediate_size
         self.num_experts_per_tok = num_experts_per_tok
+        self.n_group = n_group
+        self.topk_group = topk_group
         self.num_experts = num_experts
         self.norm_topk_prob = norm_topk_prob
+        self.output_router_logits = output_router_logits
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,
@@ -309,7 +324,7 @@ class Glm4MoeDecoderLayer(GradientCheckpointingLayer):
         if layer_idx >= config.first_k_dense_replace:
             self.mlp = Glm4MoeSparseMoeBlock(config)
         else:
-            self.mlp = Glm4MoeMLP(config)
+            self.mlp = Glm4MoeMLP(config, intermediate_size=config.intermediate_size)
         self.input_layernorm = Glm4MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Glm4MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -399,6 +414,67 @@ class Glm4MoeModel(MixtralModel):
         super().__init__(config)
         self.layers = nn.ModuleList(
             [Glm4MoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> MoeModelOutputWithPast:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache()
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position = torch.arange(
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            )
+        if position_ids is None:
+            position_ids = cache_position.unsqueeze(0)
+
+        causal_mask = create_causal_mask(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
+            position_ids=position_ids,
+        )
+
+        hidden_states = inputs_embeds
+
+        # create position embeddings to be shared across the decoder layers
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
+        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+            hidden_states = decoder_layer(
+                hidden_states,
+                position_embeddings=position_embeddings,
+                attention_mask=causal_mask,
+                position_ids=position_ids,
+                past_key_value=past_key_values,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                **kwargs,
+            )
+
+        hidden_states = self.norm(hidden_states)
+
+        return MoeModelOutputWithPast(  # only diff with Mistral is the output type, we need MoE
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values,
         )
 
 
