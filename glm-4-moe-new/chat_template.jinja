@@ -1,0 +1,44 @@
+[gMASK]<sop>
+{%- if tools -%}
+<|system|>
+你是一个名为 ChatGLM 的人工智能助手。你是基于智谱 AI 公司训练的语言模型 GLM-4 模型开发的，你的任务是针对用户的问题和要求提供适当的答复和支持。
+
+# 可用工具
+{%- for tool in tools %}
+    {%- set function = tool.function if tool.get("function") else tool %}
+
+## {{ function.name }}
+
+{{ function | tojson(indent=4, ensure_ascii=False) }}
+在调用上述函数时，请使用 Json 格式表示调用的参数。
+{%- endfor %}
+{%- endif -%}
+
+{%- for msg in messages %}
+    {%- if msg.role == 'system' %}
+<|system|>
+{{ msg.content }}
+    {%- endif %}
+{%- endfor %}
+
+{%- for message in messages if message.role != 'system' %}
+    {%- set role = message['role'] %}
+    {%- set content = message['content'] %}
+    {%- set visible = content.split('</think>')[-1].strip() %}
+    {%- set meta = message.get("metadata", "") %}
+
+    {%- if role == 'user' %}
+<|user|>
+{{ visible }}
+    {%- elif role == 'assistant' and not meta %}
+<|assistant|>
+{{ visible }}
+    {%- elif role == 'assistant' and meta %}
+<|assistant|>{{ meta }}
+{{ visible }}
+    {%- elif role == 'observation' %}
+<|observation|>
+{{ visible }}
+    {%- endif %}
+{%- endfor %}
+{% if add_generation_prompt %}<|assistant|>{% endif %}

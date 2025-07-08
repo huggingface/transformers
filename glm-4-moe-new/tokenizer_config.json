@@ -1,0 +1,145 @@
+{
+  "added_tokens_decoder": {
+    "151329": {
+      "content": "<|endoftext|>",
+      "lstrip": false,
+      "normalized": false,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
+    },
+    "151330": {
+      "content": "[MASK]",
+      "lstrip": false,
+      "normalized": false,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
+    },
+    "151331": {
+      "content": "[gMASK]",
+      "lstrip": false,
+      "normalized": false,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
+    },
+    "151332": {
+      "content": "[sMASK]",
+      "lstrip": false,
+      "normalized": false,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
+    },
+    "151333": {
+      "content": "<sop>",
+      "lstrip": false,
+      "normalized": false,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
+    },
+    "151334": {
+      "content": "<eop>",
+      "lstrip": false,
+      "normalized": false,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
+    },
+    "151335": {
+      "content": "<|system|>",
+      "lstrip": false,
+      "normalized": false,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
+    },
+    "151336": {
+      "content": "<|user|>",
+      "lstrip": false,
+      "normalized": false,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
+    },
+    "151337": {
+      "content": "<|assistant|>",
+      "lstrip": false,
+      "normalized": false,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
+    },
+    "151338": {
+      "content": "<|observation|>",
+      "lstrip": false,
+      "normalized": false,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
+    },
+    "151339": {
+      "content": "<|begin_of_image|>",
+      "lstrip": false,
+      "normalized": false,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
+    },
+    "151340": {
+      "content": "<|end_of_image|>",
+      "lstrip": false,
+      "normalized": false,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
+    },
+    "151341": {
+      "content": "<|begin_of_video|>",
+      "lstrip": false,
+      "normalized": false,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
+    },
+    "151342": {
+      "content": "<|end_of_video|>",
+      "lstrip": false,
+      "normalized": false,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
+    }
+  },
+  "additional_special_tokens": [
+    "<|endoftext|>",
+    "[MASK]",
+    "[gMASK]",
+    "[sMASK]",
+    "<sop>",
+    "<eop>",
+    "<|system|>",
+    "<|user|>",
+    "<|assistant|>",
+    "<|observation|>",
+    "<|begin_of_image|>",
+    "<|end_of_image|>",
+    "<|begin_of_video|>",
+    "<|end_of_video|>"
+  ],
+  "clean_up_tokenization_spaces": false,
+  "do_lower_case": false,
+  "eos_token": "<|user|>",
+  "extra_special_tokens": {},
+  "model_input_names": [
+    "input_ids",
+    "attention_mask"
+  ],
+  "model_max_length": 128000,
+  "pad_token": "<|endoftext|>",
+  "padding_side": "left",
+  "remove_space": false,
+  "tokenizer_class": "PreTrainedTokenizer"
+}
