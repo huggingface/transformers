@@ -616,6 +616,28 @@ class Sam2PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, (nn.LayerNorm, Sam2LayerNorm)):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
+        if isinstance(module, Sam2VisionEncoder):
+            if module.pos_embed is not None:
+                module.pos_embed.data.zero_()
+            if module.pos_embed_window is not None:
+                module.pos_embed_window.data.zero_()
+        if isinstance(module, Sam2Model):
+            if module.no_memory_embedding is not None:
+                module.no_memory_embedding.data.zero_()
+            if module.no_memory_positional_encoding is not None:
+                module.no_memory_positional_encoding.data.zero_()
+            if module.memory_temporal_positional_encoding is not None:
+                module.memory_temporal_positional_encoding.data.zero_()
+            if module.no_object_pointer is not None:
+                module.no_object_pointer.data.zero_()
+            if module.occlusion_spatial_embedding_parameter is not None:
+                module.occlusion_spatial_embedding_parameter.data.zero_()
+        if isinstance(module, Sam2MemoryFuserCXBlock):
+            if module.scale is not None:
+                module.scale.data.zero_()
 
 
 class Sam2VisionEncoder(Sam2PreTrainedModel):
