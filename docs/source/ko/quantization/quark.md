@@ -24,7 +24,7 @@ Quark에 관심이 있는 사용자는 [문서](https://quark.docs.amd.com/lates
 
 Quark는 자체 체크포인트/[설정 포맷](https://huggingface.co/amd/Llama-3.1-8B-Instruct-FP8-KV-Quark-test/blob/main/config.json#L26)를 가지고 있지만, 다른 양자화/런타임 구현체 ([AutoAWQ](https://huggingface.co/docs/transformers/quantization/awq), [네이티브 fp8](https://huggingface.co/docs/transformers/quantization/finegrained_fp8))와 호환되는 직렬화 레이아웃으로 모델을 생성하는 것도 지원합니다.
 
-Transformer에서 Quark 양자화 모델을 로드하려면 먼저 라이브러리를 설치해야야합니다:
+Transformer에서 Quark 양자화 모델을 로드하려면 먼저 라이브러리를 설치해야 합니다:
 
 ```bash
 pip install amd-quark
