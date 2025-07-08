@@ -598,7 +598,7 @@ class Aimv2ModelTest(Aimv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 class Aimv2ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
-        model_name = "yaswanthgali/aimv2-large-patch14-224-lit-HF"
+        model_name = "apple/aimv2-large-patch14-224-lit"
         model = Aimv2Model.from_pretrained(model_name, device_map=torch_device)
         processor = AutoProcessor.from_pretrained(model_name)
 
@@ -631,7 +631,7 @@ class Aimv2ModelIntegrationTest(unittest.TestCase):
 class Aimv2VisionModelIntegrationTests(unittest.TestCase):
     @slow
     def test_inference(self):
-        model_name = "yaswanthgali/aimv2-large-patch14-224-HF"
+        model_name = "apple/aimv2-large-patch14-224"
 
         model = Aimv2VisionModel.from_pretrained(model_name, device_map=torch_device)
         processor = AutoImageProcessor.from_pretrained(model_name)
@@ -662,7 +662,7 @@ class Aimv2VisionModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_inference_for_native_resolution(self):
-        model_name = "yaswanthgali/aimv2-large-patch14-native-HF"
+        model_name = "apple/aimv2-large-patch14-native"
 
         model = Aimv2VisionModel.from_pretrained(model_name, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(model_name)
