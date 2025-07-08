@@ -392,7 +392,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
     ) -> Union[tuple, InstructBlipVideoForConditionalGenerationModelOutput]:
         r"""
         Example:
-        
+
         ```python
         >>> from transformers import InstructBlipVideoProcessor, InstructBlipVideoForConditionalGeneration
         >>> import torch
