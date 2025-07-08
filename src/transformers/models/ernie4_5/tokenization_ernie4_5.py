@@ -15,13 +15,11 @@
 
 import os
 from shutil import copyfile
-from typing import Optional, Union
+from typing import Optional
 
-import numpy as np
 import sentencepiece as spm
 
 from ...tokenization_utils import PreTrainedTokenizer
-from ...tokenization_utils_base import PaddingStrategy
 from ...utils import logging
 
 
@@ -216,88 +214,6 @@ class Ernie4_5Tokenizer(PreTrainedTokenizer):
             clean_up_tokenization_spaces=False,
             spaces_between_special_tokens=False,
         )
-
-    def _pad(
-        self,
-        encoded_inputs: Union[dict],
-        max_length: Optional[int] = None,
-        padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_attention_mask: Optional[bool] = None,
-    ) -> dict:
-        """
-        Pad encoded inputs according to specified strategy.
-
-        Args:
-            encoded_inputs (Union[Dict]): Dictionary of encoded inputs.
-            max_length (Optional[int]): Maximum length to pad to.
-            padding_strategy (PaddingStrategy): Strategy for padding.
-            pad_to_multiple_of (Optional[int]): Pad to a multiple of this value.
-            return_attention_mask (Optional[bool]): Whether to return attention mask.
-
-        Returns:
-            dict: Dictionary with padded inputs and optional attention mask.
-
-        Raises:
-            ValueError: If attention_mask has unexpected type or invalid padding strategy.
-        """
-        import torch
-
-        if return_attention_mask is None:
-            return_attention_mask = "attention_mask" in self.model_input_names
-        if return_attention_mask:
-            required_input = encoded_inputs[self.model_input_names[0]]
-            if padding_strategy == PaddingStrategy.LONGEST:
-                max_length = len(required_input)
-            if max_length is not None and pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
-                max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
-            needs_to_be_padded = padding_strategy != PaddingStrategy.DO_NOT_PAD and len(required_input) != max_length
-
-            if "attention_mask" in encoded_inputs and encoded_inputs["attention_mask"] is not None:
-                attention_mask = encoded_inputs.pop("attention_mask")
-                if isinstance(attention_mask, torch.Tensor):
-                    attention_mask = attention_mask.numpy()
-                elif isinstance(attention_mask, list):
-                    attention_mask = np.array(attention_mask)
-                elif not isinstance(attention_mask, np.ndarray):
-                    raise ValueError(f"Unexpected type {type(attention_mask)} of attention_mask, ")
-            else:
-                # Create default attention mask if none provided
-                attention_mask = np.tril(np.ones((len(required_input), len(required_input)), dtype=np.int64))
-                attention_mask = np.expand_dims(attention_mask, axis=0)
-
-            if needs_to_be_padded:
-                difference = max_length - len(required_input)
-                if self.padding_side == "right":
-                    if attention_mask.ndim == 1:
-                        pad_width = [(0, difference)]
-                    else:
-                        pad_width = [(0, 0), (0, difference), (0, difference)]
-                elif self.padding_side == "left":
-                    if attention_mask.ndim == 1:
-                        pad_width = [(difference, 0)]
-                    else:
-                        pad_width = [(0, 0), (difference, 0), (difference, 0)]
-                else:
-                    raise ValueError("Invalid padding strategy:" + str(self.padding_side))
-                attention_mask = np.pad(
-                    attention_mask,
-                    pad_width=pad_width,
-                    mode="constant",
-                    constant_values=0,
-                )
-
-        encoded_inputs = super()._pad(
-            encoded_inputs,
-            max_length,
-            padding_strategy=padding_strategy,
-            pad_to_multiple_of=pad_to_multiple_of,
-            return_attention_mask=False,
-        )
-        if return_attention_mask:
-            encoded_inputs["attention_mask"] = attention_mask.tolist()
-        return encoded_inputs
 
 
 __all__ = ["Ernie4_5Tokenizer"]
