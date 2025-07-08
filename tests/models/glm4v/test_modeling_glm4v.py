@@ -394,7 +394,7 @@ class Glm4vIntegrationTest(unittest.TestCase):
             ]
             for question, video_url in zip(questions, video_urls)
         ]
-        self.processor.video_processor.max_image_size['longest_edge']=50176
+        self.processor.video_processor.max_image_size["longest_edge"] = 50176
         inputs = self.processor.apply_chat_template(
             messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt", padding=True
         ).to(torch_device)
