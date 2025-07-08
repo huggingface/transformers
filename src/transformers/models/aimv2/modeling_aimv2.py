@@ -504,8 +504,6 @@ class Aimv2VisionModel(Aimv2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
     ) -> BaseModelOutputWithPooling:
         r"""
-        Returns:
-
         Examples:
 
         ```python
