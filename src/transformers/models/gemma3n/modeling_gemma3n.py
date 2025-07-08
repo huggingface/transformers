@@ -39,6 +39,8 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
+import timm
+from packaging import version
 from ...utils import (
     ModelOutput,
     TransformersKwargs,
@@ -2200,8 +2202,14 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {}
     _tied_weights_keys = ["lm_head.weight"]
     base_model_prefix = "model"
-
+    
     def __init__(self, config: Gemma3nConfig):
+        if version.parse(timm.__version__) < version.parse("0.9.16"):
+            raise ImportError(
+                f"[Gemma3n] Requires timm >= 0.9.16 for mobilenetv5_300m_enc, "
+                f"but found timm=={timm.__version__}. "
+                "Please upgrade with: pip install -U timm"
+            )
         super().__init__(config)
         self.model = Gemma3nModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
