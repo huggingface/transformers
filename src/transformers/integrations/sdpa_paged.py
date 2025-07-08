@@ -140,7 +140,7 @@ def sdpa_attention_paged_forward(
                 block_tables=block_tables,
                 seq_lens=seq_lens,
                 block_size=block_size,
-                max_seq_len=20,
+                max_seq_len=kwargs.get("max_seqlen_k"),
                 kv_cache_dtype=kwargs.get("kv_cache_dtype", "auto"),
                 scale=scaling,
                 k_scale=module._k_scale_tensor,
