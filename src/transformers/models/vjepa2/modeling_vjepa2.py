@@ -187,7 +187,7 @@ def rotate_queries_or_keys(x, pos):
     omega = torch.arange(D // 2, dtype=x.dtype, device=x.device)
     omega /= D / 2.0
     omega = 1.0 / 10000**omega  # (D/2,)
-    freq = torch.einsum("..., f -> ... f", pos, omega)  # (..., N, D/2), outer product
+    freq = pos.unsqueeze(-1) * omega  # (..., N, D/2), outer product
 
     # -- build rotation matrix and apply
     emb_sin = freq.sin()  # (..., N, D/2)
@@ -487,6 +487,7 @@ class VJEPA2Encoder(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
+        **kwargs,
     ) -> BaseModelOutput:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -681,6 +682,7 @@ class VJEPA2Predictor(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
+        **kwargs,
     ) -> BaseModelOutput:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -1066,6 +1068,7 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
         skip_predictor: bool = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> VJEPA2WithMaskedInputModelOutput:
         r"""
         pixel_values_videos (`torch.Tensor` with shape `[batch size x num_frames x num_channels x height x width]`, required):

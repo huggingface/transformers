@@ -30,7 +30,7 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ...utils.deprecation import deprecate_kwarg
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
@@ -565,7 +565,7 @@ class Gemma3TextModel(Gemma2Model):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -641,7 +641,7 @@ class Gemma3TextModel(Gemma2Model):
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                **flash_attn_kwargs,
+                **kwargs,
             )
 
             hidden_states = layer_outputs[0]

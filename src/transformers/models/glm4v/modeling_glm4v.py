@@ -39,7 +39,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from .configuration_glm4v import Glm4vConfig, Glm4vTextConfig, Glm4vVisionConfig
 
 
@@ -258,7 +258,7 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: float,
     dropout: float = 0.0,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
@@ -794,9 +794,6 @@ class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
         return outputs
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
-
 @dataclass
 @auto_docstring(
     custom_intro="""
@@ -955,7 +952,7 @@ class Glm4vTextModel(Glm4vPreTrainedModel):
 @auto_docstring
 class Glm4vModel(Glm4vPreTrainedModel):
     base_model_prefix = ""
-    _checkpoint_conversion_mapping = None
+    _checkpoint_conversion_mapping = {}
     config: Glm4vConfig
     config_class = Glm4vConfig
     _no_split_modules = ["Glm4vTextDecoderLayer", "Glm4vVisionBlock"]
@@ -1219,7 +1216,7 @@ class Glm4vModel(Glm4vPreTrainedModel):
         video_grid_thw: Optional[torch.LongTensor] = None,
         rope_deltas: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Glm4vModelOutputWithPast]:
         r"""
         pixel_values_videos (`torch.FloatTensor` of shape `(seq_length, num_channels * temporal_size * image_size * image_size)):
@@ -1389,7 +1386,7 @@ class Glm4vCausalLMOutputWithPast(ModelOutput):
 
 
 class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = None
+    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
@@ -1454,7 +1451,7 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
         video_grid_thw: Optional[torch.LongTensor] = None,
         rope_deltas: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Glm4vCausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

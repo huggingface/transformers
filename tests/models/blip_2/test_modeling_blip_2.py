@@ -485,6 +485,12 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_conditional_generation(*config_and_inputs)
 
+    @unittest.skip(
+        reason="Blip2QFormerModel does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet."
+    )
+    def test_eager_matches_sdpa_generate(self):
+        pass
+
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
         pass
@@ -904,6 +910,12 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
     def test_for_conditional_generation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_conditional_generation(*config_and_inputs)
+
+    @unittest.skip(
+        reason="Blip2QFormerModel does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet."
+    )
+    def test_eager_matches_sdpa_generate(self):
+        pass
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):

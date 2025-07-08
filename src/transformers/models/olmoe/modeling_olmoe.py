@@ -147,7 +147,7 @@ class OlmoeRotaryEmbedding(nn.Module):
     def __init__(self, config: OlmoeConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
             self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
         else:
             self.rope_type = "default"
@@ -1044,7 +1044,7 @@ class OlmoeForCausalLM(OlmoePreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **loss_kwargs,
+        **kwargs,
     ) -> Union[tuple, MoeCausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1100,7 +1100,7 @@ class OlmoeForCausalLM(OlmoePreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size, **loss_kwargs)
+            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
 
         aux_loss = None
         if output_router_logits:
