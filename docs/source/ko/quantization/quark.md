@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 [Quark](https://quark.docs.amd.com/latest/)는 특정 데이터 타입, 알고리즘, 하드웨어에 구애받지 않도록 설계된 딥러닝 양자화 툴킷입니다. Quark에서는 다양한 전처리 전략, 알고리즘, 데이터 타입을 조합하여 사용할 수 있습니다.
 
-🤗 Transformers를 통해 통합된  PyTorch 지원은 주로 AMD CPU 및 GPU를 대상으로 하며, 주로 평가 목적으로 사용됩니다. 예를 들어, [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness)를 🤗 Transformers 백엔드와 함께 사용하여 Quark로 양자화된 다양한 모델을 원활하게 평가할 수 있습니다.
+🤗 Transformers를 통해 통합된 PyTorch 지원은 주로 AMD CPU 및 GPU를 대상으로 하며, 주로 평가 목적으로 사용됩니다. 예를 들어, [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness)를 🤗 Transformers 백엔드와 함께 사용하여 Quark로 양자화된 다양한 모델을 원활하게 평가할 수 있습니다.
 
 Quark에 관심이 있는 사용자는 [문서](https://quark.docs.amd.com/latest/)를 참고하여 모델 양자화를 시작하고 지원되는 오픈 소스 라이브러리에서 사용할 수 있습니다!
 
