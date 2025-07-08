@@ -573,6 +573,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
                 "GemmaTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
+        ("smollm3", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("speech_to_text", ("Speech2TextTokenizer" if is_sentencepiece_available() else None, None)),
         ("speech_to_text_2", ("Speech2Text2Tokenizer", None)),
         ("speecht5", ("SpeechT5Tokenizer" if is_sentencepiece_available() else None, None)),
