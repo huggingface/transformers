@@ -125,8 +125,8 @@ class Ernie4_5_MoEConfig(PretrainedConfig):
             The last possible index for a MoE layer.
         moe_layer_interval (`int`, *optional*, defaults to 1):
             The intervals between MoE layers to appear.
-        moe_capacity:
-            TODO: remove this if possible
+        moe_norm_min (`float`, *optional*, defaults to 1e-12):
+            Minimum division value during routing normalization.
         output_router_logits (`bool`, *optional*, defaults to `False`):
             Whether or not the router logits should be returned by the model. Enabling this will also
             allow the model to output the auxiliary loss, including load balancing loss and router z-loss.
@@ -195,7 +195,7 @@ class Ernie4_5_MoEConfig(PretrainedConfig):
         moe_layer_start_index=1,
         moe_layer_end_index=-1,
         moe_layer_interval=1,
-        moe_capacity=[64, 64, 64],
+        moe_norm_min=1e-12,
         output_router_logits=False,
         router_aux_loss_coef=0.001,
         **kwargs,
@@ -233,7 +233,7 @@ class Ernie4_5_MoEConfig(PretrainedConfig):
             else moe_layer_end_index
         )
         self.moe_layer_interval = moe_layer_interval
-        self.moe_capacity = moe_capacity
+        self.moe_norm_min = moe_norm_min
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
 

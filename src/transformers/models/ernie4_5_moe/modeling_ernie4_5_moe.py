@@ -1,4 +1,4 @@
-# Copyright (c) 2025 Baidu, Inc. All Rights Reserved.
+# Copyright (c) 2025 Baidu, Inc. and HuggingFace Inc. team. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import functools
-from copy import deepcopy
 from dataclasses import dataclass
 from functools import partial
 from typing import Callable, Optional
@@ -273,14 +272,35 @@ class Ernie4_5_MoEAttention(nn.Module):
         return attn_output, attn_weights
 
 
-# copy qwen3 moe (+ shared experts)
+# in original code base it tracks usage as well
+# for overall purpose - it's a bias for the gate
+class Ernie4_5_MoEStatics(nn.Module):
+    """
+    TODO:
+    Stores MoE (Mixture of Experts) statistics
+    and expert usage information.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+
+        num_experts = config.moe_num_experts
+        num_experts_groups = 1
+
+        self.e_score_correction_bias = nn.Parameter(
+            torch.zeros(num_experts_groups, num_experts, dtype=torch.float32),
+        )
+
+
+# copy qwen3 moe (+ shared experts + different normalization + correction bias)
+# do not copy... ^ is the closest
 class Ernie4_5_MoESparseMoEBlock_v2(nn.Module):
     def __init__(self,config):
         super().__init__()
         self.num_experts = config.moe_num_experts
         self.top_k = config.moe_k
 
-        # TODO: apparently it's saved but not used - what's the purpose of this...
+        # correction bias
         self.moe_statics = Ernie4_5_MoEStatics(config)
 
         # gating
@@ -288,8 +308,9 @@ class Ernie4_5_MoESparseMoEBlock_v2(nn.Module):
         self.experts = nn.ModuleList(
             [Ernie4_5_MoEMLP(config, config.moe_intermediate_size) for _ in range(config.moe_num_experts)]
         )
+        self.norm_min = config.moe_norm_min
 
-        # shared experts for all forwards
+        # (optional) shared experts for all forwards
         self.shared_experts = None
         if config.moe_num_shared_experts > 0:
             self.shared_experts = Ernie4_5_MoEMLP(config, config.moe_intermediate_size * config.moe_num_shared_experts)
@@ -301,14 +322,18 @@ class Ernie4_5_MoESparseMoEBlock_v2(nn.Module):
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
         # router_logits: (batch * sequence_length, n_experts)
-        # TODO: deactivate autocast?
         router_logits = self.gate(hidden_states.float())
 
         # temporarily forward in fp32 and then cast back to the input dtype
+        # TODO: check below
+        # See https://github.com/PaddlePaddle/ERNIE/blob/d4e1c371dfd089ef618ef378e8996049bd54da00/ernie/moe/moe_layer.py#L607 in combination with
+        # https://github.com/PaddlePaddle/Paddle/blob/develop/python/paddle/incubate/nn/functional/moe_gate_dispatch.py#L104 == the "correction bias"
+        correction_bias = self.moe_statics.e_score_correction_bias[0]
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
+        #routing_weights, selected_experts = torch.topk(routing_weights + correction_bias, self.top_k, dim=-1)
         routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
         routing_weights = routing_weights / torch.clamp(
-            routing_weights.sum(dim=-1, keepdim=True), min=1e-12
+            routing_weights.sum(dim=-1, keepdim=True), min=self.norm_min
         )
         routing_weights = routing_weights.to(hidden_states.dtype)
 
@@ -336,320 +361,12 @@ class Ernie4_5_MoESparseMoEBlock_v2(nn.Module):
             # the `top_x` tensor here.
             final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
 
-        # Add shared experts to the result
+        # Add (optional) shared experts to the result
         if self.shared_experts is not None:
             final_hidden_states += self.shared_experts(hidden_states)
 
         final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return final_hidden_states, None, torch.zeros([1], dtype=torch.float32, device=hidden_states.device), router_logits
-
-
-class Ernie4_5_MoEStatics(nn.Module):
-    """
-    Stores MoE (Mixture of Experts) statistics
-    and expert usage information.
-    """
-
-    def __init__(self, config):
-        """
-        Initialize MoE statistics tracking.
-
-        Args:
-            config: Model configuration containing MoE parameters
-        """
-        super().__init__()
-
-        num_experts = config.moe_num_experts
-        num_experts_groups = 1
-
-        self.e_score_correction_bias = nn.Parameter(
-            torch.zeros(num_experts_groups, num_experts, dtype=torch.float32),
-            requires_grad=False
-        )
-
-
-def topk_gate_func(
-    module: nn.Module,
-    hidden_states: torch.Tensor,
-):
-    capacity = module.get_capacity(hidden_states.shape[0])
-    with torch.autocast(device_type='cuda', dtype=torch.float32):
-        logits = module.gate(hidden_states.float())
-    router_loss = torch.zeros([1], dtype=torch.float32, device=hidden_states.device)
-    router_loss.detach()
-    return logits, capacity, router_loss
-
-
-class Ernie4_5_MoESparseMoEBlock(nn.Module):
-    """Mixture of Experts (MoE) variant of ERNIE's MLP layer."""
-
-    def __init__(self,config):
-        super().__init__()
-        self.config = config
-        self.k = config.moe_k
-        #self.sinkhorn_2gate = config.sinkhorn_2gate
-        #self.sinkhorn_temp = config.sinkhorn_temp
-
-        moe_intermediate_size = config.moe_intermediate_size if config.moe_intermediate_size else config.intermediate_size
-        self.gate = nn.Linear(config.hidden_size, config.moe_num_experts, bias=False, dtype=torch.float32)
-        #if config.moe_gate_act == "softmax":
-        #    self.gate_act = partial(F.softmax, dim=-1)
-        #elif config.moe_gate_act == "sigmoid":
-        #    self.gate_act = F.sigmoid
-        #else:
-        #    raise ValueError(f"{config.moe_gate_act} is not supported.")
-        self.gate_act = partial(F.softmax, dim=-1)
-
-        self.experts = nn.ModuleList(
-            [Ernie4_5_MoEMLP(config,moe_intermediate_size) for i in range(config.moe_num_experts)]
-        )
-
-        #if config.moe_use_aux_free:
-        #    self.moe_statics = Ernie4_5_MoeStatics(config)
-
-        #self.use_correction_bias = config.moe_use_aux_free
-        # TODO: https://github.com/PaddlePaddle/Paddle/blob/develop/python/paddle/incubate/nn/functional/moe_gate_dispatch.py#L104
-        self.moe_statics = Ernie4_5_MoEStatics(config)  # TODO: apparently it's saved but not used
-        self.num_local_experts = len(self.experts)
-
-        self.shared_experts = self._init_shared_experts()
-
-    def _init_shared_experts(self):
-        """
-        Initialize the shared expert module.
-
-        Returns:
-            shared_experts: Shared expert module, returns None if no shared experts are needed.
-
-        """
-        cfg = deepcopy(self.config)
-        if getattr(cfg, 'moe_num_shared_experts', 0) > 0:
-            if getattr(cfg, 'moe_intermediate_size', None):
-                cfg.intermediate_size = cfg.moe_intermediate_size * cfg.moe_num_shared_experts
-            else:
-                cfg.intermediate_size = cfg.intermediate_size * cfg.moe_num_shared_experts
-            shared_experts = Ernie4_5_MoEMLP(cfg, cfg.intermediate_size)
-        else:
-            shared_experts = None
-        return shared_experts
-
-    def forward(
-        self,
-        input: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Forward pass through MoE layer.
-
-        Args:
-            input (Tensor): Input tensor of shape [s, d].
-            token_type_ids: Optional tensor for token types.
-
-        Returns:
-            tuple: (output, combine_weights, router_loss, gate_logits)
-        """
-
-        if input.dim() == 3:
-            orig_shape = input.shape
-            input = input.reshape(-1, input.shape[-1])
-        else:
-            orig_shape = None
-        assert input.dim() == 2, f"input Tensor must have dimensions: (s)equence, (d)im, got:{input.shape}"
-
-        assert self.gate is not None
-
-        gate_input = input
-
-        (
-            dispatched_input,
-            combine_weights,
-            dispatch_mask,
-            scatter_index,
-            router_loss,
-            gate_logits,
-            gate_prob
-        ) = self.gate_and_dispatch(gate_input)
-
-        expert_out = self.forward_experts(dispatched_input)
-
-        combined_output = self.combine_expert_output(expert_out, combine_weights, scatter_index)
-
-        if self.shared_experts is not None:
-            shared_expert_out = self.shared_experts(gate_input)
-            combined_output += shared_expert_out
-
-        if orig_shape:
-            combined_output = combined_output.reshape(orig_shape[:-1] + (combined_output.shape[-1],))
-
-        return combined_output, combine_weights, router_loss, gate_logits
-
-    def forward_experts(self, dispatched_input: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass through experts sequentially.
-
-        Args:
-            dispatched_input (Tensor): Input tensor of shape [num_experts, capacity, dim].
-
-        Returns:
-            Tensor: Expert outputs of shape [num_experts, capacity, dim].
-        """
-        true_experts = self.experts
-        dispatched_input = dispatched_input.reshape(
-            1, self.num_local_experts, -1, dispatched_input.shape[-1]
-        )
-        expert_outputs = []
-        if isinstance(self.experts, nn.ModuleList):
-            chunks = dispatched_input.permute(1, 0, 2, 3).contiguous().unbind(0)
-            assert len(chunks) == len(true_experts), f"{len(chunks)}, {len(true_experts)}"
-            for chunk, expert in zip(chunks, true_experts):
-                expert_outputs.append(expert(chunk))
-        else:
-            dispatched_input = dispatched_input.permute(1, 0, 2, 3).contiguous()
-            orig_shape = dispatched_input.shape
-            chunks = dispatched_input.reshape(orig_shape[0], -1, orig_shape[-1])
-            chunks = self.experts(chunks)
-            chunks = chunks.reshape(orig_shape[:-1] + (chunks.shape[-1],)).unbind(0)
-            expert_outputs.extend(chunks)
-
-        expert_output = torch.stack(expert_outputs, dim=1)
-        return expert_output
-
-    def moe_gate_dispatch(
-        self,
-        x: torch.Tensor,
-        gate_logits: torch.Tensor,
-        k: int,
-        capacity: Optional[int],
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor,
-               torch.Tensor, torch.Tensor]:
-
-        S, H = x.shape
-        E = gate_logits.shape[1]
-        device = x.device
-        topk_prob, topk_idx = torch.topk(gate_logits, k, dim=-1)
-        combine_weights = topk_prob
-        expert_id = topk_idx
-        y = x.new_zeros((E, capacity, H))
-        scatter_index = x.new_full((k, S), -1, dtype=torch.int32)
-
-        # per-expert slot counters
-        slot_counter = torch.zeros(E, dtype=torch.int32, device=device)
-
-        for tok in range(S):
-            for route in range(k):
-                e = expert_id[tok, route].item()
-                slot = slot_counter[e].item()
-                if slot >= capacity:
-                    combine_weights[tok, route] = 0.0
-                    continue
-
-                # record mapping & dispatch activation
-                scatter_index[route, tok] = e * capacity + slot
-                y[e, slot] = x[tok]
-                slot_counter[e] += 1
-
-        expert_offset = torch.cumsum(slot_counter, 0, dtype=torch.int64)
-
-        return y, combine_weights, scatter_index, expert_offset, expert_id
-
-    def combine_expert_output(self, expert_output: torch.Tensor, combine_weights: torch.Tensor, scatter_index: torch.Tensor) -> torch.Tensor:
-        """
-        Combine expert outputs using combination weights.
-
-        Args:
-            expert_output (Tensor): Expert outputs [num_experts, capacity, dim].
-            combine_weights (Tensor): Combination weights.
-            scatter_index (Tensor): Scatter indices.
-
-        Returns:
-            Tensor: Combined output [seqlen, dim].
-        """
-        expert_output = expert_output.reshape(-1, expert_output.shape[-1])
-        combined_output = self.combining(expert_output, combine_weights, scatter_index)
-        return combined_output
-
-    def combining(self, x, combine_weights, scatter_index):
-        """
-        Combines and aggregates input matrix using combination weights.
-
-        Args:
-            x (Tensor): Input tensor of shape [num_experts * capacity, dim]
-            combine_weights (Tensor): Combination weights of shape [seq, 2]
-            scatter_index (Tensor): Scatter indices of shape [seq, 2]
-
-        Returns:
-            Tensor: Combined output tensor of shape [seq, dim]
-        """
-        dim = x.shape[-1]
-
-        scatter_index = scatter_index.reshape([-1])
-        num_k = combine_weights.shape[-1]
-
-        combine_weights = combine_weights.unsqueeze(1)
-
-        x = x[scatter_index].reshape([-1, num_k, dim])
-
-        return torch.matmul(combine_weights, x).squeeze(1)
-
-    def gate_and_dispatch(self, input):
-        """
-        Calculate gate and dispatch inputs.
-
-        Args:
-            input: Input tensor of shape [seq, dim]
-
-        Returns:
-            tuple: (dispatched_input, combine_weights, dispatch_mask,
-            scatter_index, router_loss, gate_logits, gate_prob)
-        """
-        gate_logits, capacity, router_loss = topk_gate_func(self, input)
-
-        # capacity no use
-        prob = self.gate_act(gate_logits)
-        (
-            dispatched_input,
-            combine_weights_unnorm,
-            scatter_index,
-            dispatch_mask,
-            _,
-        ) = self.moe_gate_dispatch(input, prob,  k=self.k, capacity=capacity)
-        dispatch_mask = torch.diff(F.pad(dispatch_mask, (1, 0)))
-
-        scatter_index.detach()
-        dispatch_mask.detach()
-
-        scatter_index = scatter_index.transpose(0, 1)  # [k, s] -> [s, k]
-        combine_weights = combine_weights_unnorm / torch.clamp(
-            combine_weights_unnorm.sum(dim=-1, keepdim=True), min=1e-12
-        )
-        combine_weights = combine_weights.to(dtype=dispatched_input.dtype)
-
-        return dispatched_input, combine_weights, dispatch_mask, scatter_index, router_loss, gate_logits, prob
-
-    def get_capacity(self, num_tokens, cap_factor=None):
-        """
-        Calculate capacity based on number of tokens.
-
-        Args:
-            num_tokens: Number of input tokens
-            cap_factor: Optional capacity factor override
-
-        Returns:
-            int: Calculated capacity
-        """
-        num_experts = self.config.moe_num_experts
-        if cap_factor is not None:
-            cap = cap_factor
-        else:
-            if self.training:
-                cap = self.config.moe_capacity[0]
-            elif num_tokens < num_experts:
-                cap = self.config.moe_capacity[2]
-            else:
-                cap = self.config.moe_capacity[1]
-
-        capacity = int(cap * num_tokens // num_experts)
-        assert capacity > 0, f"requires capacity to >= 0. cap={cap}, num_tokens={num_tokens}"
-        return capacity
 
 
 class Ernie4_5_MoEDecoderLayer(nn.Module):
