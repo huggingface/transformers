@@ -1914,6 +1914,129 @@ class GenerationTesterMixin:
                     )
 
     @pytest.mark.generate
+    def test_generate_continue_from_prefilled_past_key_values(self):
+        # Tests that we can continue generating from past key values, returned from a previous `generate` call,
+        # without the tokens that correspond to the cached part.
+        for model_class in self.all_generative_model_classes:
+            if any(model_name in model_class.__name__.lower() for model_name in ["imagegpt", "mllama"]):
+                self.skipTest(reason="Won't fix: old model with unique inputs/caches/other")
+            if any(model_name in model_class.__name__.lower() for model_name in ["umt5"]):
+                self.skipTest(reason="TODO: needs modeling or test input preparation fixes for compatibility")
+
+            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+
+            if not hasattr(config.get_text_config(), "use_cache"):
+                self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
+            if config.is_encoder_decoder:
+                self.skipTest(reason="The test for encode_decoder is not written yet")
+
+            # Let's make it always:
+            # 1. use cache (for obvious reasons)
+            # 2. generate to max length (which can be achieved by setting the eos token to an invalid value), which
+            #    would make the test flaky (e.g. EOS is generated on iteration 1 on both generations, but the
+            #    continuation would force it to generate beyond an EOS token)
+            # 3. ignore `token_type_ids` for simplicity
+            # 4. ignore `forced_eos_token_id`, which requires further manipulation of the continuation inputs and is
+            #    active by default on some models
+            # 5. ignore `encoder_no_repeat_ngram_size`, which is set by default in some encoder-decoder models. When
+            #    we use their decoder as a stand-alone model, `encoder_no_repeat_ngram_size` actually prevents
+            #    repetition exclusively from the prompt. This test relies on comparing one call vs 2 calls
+            #    with cache, what is considered a prompt is different in the two cases.
+
+            if "token_type_ids" in inputs:
+                del inputs["token_type_ids"]
+
+            model = model_class(config).to(torch_device)
+            model.eval()
+
+            # If "past_key_values" is not returned, skip the test (e.g. RWKV uses a different cache name and format)
+            if "past_key_values" not in model(**inputs):
+                self.skipTest(reason="This model doesn't return `past_key_values`")
+
+            generate_kwargs = {
+                "pad_token_id": -1,
+                "eos_token_id": -1,
+                "forced_eos_token_id": None,
+                "encoder_no_repeat_ngram_size": 0,
+                "use_cache": True,
+                "do_sample": False,
+                "return_dict_in_generate": True,
+                "output_scores": True,
+            }
+
+            # Traditional way to conitnue generating text using kv cache
+            #                 output2
+            # /~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\
+            #            input2
+            # /~~~~~~~~~~~~~~~~~~~~~~~~\
+            #      output1
+            # /~~~~~~~~~~~~~~~~\
+            #  input1
+            # /~~~~~~\
+            # IIIIIIIIOOOOOOOOOOIIIIIIIIOOOOOOOOOOOOOOOOOO
+            #
+            # in this test, two input sequences (marked by I) are identical.
+            # in the normal application, this is part of a conversation.
+            inputs1 = inputs
+            outputs1 = model.generate(**inputs1, **generate_kwargs, max_new_tokens=2)
+            inputs2 = { **inputs }
+            inputs2["input_ids"] = torch.cat((outputs1.sequences, inputs["input_ids"]), dim=1)
+            inputs2["attention_mask"] = torch.nn.functional.pad(
+                inputs1["attention_mask"],
+                (0, inputs2["input_ids"].shape[1] - inputs1["input_ids"].shape[1]),
+                mode="constant",
+                value=1,
+            )
+            inputs2["past_key_values"] = outputs2.past_key_values
+            outputs2 = model.generate(**inputs2, **generate_kwargs, max_new_tokens=2)
+            traditional_outputs = outputs2
+
+            # New way to conitnue generating text using kv cache.
+            # It continue from the generated position, but we do not append the new input to the previous output,
+            # relying only on the kv cache.
+            #
+            #                    cache_position
+            #                   /~~~~~~~\
+            #  inputs2["attention_mask"]
+            # /~~~~~~~~~~~~~~~~~~~~~~~~~\
+            #      output1               output2
+            # /~~~~~~~~~~~~~~~~\/~~~~~~~~~~~~~~~~~~~~~~~~~\
+            #  input1             input2
+            # /~~~~~~\          /~~~~~~~\
+            # IIIIIIIIOOOOOOOOOOIIIIIIIIIOOOOOOOOOOOOOOOOOO
+            #
+            inputs1 = inputs
+            outputs1 = model.generate(**inputs1, **generate_kwargs, max_new_tokens=2)
+            inputs1_length = inputs1["input_ids"].shape[1]
+            outputs1_length = outputs1.sequence.shape[1]
+            inputs2 = { **inputs }
+            # inputs2["input_ids"] = inputs1["input_ids"]
+            inputs2["attention_mask"] = torch.nn.functional.pad(
+                inputs1["attention_mask"],
+                (0, output.sequence.shape[1]),
+                mode="constant",
+                value=1,
+            )
+            inputs2["past_key_values"] = outputs1.past_key_values
+            inputs2["cache_position"] = torch.arange(outputs1_length, outputs1_length + inputs1_length,
+                                                     dtype=torch.int64, device=model.device)
+            outputs2 = model.generate(**inputs2, **generate_kwargs, max_new_tokens=2)
+            incremental_outputs = outputs2
+
+            # The two sets of generated text and past kv should be equal to each other
+            self._check_similar_generate_outputs(traditional_outputs, incremental_outputs)
+            for layer_idx in range(len(traditional_outputs.past_key_values)):
+                for kv_idx in range(len(traditional_outputs.past_key_values[layer_idx])):
+                    self.assertTrue(
+                        torch.allclose(
+                            traditional_outputs.past_key_values[layer_idx][kv_idx],
+                            incremental_outputs.past_key_values[layer_idx][kv_idx],
+                        )
+                    )
+
+
+
+    @pytest.mark.generate
     def test_generate_continue_from_inputs_embeds(self):
         """Tests that we can continue generation from `inputs_embeds` and past key values returned from a previous `generate` call."""
         for model_class in self.all_generative_model_classes:
