@@ -43,8 +43,10 @@ def merge_configurations(config_path: str, entropy_params_path: str) -> Dict[str
     # Create patcher config
     patcher_hidden_size = int(entropy_model_params.get("dim", 512))
     patcher_multiple_of = int(entropy_model_params.get("multiple_of", 256))
-    patcher_intermediate_size = patcher_multiple_of * ((int(8 * patcher_hidden_size / 3) + patcher_multiple_of - 1) // patcher_multiple_of)
-    
+    patcher_intermediate_size = patcher_multiple_of * (
+        (int(8 * patcher_hidden_size / 3) + patcher_multiple_of - 1) // patcher_multiple_of
+    )
+
     patcher_config = {
         "vocab_size": int(entropy_model_params.get("vocab_size", 256)),
         "hidden_size": patcher_hidden_size,
@@ -65,8 +67,10 @@ def merge_configurations(config_path: str, entropy_params_path: str) -> Dict[str
     # Create encoder config
     encoder_hidden_size = unified_config.get("dim_local_encoder", 1024)
     encoder_multiple_of = unified_config.get("multiple_of", 256)
-    encoder_intermediate_size = encoder_multiple_of * ((int(8 * encoder_hidden_size / 3) + encoder_multiple_of - 1) // encoder_multiple_of)
-    
+    encoder_intermediate_size = encoder_multiple_of * (
+        (int(8 * encoder_hidden_size / 3) + encoder_multiple_of - 1) // encoder_multiple_of
+    )
+
     encoder_config = {
         "vocab_size": unified_config.get("vocab_size", 256),
         "cross_attn_all_layers": unified_config.get("cross_attn_all_layers_encoder", False),
@@ -79,7 +83,8 @@ def merge_configurations(config_path: str, entropy_params_path: str) -> Dict[str
         "num_hidden_layers": unified_config.get("n_layers_local_encoder", 1),
         "norm_eps": unified_config.get("norm_eps", 1e-5),
         "dropout": unified_config.get("dropout", 0.0),
-        "max_position_embeddings": unified_config.get("max_encoder_seq_length") or unified_config.get("max_seqlen", 1024),
+        "max_position_embeddings": unified_config.get("max_encoder_seq_length")
+        or unified_config.get("max_seqlen", 1024),
         "rope_theta": unified_config.get("rope_theta", 10000.0),
         "rope_scaling": {"rope_type": "default"},
         "hidden_act": unified_config.get("hidden_act", "silu"),
@@ -90,8 +95,10 @@ def merge_configurations(config_path: str, entropy_params_path: str) -> Dict[str
     # Create decoder config
     decoder_hidden_size = unified_config.get("dim_local_decoder", 1024)
     decoder_multiple_of = unified_config.get("multiple_of", 256)
-    decoder_intermediate_size = decoder_multiple_of * ((int(8 * decoder_hidden_size / 3) + decoder_multiple_of - 1) // decoder_multiple_of)
-    
+    decoder_intermediate_size = decoder_multiple_of * (
+        (int(8 * decoder_hidden_size / 3) + decoder_multiple_of - 1) // decoder_multiple_of
+    )
+
     decoder_config = {
         "vocab_size": unified_config.get("vocab_size", 256),
         "cross_attn_all_layers": unified_config.get("cross_attn_all_layers_decoder", False),
@@ -103,7 +110,8 @@ def merge_configurations(config_path: str, entropy_params_path: str) -> Dict[str
         "num_hidden_layers": unified_config.get("n_layers_local_decoder", 9),
         "norm_eps": unified_config.get("norm_eps", 1e-5),
         "dropout": unified_config.get("dropout", 0.0),
-        "max_position_embeddings": unified_config.get("max_encoder_seq_length") or unified_config.get("max_seqlen", 1024),
+        "max_position_embeddings": unified_config.get("max_encoder_seq_length")
+        or unified_config.get("max_seqlen", 1024),
         "rope_theta": unified_config.get("rope_theta", 10000.0),
         "rope_scaling": {"rope_type": "default"},
         "hidden_act": unified_config.get("hidden_act", "silu"),
@@ -114,8 +122,10 @@ def merge_configurations(config_path: str, entropy_params_path: str) -> Dict[str
     # Create global transformer config
     global_hidden_size = unified_config.get("dim_global", 2048)
     global_multiple_of = unified_config.get("multiple_of", 256)
-    global_intermediate_size = global_multiple_of * ((int(8 * global_hidden_size / 3) + global_multiple_of - 1) // global_multiple_of)
-    
+    global_intermediate_size = global_multiple_of * (
+        (int(8 * global_hidden_size / 3) + global_multiple_of - 1) // global_multiple_of
+    )
+
     global_config = {
         "hidden_size": global_hidden_size,
         "num_attention_heads": unified_config.get("n_heads_global", 16),
@@ -163,7 +173,7 @@ def merge_configurations(config_path: str, entropy_params_path: str) -> Dict[str
     return main_config_dict
 
 
-def apply_weight_mapping(state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:    
+def apply_weight_mapping(state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
     component_mappings = {
         ".attention.": ".self_attn.",
         ".feed_forward.": ".mlp.",
@@ -181,18 +191,18 @@ def apply_weight_mapping(state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch
         ".wo.": ".o_proj.",
         ".output.": ".lm_head.",
     }
-    
+
     new_state_dict = {}
-    
+
     for old_key, tensor in state_dict.items():
         new_key = old_key
-        
+
         for old_pattern, new_pattern in component_mappings.items():
             if old_pattern in new_key:
                 new_key = new_key.replace(old_pattern, new_pattern)
-        
+
         new_state_dict[new_key] = tensor
-    
+
     return new_state_dict
 
 
@@ -211,9 +221,9 @@ def merge_weights(weights_path: str, entropy_weights_path: str) -> Dict[str, tor
     for key, tensor in entropy_weights.items():
         patcher_key = f"patcher.{key}"
         unified_weights[patcher_key] = tensor
-    
+
     unified_weights = apply_weight_mapping(unified_weights)
-    
+
     decoder_lm_head_key = "local_decoder.lm_head.weight"
     top_lm_head_key = "lm_head.weight"
     unified_weights[top_lm_head_key] = unified_weights[decoder_lm_head_key]
@@ -227,9 +237,9 @@ def merge_weights(weights_path: str, entropy_weights_path: str) -> Dict[str, tor
             prefixed_weights[f"model.{key}"] = tensor
         else:
             prefixed_weights[key] = tensor
-    
+
     unified_weights = prefixed_weights
-    
+
     return unified_weights
 
 

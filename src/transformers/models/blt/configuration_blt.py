@@ -23,15 +23,16 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
+
 class BLTLocalEncoderConfig(PretrainedConfig):
     """
     Configuration class for the BLT Local Encoder component.
     """
-    
+
     model_type = "blt_local_encoder"
-    
+
     def __init__(
-          self,
+        self,
         vocab_size=256,
         cross_attn_all_layers=True,
         cross_attn_k=2,
@@ -66,18 +67,19 @@ class BLTLocalEncoderConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling or {"rope_type": "default"}
         self.hidden_act = hidden_act
-        
+
         super().__init__(**kwargs)
 
         self._attn_implementation = _attn_implementation
-    
+
+
 class BLTLocalDecoderConfig(PretrainedConfig):
     """
     Configuration class for the BLT Local Decoder component.
     """
-    
+
     model_type = "blt_local_decoder"
-    
+
     def __init__(
         self,
         vocab_size=256,
@@ -119,16 +121,15 @@ class BLTLocalDecoderConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         self._attn_implementation = _attn_implementation
-
 
 
 class BLTGlobalTransformerConfig(PretrainedConfig):
     """
     Configuration class for the BLT Global Transformer component.
     """
-    
+
     model_type = "blt_global_transformer"
-    
+
     def __init__(
         self,
         hidden_size=512,
@@ -157,17 +158,16 @@ class BLTGlobalTransformerConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling or {"rope_type": "default"}
         self.hidden_act = hidden_act
-        
+
         super().__init__(**kwargs)
 
         self._attn_implementation = _attn_implementation
 
 
-
 class BLTPatcherConfig(PretrainedConfig):
     r"""
     Configuration class for the BLT Patcher/Entropy model component.
-    
+
     Args:
         vocab_size (`int`, *optional*, defaults to 256):
             Vocabulary size for the entropy model used in patching.
@@ -198,9 +198,9 @@ class BLTPatcherConfig(PretrainedConfig):
         attn_bias_type (`str`, *optional*, defaults to "causal"):
             Attention bias type for the entropy model.
     """
-    
+
     model_type = "blt_patcher"
-    
+
     def __init__(
         self,
         vocab_size=256,
@@ -236,7 +236,6 @@ class BLTPatcherConfig(PretrainedConfig):
         self._attn_implementation = _attn_implementation
 
 
-
 class BLTConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BLTModel`]. It is used to instantiate a
@@ -251,7 +250,7 @@ class BLTConfig(PretrainedConfig):
         max_position_embeddings (`int`, *optional*, defaults to 1024):
             The maximum sequence length that this model can handle.
         _attn_implementation (`str`, *optional*, defaults to "sdpa"):
-            The attention implementation to use. Can be "eager", "sdpa", etc. This setting is propagated to all 
+            The attention implementation to use. Can be "eager", "sdpa", etc. This setting is propagated to all
             sub-components (encoder, decoder, global transformer, patcher).
 
         # Patching configuration
@@ -308,10 +307,10 @@ class BLTConfig(PretrainedConfig):
     model_type = "blt"
     keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs = {
-        "patcher_config": BLTPatcherConfig, 
-        "encoder_config": BLTLocalEncoderConfig, 
-        "decoder_config": BLTLocalDecoderConfig, 
-        "global_config": BLTGlobalTransformerConfig
+        "patcher_config": BLTPatcherConfig,
+        "encoder_config": BLTLocalEncoderConfig,
+        "decoder_config": BLTLocalDecoderConfig,
+        "global_config": BLTGlobalTransformerConfig,
     }
 
     def __init__(
@@ -336,7 +335,6 @@ class BLTConfig(PretrainedConfig):
         _attn_implementation="sdpa",
         **kwargs,
     ):
-        
         # Basic model configuration
         self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
@@ -394,10 +392,11 @@ class BLTConfig(PretrainedConfig):
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
+
 __all__ = [
-    "BLTConfig", 
-    "BLTPatcherConfig", 
-    "BLTLocalEncoderConfig", 
-    "BLTLocalDecoderConfig", 
-    "BLTGlobalTransformerConfig", 
+    "BLTConfig",
+    "BLTPatcherConfig",
+    "BLTLocalEncoderConfig",
+    "BLTLocalDecoderConfig",
+    "BLTGlobalTransformerConfig",
 ]
