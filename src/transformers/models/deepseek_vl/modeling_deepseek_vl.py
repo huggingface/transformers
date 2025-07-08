@@ -236,11 +236,11 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
         )
 
 
-# Copied from transformers.models.janus.modeling_janus.JanusForConditionalGeneration with Janus->DeepseekVL
 class DeepseekVLForConditionalGeneration(DeepseekVLPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["model.language_model.embed_tokens.weight", "lm_head.weight"]
     _supports_static_cache = True
 
+    # Copied from transformers.models.janus.modeling_janus.JanusForConditionalGeneration.__init__ with Janus->DeepseekVL
     def __init__(self, config: DeepseekVLConfig):
         super().__init__(config)
         self.config = config
@@ -250,26 +250,33 @@ class DeepseekVLForConditionalGeneration(DeepseekVLPreTrainedModel, GenerationMi
         # Initialize weights and apply final processing.
         self.post_init()
 
+    # Copied from transformers.models.janus.modeling_janus.JanusForConditionalGeneration.get_input_embeddings with Janus->DeepseekVL
     def get_input_embeddings(self):
         return self.model.language_model.get_input_embeddings()
 
+    # Copied from transformers.models.janus.modeling_janus.JanusForConditionalGeneration.set_input_embeddings with Janus->DeepseekVL
     def set_input_embeddings(self, value):
         self.model.language_model.set_input_embeddings(value)
 
+    # Copied from transformers.models.janus.modeling_janus.JanusForConditionalGeneration.get_output_embeddings with Janus->DeepseekVL
     def get_output_embeddings(self):
         return self.lm_head
 
+    # Copied from transformers.models.janus.modeling_janus.JanusForConditionalGeneration.set_output_embeddings with Janus->DeepseekVL
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
+    # Copied from transformers.models.janus.modeling_janus.JanusForConditionalGeneration.set_decoder with Janus->DeepseekVL
     def set_decoder(self, decoder):
         self.model = decoder
 
+    # Copied from transformers.models.janus.modeling_janus.JanusForConditionalGeneration.get_decoder with Janus->DeepseekVL
     def get_decoder(self):
         return self.model
 
     @can_return_tuple
     @auto_docstring
+    # Copied from transformers.models.janus.modeling_janus.JanusForConditionalGeneration.forward with Janus->DeepseekVL
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -319,6 +326,7 @@ class DeepseekVLForConditionalGeneration(DeepseekVLPreTrainedModel, GenerationMi
             image_hidden_states=outputs.image_hidden_states,
         )
 
+    # Copied from transformers.models.janus.modeling_janus.JanusForConditionalGeneration.prepare_inputs_for_generation with Janus->DeepseekVL
     def prepare_inputs_for_generation(
         self,
         input_ids,
