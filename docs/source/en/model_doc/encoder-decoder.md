@@ -14,8 +14,6 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Encoder Decoder Models
-
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
@@ -24,33 +22,82 @@ rendered properly in your Markdown viewer.
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
-## Overview
+# Encoder Decoder Models
 
-The [`EncoderDecoderModel`] can be used to initialize a sequence-to-sequence model with any
-pretrained autoencoding model as the encoder and any pretrained autoregressive model as the decoder.
+[`EncoderDecoderModel`](https://huggingface.co/papers/1706.03762) has two main parts:
 
-The effectiveness of initializing sequence-to-sequence models with pretrained checkpoints for sequence generation tasks
-was shown in [Leveraging Pre-trained Checkpoints for Sequence Generation Tasks](https://huggingface.co/papers/1907.12461) by
-Sascha Rothe, Shashi Narayan, Aliaksei Severyn.
+Encoder: This part reads the input text and converts it into a set of numerical features capturing the meaning and context 
+of the input.
 
-After such an [`EncoderDecoderModel`] has been trained/fine-tuned, it can be saved/loaded just like
-any other models (see the examples for more information).
+Decoder: This part takes the numerical features from the encoder and generates the output text step by step. It uses the information from the encoder to produce meaningful and relevant output, such as a translation, a summary, or an answer.
 
-An application of this architecture could be to leverage two pretrained [`BertModel`] as the encoder
-and decoder for a summarization model as was shown in: [Text Summarization with Pretrained Encoders](https://huggingface.co/papers/1908.08345) by Yang Liu and Mirella Lapata.
+We can be use this model class to initialize a sequence-to-sequence model with any pretrained autoencoding model as the 
+encoder and any pretrained autoregressive model as the decoder.
 
-## Randomly initializing `EncoderDecoderModel` from model configurations.
+> [!TIP]
+> This model was contributed by [thomwolf](https://github.com/thomwolf). This model's TensorFlow and Flax versions
+> were contributed by [ydshieh](https://github.com/ydshieh).
+> Click on the Encoder Decoder models in the right sidebar for more examples of how to apply Encoder Decoder to different 
+> language tasks.
 
-[`EncoderDecoderModel`] can be randomly initialized from an encoder and a decoder config. In the following example, we show how to do this using the default [`BertModel`] configuration for the encoder and the default [`BertForCausalLM`] configuration for the decoder.
+The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line.
+
+hfoptions id="usage">
+<hfoption id="Pipeline">
 
 ```python
->>> from transformers import BertConfig, EncoderDecoderConfig, EncoderDecoderModel
+import torch
+from transformers import pipeline
 
->>> config_encoder = BertConfig()
->>> config_decoder = BertConfig()
+pipeline = pipeline(
+    task="text-generation",
+    model="patrickvonplaten/bert2bert-cnn_dailymail-fp16",
+    torch_dtype=torch.bfloat16,
+    device=0
+)
+pipeline("Plants create energy through a process known as")
+```
 
->>> config = EncoderDecoderConfig.from_encoder_decoder_configs(config_encoder, config_decoder)
->>> model = EncoderDecoderModel(config=config)
+</hfoption>
+<hfoption id="AutoModel">
+
+```python
+import torch  
+from transformers import AutoModelForCausalLM, AutoTokenizer  
+
+tokenizer = AutoTokenizer.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1")
+model = AutoModelForCausalLM.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1", torch_dtype=torch.bfloat16, device_map="auto")  
+input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to("cuda")  
+
+output = model.generate(**input_ids)  
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+
+</hfoption>
+<hfoption id="transformers CLI">
+
+```bash
+echo -e "Plants create energy through a process known as" | transformers-cli run --task text-generation --model "patrickvonplaten/bert2bert-cnn_dailymail-fp16" --device 0
+```
+
+</hfoption>
+</hfoptions>
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+
+The example below uses [torchao](../quantization/torchao) to only quantize the weights to 4-bit integers.
+
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
+
+quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
+tokenizer = AutoTokenizer.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16")
+model = AutoModelForCausalLM.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16", torch_dtype=torch.bfloat16, quantization_config=quantization_config, device_map="auto")
+input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to("cuda")
+
+output = model.generate(**input_ids)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 ## Initialising `EncoderDecoderModel` from a pretrained encoder and a pretrained decoder.
@@ -93,36 +140,15 @@ To perform inference, one uses the [`generate`] method, which allows to autoregr
 >>> generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 >>> print(generated_text)
 nearly 800 thousand customers were affected by the shutoffs. the aim is to reduce the risk of wildfires. nearly 800, 000 customers were expected to be affected by high winds amid dry conditions. pg & e said it scheduled the blackouts to last through at least midday tomorrow.
-```
 
-## Loading a PyTorch checkpoint into `TFEncoderDecoderModel`.
-
-[`TFEncoderDecoderModel.from_pretrained`] currently doesn't support initializing the model from a
-pytorch checkpoint. Passing `from_pt=True` to this method will throw an exception. If there are only pytorch
-checkpoints for a particular encoder-decoder model, a workaround is:
-
-```python
->>> # a workaround to load from pytorch checkpoint
->>> from transformers import EncoderDecoderModel, TFEncoderDecoderModel
-
->>> _model = EncoderDecoderModel.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16")
-
->>> _model.encoder.save_pretrained("./encoder")
->>> _model.decoder.save_pretrained("./decoder")
-
->>> model = TFEncoderDecoderModel.from_encoder_decoder_pretrained(
-...     "./encoder", "./decoder", encoder_from_pt=True, decoder_from_pt=True
-... )
->>> # This is only for copying some specific attributes of this particular model.
->>> model.config = _model.config
-```
-
-## Training
+### Training
 
 Once the model is created, it can be fine-tuned similar to BART, T5 or any other encoder-decoder model.
 As you can see, only 2 inputs are required for the model in order to compute a loss: `input_ids` (which are the
 `input_ids` of the encoded input sequence) and `labels` (which are the `input_ids` of the encoded
 target sequence).
+
+Detailed [colab](https://colab.research.google.com/drive/1WIk2bxglElfZewOHboPFNj8H44_VAyKE?usp=sharing#scrollTo=ZwQIEhKOrJpl) for training.
 
 ```python
 >>> from transformers import BertTokenizer, EncoderDecoderModel
@@ -146,12 +172,6 @@ target sequence).
 >>> # the forward function automatically creates the correct decoder_input_ids
 >>> loss = model(input_ids=input_ids, labels=labels).loss
 ```
-
-Detailed [colab](https://colab.research.google.com/drive/1WIk2bxglElfZewOHboPFNj8H44_VAyKE?usp=sharing#scrollTo=ZwQIEhKOrJpl) for training.
-
-This model was contributed by [thomwolf](https://github.com/thomwolf). This model's TensorFlow and Flax versions
-were contributed by [ydshieh](https://github.com/ydshieh).
-
 
 ## EncoderDecoderConfig
 
