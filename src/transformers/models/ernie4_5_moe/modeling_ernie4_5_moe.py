@@ -290,7 +290,9 @@ class Ernie4_5_MoESparseMoEBlock_v2(nn.Module):
         )
 
         # shared experts for all forwards
-        self.shared_experts = Ernie4_5_MoEMLP(config, config.moe_intermediate_size * config.moe_num_shared_experts)
+        self.shared_experts = None
+        if config.moe_num_shared_experts > 0:
+            self.shared_experts = Ernie4_5_MoEMLP(config, config.moe_intermediate_size * config.moe_num_shared_experts)
 
     def forward(
         self,
@@ -299,11 +301,15 @@ class Ernie4_5_MoESparseMoEBlock_v2(nn.Module):
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
         # router_logits: (batch * sequence_length, n_experts)
-        router_logits = self.gate(hidden_states)
+        # TODO: deactivate autocast?
+        router_logits = self.gate(hidden_states.float())
 
         # temporarily forward in fp32 and then cast back to the input dtype
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
         routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
+        routing_weights = routing_weights / torch.clamp(
+            routing_weights.sum(dim=-1, keepdim=True), min=1e-12
+        )
         routing_weights = routing_weights.to(hidden_states.dtype)
 
         final_hidden_states = torch.zeros(
@@ -331,7 +337,8 @@ class Ernie4_5_MoESparseMoEBlock_v2(nn.Module):
             final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
 
         # Add shared experts to the result
-        final_hidden_states += self.shared_experts(hidden_states)
+        if self.shared_experts is not None:
+            final_hidden_states += self.shared_experts(hidden_states)
 
         final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return final_hidden_states, None, torch.zeros([1], dtype=torch.float32, device=hidden_states.device), router_logits
@@ -366,7 +373,7 @@ def topk_gate_func(
     hidden_states: torch.Tensor,
 ):
     capacity = module.get_capacity(hidden_states.shape[0])
-    with torch.autocast(device_type='cuda',dtype=torch.float32):
+    with torch.autocast(device_type='cuda', dtype=torch.float32):
         logits = module.gate(hidden_states.float())
     router_loss = torch.zeros([1], dtype=torch.float32, device=hidden_states.device)
     router_loss.detach()
@@ -683,8 +690,8 @@ class Ernie4_5_MoEDecoderLayer(nn.Module):
             and layer_idx >= moe_layer_start_index
             and layer_idx <= moe_layer_end_index
         ):
-            self.mlp = Ernie4_5_MoESparseMoEBlock(config)
-            #self.mlp = Ernie4_5_MoESparseMoEBlock_v2(config)
+            #self.mlp = Ernie4_5_MoESparseMoEBlock(config)
+            self.mlp = Ernie4_5_MoESparseMoEBlock_v2(config)
         else:
             self.mlp = Ernie4_5_MoEMLP(config)
 
@@ -753,8 +760,8 @@ class Ernie4_5_MoEDecoderLayer(nn.Module):
         router_loss = None
         gate_logits = None
 
-        if isinstance(self.mlp, Ernie4_5_MoESparseMoEBlock):
-        #if isinstance(self.mlp, Ernie4_5_MoESparseMoEBlock_v2):
+        #if isinstance(self.mlp, Ernie4_5_MoESparseMoEBlock):
+        if isinstance(self.mlp, Ernie4_5_MoESparseMoEBlock_v2):
             hidden_states, _, router_loss, gate_logits = self.mlp(hidden_states)
         else:
             hidden_states = self.mlp(hidden_states)
@@ -782,6 +789,7 @@ class Ernie4_5_MoEPretrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["Ernie4_5_MoEDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
+    _keep_in_fp32_modules_strict = ["gate", "moe_statics"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -962,7 +970,7 @@ class ErniePretrainingCriterion(nn.Module):
 @auto_docstring
 class Ernie4_5_MoEModel(Ernie4_5_MoEPretrainedModel):
     """The core ERNIE transformer model with MoE (Mixture of Experts) support."""
-    _keep_in_fp32_modules = ['gate']
+
     def __init__(self, config: Ernie4_5_MoEConfig):
         """Initialize the ERNIE model architecture."""
         super().__init__(config)
