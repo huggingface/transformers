@@ -407,8 +407,9 @@ class Ovis2IntegrationTest(unittest.TestCase):
         ).to(torch_device, torch.bfloat16)
 
         output = model.generate(**inputs, max_new_tokens=50)
+
         EXPECTED_DECODED_TEXT = [
-            'system\nYou are a helpful assistant.\nuser\n\nWhat do you see in this image?\nassistant\nThe image shows a forested area with two deer in the foreground. The deer are brown in color and appear to be grazing on the grass. The scene is quite foggy, creating a misty atmosphere. The deer are positioned on a grassy',
+            'system\nYou are a helpful assistant.\nuser\n\nWhat do you see in this image?\nassistant\nThe image shows a scene from a stealth cam, capturing a foggy forest setting. There are two deer visible in the foreground, with one larger deer standing in the center and a smaller deer behind it. The background is filled with dense greenery,',
             'system\nYou are a helpful assistant.\nuser\n\nWhat do you see in this image?\nassistant\nI see two cats lying on a pink blanket. There are also two remote controls on the blanket.'
         ]  # fmt: skip
         self.assertEqual(
