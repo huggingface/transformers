@@ -1624,13 +1624,17 @@ class Qwen2_5OmniThinkerTextModel(Qwen2_5OmniPreTrainedModel):
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             # Prepare mask arguments
+
+            # position_ids is 3d tensor of shape [3, batch_size, seq_length]
+            # When used for masking, we need the sequence ids which is the first dimension
+
             mask_kwargs = {
                 "config": self.config,
                 "input_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
-                "position_ids": position_ids,
+                "position_ids": position_ids[0],
             }
             # Create the masks
             causal_mask_mapping = {
@@ -2186,13 +2190,17 @@ class Qwen2_5OmniTalkerModel(Qwen2_5OmniPreTrainedModel):
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             # Prepare mask arguments
+
+            # position_ids is 3d tensor of shape [3, batch_size, seq_length]
+            # When used for masking, we need the sequence ids which is the first dimension
+
             mask_kwargs = {
                 "config": self.config,
                 "input_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
-                "position_ids": position_ids,
+                "position_ids": position_ids[0],
             }
             # Create the masks
             causal_mask_mapping = {
