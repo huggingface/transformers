@@ -42,12 +42,13 @@ from ...utils.import_utils import is_torch_available
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoTokenizer
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
+    LlamaAttention,
     LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaMLP,
     LlamaModel,
     LlamaPreTrainedModel,
-    LlamaRMSNorm, LlamaAttention,
+    LlamaRMSNorm,
 )
 from ..llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,
