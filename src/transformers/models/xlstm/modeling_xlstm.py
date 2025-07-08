@@ -1304,71 +1304,60 @@ class xLSTMPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _is_stateful = True
 
+    def _module_name_map(self, module):
+        for name, mod in self.named_modules():
+            if mod is module:
+                return name
+        return ""
+
     def _init_weights(self, module):
-        if self is not module:
-            if isinstance(module, torch.nn.Embedding):
-                small_init_method(self.config.hidden_size)(self.embeddings.weight)
-            return
+        if isinstance(module, nn.Embedding):
+            small_init_method(self.config.hidden_size)(self.embeddings.weight)
 
-        for param_name, param in self.named_parameters():
-            if "bias" in param_name and param is not None:
-                torch.nn.init.zeros_(param)
-            elif "weight" in param_name and param is not None and param.ndim > 1:
-                small_init_method(self.config.hidden_size)(param)
-
-        small_init_method(self.config.hidden_size)(self.embeddings.weight)
-        torch.nn.init.ones_(self.out_norm.weight)
-
-        for block in self.blocks:
-            torch.nn.init.ones_(block.mlstm_layer.multihead_norm.weight)
-            torch.nn.init.ones_(block.norm_mlstm.weight)
-            torch.nn.init.ones_(block.norm_ffn.weight)
-
-            wang_init_method(dim=block.ffn.up_proj_dim, n_layers=self.config.num_hidden_layers)(
-                block.ffn.proj_down.weight
-            )
-            wang_init_method(dim=self.config.hidden_size, n_layers=self.config.num_hidden_layers)(
-                block.mlstm_layer.out_proj.weight
-            )
-
-            if self.config.weight_mode == "single":
-                torch.nn.init.zeros_(block.mlstm_layer.ogate_preact.weight)
-                torch.nn.init.zeros_(block.mlstm_layer.igate_preact.weight)
-                torch.nn.init.zeros_(block.mlstm_layer.fgate_preact.weight)
-
+        if isinstance(module, nn.Linear):
+            if module.bias is not None:
+                torch.nn.init.zeros_(module.bias)
+            if self.config.weight_mode == "single" and "gate" in self._module_name_map(module):
+                torch.nn.init.zeros_(module.weight)
                 with torch.no_grad():
-                    block.mlstm_layer.igate_preact.bias.copy_(
-                        -10.0 * torch.ones_like(block.mlstm_layer.igate_preact.bias)
-                    )
-                    block.mlstm_layer.fgate_preact.bias.copy_(
-                        torch.linspace(
-                            3.0,
-                            6.0,
-                            block.mlstm_layer.fgate_preact.bias.shape[-1],
-                        ).to(
-                            device=block.mlstm_layer.fgate_preact.bias.device,
-                            dtype=block.mlstm_layer.fgate_preact.bias.dtype,
+                    if "igate" in self._module_name_map(module):
+                        module.bias.copy_(-10.0 * torch.ones_like(module.bias))
+                    elif "fgate" in self._module_name_map(module):
+                        module.bias.copy_(
+                            torch.linspace(
+                                3.0,
+                                6.0,
+                                module.bias.shape[-1],
+                            ).to(
+                                device=module.device,
+                                dtype=module.dtype,
+                            )
                         )
-                    )
-            elif self.config.weight_mode == "fused":
-                torch.nn.init.zeros_(block.mlstm_layer.ifgate_preact.weight)
-
+            elif self.config.weight_mode == "fused" and "gate" in self._module_name_map(module):
+                torch.nn.init.zeros_(module.weight)
                 with torch.no_grad():
-                    block.mlstm_layer.ifgate_preact.bias[: self.config.num_heads] += (
-                        -block.mlstm_layer.ifgate_preact.bias[: self.config.num_heads]
-                        - 10.0 * torch.ones_like(block.mlstm_layer.igate_preact.bias)
+                    module.bias[: self.config.num_heads] += -module.bias[
+                        : self.config.num_heads
+                    ] - 10.0 * torch.ones_like(module.bias)
+                    module.bias[: self.config.num_heads] += -module.bias[self.config.num_heads :] + torch.linspace(
+                        3.0,
+                        6.0,
+                        module.bias.shape[-1],
+                    ).to(
+                        device=module.device,
+                        dtype=module.dtype,
                     )
-                    block.mlstm_layer.ifgate_preact.bias[: self.config.num_heads] += (
-                        -block.mlstm_layer.ifgate_preact.bias[self.config.num_heads :]
-                        + torch.linspace(
-                            3.0,
-                            6.0,
-                            block.mlstm_layer.fgate_preact.bias.shape[-1],
-                        ).to(
-                            device=block.mlstm_layer.fgate_preact.bias.device,
-                            dtype=block.mlstm_layer.fgate_preact.bias.dtype,
-                        )
-                    )
+            elif "proj_down" in self._module_name_map(module):
+                wang_init_method(dim=module.weight.shape[1], n_layers=self.config.num_hidden_layers)(module.weight)
+            elif "out_proj" in self._module_name_map(module):
+                wang_init_method(dim=self.config.hidden_size, n_layers=self.config.num_hidden_layers)(module.weight)
+            elif module.weight is not None:
+                small_init_method(self.config.hidden_size)(module.weight)
+
+        if isinstance(module, RMSNorm) or hasattr(module, "_layer_normalize"):
+            torch.nn.init.ones_(module.weight)
+            if hasattr(module, "bias") and module.bias is not None:
+                torch.nn.init.zeros_(module.bias)
 
 
 @dataclass
