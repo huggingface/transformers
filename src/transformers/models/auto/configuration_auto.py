@@ -534,7 +534,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("git", "GIT"),
         ("glm", "GLM"),
         ("glm4", "GLM4"),
-        ("glm4_moe", "Glm4Moe"),
+        ("glm4_moe", "Glm4MoE"),
         ("glm4v", "GLM4V"),
         ("glm4v_text", "GLM4V"),
         ("glpn", "GLPN"),
