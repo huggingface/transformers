@@ -220,6 +220,10 @@ class DepthProModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @unittest.skip(reason="Inductor error: name 'OpaqueUnaryFn_log2' is not defined")
+    def test_sdpa_can_compile_dynamic(self):
+        pass
+
     @unittest.skip(reason="DepthPro does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
