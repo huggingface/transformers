@@ -330,14 +330,13 @@ class Ernie4_5_MoEDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class Ernie4_5_MoEPreTrainedModel(MixtralPreTrainedModel):
-    config_class = Ernie4_5_MoEConfig
-    _no_split_modules = ["Ernie4_5_MoEDecoderLayer"]
     _keep_in_fp32_modules_strict = ["gate", "moe_statics"]
 
-    # TODO: init scheme of paddle
 
-
-# TODO: add mtp option?
+# TODO: add mtp option? - a lot of unclear details
+#    - Do we act as if we were in pos 0, no past?
+#    - Which variables would need to be cut then?
+#    - ...
 @auto_docstring
 class Ernie4_5_MoEModel(MixtralModel):
     @can_return_tuple

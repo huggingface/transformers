@@ -56,7 +56,6 @@ class Ernie4_5_MoEConfig(PretrainedConfig):
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details, check out [this
             paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `32`.
-
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 131072):
