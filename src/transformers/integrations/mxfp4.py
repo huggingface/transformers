@@ -97,7 +97,7 @@ class Mxfp4OpenAIMoeExperts(nn.Module):
         self.down_proj_right_pad = smallest_even_divide_number(self.hidden_size, 256) - self.hidden_size
         self.down_proj_bottom_pad = self.gate_up_proj_right_pad // 2
             
-    def forward(self, hidden_states: torch.Tensor, router_logits=None, topk=None, router_indices=None, routing_weights=None) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, routing_data, gather_idx, scatter_idx) -> torch.Tensor:
         """
         To update with moe mxfp4 kernels, for now we just upcast the weights in torch.bfloat16
         """
@@ -118,11 +118,8 @@ class Mxfp4OpenAIMoeExperts(nn.Module):
 
         from triton_kernels.matmul_ogs import FnSpecs, FusedActivation, matmul_ogs
         from triton_kernels.swiglu import swiglu_fn
-        from triton_kernels.routing import routing
         # TODO: needed in the context of device_map, maybe not for TP
         with torch.cuda.device(hidden_states.device):
-            renormalize = True
-            routing_data, gather_idx, scatter_idx = routing(router_logits, topk, sm_first=not renormalize)
             act = FusedActivation(FnSpecs("swiglu", swiglu_fn, ("alpha", "limit")),(self.alpha, None), 2)
 
             apply_router_weight_on_input = False
@@ -150,9 +147,11 @@ class Mxfp4OpenAIMoeExperts(nn.Module):
         return output_states
 
 def mlp_forward(self, hidden_states):
-    hidden_states = hidden_states.reshape(-1, self.hidden_dim)
-    router_logits = self.router(hidden_states)
-    routed_out = self.experts(hidden_states, router_logits=router_logits, topk=self.top_k)
+    from triton_kernels.routing import routing
+    hidden_states = hidden_states.reshape(-1, self.router.hidden_dim)
+    router_logits = nn.functional.linear(hidden_states, self.router.weight, self.router.bias)
+    routing_data, gather_idx, scatter_idx = routing(router_logits, self.router.top_k, sm_first=False)
+    routed_out = self.experts(hidden_states, routing_data, gather_idx, scatter_idx)
     return routed_out, router_logits
 
 def should_convert_module(current_key_name, patterns):
