@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Callable, Optional, Tuple
+from typing import Callable, Optional
 
 import flax
 import flax.linen as nn
@@ -78,8 +78,8 @@ class FlaxElectraForPreTrainingOutput(ModelOutput):
     """
 
     logits: jnp.ndarray = None
-    hidden_states: Optional[Tuple[jnp.ndarray]] = None
-    attentions: Optional[Tuple[jnp.ndarray]] = None
+    hidden_states: Optional[tuple[jnp.ndarray]] = None
+    attentions: Optional[tuple[jnp.ndarray]] = None
 
 
 ELECTRA_START_DOCSTRING = r"""
@@ -686,7 +686,7 @@ class FlaxElectraPreTrainedModel(FlaxPreTrainedModel):
     def __init__(
         self,
         config: ElectraConfig,
-        input_shape: Tuple = (1, 1),
+        input_shape: tuple = (1, 1),
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
@@ -705,7 +705,7 @@ class FlaxElectraPreTrainedModel(FlaxPreTrainedModel):
         )
 
     # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertPreTrainedModel.init_weights
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
         token_type_ids = jnp.zeros_like(input_ids)

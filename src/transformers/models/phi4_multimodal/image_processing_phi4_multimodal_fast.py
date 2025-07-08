@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import math
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import torch
 
@@ -174,7 +174,7 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: List["torch.Tensor"],
+        images: list["torch.Tensor"],
         size: SizeDict,
         interpolation: Optional["F.InterpolationMode"],
         patch_size: int,
@@ -182,8 +182,8 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: Optional[float],
         do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ):

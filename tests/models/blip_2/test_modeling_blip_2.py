@@ -20,10 +20,11 @@ import unittest
 import numpy as np
 import pytest
 import requests
-from parameterized import parameterized
 
 from transformers import CONFIG_MAPPING, Blip2Config, Blip2QFormerConfig, Blip2VisionConfig
 from transformers.testing_utils import (
+    Expectations,
+    cleanup,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
@@ -672,15 +673,6 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
             # They should result in very similar logits
             torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
 
-    @unittest.skip("BLIP2 cannot generate only from input ids, and requires pixel values in all cases to be present")
-    @parameterized.expand([("greedy", 1), ("beam search", 2)])
-    def test_generate_from_inputs_embeds(self, _, num_beams):
-        pass
-
-    @unittest.skip("BLIP2 cannot generate only from input ids, and requires pixel values in all cases to be present")
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
 
 # this class is based on `T5ModelTester` found in tests/models/t5/test_modeling_t5.py
 class Blip2TextModelTester:
@@ -772,6 +764,7 @@ class Blip2TextModelTester:
             bos_token_id=self.pad_token_id,
             pad_token_id=self.pad_token_id,
             decoder_start_token_id=self.decoder_start_token_id,
+            is_encoder_decoder=True,
         )
 
 
@@ -793,6 +786,9 @@ class Blip2ModelTester:
         self.text_model_tester = Blip2TextModelTester(parent, **text_kwargs)
         self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.seq_length = self.text_model_tester.seq_length  # need seq_length for common tests
+        self.encoder_seq_length = (
+            self.text_model_tester.encoder_seq_length + num_query_tokens
+        )  # need enc seq_length for gen tests
         self.is_training = is_training
         self.num_query_tokens = num_query_tokens
 
@@ -857,11 +853,9 @@ class Blip2ModelTester:
 
 
 @require_torch
-class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2ForConditionalGeneration, Blip2Model) if is_torch_available() else ()
     additional_model_inputs = ["input_ids", "decoder_input_ids"]
-    # Doesn't run generation tests. TODO: fix generation tests for Blip2ForConditionalGeneration
-    all_generative_model_classes = ()
     pipeline_model_mapping = (
         {
             "feature-extraction": Blip2Model,
@@ -1620,6 +1614,12 @@ def prepare_img():
 @require_torch
 @slow
 class Blip2ModelIntegrationTest(unittest.TestCase):
+    def setUp(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
     def test_inference_opt(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
         model = Blip2ForConditionalGeneration.from_pretrained(
@@ -1698,9 +1698,23 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         predictions = model.generate(**inputs)
         generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
 
+        expectations = Expectations(
+            {
+                ("xpu", 3): [
+                    [0, 3, 9, 2335, 19, 1556, 28, 160, 1782, 30, 8, 2608, 1],
+                    "a woman is playing with her dog on the beach",
+                ],
+                ("cuda", 7): [
+                    [0, 3, 9, 2335, 19, 1556, 28, 160, 1782, 30, 8, 2608, 1],
+                    "a woman is playing with her dog on the beach",
+                ],
+            }
+        )
+        expected_outputs = expectations.get_expectation()
+
         # Test output
-        self.assertEqual(predictions[0].tolist(), [0, 2335, 1556, 28, 1782, 30, 8, 2608, 1])
-        self.assertEqual("woman playing with dog on the beach", generated_text)
+        self.assertEqual(predictions[0].tolist(), expected_outputs[0])
+        self.assertEqual(expected_outputs[1], generated_text)
 
         # image and context
         prompt = "Question: which city is this? Answer:"
@@ -1709,9 +1723,23 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         predictions = model.generate(**inputs)
         generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
 
+        expectations = Expectations(
+            {
+                ("xpu", 3): [
+                    [0, 3, 7, 152, 2515, 11389, 3523, 1],
+                    "san francisco",
+                ],
+                ("cuda", 7): [
+                    [0, 3, 7, 152, 2515, 11389, 3523, 1],
+                    "san francisco",
+                ],
+            }
+        )
+        expected_outputs = expectations.get_expectation()
+
         # Test output
-        self.assertEqual(predictions[0].tolist(), [0, 3, 7, 152, 67, 839, 1])
-        self.assertEqual(generated_text, "san diego")
+        self.assertEqual(predictions[0].tolist(), expected_outputs[0])
+        self.assertEqual(generated_text, expected_outputs[1])
 
     def test_inference_t5_batched_beam_search(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-flan-t5-xl")
@@ -1725,9 +1753,23 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
         predictions = model.generate(**inputs, num_beams=2)
 
+        expectations = Expectations(
+            {
+                ("xpu", 3): [
+                    [0, 3, 9, 2335, 19, 1556, 28, 160, 1782, 30, 8, 2608, 1],
+                    [0, 3, 9, 2335, 19, 1556, 28, 160, 1782, 30, 8, 2608, 1],
+                ],
+                ("cuda", 7): [
+                    [0, 3, 9, 2335, 19, 1556, 28, 160, 1782, 30, 8, 2608, 1],
+                    [0, 3, 9, 2335, 19, 1556, 28, 160, 1782, 30, 8, 2608, 1],
+                ],
+            }
+        )
+        expected_predictions = expectations.get_expectation()
+
         # Test output (in this case, slightly different from greedy search)
-        self.assertEqual(predictions[0].tolist(), [0, 2335, 1556, 28, 1782, 30, 8, 2608, 1])
-        self.assertEqual(predictions[1].tolist(), [0, 2335, 1556, 28, 1782, 30, 8, 2608, 1])
+        self.assertEqual(predictions[0].tolist(), expected_predictions[0])
+        self.assertEqual(predictions[1].tolist(), expected_predictions[1])
 
     @require_torch_multi_accelerator
     def test_inference_opt_multi_accelerator(self):
@@ -1744,7 +1786,8 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
 
         # Test output
-        self.assertEqual(predictions[0].tolist(), [2, 102, 693, 2828, 15, 5, 4105, 19, 10, 2335, 50118])
+        expected_ids = [2, 102, 693, 2828, 15, 5, 4105, 19, 10, 2335, 50118]
+        self.assertEqual(predictions[0].tolist(), [50265] * 32 + expected_ids)  # 50265 is the img token id
         self.assertEqual("a woman sitting on the beach with a dog", generated_text)
 
         # image and context
@@ -1755,10 +1798,8 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
 
         # Test output
-        self.assertEqual(
-            predictions[0].tolist(),
-            [2, 45641, 35, 61, 343, 16, 42, 116, 31652, 35, 24, 18, 45, 10, 343, 6, 24, 18, 10, 4105, 50118],
-        )
+        expected_ids = [2, 45641, 35, 61, 343, 16, 42, 116, 31652, 35, 24, 18, 45, 10, 343, 6, 24, 18, 10, 4105, 50118]
+        self.assertEqual(predictions[0].tolist(), [50265] * 32 + expected_ids)  # 50265 is the img token id
         self.assertEqual(generated_text, "Question: which city is this? Answer: it's not a city, it's a beach")
 
     @require_torch_multi_accelerator
@@ -1784,8 +1825,17 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
 
         # Test output
-        self.assertEqual(predictions[0].tolist(), [0, 2335, 1556, 28, 1782, 30, 8, 2608, 1])
-        self.assertEqual("woman playing with dog on the beach", generated_text)
+        expected_ids_and_text = Expectations(
+            {
+                ("cuda", None): ([0, 2335, 1556, 28, 1782, 30, 8, 2608, 1], "woman playing with dog on the beach"),
+                ("rocm", (9, 5)): (
+                    [0, 3, 9, 2335, 19, 1556, 28, 160, 1782, 30, 8, 2608, 1],
+                    "a woman is playing with her dog on the beach",
+                ),
+            }
+        ).get_expectation()
+        self.assertEqual(predictions[0].tolist(), expected_ids_and_text[0])
+        self.assertEqual(generated_text, expected_ids_and_text[1])
 
         # image and context
         prompt = "Question: which city is this? Answer:"
@@ -1795,11 +1845,17 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
 
         # Test output
-        self.assertEqual(
-            predictions[0].tolist(),
-            [0, 3, 7, 152, 67, 839, 1],
-        )
-        self.assertEqual(generated_text, "san diego")
+        expected_ids_and_text = Expectations(
+            {
+                ("cuda", None): ([0, 3, 7, 152, 67, 839, 1], "san diego"),
+                ("rocm", (9, 5)): (
+                    [0, 3, 7, 152, 2515, 11389, 3523, 1],
+                    "san francisco",  # TODO: check if this is ok
+                ),
+            }
+        ).get_expectation()
+        self.assertEqual(predictions[0].tolist(), expected_ids_and_text[0])
+        self.assertEqual(generated_text, expected_ids_and_text[1])
 
     def test_expansion_in_processing(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")

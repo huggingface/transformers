@@ -92,7 +92,7 @@ def custom_attention(
     a_new_kwargs = None,  # You can now add as many kwargs as you need
     another_new_kwargs = None,  # You can now add as many kwargs as you need
     **kwargs,  # You need to accept **kwargs as models will pass other args
-) -> Tuple[torch.Tensor, Optional[torch.Tensor]]
+) -> tuple[torch.Tensor, Optional[torch.Tensor]]
     ...  # do your magic!
     return attn_output, attn_weights  # attn_weights are optional here
 

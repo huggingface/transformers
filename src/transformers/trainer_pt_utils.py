@@ -21,6 +21,7 @@ import io
 import json
 import math
 import os
+import re
 import sys
 import warnings
 from collections.abc import Iterator, Mapping
@@ -271,7 +272,7 @@ class DistributedSamplerWithLoop(DistributedSampler):
             Dataset used for sampling.
         batch_size (`int`):
             The batch size used with this sampler
-        kwargs (`Dict[str, Any]`, *optional*):
+        kwargs (`dict[str, Any]`, *optional*):
             All other keyword arguments passed to `DistributedSampler`.
     """
 
@@ -644,7 +645,7 @@ class LengthGroupedSampler(Sampler):
             lengths = [len(feature[model_input_name]) for feature in dataset]
         elif isinstance(lengths, torch.Tensor):
             logger.info(
-                "If lengths is a torch.Tensor, LengthGroupedSampler will be slow. Converting lengths to List[int]..."
+                "If lengths is a torch.Tensor, LengthGroupedSampler will be slow. Converting lengths to list[int]..."
             )
             lengths = lengths.tolist()
 
@@ -708,7 +709,7 @@ class DistributedLengthGroupedSampler(DistributedSampler):
         elif isinstance(lengths, torch.Tensor):
             logger.info(
                 "If lengths is a torch.Tensor, DistributedLengthGroupedSampler will be slow. Converting lengths to"
-                " List[int]..."
+                " list[int]..."
             )
             lengths = lengths.tolist()
 
@@ -941,11 +942,11 @@ def metrics_format(self, metrics: dict[str, float]) -> dict[str, float]:
     Reformat Trainer metrics values to a human-readable format.
 
     Args:
-        metrics (`Dict[str, float]`):
+        metrics (`dict[str, float]`):
             The metrics returned from train/evaluate/predict
 
     Returns:
-        metrics (`Dict[str, float]`): The reformatted metrics
+        metrics (`dict[str, float]`): The reformatted metrics
     """
 
     metrics_copy = metrics.copy()
@@ -971,7 +972,7 @@ def log_metrics(self, split, metrics):
     Args:
         split (`str`):
             Mode/split name: one of `train`, `eval`, `test`
-        metrics (`Dict[str, float]`):
+        metrics (`dict[str, float]`):
             The metrics returned from train/evaluate/predictmetrics: metrics dict
 
     Notes on memory reports:
@@ -1061,7 +1062,7 @@ def save_metrics(self, split, metrics, combined=True):
     Args:
         split (`str`):
             Mode/split name: one of `train`, `eval`, `test`, `all`
-        metrics (`Dict[str, float]`):
+        metrics (`dict[str, float]`):
             The metrics returned from train/evaluate/predict
         combined (`bool`, *optional*, defaults to `True`):
             Creates combined metrics by updating `all_results.json` with metrics of this call
@@ -1124,8 +1125,9 @@ def get_parameter_names(model, forbidden_layer_types, forbidden_layer_names=None
     """
     Returns the names of the model parameters that are not inside a forbidden layer.
     """
-    if forbidden_layer_names is None:
-        forbidden_layer_names = []
+    forbidden_layer_patterns = (
+        [re.compile(pattern) for pattern in forbidden_layer_names] if forbidden_layer_names is not None else []
+    )
     result = []
     for name, child in model.named_children():
         child_params = get_parameter_names(child, forbidden_layer_types, forbidden_layer_names)
@@ -1133,12 +1135,15 @@ def get_parameter_names(model, forbidden_layer_types, forbidden_layer_names=None
             f"{name}.{n}"
             for n in child_params
             if not isinstance(child, tuple(forbidden_layer_types))
-            and not any(forbidden in f"{name}.{n}".lower() for forbidden in forbidden_layer_names)
+            and not any(pattern.search(f"{name}.{n}".lower()) for pattern in forbidden_layer_patterns)
         ]
     # Add model specific parameters that are not in any child
     result += [
-        k for k in model._parameters.keys() if not any(forbidden in k.lower() for forbidden in forbidden_layer_names)
+        k
+        for k in model._parameters.keys()
+        if not any(pattern.search(k.lower()) for pattern in forbidden_layer_patterns)
     ]
+
     return result
 
 

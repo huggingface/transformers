@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch openai model."""
 
+import os
 import unittest
 
 import torch
@@ -31,6 +32,8 @@ from transformers.testing_utils import (
     require_read_token,
     require_torch,
     require_torch_accelerator,
+    require_tokenizers,
+    require_tiktoken,
     slow,
     torch_device,
 )
@@ -399,3 +402,62 @@ class OpenAIMoeIntegrationTest(unittest.TestCase):
         )
         static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
+
+class OpenAIMoeTokenizationIntegrationTest(unittest.TestCase):
+    """Ensure the HF tokenizer extracted with `OpenAIMoeConverter` remains byte-level identical to
+    the reference `o200k_harmony` tiktoken encoding.
+    """
+
+    def setUp(self):
+        import os
+        import tiktoken
+
+        # Load the HF tokenizer (fast implementation)
+        self.tokenizer = AutoTokenizer.from_pretrained("/fsx/vb/converted_model")
+
+        # Build the (pre-release) o200k_harmony encoding for tiktoken
+        o200k_base = tiktoken.get_encoding("o200k_base")
+        self.tkt_encoding = tiktoken.Encoding(
+            name="o200k_harmony",
+            pat_str=o200k_base._pat_str,
+            mergeable_ranks=o200k_base._mergeable_ranks,
+            special_tokens={
+                **o200k_base._special_tokens,
+                "<|startoftext|>": 199998,
+                "<|endoftext|>": 199999,
+                "<|return|>": 200002,
+                "<|constrain|>": 200003,
+                "<|channel|>": 200005,
+                "<|start|>": 200006,
+                "<|end|>": 200007,
+                "<|message|>": 200008,
+                "<|call|>": 200012,
+            },
+        )
+
+    def _assert_equivalent(self, string: str):
+        # Encode
+        ids_hf = self.tokenizer.encode(string)
+        ids_tk = self.tkt_encoding.encode(string, allowed_special="all")
+        self.assertEqual(ids_hf, ids_tk, msg=f"HF vs tiktoken mismatch on: {string!r}")
+
+        # Decode round-trip (with special tokens preserved)
+        decoded_hf = self.tokenizer.decode(ids_hf, skip_special_tokens=False)
+        decoded_tk = self.tkt_encoding.decode(ids_tk)
+        self.assertEqual(decoded_hf, decoded_tk, msg=f"Decode diff on: {string!r}")
+
+    @slow
+    def test_equivalence_on_public_datasets(self):
+        import tqdm
+        from datasets import load_dataset
+
+        # 1) Code-to-text dataset
+        ds = load_dataset("google/code_x_glue_ct_code_to_text", "go")
+        for item in tqdm.tqdm(ds["validation"]):
+            self._assert_equivalent(item["code"])
+
+        # 2) XNLI premises across all languages
+        ds = load_dataset("facebook/xnli", "all_languages")
+        for item in tqdm.tqdm(ds["train"]):
+            for premise in item["premise"].values():
+                self._assert_equivalent(premise)
