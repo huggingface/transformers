@@ -146,22 +146,13 @@ class LightGlueConfig(PretrainedConfig):
             keypoint_detector_config["model_type"] = (
                 keypoint_detector_config["model_type"] if "model_type" in keypoint_detector_config else "superpoint"
             )
-            if keypoint_detector_config["model_type"] not in CONFIG_MAPPING and self.trust_remote_code:
-                AutoConfig.register(
-                    keypoint_detector_config["model_type"],
-                    AutoConfig.from_pretrained(
-                        keypoint_detector_config["_name_or_path"], trust_remote_code=self.trust_remote_code
-                    ).__class__,
-                )
-            keypoint_detector_config_class = CONFIG_MAPPING[keypoint_detector_config["model_type"]]
-
-            if self.trust_remote_code:
-                keypoint_detector_config = keypoint_detector_config_class(
-                    **keypoint_detector_config, attn_implementation="eager", trust_remote_code=self.trust_remote_code
+            if keypoint_detector_config["model_type"] not in CONFIG_MAPPING:
+                keypoint_detector_config = AutoConfig.from_pretrained(
+                    keypoint_detector_config["_name_or_path"], trust_remote_code=self.trust_remote_code
                 )
             else:
-                keypoint_detector_config = keypoint_detector_config_class(
-                    **keypoint_detector_config, attn_implementation="eager"
+                keypoint_detector_config = CONFIG_MAPPING[keypoint_detector_config["model_type"]](
+                    **keypoint_detector_config, attn_implementation="eager", trust_remote_code=self.trust_remote_code
                 )
 
         if keypoint_detector_config is None:
