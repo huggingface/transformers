@@ -122,7 +122,7 @@ def create_tokenizer(model_name_or_path, save_dir):
     """
     tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, return_token_type_ids=False)
     tokenizer.model_max_length = CONTEXT_LENGTH
-    tokenizer.add_tokens(SPECIAL_TOKENS)
+    tokenizer.add_special_tokens({"additional_special_tokens": SPECIAL_TOKENS})
     tokenizer.chat_template = CHAT_TEMPLATE
     setattr(tokenizer, "image_token", "<IMG_ATOM>")  # 151665
     setattr(tokenizer, "image_token_id", tokenizer.convert_tokens_to_ids(tokenizer.image_token))

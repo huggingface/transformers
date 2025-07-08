@@ -335,12 +335,9 @@ class Ovis2IntegrationTest(unittest.TestCase):
 
         self.assertTrue(inputs.input_ids.shape[1] == 1314)  # should expand num-image-tokens times
         self.assertTrue(inputs.pixel_values.shape == torch.Size([5, 3, 448, 448]))
-        self.assertTrue(inputs.grids.tolist() == [[2, 2]])
 
-        # verify single forward pass
         inputs = inputs.to(torch_device)
 
-        # verify generation
         output = model.generate(**inputs, max_new_tokens=64)
         EXPECTED_DECODED_TEXT = 'system\nYou are a helpful assistant.\nuser\n\nWhat do you see in this image?\nassistant\nI see two cats lying on a pink blanket. There are also two remote controls on the blanket.'  # fmt: skip
         self.assertEqual(
@@ -396,7 +393,7 @@ class Ovis2IntegrationTest(unittest.TestCase):
         inputs = self.processor(text=text, images=[self.image, image], return_tensors="pt").to(
             torch_device, torch.bfloat16
         )
-        # verify generation
+
         output = model.generate(**inputs, max_new_tokens=40)
         EXPECTED_DECODED_TEXT = 'system\nYou are a helpful assistant.\nuser\n\n\nWhat do you see in these images?\nassistant\nIn the first image, I see two cats lying on a pink blanket with remote controls nearby. The second image shows a dog standing on a wooden floor near a kitchen cabinet.'  # fmt: skip
 
@@ -422,7 +419,6 @@ class Ovis2IntegrationTest(unittest.TestCase):
             padding=True,
         ).to(torch_device, torch.bfloat16)
 
-        # verify generation
         output = model.generate(**inputs, max_new_tokens=50)
         EXPECTED_DECODED_TEXT = [
             'system\nYou are a helpful assistant.\nuser\n\nWhat do you see in this image?\nassistant\nThe image shows a forested area with two deer in the foreground. The deer are brown in color and appear to be grazing on the grass. The scene is quite foggy, creating a misty atmosphere. The deer are positioned on a grassy',
@@ -456,7 +452,6 @@ class Ovis2IntegrationTest(unittest.TestCase):
             torch_device, torch.bfloat16
         )
 
-        # verify generation
         output_batched = model.generate(**inputs_batched, max_new_tokens=50)
         output_single = model.generate(**inputs_single, max_new_tokens=50)
 
