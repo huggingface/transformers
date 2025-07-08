@@ -501,7 +501,6 @@ setup(
     ],
     cmdclass={"deps_table_update": DepsTableUpdateCommand},
 )
-print(extras["testing"])
 
 extras["tests_torch"] = deps_list()
 extras["tests_tf"] = deps_list()
