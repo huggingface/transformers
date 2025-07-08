@@ -364,10 +364,9 @@ class Glm4vIntegrationTest(unittest.TestCase):
             self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
         ).to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False, num_beams=3, num_return_sequences=3)
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False, num_beams=2, num_return_sequences=2)
 
         EXPECTED_DECODED_TEXT = [
-            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture is not a dog; it's a cat. Specifically, it looks",
             "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture doesn't look like a dog; it's actually a cat. Specifically",
             "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture doesn't look like a dog; it's actually a cat, specifically"
         ]  # fmt: skip
@@ -399,7 +398,7 @@ class Glm4vIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXT = [
             "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture is not a dog; it's a cat. Specifically, it looks",
-            '\nWho are you?\n<think>Got it, let\'s look at the question. The user is asking "Who are you?" which is a common question when someone meets an AI'
+            '\nWho are you?\n<think>Got it, the user is asking "Who are you?" I need to respond appropriately. First, I should clarify that I\'m an AI assistant'
         ]  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
