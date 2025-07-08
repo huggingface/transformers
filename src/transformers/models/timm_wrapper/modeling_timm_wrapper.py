@@ -119,8 +119,8 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         extra_init_kwargs = config.model_args or {}
         try:
             self.timm_model = timm.create_model(
-            config.architecture, pretrained=False, num_classes=0, **extra_init_kwargs
-         )
+                config.architecture, pretrained=False, num_classes=0, **extra_init_kwargs
+            )
         except RuntimeError as e:
             raise ImportError(
                 f"You are trying to instantiate `{config.architecture}`, but it's not supported in timm={timm.__version__}. "
