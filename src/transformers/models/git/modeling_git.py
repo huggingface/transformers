@@ -287,7 +287,7 @@ class GitAttention(nn.Module):
         output_attentions: Optional[bool] = False,
         pixel_values_present: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
-        hidden_states, self_attn_weights = self.self(
+        attn_output, self_attn_weights = self.self(
             hidden_states,
             attention_mask,
             head_mask,
@@ -295,7 +295,7 @@ class GitAttention(nn.Module):
             output_attentions,
             pixel_values_present,
         )
-        attention_output = self.output(hidden_states, hidden_states)
+        attention_output = self.output(attn_output, hidden_states)
         return attention_output, self_attn_weights
 
 
