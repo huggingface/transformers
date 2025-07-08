@@ -521,8 +521,10 @@ else:
         device = query.device
 
         if c_initial is not None:
-            assert n_initial is not None and m_initial is not None, "Initial states must be provided together."
-            assert n_initial is not None and m_initial is not None, "Initial states must be provided together."
+            if n_initial is None or m_initial is None:
+                raise ValueError("Initial states must be provided together.")
+            if n_initial is None or m_initial is None:
+                raise ValueError("Initial states must be provided together.")
             matC_state, vecN_state, vecM_state = (
                 c_initial.to(dtype=dtype_state),
                 n_initial.to(dtype=dtype_state),
@@ -587,10 +589,11 @@ else:
         chunk_size: int = 64,
         **kwargs,
     ) -> Union[torch.Tensor, tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]]:
-        assert not return_last_states, (
-            "We are padding zeros, so we cannot return last states,",
-            "as they would be not the true last states.",
-        )
+        if return_last_states:
+            raise ValueError(
+                "We are padding zeros, so we cannot return last states,",
+                "as they would be not the true last states.",
+            )
 
         BATCH_SIZE, NH, SEQLEN, DHQK = query.shape  # (BATCH_SIZE, NH, SEQLEN, DHQK)
         S_unpadded = SEQLEN
@@ -868,9 +871,8 @@ else:
                     return_last_states = self.config.return_last_states
 
                 if self.config.mode == "train_with_padding":
-                    assert not return_last_states, (
-                        "return_last_states=True is not supported with train_with_padding mode."
-                    )
+                    if return_last_states:
+                        raise ValueError("return_last_states=True is not supported with train_with_padding mode.")
 
                 return self._train_fn(
                     query=query,
