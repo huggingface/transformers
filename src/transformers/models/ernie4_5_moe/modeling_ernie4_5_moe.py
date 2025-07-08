@@ -294,13 +294,13 @@ class Ernie4_5_MoEStatics(nn.Module):
 
 # copy qwen3 moe (+ shared experts + different normalization + correction bias)
 # do not copy... ^ is the closest
-class Ernie4_5_MoESparseMoEBlock_v2(nn.Module):
+class Ernie4_5_MoESparseMoEBlock(nn.Module):
     def __init__(self,config):
         super().__init__()
         self.num_experts = config.moe_num_experts
         self.top_k = config.moe_k
 
-        # correction bias
+        # correction bias (yes it seems to be a typo with statics <> statistics)
         self.moe_statics = Ernie4_5_MoEStatics(config)
 
         # gating
@@ -387,7 +387,6 @@ class Ernie4_5_MoEDecoderLayer(nn.Module):
         self.hidden_size = config.hidden_size
         self.layer_idx = layer_idx
         self.config = config
-        self.use_moe = True
         self.self_attn = Ernie4_5_MoEAttention(config, layer_idx)
 
         moe_layer_start_index = (
@@ -402,13 +401,11 @@ class Ernie4_5_MoEDecoderLayer(nn.Module):
         )
 
         if (
-            self.use_moe
-            and ((layer_idx + 1) % config.moe_layer_interval == 0)
+            ((layer_idx + 1) % config.moe_layer_interval == 0)
             and layer_idx >= moe_layer_start_index
             and layer_idx <= moe_layer_end_index
         ):
-            #self.mlp = Ernie4_5_MoESparseMoEBlock(config)
-            self.mlp = Ernie4_5_MoESparseMoEBlock_v2(config)
+            self.mlp = Ernie4_5_MoESparseMoEBlock(config)
         else:
             self.mlp = Ernie4_5_MoEMLP(config)
 
@@ -477,8 +474,7 @@ class Ernie4_5_MoEDecoderLayer(nn.Module):
         router_loss = None
         gate_logits = None
 
-        #if isinstance(self.mlp, Ernie4_5_MoESparseMoEBlock):
-        if isinstance(self.mlp, Ernie4_5_MoESparseMoEBlock_v2):
+        if isinstance(self.mlp, Ernie4_5_MoESparseMoEBlock):
             hidden_states, _, router_loss, gate_logits = self.mlp(hidden_states)
         else:
             hidden_states = self.mlp(hidden_states)
@@ -541,7 +537,7 @@ def subbatch(f, arg_idx, axis, bs, out_idx, same_arg_idx={}):
         axis_width = [inp.shape[d] for inp, d in zip(inps, axis)]
         assert len(set(axis_width)) == 1, "Batch sizes should be kept equal."
 
-        inp_axis = {idx: d for idx, d in zip(arg_idx, axis)}
+        inp_axis = dict(zip(arg_idx, axis))
 
         axis_width = axis_width[0]
         if axis_width < bs:
@@ -781,7 +777,7 @@ class Ernie4_5_MoEModel(Ernie4_5_MoEPretrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        all_router_loss = torch.tensor(0.0, device=inputs_embeds.device)# if self.config.use_moe else None
+        all_router_loss = torch.tensor(0.0, device=inputs_embeds.device)
         all_gate_logits = ()
 
         for decoder_layer in self.layers:
@@ -818,10 +814,8 @@ class Ernie4_5_MoEModel(Ernie4_5_MoEPretrainedModel):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
-            #if self.config.use_moe:
-            if True:
-                layer_outputs, gate_logits = layer_outputs[:-1], layer_outputs[-1]
-                all_gate_logits = all_gate_logits + (gate_logits,)
+            layer_outputs, gate_logits = layer_outputs[:-1], layer_outputs[-1]
+            all_gate_logits = all_gate_logits + (gate_logits,)
 
         hidden_states = self.norm(hidden_states)
 
