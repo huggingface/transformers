@@ -3968,6 +3968,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 # init state_dict for this shard
                 shard_state_dict = dict.fromkeys(shard, "")
                 for module_name in shard:
+                    # note that get_state_dict_from_offload can update with meta tensors
+                    # if both a parent module and its descendant are offloaded
                     tensor = shard_state_dict[module_name]
                     if tensor == "" or (isinstance(tensor, torch.Tensor) and tensor.device.type == "meta"):
                         # update state dict with onloaded parameters
