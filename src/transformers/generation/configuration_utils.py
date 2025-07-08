@@ -62,7 +62,6 @@ if is_torch_available():
         SlidingWindowCache,
         StaticCache,
         StaticCacheConfig,
-        xLSTMCache,
     )
     from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
 
@@ -77,7 +76,6 @@ if is_torch_available():
         "offloaded_hybrid": OffloadedHybridCache,
         "offloaded_hybrid_chunked": OffloadedHybridCache,
         "mamba": MambaCache,
-        "xlstm": xLSTMCache,
     }
     QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
     ALL_CACHE_IMPLEMENTATIONS = (
@@ -189,7 +187,6 @@ class GenerationConfig(PushToHubMixin):
             - `"sliding_window"`: [`SlidingWindowCache`]
             - `"hybrid"`: [`HybridCache`]
             - `"mamba"`: [`MambaCache`]
-            - `"xlstm"`: [`xLSTMCache`]
             - `"quantized"`: [`QuantizedCache`]
 
             If none is specified, we will use the default cache for the model (which is often [`DynamicCache`]). See
