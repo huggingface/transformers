@@ -187,7 +187,7 @@ def rotate_queries_or_keys(x, pos):
     omega = torch.arange(D // 2, dtype=x.dtype, device=x.device)
     omega /= D / 2.0
     omega = 1.0 / 10000**omega  # (D/2,)
-    freq = torch.einsum("..., f -> ... f", pos, omega)  # (..., N, D/2), outer product
+    freq = pos.unsqueeze(-1) * omega  # (..., N, D/2), outer product
 
     # -- build rotation matrix and apply
     emb_sin = freq.sin()  # (..., N, D/2)
