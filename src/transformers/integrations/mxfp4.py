@@ -170,7 +170,6 @@ def _replace_with_mxfp4_linear(
     current_key_name=None,
     quantization_config=None,
     has_been_replaced=False,
-    pre_quantized=False,
     config=None,
     tp_plan=None,
 ):
@@ -199,7 +198,6 @@ def _replace_with_mxfp4_linear(
                 current_key_name,
                 quantization_config,
                 has_been_replaced=has_been_replaced,
-                pre_quantized=pre_quantized,
                 config=config,
                 tp_plan=tp_plan,
             )
@@ -212,7 +210,6 @@ def replace_with_mxfp4_linear(
     modules_to_not_convert=None,
     current_key_name=None,
     quantization_config=None,
-    pre_quantized=False,
     config=None,
     tp_plan=None,
 ):
@@ -226,7 +223,6 @@ def replace_with_mxfp4_linear(
         modules_to_not_convert,
         current_key_name,
         quantization_config,
-        pre_quantized=pre_quantized,
         config=config,
         tp_plan=tp_plan,
     )
