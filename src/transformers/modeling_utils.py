@@ -3899,9 +3899,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
             if len(error_names) > 0:
                 raise RuntimeError(
-                    f"The weights trying to be saved contained shared tensors {error_names} that are mismatching "
-                    "the transformers base configuration. Try saving using `safe_serialization=False`, setting the "
-                    "`_dynamic_tied_weights_keys` attribute for affected modules, or remove this tensor sharing.",
+                    f"The weights trying to be saved contained shared tensors {error_names} that are mismatching the transformers base configuration. Try saving using `safe_serialization=False` or remove this tensor sharing.",
                 )
 
         # Shard the model if it is too big.
