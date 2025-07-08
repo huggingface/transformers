@@ -14,7 +14,7 @@
 # limitations under the License.
 """PyTorch GLM-4-MOE model."""
 
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -27,10 +27,11 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import rope_config_validation
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3TopkRouter
-from ..glm4.modeling_glm4 import Glm4Attention
+from ..glm4.modeling_glm4 import Glm4Attention, apply_rotary_pos_emb, eager_attention_forward
 from ..llama.modeling_llama import (
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
@@ -146,7 +147,8 @@ class Glm4MoeConfig(PretrainedConfig):
         output_router_logits (`bool`, *optional*, defaults to `False`):
             Whether or not the router logits should be returned by the model. Enabling this will also
             allow the model to output the auxiliary loss. See [here]() for more details.
-
+        add_qk_norm (`bool`, *optional*, defaults to `False`):
+            Whether or not to add normalization to the query and key projections in the attention layer.
     ```python
     >>> from transformers import Glm4MoeModel, Glm4MoeConfig
 
@@ -209,6 +211,7 @@ class Glm4MoeConfig(PretrainedConfig):
         topk_group=1,
         norm_topk_prob=True,
         output_router_logits=False,
+        add_qk_norm=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -243,6 +246,7 @@ class Glm4MoeConfig(PretrainedConfig):
         self.num_experts = num_experts
         self.norm_topk_prob = norm_topk_prob
         self.output_router_logits = output_router_logits
+        self.add_qk_norm = add_qk_norm
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,
@@ -250,11 +254,80 @@ class Glm4MoeConfig(PretrainedConfig):
         )
 
 
-__all__ = ["Glm4MoeConfig"]
-
-
 class Glm4MoeAttention(Glm4Attention):
-    pass
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(self, config: Glm4MoeConfig, layer_idx: Optional[int] = None):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = True
+
+        self.q_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.k_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
+
+        if self.config.add_qk_norm:
+            self.q_norm = Glm4MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+            self.k_norm = Glm4MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: Optional[torch.Tensor],
+        past_key_value: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        if self.config.add_qk_norm:
+            query_states = self.q_norm(query_states)
+            key_states = self.k_norm(query_states)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if past_key_value is not None:
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
 
 
 class Glm4MoeMLP(Qwen2MoeMLP):
@@ -579,4 +652,5 @@ __all__ = [
     "Glm4MoeForSequenceClassification",
     "Glm4MoeForTokenClassification",
     "Glm4MoeForQuestionAnswering",
+    "Glm4MoeConfig",
 ]

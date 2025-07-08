@@ -125,7 +125,8 @@ class Glm4MoeConfig(PretrainedConfig):
         output_router_logits (`bool`, *optional*, defaults to `False`):
             Whether or not the router logits should be returned by the model. Enabling this will also
             allow the model to output the auxiliary loss. See [here]() for more details.
-
+        add_qk_norm (`bool`, *optional*, defaults to `False`):
+            Whether or not to add normalization to the query and key projections in the attention layer.
     ```python
     >>> from transformers import Glm4MoeModel, Glm4MoeConfig
 
@@ -188,6 +189,7 @@ class Glm4MoeConfig(PretrainedConfig):
         topk_group=1,
         norm_topk_prob=True,
         output_router_logits=False,
+        add_qk_norm=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -222,10 +224,12 @@ class Glm4MoeConfig(PretrainedConfig):
         self.num_experts = num_experts
         self.norm_topk_prob = norm_topk_prob
         self.output_router_logits = output_router_logits
+        self.add_qk_norm = add_qk_norm
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
 
 __all__ = ["Glm4MoeConfig"]
