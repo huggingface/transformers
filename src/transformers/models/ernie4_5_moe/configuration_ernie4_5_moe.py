@@ -227,11 +227,7 @@ class Ernie4_5_MoEConfig(PretrainedConfig):
         self.moe_num_experts = moe_num_experts
         self.moe_num_shared_experts = moe_num_shared_experts
         self.moe_layer_start_index = moe_layer_start_index
-        self.moe_layer_end_index = (
-            self.num_hidden_layers - 1
-            if moe_layer_end_index == -1
-            else moe_layer_end_index
-        )
+        self.moe_layer_end_index = self.num_hidden_layers - 1 if moe_layer_end_index == -1 else moe_layer_end_index
         self.moe_layer_interval = moe_layer_interval
         self.moe_norm_min = moe_norm_min
         self.output_router_logits = output_router_logits

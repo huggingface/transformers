@@ -213,18 +213,10 @@ class Ernie4_5_MoEAttention(nn.Module):
         self.attention_dropout = 0.0
         self.is_causal = True
 
-        self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.use_bias
-        )
-        self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.use_bias
-        )
-        self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.use_bias
-        )
-        self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.use_bias
-        )
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.use_bias)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.use_bias)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.use_bias)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.use_bias)
 
     def forward(
         self,
@@ -286,7 +278,7 @@ class Ernie4_5_MoEStatics(nn.Module):
         self.e_score_correction_bias = nn.Parameter(
             torch.zeros(num_experts_groups, num_experts, dtype=torch.float32),
             # TODO: it has non-zero values...
-            #requires_grad=False,
+            # requires_grad=False,
         )
 
 
@@ -306,7 +298,7 @@ class Ernie4_5_MoESparseMoEBlock(nn.Module):
     Ernie 4.5 MoE's original formula is based on case (2).
     """
 
-    def __init__(self,config):
+    def __init__(self, config):
         super().__init__()
         self.num_experts = config.moe_num_experts
         self.top_k = config.moe_k
@@ -339,13 +331,11 @@ class Ernie4_5_MoESparseMoEBlock(nn.Module):
         # TODO: check below
         # See https://github.com/PaddlePaddle/ERNIE/blob/d4e1c371dfd089ef618ef378e8996049bd54da00/ernie/moe/moe_layer.py#L607 in combination with
         # https://github.com/PaddlePaddle/Paddle/blob/develop/python/paddle/incubate/nn/functional/moe_gate_dispatch.py#L104 == the "correction bias"
-        correction_bias = self.moe_statics.e_score_correction_bias[0]
+        # correction_bias = self.moe_statics.e_score_correction_bias[0]
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
-        #routing_weights, selected_experts = torch.topk(routing_weights + correction_bias, self.top_k, dim=-1)
+        # routing_weights, selected_experts = torch.topk(routing_weights + correction_bias, self.top_k, dim=-1)
         routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
-        routing_weights = routing_weights / torch.clamp(
-            routing_weights.sum(dim=-1, keepdim=True), min=self.norm_min
-        )
+        routing_weights = routing_weights / torch.clamp(routing_weights.sum(dim=-1, keepdim=True), min=self.norm_min)
         routing_weights = routing_weights.to(hidden_states.dtype)
 
         final_hidden_states = torch.zeros(
@@ -416,7 +406,7 @@ class Ernie4_5_MoEDecoderLayer(GradientCheckpointingLayer):
             hidden_states (`torch.FloatTensor`):
                 Input to the layer of shape `(batch, seq_len, embed_dim)`.
             position_embeddings (`tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
-                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
+                tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
                 with `head_dim` being the embedding dimension of each attention head.
             attention_mask (`torch.FloatTensor`, *optional*):
                 Attention mask of size `(batch, sequence_length)` where padding elements are indicated by 0.
@@ -505,10 +495,7 @@ class Ernie4_5_MoEModel(Ernie4_5_MoEPretrainedModel):
             config.hidden_size,
         )
         self.layers = nn.ModuleList(
-            [
-                Ernie4_5_MoEDecoderLayer(config, layer_idx)
-                for layer_idx in range(config.num_hidden_layers)
-            ]
+            [Ernie4_5_MoEDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = Ernie4_5_MoERMSNorm(config.hidden_size, config.rms_norm_eps)
         self.rotary_emb = Ernie4_5_MoERopeEmbedding(config=config)
@@ -538,7 +525,7 @@ class Ernie4_5_MoEModel(Ernie4_5_MoEPretrainedModel):
         output_router_logits: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
-    )-> MoeModelOutputWithPast:
+    ) -> MoeModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.output_router_logits
@@ -648,7 +635,6 @@ def subbatch(f, arg_idx, axis, bs, out_idx, same_arg_idx={}):
 
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
-
         assert len(arg_idx) == len(axis), "Number of batching args and number of batching dims should match."
 
         inps = [args[i] for i in arg_idx]
@@ -666,9 +652,9 @@ def subbatch(f, arg_idx, axis, bs, out_idx, same_arg_idx={}):
             _args = []
             for i, inp in enumerate(args):
                 if i in same_arg_idx:
-                    assert (
-                        i > same_arg_idx[i]
-                    ), f"expect i > same_arg_idx[i], but got i: {i} and same_arg_idx[i]: {same_arg_idx[i]}"
+                    assert i > same_arg_idx[i], (
+                        f"expect i > same_arg_idx[i], but got i: {i} and same_arg_idx[i]: {same_arg_idx[i]}"
+                    )
                     _args.append(_args[same_arg_idx[i]])
                 elif i in arg_idx:
                     d = inp_axis[i]
@@ -734,7 +720,6 @@ class ErniePretrainingCriterion(nn.Module):
 
         return loss, loss_sum
 
-
     def loss_impl(self, prediction_scores: torch.Tensor, masked_lm_labels: torch.Tensor) -> torch.Tensor:
         """
         Core loss computation without reduction (but per-token).
@@ -753,7 +738,7 @@ class ErniePretrainingCriterion(nn.Module):
         # Transpose prediction_scores to [batch_size, vocab_size, seq_len]
         unreduced_loss = self.loss_func(
             scores_float32.transpose(1, 2),  # Shape: [batch_size, vocab_size, seq_len]
-            masked_lm_labels.long()          # Shape: [batch_size, seq_len], ensure long type
+            masked_lm_labels.long(),  # Shape: [batch_size, seq_len], ensure long type
         )
         # unreduced_loss will be of shape [batch_size, seq_len] and dtype float32
         return unreduced_loss
@@ -764,19 +749,13 @@ class ErniePretrainingCriterion(nn.Module):
         loss_subbatch_seqlen_config_key = "loss_subbatch_seqlen"
         default_loss_subbatch_seqlen = 32768
 
-        current_loss_subbatch_seqlen = self.config.get(
-            loss_subbatch_seqlen_config_key, default_loss_subbatch_seqlen
-        )
+        current_loss_subbatch_seqlen = self.config.get(loss_subbatch_seqlen_config_key, default_loss_subbatch_seqlen)
 
         if prediction_scores_dims == 2 and prediction_scores.shape[0] > current_loss_subbatch_seqlen:
-            sb_loss_func = subbatch(
-                self.loss_impl, [0, 1], [0, 0], current_loss_subbatch_seqlen, 0
-            )
+            sb_loss_func = subbatch(self.loss_impl, [0, 1], [0, 0], current_loss_subbatch_seqlen, 0)
             masked_lm_loss = sb_loss_func(prediction_scores, masked_lm_labels)
         elif prediction_scores_dims == 3 and prediction_scores.shape[1] > current_loss_subbatch_seqlen:
-            sb_loss_func = subbatch(
-                self.loss_impl, [0, 1], [1, 1], current_loss_subbatch_seqlen, 1
-            )
+            sb_loss_func = subbatch(self.loss_impl, [0, 1], [1, 1], current_loss_subbatch_seqlen, 1)
             masked_lm_loss = sb_loss_func(prediction_scores, masked_lm_labels)
         else:
             masked_lm_loss = self.loss_impl(prediction_scores, masked_lm_labels)
@@ -889,7 +868,7 @@ def load_balancing_loss_func(
 
 # copy mixtral (except init and example in docstring)
 @auto_docstring
-class Ernie4_5_MoEForCausalLM(Ernie4_5_MoEPretrainedModel,GenerationMixin):
+class Ernie4_5_MoEForCausalLM(Ernie4_5_MoEPretrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
@@ -904,7 +883,7 @@ class Ernie4_5_MoEForCausalLM(Ernie4_5_MoEPretrainedModel,GenerationMixin):
         self.num_experts = config.moe_num_experts
         self.num_experts_per_tok = config.moe_k
 
-        #self.loss_function = ErniePretrainingCriterion(config)
+        # self.loss_function = ErniePretrainingCriterion(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1007,8 +986,4 @@ class Ernie4_5_MoEForCausalLM(Ernie4_5_MoEPretrainedModel,GenerationMixin):
         )
 
 
-__all__ = [
-    "Ernie4_5_MoEModel",
-    "Ernie4_5_MoEForCausalLM",
-    "Ernie4_5_MoEPretrainedModel"
-]
+__all__ = ["Ernie4_5_MoEModel", "Ernie4_5_MoEForCausalLM", "Ernie4_5_MoEPretrainedModel"]
