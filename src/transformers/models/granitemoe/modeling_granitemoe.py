@@ -455,7 +455,7 @@ class GraniteMoeAttention(nn.Module):
             query_states,
             key_states,
             value_states,
-            attention_mask,
+            attention_mask if self.config._attn_implementation != 'flash_attention_2' else None,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             **kwargs,
