@@ -3835,23 +3835,27 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             # We're going to remove aliases before saving
             ptrs = collections.defaultdict(list)
             for name, tensor in state_dict.items():
-                if not isinstance(tensor, torch.Tensor):
-                    # Sometimes in the state_dict we have non-tensor objects.
-                    # e.g. in bitsandbytes we have some `str` objects in the state_dict
+                # Sometimes in the state_dict we have non-tensor objects.
+                # e.g. in bitsandbytes we have some `str` objects in the state_dict
+                if isinstance(tensor, torch.Tensor):
+                    ptrs[id_tensor_storage(tensor)].append(name)
+                else:
                     # In the non-tensor case, fall back to the pointer of the object itself
                     ptrs[id(tensor)].append(name)
 
-                elif tensor.device.type == "meta":
-                    # In offloaded cases, there may be meta tensors in the state_dict.
-                    # For these cases, key by the pointer of the original tensor object
-                    # (state_dict tensors are detached and therefore no longer shared)
-                    tensor = self.get_parameter(name)
-                    ptrs[id(tensor)].append(name)
-
+            # These are all the pointers of shared tensors
+            if hasattr(self, "hf_device_map"):
+                # if the model has offloaded parameters, we must check using find_tied_parameters()
+                tied_params = find_tied_parameters(self)
+                if tied_params:
+                    tied_names = tied_params[0]
+                    shared_ptrs = {
+                        ptr: names for ptr, names in ptrs.items() if any(name in tied_names for name in names)
+                    }
                 else:
-                    ptrs[id_tensor_storage(tensor)].append(name)
-
-            shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
+                    shared_ptrs = {}
+            else:
+                shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
 
             # Recursively descend to find tied weight keys
             _tied_weights_keys = _get_tied_weight_keys(self)
