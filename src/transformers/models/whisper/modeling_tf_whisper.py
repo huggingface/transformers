@@ -600,8 +600,9 @@ WHISPER_INPUTS_DOCSTRING = r"""
     Args:
         input_features (`tf.Tensor` of shape `(batch_size, feature_size, sequence_length)`):
             Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be obtained
-            by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a `numpy.ndarray`, *e.g.*
-            via the torchcodec library (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
+            by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a `numpy.ndarray` or a
+            `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or the soundfile library
+            (`pip install soundfile`).
             To prepare the array into `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the
             fbank features, padding and conversion into a tensor of type `tf.Tensor`.
             See [`~WhisperFeatureExtractor.__call__`]
@@ -729,8 +730,8 @@ class TFWhisperEncoder(keras.layers.Layer):
         Args:
             input_features (`tf.Tensor` of shape `(batch_size, feature_size, sequence_length)`):
                 Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be
-                obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a
-                `numpy.ndarray`, *e.g.* via the torchcodec libary (`pip install torchcodec`) or
+                obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
+                `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec libary (`pip install torchcodec`) or
                 the soundfile library (`pip install soundfile`). To prepare the array into
                 `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the fbank features,
                 padding and conversion into a tensor of type `tf.Tensor`. See [`~WhisperFeatureExtractor.__call__`]

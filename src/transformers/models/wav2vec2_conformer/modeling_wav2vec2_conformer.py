@@ -1579,10 +1579,10 @@ class Wav2Vec2ConformerForSequenceClassification(Wav2Vec2ConformerPreTrainedMode
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via the torchcodec library (`pip install
-            torchcodec`) or the soundfile library (`pip install soundfile`). To prepare the array into `input_values`,
-            the [`AutoProcessor`] should be used for padding and conversion into a tensor of type `torch.FloatTensor`.
-            See [`Wav2Vec2ConformerProcessor.__call__`] for details.
+            into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library
+            (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
+            To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and conversion
+            into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2ConformerProcessor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
@@ -1682,7 +1682,7 @@ class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ConformerPreTrainedMo
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via the torchcodec library (`pip install
+            into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install
             torchcodec`) or the soundfile library (`pip install soundfile`). To prepare the array into `input_values`,
             the [`AutoProcessor`] should be used for padding and conversion into a tensor of type `torch.FloatTensor`.
             See [`Wav2Vec2ConformerProcessor.__call__`] for details.
@@ -1853,7 +1853,7 @@ class Wav2Vec2ConformerForXVector(Wav2Vec2ConformerPreTrainedModel):
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via the torchcodec library (`pip install
+            into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install
             torchcodec`) or the soundfile library (`pip install soundfile`). To prepare the array into `input_values`,
             the [`AutoProcessor`] should be used for padding and conversion into a tensor of type `torch.FloatTensor`.
             See [`Wav2Vec2ConformerProcessor.__call__`] for details.
