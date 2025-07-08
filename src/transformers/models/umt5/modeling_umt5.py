@@ -349,7 +349,7 @@ class UMT5Attention(nn.Module):
         attn_output = attn_output.view(batch_size, seq_length, -1)
 
         attn_output = self.o(attn_output)
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights
 
 
 class UMT5LayerSelfAttention(nn.Module):
@@ -434,7 +434,7 @@ class UMT5Block(GradientCheckpointingLayer):
         output_attentions=False,
         cache_position=None,
     ):
-        hidden_states, self_attn_weights, past_key_value = self.layer[0](
+        hidden_states, self_attn_weights = self.layer[0](
             hidden_states,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
@@ -452,7 +452,7 @@ class UMT5Block(GradientCheckpointingLayer):
         cross_attn_weights = None
         do_cross_attention = self.is_decoder and encoder_hidden_states is not None
         if do_cross_attention:
-            hidden_states, cross_attn_weights, past_key_value = self.layer[1](
+            hidden_states, cross_attn_weights = self.layer[1](
                 hidden_states,
                 encoder_hidden_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
@@ -475,10 +475,7 @@ class UMT5Block(GradientCheckpointingLayer):
             clamp_value = torch.where(torch.isinf(hidden_states).any(), max_dtype - 1000, max_dtype)
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
-        outputs = (
-            hidden_states,
-            past_key_value,
-        )
+        outputs = (hidden_states,)
 
         if output_attentions:
             outputs += (self_attn_weights, cross_attn_weights)
@@ -776,13 +773,10 @@ class UMT5Stack(UMT5PreTrainedModel):
 
             hidden_states = layer_outputs[0]
 
-            if use_cache:
-                next_decoder_cache = layer_outputs[1]
-
             if output_attentions:
-                all_attentions += (layer_outputs[2],)
+                all_attentions += (layer_outputs[1],)
                 if self.is_decoder:
-                    all_cross_attentions += (layer_outputs[3],)
+                    all_cross_attentions += (layer_outputs[2],)
 
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
@@ -791,14 +785,12 @@ class UMT5Stack(UMT5PreTrainedModel):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
-
         if not return_dict:
             return tuple(
                 v
                 for v in [
                     hidden_states,
-                    next_cache,
+                    past_key_values,
                     all_hidden_states,
                     all_attentions,
                     all_cross_attentions,
@@ -807,7 +799,7 @@ class UMT5Stack(UMT5PreTrainedModel):
             )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_attentions,
             cross_attentions=all_cross_attentions,

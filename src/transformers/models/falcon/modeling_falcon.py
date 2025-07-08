@@ -358,10 +358,7 @@ class FalconAttention(nn.Module):
 
             attn_output = self.dense(attn_output)
 
-            if output_attentions:
-                return attn_output, layer_past, attention_scores
-            else:
-                return attn_output, layer_past
+            return attn_output, attention_scores
 
         else:
             if self._use_sdpa and not output_attentions and head_mask is None:
@@ -412,10 +409,7 @@ class FalconAttention(nn.Module):
 
                 attn_output = self.dense(attn_output)
 
-            if output_attentions:
-                return attn_output, layer_past, attention_probs
-            else:
-                return attn_output, layer_past
+            return attn_output, attention_probs
 
 
 class FalconFlashAttention2(FalconAttention):
@@ -524,7 +518,7 @@ class FalconFlashAttention2(FalconAttention):
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, layer_past, attn_weights
+        return attn_output, attn_weights
 
 
 class FalconMLP(nn.Module):
@@ -599,7 +593,7 @@ class FalconDecoderLayer(GradientCheckpointingLayer):
             attention_layernorm_out = self.input_layernorm(hidden_states)
 
         # Self attention.
-        attn_outputs = self.self_attention(
+        attention_output, attn_weights = self.self_attention(
             attention_layernorm_out,
             layer_past=layer_past,
             attention_mask=attention_mask,
@@ -611,8 +605,6 @@ class FalconDecoderLayer(GradientCheckpointingLayer):
             cache_position=cache_position,
             position_embeddings=position_embeddings,
         )
-
-        attention_output = attn_outputs[0]
 
         if not self.config.new_decoder_architecture:
             if self.config.parallel_attn:
@@ -630,8 +622,6 @@ class FalconDecoderLayer(GradientCheckpointingLayer):
         ):
             mlp_layernorm_out = attention_layernorm_out
 
-        outputs = attn_outputs[1:]
-
         # MLP.
         mlp_output = self.mlp(mlp_layernorm_out)
 
@@ -640,12 +630,7 @@ class FalconDecoderLayer(GradientCheckpointingLayer):
 
         output = dropout_add(mlp_output, residual, self.config.hidden_dropout, training=self.training)
 
-        if use_cache:
-            outputs = (output,) + outputs
-        else:
-            outputs = (output,) + outputs[1:]
-
-        return outputs  # hidden_states, past_kv, attentions
+        return output, attn_weights
 
 
 @auto_docstring
@@ -815,7 +800,6 @@ class FalconModel(FalconPreTrainedModel):
         # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        next_decoder_cache = None
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
 
@@ -837,11 +821,8 @@ class FalconModel(FalconPreTrainedModel):
             )
 
             hidden_states = outputs[0]
-            if use_cache is True:
-                next_decoder_cache = outputs[1]
-
             if output_attentions:
-                all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
+                all_self_attentions = all_self_attentions + (outputs[1],)
 
         # Add last hidden state
         hidden_states = self.ln_f(hidden_states)
@@ -849,15 +830,14 @@ class FalconModel(FalconPreTrainedModel):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
         if not return_dict:
             return tuple(
-                v for v in [hidden_states, next_cache, all_hidden_states, all_self_attentions] if v is not None
+                v for v in [hidden_states, past_key_values, all_hidden_states, all_self_attentions] if v is not None
             )
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )

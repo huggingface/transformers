@@ -305,7 +305,7 @@ class DbrxAttention(nn.Module):
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights
 
 
 class DbrxFlashAttention2(DbrxAttention):
@@ -430,7 +430,7 @@ class DbrxFlashAttention2(DbrxAttention):
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights
 
 
 class DbrxSdpaAttention(DbrxAttention):
@@ -525,7 +525,7 @@ class DbrxSdpaAttention(DbrxAttention):
 
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, None, past_key_value
+        return attn_output, None
 
 
 DBRX_ATTENTION_CLASSES = {
@@ -561,7 +561,7 @@ class DbrxNormAttentionNorm(nn.Module):
         residual_states = hidden_states
         hidden_states = self.norm_1(hidden_states).to(hidden_states.dtype)
 
-        hidden_states, attn_weights, past_key_value = self.attn(
+        hidden_states, attn_weights = self.attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -578,7 +578,7 @@ class DbrxNormAttentionNorm(nn.Module):
         residual_states = hidden_states
         hidden_states = self.norm_2(hidden_states).to(hidden_states.dtype)
 
-        return residual_states, hidden_states, attn_weights, past_key_value
+        return residual_states, hidden_states, attn_weights
 
 
 class DbrxRouter(nn.Module):
@@ -775,7 +775,7 @@ class DbrxBlock(GradientCheckpointingLayer):
         """
 
         # Norm + Attention + Norm
-        resid_states, hidden_states, self_attn_weights, present_key_value = self.norm_attn_norm(
+        resid_states, hidden_states, self_attn_weights = self.norm_attn_norm(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -795,9 +795,6 @@ class DbrxBlock(GradientCheckpointingLayer):
 
         if output_attentions:
             outputs += (self_attn_weights,)
-
-        if use_cache:
-            outputs += (present_key_value,)
 
         if output_router_logits:
             outputs += (router_logits,)
@@ -935,7 +932,6 @@ class DbrxModel(DbrxPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         all_router_logits = () if output_router_logits else None
-        next_decoder_cache = None
 
         for block in self.blocks:
             if output_hidden_states:
@@ -954,9 +950,6 @@ class DbrxModel(DbrxPreTrainedModel):
 
             hidden_states = block_outputs[0]
 
-            if use_cache:
-                next_decoder_cache = block_outputs[2 if output_attentions else 1]
-
             if output_attentions:
                 all_self_attns += (block_outputs[1],)
 
@@ -969,16 +962,15 @@ class DbrxModel(DbrxPreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
         if not return_dict:
             return tuple(
                 v
-                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, all_router_logits]
+                for v in [hidden_states, past_key_values, all_hidden_states, all_self_attns, all_router_logits]
                 if v is not None
             )
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
             router_logits=all_router_logits,

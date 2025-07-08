@@ -150,11 +150,7 @@ class GPTNeoXJapaneseAttention(nn.Module):
         attn_output = self._merge_heads(attn_output, self.num_attention_heads, self.head_size)
         attn_output = self.dense(attn_output)
 
-        outputs = (attn_output, layer_past)
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs, self.dense_bias
+        return attn_output, attn_weights, self.dense_bias
 
     @classmethod
     def _split_heads(cls, tensor, num_attention_heads, attn_head_size):
@@ -357,7 +353,7 @@ class GPTNeoXJapaneseLayer(nn.Module):
     ):
         residual = hidden_states
         ln_out = self.input_layernorm(hidden_states)
-        attention_layer_outputs, attn_bias = self.attention(
+        attn_output, attn_weights, attn_bias = self.attention(
             ln_out,
             attention_mask=attention_mask,
             layer_past=layer_past,
@@ -368,8 +364,6 @@ class GPTNeoXJapaneseLayer(nn.Module):
             cache_position=cache_position,
             position_embeddings=position_embeddings,
         )
-        attn_output = attention_layer_outputs[0]  # output_attn: a, present, (attentions)
-        outputs = attention_layer_outputs[1:]
 
         # attn_output = (atten_output + bias) + residual
         attn_output = bias_dropout_add(
@@ -386,12 +380,7 @@ class GPTNeoXJapaneseLayer(nn.Module):
             mlp_output, bias=None, residual=attn_output, prob=self.hidden_dropout, training=self.training
         )
 
-        if use_cache:
-            outputs = (attn_output,) + outputs
-        else:
-            outputs = (attn_output,) + outputs[1:]
-
-        return outputs  # hidden_states, present, (attentions)
+        return attn_output, attn_weights
 
 
 @auto_docstring
@@ -490,7 +479,6 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
         # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        next_decoder_cache = None
         all_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
         for i, layer in enumerate(self.layers):
@@ -509,23 +497,22 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
                 position_embeddings=position_embeddings,
             )
             hidden_states = outputs[0]
-            if use_cache is True:
-                next_decoder_cache = outputs[1]
             if output_attentions:
-                all_attentions = all_attentions + (outputs[2 if use_cache else 1],)
+                all_attentions = all_attentions + (outputs[1],)
 
         hidden_states = self.final_layer_norm(hidden_states)
         # Add last hidden state
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
         if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_attentions] if v is not None)
+            return tuple(
+                v for v in [hidden_states, past_key_values, all_hidden_states, all_attentions] if v is not None
+            )
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_attentions,
         )

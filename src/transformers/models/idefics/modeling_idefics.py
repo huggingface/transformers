@@ -647,7 +647,7 @@ class IdeficsAttention(nn.Module):
         if output_attentions:
             attn_weights = None
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights
 
 
 # this was adapted from LlamaDecoderLayer
@@ -701,7 +701,7 @@ class IdeficsDecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+        hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -725,9 +725,6 @@ class IdeficsDecoderLayer(GradientCheckpointingLayer):
 
         if output_attentions:
             outputs += (self_attn_weights,)
-
-        if use_cache:
-            outputs += (present_key_value,)
 
         return outputs
 
@@ -847,7 +844,7 @@ class IdeficsGatedCrossAttentionLayer(GradientCheckpointingLayer):
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
-        hidden_states, self_attn_weights, present_key_value = self.cross_attn(
+        hidden_states, self_attn_weights = self.cross_attn(
             hidden_states=hidden_states,
             key_value_states=image_hidden_states,
             attention_mask=image_attention_mask,
@@ -870,9 +867,6 @@ class IdeficsGatedCrossAttentionLayer(GradientCheckpointingLayer):
 
         if output_attentions:
             outputs += (self_attn_weights,)
-
-        if use_cache:
-            outputs += (present_key_value,)
 
         return outputs
 
@@ -1152,7 +1146,6 @@ class IdeficsModel(IdeficsPreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        next_decoder_cache = None
 
         for idx, decoder_layer in enumerate(self.layers):
             if output_hidden_states:
@@ -1186,9 +1179,6 @@ class IdeficsModel(IdeficsPreTrainedModel):
             )
             hidden_states = layer_outputs[0]
 
-            if use_cache:
-                next_decoder_cache = layer_outputs[2 if output_attentions else 1]
-
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
@@ -1198,12 +1188,11 @@ class IdeficsModel(IdeficsPreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
         image_hidden_states = image_hidden_states.view(batch_size, num_images, image_seq_len, image_hidden_size)
 
         return IdeficsBaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
             image_hidden_states=image_hidden_states,

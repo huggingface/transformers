@@ -492,7 +492,7 @@ class MoshiAttention(nn.Module):
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights
 
 
 # NO LONGER EXIST Copied from transformers.models.gemma.modeling_gemma.GemmaFlashAttention2 with Gemma->Moshi
@@ -614,7 +614,7 @@ class MoshiFlashAttention2(MoshiAttention):
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights
 
 
 # NO LONGER EXIST Copied from transformers.models.gemma.modeling_gemma.GemmaSdpaAttention with Gemma->Moshi
@@ -709,7 +709,7 @@ class MoshiSdpaAttention(MoshiAttention):
 
         attn_output = self.o_proj(attn_output, cache_position)  # Ignore copy
 
-        return attn_output, None, past_key_value
+        return attn_output, None
 
 
 MOSHI_ATTENTION_CLASSES = {
@@ -771,7 +771,7 @@ class MoshiDecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+        hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -795,9 +795,6 @@ class MoshiDecoderLayer(GradientCheckpointingLayer):
 
         if output_attentions:
             outputs += (self_attn_weights,)
-
-        if use_cache:
-            outputs += (present_key_value,)
 
         return outputs
 
@@ -1001,7 +998,6 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        next_decoder_cache = None
         hidden_states = inputs_embeds
         for decoder_layer in self.layers:
             if output_hidden_states:
@@ -1019,9 +1015,6 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
 
             hidden_states = layer_outputs[0]
 
-            if use_cache:
-                next_decoder_cache = layer_outputs[2 if output_attentions else 1]
-
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
@@ -1029,7 +1022,6 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
         logits = self.lm_heads(hidden_states, cache_position)
 
         loss = None
@@ -1044,13 +1036,15 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
             loss = loss_fct(logits.reshape(-1, self.config.audio_vocab_size), labels)
 
         if not return_dict:
-            return tuple(v for v in [loss, logits, next_cache, all_hidden_states, all_self_attns] if v is not None)
+            return tuple(
+                v for v in [loss, logits, past_key_values, all_hidden_states, all_self_attns] if v is not None
+            )
 
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=next_cache,
-            hidden_states=all_hidden_states,
+            past_key_values=past_key_values,
+            hidden_states=past_key_values,
             attentions=all_self_attns,
         )
 
@@ -1268,13 +1262,6 @@ class MoshiModel(MoshiPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        return_legacy_cache = False  # noqa: F841
-        if (
-            use_cache and not isinstance(past_key_values, Cache) and not self.training
-        ):  # kept for BC (non `Cache` `past_key_values` inputs)
-            return_legacy_cache = True  # noqa: F841
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
@@ -1303,7 +1290,6 @@ class MoshiModel(MoshiPreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        next_decoder_cache = None
 
         for decoder_layer in self.layers:
             if output_hidden_states:
@@ -1321,9 +1307,6 @@ class MoshiModel(MoshiPreTrainedModel):
 
             hidden_states = layer_outputs[0]
 
-            if use_cache:
-                next_decoder_cache = layer_outputs[2 if output_attentions else 1]
-
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
@@ -1333,12 +1316,13 @@ class MoshiModel(MoshiPreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
         if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
+            return tuple(
+                v for v in [hidden_states, past_key_values, all_hidden_states, all_self_attns] if v is not None
+            )
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
