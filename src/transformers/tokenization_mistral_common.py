@@ -18,15 +18,9 @@ import warnings
 from collections.abc import Mapping, Sized
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Optional, Union, overload
+from typing import Any, Callable, Optional, Union, overload
 
 import numpy as np
-from mistral_common.protocol.instruct.request import ChatCompletionRequest
-from mistral_common.protocol.instruct.validator import ValidationMode
-from mistral_common.tokens.tokenizers.base import SpecialTokenPolicy
-from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
-from mistral_common.tokens.tokenizers.tekken import Tekkenizer
-from mistral_common.tokens.tokenizers.utils import download_tokenizer_from_hf_hub
 
 from transformers.tokenization_utils_base import (
     LARGE_INTEGER,
@@ -41,12 +35,19 @@ from transformers.tokenization_utils_base import (
 from transformers.utils import PaddingStrategy, TensorType, add_end_docstrings, logging, to_py_obj
 from transformers.utils.generic import is_torch_tensor
 from transformers.utils.hub import PushToHubMixin
-from transformers.utils.import_utils import is_torch_available, requires
+from transformers.utils.import_utils import is_mistral_common_available, is_torch_available, requires
 
 
-if TYPE_CHECKING:
-    if is_torch_available():
-        import torch
+if is_mistral_common_available():
+    from mistral_common.protocol.instruct.request import ChatCompletionRequest
+    from mistral_common.protocol.instruct.validator import ValidationMode
+    from mistral_common.tokens.tokenizers.base import SpecialTokenPolicy
+    from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
+    from mistral_common.tokens.tokenizers.tekken import Tekkenizer
+    from mistral_common.tokens.tokenizers.utils import download_tokenizer_from_hf_hub
+
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)
@@ -1497,7 +1498,6 @@ class MistralCommonTokenizer(PushToHubMixin):
                             raise ImportError(
                                 "Unable to convert output to PyTorch tensors format, PyTorch is not installed."
                             )
-                        import torch
 
                         pixel_values = torch.tensor(images)
                     elif return_tensors == "np":
