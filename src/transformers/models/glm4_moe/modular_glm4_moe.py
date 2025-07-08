@@ -47,7 +47,7 @@ class Glm4MoeConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Glm4MoeModel`]. It is used to instantiate a
     Glm4Moe model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of [THUDM/GLM-4-100B-A9B](https://huggingface.co/THUDM/GLM-4-100B-A9B).
+    with the defaults will yield a similar configuration to that of [THUDM/GLM-4-100B-A10B](https://huggingface.co/THUDM/GLM-4-100B-A10B).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -153,7 +153,7 @@ class Glm4MoeConfig(PretrainedConfig):
     >>> # Initializing a Glm4Moe style configuration
     >>> configuration = Glm4MoeConfig()
 
-    >>> # Initializing a model from the GLM-4-MOE-100B-A9B style configuration
+    >>> # Initializing a model from the GLM-4-MOE-100B-A10B style configuration
     >>> model = Glm4MoeModel(configuration)
 
     >>> # Accessing the model configuration
@@ -491,10 +491,10 @@ class Glm4MoeForCausalLM(MixtralForCausalLM):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, Qwen3MoeForCausalLM
+        >>> from transformers import AutoTokenizer, Glm4MoeForCausalLM
 
-        >>> model = Glm4MoeForCausalLM.from_pretrained("THUDM/GLM-4-MoE-100B-A9B")
-        >>> tokenizer = AutoTokenizer.from_pretrained("THUDM/GLM-4-MoE-100B-A9B")
+        >>> model = Glm4MoeForCausalLM.from_pretrained("THUDM/GLM-4-MoE-100B-A10B")
+        >>> tokenizer = AutoTokenizer.from_pretrained("THUDM/GLM-4-MoE-100B-A10B")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")

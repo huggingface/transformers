@@ -711,10 +711,10 @@ class Glm4MoeForCausalLM(Glm4MoePreTrainedModel, GenerationMixin):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, Qwen3MoeForCausalLM
+        >>> from transformers import AutoTokenizer, Glm4MoeForCausalLM
 
-        >>> model = Glm4MoeForCausalLM.from_pretrained("THUDM/GLM-4-MoE-100B-A9B")
-        >>> tokenizer = AutoTokenizer.from_pretrained("THUDM/GLM-4-MoE-100B-A9B")
+        >>> model = Glm4MoeForCausalLM.from_pretrained("THUDM/GLM-4-MoE-100B-A10B")
+        >>> tokenizer = AutoTokenizer.from_pretrained("THUDM/GLM-4-MoE-100B-A10B")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
