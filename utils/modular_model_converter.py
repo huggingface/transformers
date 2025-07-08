@@ -959,8 +959,6 @@ def replace_class_node(
         elif m.matches(node, m.SimpleStatementLine(body=[m.AnnAssign()])):
             modular_class_attributes[node.body[0].target.value] = node
 
-    new_class_attributes = list({**original_modeling_class_attributes, **modular_class_attributes}.values())
-
     # Use all original modeling attributes, and potentially override some with values in the modular
     new_class_attributes = list({**original_modeling_class_attributes, **modular_class_attributes}.values())
 
