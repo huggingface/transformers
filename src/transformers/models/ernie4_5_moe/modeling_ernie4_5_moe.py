@@ -14,8 +14,7 @@
 
 import functools
 from dataclasses import dataclass
-from functools import partial
-from typing import Callable, Optional
+from typing import Callable, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -26,7 +25,8 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import ModelOutput, MoeCausalLMOutputWithPast
+from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import ModelOutput, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -36,8 +36,6 @@ from .configuration_ernie4_5_moe import Ernie4_5_MoEConfig
 
 logger = logging.get_logger(__name__)
 
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 @dataclass
 class Erine4_5_MoeModelOutputWithPast(ModelOutput):
@@ -272,29 +270,42 @@ class Ernie4_5_MoEAttention(nn.Module):
         return attn_output, attn_weights
 
 
-# in original code base it tracks usage as well
-# for overall purpose - it's a bias for the gate
 class Ernie4_5_MoEStatics(nn.Module):
     """
-    TODO:
     Stores MoE (Mixture of Experts) statistics
-    and expert usage information.
+        - Bias for the gating
+        - Additionally, usage per expert in the original codebase
     """
 
     def __init__(self, config):
         super().__init__()
 
-        num_experts = config.moe_num_experts
         num_experts_groups = 1
+        num_experts = config.moe_num_experts
 
         self.e_score_correction_bias = nn.Parameter(
             torch.zeros(num_experts_groups, num_experts, dtype=torch.float32),
+            # TODO: it has non-zero values...
+            #requires_grad=False,
         )
 
 
-# copy qwen3 moe (+ shared experts + different normalization + correction bias)
+# copy mixtral moe (+ shared experts + different normalization + correction bias)
 # do not copy... ^ is the closest
 class Ernie4_5_MoESparseMoEBlock(nn.Module):
+    """
+    This implementation is
+    strictly equivalent to standard MoE with full capacity (no
+    dropped tokens). It's faster since it formulates MoE operations
+    in terms of block-sparse operations to accommodate imbalanced
+    assignments of tokens to experts, whereas standard MoE either
+    (1) drop tokens at the cost of reduced performance or (2) set
+    capacity factor to number of experts and thus waste computation
+    and memory on padding.
+
+    Ernie 4.5 MoE's original formula is based on case (2).
+    """
+
     def __init__(self,config):
         super().__init__()
         self.num_experts = config.moe_num_experts
@@ -366,44 +377,21 @@ class Ernie4_5_MoESparseMoEBlock(nn.Module):
             final_hidden_states += self.shared_experts(hidden_states)
 
         final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
-        return final_hidden_states, None, torch.zeros([1], dtype=torch.float32, device=hidden_states.device), router_logits
+        return final_hidden_states, router_logits
 
 
-class Ernie4_5_MoEDecoderLayer(nn.Module):
-    """A single transformer decoder layer in ERNIE-MoE model.
-
-    Contains self-attention and feed-forward components with optional MoE (Mixture of Experts)
-    support, residual connections, and layer normalization.
-    """
-
+# follows qwen3 moe somewhat - however the args and kwargs ain't matching as they should let me fix these in another PR
+class Ernie4_5_MoEDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx):
-        """Initialize the decoder layer.
-
-        Args:
-            config (ErnieMoEConfig): Model configuration.
-            layer_idx (int): Index of this layer in the transformer stack
-        """
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.layer_idx = layer_idx
-        self.config = config
-        self.self_attn = Ernie4_5_MoEAttention(config, layer_idx)
 
-        moe_layer_start_index = (
-            min(config.moe_layer_start_index)
-            if isinstance(config.moe_layer_start_index, (tuple, list))
-            else config.moe_layer_start_index
-        )
-        moe_layer_end_index = (
-            max(config.moe_layer_end_index)
-            if isinstance(config.moe_layer_end_index, (tuple, list))
-            else config.moe_layer_end_index
-        )
+        self.self_attn = Ernie4_5_MoEAttention(config, layer_idx)
 
         if (
             ((layer_idx + 1) % config.moe_layer_interval == 0)
-            and layer_idx >= moe_layer_start_index
-            and layer_idx <= moe_layer_end_index
+            and layer_idx >= config.moe_layer_start_index
+            and layer_idx <= config.moe_layer_end_index
         ):
             self.mlp = Ernie4_5_MoESparseMoEBlock(config)
         else:
@@ -415,40 +403,36 @@ class Ernie4_5_MoEDecoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
         past_key_value: Optional[tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
+        output_router_logits: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-        output_router_loss: bool = True,
-        output_gate_logits: bool = True,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        """Forward pass through the decoder layer.
-
+        """
         Args:
-            hidden_states (torch.Tensor): Input tensor [batch_size, seq_len, hidden_size]
-            attention_mask (Optional[torch.Tensor]): Attention mask tensor
-            position_ids (Optional[torch.Tensor]): Position indices for rotary embeddings
-            past_key_value (Optional[tuple[torch.Tensor]]): Cached key/value states
-            output_attentions (Optional[bool]): Whether to return attention weights
-            use_cache (Optional[bool]): Whether to cache key/value states
+            hidden_states (`torch.FloatTensor`):
+                Input to the layer of shape `(batch, seq_len, embed_dim)`.
+            position_embeddings (`tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
+                with `head_dim` being the embedding dimension of each attention head.
+            attention_mask (`torch.FloatTensor`, *optional*):
+                Attention mask of size `(batch, sequence_length)` where padding elements are indicated by 0.
+            past_key_value (`Cache`, *optional*):
+                Cached past key and value projection states.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            output_router_logits (`bool`, *optional*):
+                Whether or not to return the logits of all the routers. They are useful for computing the router loss,
+                and should not be returned during inference.
             cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
                 Indices depicting the position of the input sequence tokens in the sequence.
-            position_embeddings (`tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
-                tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
-                with `head_dim` being the embedding dimension of each attention head.
-            output_router_loss (bool): Whether to return MoE router loss
-            output_gate_logits (bool): Whether to return MoE gate logits
-
-        Returns:
-            Union: Various output combinations depending on arguments:
-                - Base case: Hidden states tensor
-                - With attention: tuple of (hidden_states, attention_weights)
-                - With router loss: May include gate logits in output tuple
-                - With MoE gate logits: May include gate logits in output tuple
+            kwargs (`dict`, *optional*):
+                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
+                into the model.
         """
         residual = hidden_states
 
@@ -457,12 +441,10 @@ class Ernie4_5_MoEDecoderLayer(nn.Module):
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
+            position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             past_key_value=past_key_value,
-            position_ids=position_ids,
-            use_cache=use_cache,
             cache_position=cache_position,
-            position_embeddings=position_embeddings,
             **kwargs,
         )
         hidden_states = hidden_states + residual
@@ -471,13 +453,12 @@ class Ernie4_5_MoEDecoderLayer(nn.Module):
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
 
-        router_loss = None
-        gate_logits = None
-
+        hidden_states = self.mlp(hidden_states)
         if isinstance(self.mlp, Ernie4_5_MoESparseMoEBlock):
-            hidden_states, _, router_loss, gate_logits = self.mlp(hidden_states)
+            hidden_states, router_logits = hidden_states
         else:
-            hidden_states = self.mlp(hidden_states)
+            router_logits = None
+
         hidden_states = hidden_states + residual
 
         outputs = (hidden_states,)
@@ -485,18 +466,14 @@ class Ernie4_5_MoEDecoderLayer(nn.Module):
         if output_attentions:
             outputs += (self_attn_weights,)
 
-        if output_router_loss:
-            outputs += (router_loss,)
-
-        if output_gate_logits:
-            outputs += (gate_logits,)
+        if output_router_logits:
+            outputs += (router_logits,)
 
         return outputs
 
 
 @auto_docstring
 class Ernie4_5_MoEPretrainedModel(PreTrainedModel):
-    """Base class for ERNIE pretrained models."""
     config_class = Ernie4_5_MoEConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
@@ -504,13 +481,154 @@ class Ernie4_5_MoEPretrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     _keep_in_fp32_modules_strict = ["gate", "moe_statics"]
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
     _supports_flex_attn = True
     _supports_cache_class = True
     _supports_quantized_cache = True
     _supports_static_cache = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
+    _supports_attention_backend = True  # TODO: check config in qwen3
+
+    # TODO: init scheme of paddle
 
 
+@auto_docstring
+class Ernie4_5_MoEModel(Ernie4_5_MoEPretrainedModel):
+    # TODO: add mtp option
+    def __init__(self, config: Ernie4_5_MoEConfig):
+        super().__init__(config)
+        self.padding_idx = config.pad_token_id
+        self.vocab_size = config.vocab_size
+
+        self.embed_tokens = nn.Embedding(
+            config.vocab_size,
+            config.hidden_size,
+        )
+        self.layers = nn.ModuleList(
+            [
+                Ernie4_5_MoEDecoderLayer(config, layer_idx)
+                for layer_idx in range(config.num_hidden_layers)
+            ]
+        )
+        self.norm = Ernie4_5_MoERMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.rotary_emb = Ernie4_5_MoERopeEmbedding(config=config)
+        self.gradient_checkpointing = False
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.embed_tokens = value
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        output_router_logits: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+    )-> MoeModelOutputWithPast:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.output_router_logits
+        )
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache()
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position = torch.arange(
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            )
+        if position_ids is None:
+            position_ids = cache_position.unsqueeze(0)
+
+        causal_mask = create_causal_mask(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
+        )
+
+        hidden_states = inputs_embeds
+
+        # create position embeddings to be shared across the decoder layers
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
+        # decoder layers
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attns = () if output_attentions else None
+        all_router_logits = () if output_router_logits else None
+
+        for decoder_layer in self.layers:
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+
+            layer_outputs = decoder_layer(
+                hidden_states,
+                position_embeddings=position_embeddings,
+                attention_mask=causal_mask,
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                output_router_logits=output_router_logits,
+                cache_position=cache_position,
+                **flash_attn_kwargs,
+            )
+
+            hidden_states = layer_outputs[0]
+
+            if output_attentions:
+                all_self_attns += (layer_outputs[1],)
+
+            if output_router_logits:
+                all_router_logits += (layer_outputs[-1],)
+
+        hidden_states = self.norm(hidden_states)
+
+        # add hidden states from the last decoder layer
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
+
+        return MoeModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attns,
+            router_logits=all_router_logits,
+        )
+
+
+# I like this :eyes:
 def subbatch(f, arg_idx, axis, bs, out_idx, same_arg_idx={}):
     """
     Converts a function to one that applies to subbatch of an input dimension.
@@ -571,6 +689,8 @@ def subbatch(f, arg_idx, axis, bs, out_idx, same_arg_idx={}):
     return wrapper
 
 
+# shouldn't be needed + router loss was missing either way
+# only major diff is the using of `subbatch` above
 class ErniePretrainingCriterion(nn.Module):
     """Criterion for ERNIE pretraining task."""
 
@@ -680,260 +800,210 @@ class ErniePretrainingCriterion(nn.Module):
         return loss, loss_sum
 
 
-@auto_docstring
-class Ernie4_5_MoEModel(Ernie4_5_MoEPretrainedModel):
-    """The core ERNIE transformer model with MoE (Mixture of Experts) support."""
+# copy mixtral
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
-    def __init__(self, config: Ernie4_5_MoEConfig):
-        """Initialize the ERNIE model architecture."""
-        super().__init__(config)
-        self.padding_idx = config.pad_token_id
-        self.vocab_size = config.vocab_size
-        self.hidden_size = config.hidden_size
-        self.config = config
 
-        self.embed_tokens = nn.Embedding(
-            self.vocab_size,
-            self.hidden_size,
+# copy mixtral
+def load_balancing_loss_func(
+    gate_logits: Union[torch.Tensor, tuple[torch.Tensor], None],
+    num_experts: Optional[int] = None,
+    top_k=2,
+    attention_mask: Optional[torch.Tensor] = None,
+) -> Union[torch.Tensor, int]:
+    r"""
+    Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
+
+    See Switch Transformer (https://huggingface.co/papers/2101.03961) for more details. This function implements the loss
+    function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
+    experts is too unbalanced.
+
+    Args:
+        gate_logits:
+            Logits from the `gate`, should be a tuple of model.config.num_hidden_layers tensors of
+            shape [batch_size X sequence_length, num_experts].
+        num_experts:
+            Number of experts
+        top_k:
+            The number of experts to route per-token, can be also interpreted as the `top-k` routing
+            parameter.
+        attention_mask (`torch.Tensor`, *optional*):
+            The attention_mask used in forward function
+            shape [batch_size X sequence_length] if not None.
+
+    Returns:
+        The auxiliary loss.
+    """
+    if gate_logits is None or not isinstance(gate_logits, tuple):
+        return 0
+
+    if isinstance(gate_logits, tuple):
+        compute_device = gate_logits[0].device
+        concatenated_gate_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0)
+
+    routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
+
+    _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
+
+    expert_mask = torch.nn.functional.one_hot(selected_experts, num_experts)
+
+    if attention_mask is None:
+        # Compute the percentage of tokens routed to each experts
+        tokens_per_expert = torch.mean(expert_mask.float(), dim=0)
+
+        # Compute the average probability of routing to these experts
+        router_prob_per_expert = torch.mean(routing_weights, dim=0)
+    else:
+        batch_size, sequence_length = attention_mask.shape
+        num_hidden_layers = concatenated_gate_logits.shape[0] // (batch_size * sequence_length)
+
+        # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
+        expert_attention_mask = (
+            attention_mask[None, :, :, None, None]
+            .expand((num_hidden_layers, batch_size, sequence_length, top_k, num_experts))
+            .reshape(-1, top_k, num_experts)
+            .to(compute_device)
         )
 
-        self.layers = nn.ModuleList(
-            [
-                Ernie4_5_MoEDecoderLayer(config, i)
-                for i in range(config.num_hidden_layers)
-            ]
-        )
-        self.norm = Ernie4_5_MoERMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.rotary_emb = Ernie4_5_MoERopeEmbedding(config=config)
-
-        self.gradient_checkpointing = False
-
-        self.post_init()
-
-    def get_input_embeddings(self):
-        """Get the input embedding layer."""
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        """Set new input embeddings."""
-        self.embed_tokens = value
-
-    def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
-    ):
-        """Forward pass through the ERNIE model."""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        # Compute the percentage of tokens routed to each experts
+        tokens_per_expert = torch.sum(expert_mask.float() * expert_attention_mask, dim=0) / torch.sum(
+            expert_attention_mask, dim=0
         )
 
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
-
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
-
-        if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
-
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-        if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
-
-        causal_mask = create_causal_mask(
-            config=self.config,
-            input_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            cache_position=cache_position,
-            past_key_values=past_key_values,
+        # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
+        router_per_expert_attention_mask = (
+            attention_mask[None, :, :, None]
+            .expand((num_hidden_layers, batch_size, sequence_length, num_experts))
+            .reshape(-1, num_experts)
+            .to(compute_device)
         )
 
-        hidden_states = inputs_embeds
-
-        # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
-
-        # decoder layers
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-        all_router_loss = torch.tensor(0.0, device=inputs_embeds.device)
-        all_gate_logits = ()
-
-        for decoder_layer in self.layers:
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    partial(decoder_layer.__call__, **flash_attn_kwargs),
-                    hidden_states,
-                    causal_mask,
-                    position_ids,
-                    past_key_values,
-                    output_attentions,
-                    use_cache,
-                    cache_position,
-                    position_embeddings,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    causal_mask,
-                    position_ids,
-                    past_key_values,
-                    output_attentions,
-                    use_cache,
-                    cache_position,
-                    position_embeddings,
-                    **flash_attn_kwargs,
-                )
-
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attns += (layer_outputs[1],)
-
-            layer_outputs, gate_logits = layer_outputs[:-1], layer_outputs[-1]
-            all_gate_logits = all_gate_logits + (gate_logits,)
-
-        hidden_states = self.norm(hidden_states)
-
-        # add hidden states from the last decoder layer
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
-
-        return Erine4_5_MoeModelOutputWithPast(
-            last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
-            router_loss=all_router_loss,
-            gate_logits=all_gate_logits,
+        # Compute the average probability of routing to these experts
+        router_prob_per_expert = torch.sum(routing_weights * router_per_expert_attention_mask, dim=0) / torch.sum(
+            router_per_expert_attention_mask, dim=0
         )
 
+    overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
+    return overall_loss * num_experts
 
+
+# copy mixtral (except init and example in docstring)
 @auto_docstring
 class Ernie4_5_MoEForCausalLM(Ernie4_5_MoEPretrainedModel,GenerationMixin):
-    """ERNIE Mixture of Experts (MoE) model for causal language modeling."""
-
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     def __init__(self, config):
-        """
-        Initializes the ERNIE MoE model for causal language modeling.
-
-        Args:
-            config (dict): Model configuration.
-        """
         super().__init__(config)
-        self.config = config
         self.model = Ernie4_5_MoEModel(config)
-        #self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=config.weight_share_add_bias and config.use_bias) # TODO
+        self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=config.use_bias)
-        self.loss_function = ErniePretrainingCriterion(config)
+
+        self.router_aux_loss_coef = config.router_aux_loss_coef
+        self.num_experts = config.moe_num_experts
+        self.num_experts_per_tok = config.moe_k
+
+        #self.loss_function = ErniePretrainingCriterion(config)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
-        """Returns the input embeddings layer."""
         return self.model.embed_tokens
 
     def set_input_embeddings(self, value):
-        """Sets the input embeddings layer."""
         self.ernie.embed_tokens = value
 
     def get_output_embeddings(self):
-        """Returns the output embeddings (LM head)."""
         return self.lm_head
 
     def set_output_embeddings(self, new_embeddings):
-        """Sets the output embeddings layer."""
         self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
-        """Sets the ERNIE decoder model."""
         self.model = decoder
 
     def get_decoder(self):
-        """Get the transformer decoder."""
         return self.model
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
-        input_ids,
-        attention_mask=None,
-        position_ids=None,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[list[torch.FloatTensor]] = None,
-        inputs_embeds=None,
-        labels=None,
-        loss_mask=None,
-        use_cache=False,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        output_router_logits: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[KwargsForCausalLM],
-    ):
+    ) -> MoeCausalLMOutputWithPast:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
-        Forward pass for causal language modeling.
-        """
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.output_router_logits
+        )
+
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
-        outputs = self.model(
-            input_ids,
-            position_ids=position_ids,
+        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
+        outputs: MoeModelOutputWithPast = self.model(
+            input_ids=input_ids,
             attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            past_key_values=past_key_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            output_router_logits=output_router_logits,
+            cache_position=cache_position,
             **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
-        logits = self.lm_head(hidden_states)
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
-        loss, router_loss = None, None
-        if getattr(self.config, "use_moe", False):
-            router_loss = outputs.router_loss
-
+        loss = None
         if labels is not None:
-            loss, _ = self.loss_function(logits, labels, loss_mask, router_loss)
+            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
 
-        return Ernie4_5_MoECausalLMOutputWithPast(
+        aux_loss = None
+        if output_router_logits:
+            aux_loss = load_balancing_loss_func(
+                outputs.router_logits,
+                self.num_experts,
+                self.num_experts_per_tok,
+                attention_mask,
+            )
+            if labels is not None:
+                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
+
+        return MoeCausalLMOutputWithPast(
             loss=loss,
+            aux_loss=aux_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            router_loss=router_loss,
+            router_logits=outputs.router_logits,
         )
 
 

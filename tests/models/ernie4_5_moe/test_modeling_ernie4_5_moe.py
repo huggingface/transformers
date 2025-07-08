@@ -36,11 +36,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        Qwen3ForQuestionAnswering,
         Ernie4_5_MoEForCausalLM,
-        Ernie4_5_MoEForQuestionAnswering,
-        Ernie4_5_MoEForSequenceClassification,
-        Ernie4_5_MoEForTokenClassification,
         Ernie4_5_MoEModel,
     )
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -51,9 +47,6 @@ class Ernie4_5_MoEModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = Ernie4_5_MoEModel
         causal_lm_class = Ernie4_5_MoEForCausalLM
-        sequence_class = Ernie4_5_MoEForSequenceClassification
-        token_class = Ernie4_5_MoEForTokenClassification
-        question_answering_class = Ernie4_5_MoEForQuestionAnswering
 
 
 @require_torch
@@ -62,9 +55,6 @@ class Ernie4_5_MoEModelTest(CausalLMModelTest, unittest.TestCase):
         (
             Ernie4_5_MoEModel,
             Ernie4_5_MoEForCausalLM,
-            Ernie4_5_MoEForSequenceClassification,
-            Ernie4_5_MoEForTokenClassification,
-            Ernie4_5_MoEForQuestionAnswering,
         )
         if is_torch_available()
         else ()
