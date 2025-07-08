@@ -110,6 +110,8 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         self.vocab_size = config.vlm_config.text_config.vocab_size
 
         self.vlm = AutoModelForImageTextToText.from_config(config.vlm_config)
+        if self.vlm._tied_weights_keys is not None:
+            self._tied_weights_keys = [f"vlm.{k}" for k in self.vlm._tied_weights_keys]
 
         self.embedding_dim = self.config.embedding_dim
         self.embedding_proj_layer = nn.Linear(
