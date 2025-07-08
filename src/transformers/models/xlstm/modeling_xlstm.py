@@ -1268,6 +1268,31 @@ _CHECKPOINT_FOR_DOC = "NX-AI/xLSTM-7b"
 _CONFIG_FOR_DOC = "xLSTMConfig"
 
 
+def small_init_method(dim):
+    """
+    Adapted from: https://github.com/EleutherAI/gpt-neox/blob/main/megatron/model/init_functions.py
+    Fills the input Tensor with values according to the method described in Transformers without Tears: Improving
+    the Normalization of Self-Attention - Nguyen, T. & Salazar, J. (2019), using a normal distribution."""
+    std = (2 / (5 * dim)) ** (1 / 2)
+
+    def init_(tensor):
+        return torch.nn.init.normal_(tensor, mean=0.0, std=std)
+
+    return init_
+
+
+def wang_init_method(n_layers, dim):
+    """
+    Adapted from https://github.com/EleutherAI/gpt-neox/blob/main/megatron/model/init_functions.py
+    """
+    std = 2 / n_layers / dim ** (1 / 2)
+
+    def init_(tensor):
+        return torch.nn.init.normal_(tensor, mean=0.0, std=std)
+
+    return init_
+
+
 class xLSTMPreTrainedModel(PreTrainedModel):
     """
     An abstract class for an interface to loading a pre-trained xLSTM model.
@@ -1464,31 +1489,6 @@ class xLSTMCausalLMOutput(ModelOutput):
     logits: Optional[torch.FloatTensor] = None
     cache_params: Optional[xLSTMCache] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
-
-
-def small_init_method(dim):
-    """
-    Adapted from: https://github.com/EleutherAI/gpt-neox/blob/main/megatron/model/init_functions.py
-    Fills the input Tensor with values according to the method described in Transformers without Tears: Improving
-    the Normalization of Self-Attention - Nguyen, T. & Salazar, J. (2019), using a normal distribution."""
-    std = (2 / (5 * dim)) ** (1 / 2)
-
-    def init_(tensor):
-        return torch.nn.init.normal_(tensor, mean=0.0, std=std)
-
-    return init_
-
-
-def wang_init_method(n_layers, dim):
-    """
-    Adapted from https://github.com/EleutherAI/gpt-neox/blob/main/megatron/model/init_functions.py
-    """
-    std = 2 / n_layers / dim ** (1 / 2)
-
-    def init_(tensor):
-        return torch.nn.init.normal_(tensor, mean=0.0, std=std)
-
-    return init_
 
 
 @auto_docstring
