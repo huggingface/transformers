@@ -953,8 +953,8 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         raw_image1 = prepare_image()
         raw_image2 = prepare_groceries_image()
         input_boxes = [
-            [[[75, 275, 1725, 850], [425, 600, 700, 875], [1375, 550, 1650, 800], [1240, 675, 1400, 750]]],
-            [[[450, 170, 520, 350], [350, 190, 450, 350], [500, 170, 580, 350], [580, 170, 640, 350]]],
+            [[75, 275, 1725, 850], [425, 600, 700, 875], [1375, 550, 1650, 800], [1240, 675, 1400, 750]],
+            [[450, 170, 520, 350], [350, 190, 450, 350], [500, 170, 580, 350], [580, 170, 640, 350]],
         ]
         inputs = self.processor(images=[raw_image1, raw_image2], input_boxes=input_boxes, return_tensors="pt").to(
             torch_device

@@ -125,25 +125,23 @@ class Sam2Processor(ProcessorMixin):
             )
 
             # Get padding requirements for all inputs
-            padding_info = {}
             if processed_points is not None:
-                padding_info["points"] = self._get_nested_dimensions(processed_points)[:3]
+                points_max_dims = self._get_nested_dimensions(processed_points)[:3]
             if processed_labels is not None:
-                padding_info["labels"] = self._get_nested_dimensions(processed_labels)[:3]
+                labels_max_dims = self._get_nested_dimensions(processed_labels)[:3]
             if processed_boxes is not None:
-                padding_info["boxes"] = self._get_nested_dimensions(processed_boxes)[:2]
+                boxes_max_dims = self._get_nested_dimensions(processed_boxes)[:2]
 
             # Ensure points and labels have consistent dimensions
             if processed_points is not None and processed_labels is not None:
-                if padding_info["points"] != padding_info["labels"]:
+                if points_max_dims != labels_max_dims:
                     raise ValueError(
                         "Input points and labels have inconsistent dimensions. Please ensure they have the same dimensions."
                     )
 
             # Check that boxes don't need padding (model limitation)
             if processed_boxes is not None and len(processed_boxes) >= 2:
-                max_boxes = padding_info["boxes"][1]
-                if any(len(img_boxes) < max_boxes for img_boxes in processed_boxes):
+                if any(len(img_boxes) < boxes_max_dims[1] for img_boxes in processed_boxes):
                     raise ValueError(
                         "Input boxes have inconsistent dimensions that would require padding, "
                         "but boxes cannot be padded due to model limitations. "
@@ -152,13 +150,13 @@ class Sam2Processor(ProcessorMixin):
 
             # Pad and normalize all inputs to final tensor format
             if processed_points is not None:
-                padded_points = self._pad_nested_list(processed_points, padding_info["points"] + [2])
+                padded_points = self._pad_nested_list(processed_points, points_max_dims + [2])
                 final_points = torch.tensor(padded_points, dtype=torch.float32)
                 self._normalize_tensor_coordinates(final_points, original_sizes, preserve_padding=True)
                 encoding_image_processor.update({"input_points": final_points})
 
             if processed_labels is not None:
-                padded_labels = self._pad_nested_list(processed_labels, padding_info["labels"])
+                padded_labels = self._pad_nested_list(processed_labels, labels_max_dims)
                 final_labels = torch.tensor(padded_labels, dtype=torch.int64)
                 encoding_image_processor.update({"input_labels": final_labels})
 
@@ -480,7 +478,7 @@ class Sam2Processor(ProcessorMixin):
         normalize_coords: bool = True,
         box: Optional[list[float]] = None,
     ) -> dict[str, Any]:
-        """Add new points or box to a frame and return preprocessed inputs for model."""
+        """Add new points or box to a video frame and return preprocessed inputs for model."""
         obj_idx = inference_state._obj_id_to_idx(obj_id)
         point_inputs_per_frame = inference_state.point_inputs_per_obj[obj_idx]
         mask_inputs_per_frame = inference_state.mask_inputs_per_obj[obj_idx]

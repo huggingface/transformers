@@ -15,8 +15,10 @@
 """Fast Image processor class for SAM2."""
 
 import math
+import warnings
 from copy import deepcopy
 from itertools import product
+from pathlib import Path
 from typing import Any, Optional, Union
 
 import numpy as np
@@ -41,6 +43,29 @@ if is_torch_available():
 
 if is_torchvision_available():
     from torchvision.ops.boxes import batched_nms
+
+CUDA_KERNELS = None
+
+
+def load_cuda_kernels():
+    from torch.utils.cpp_extension import load
+
+    global CUDA_KERNELS
+
+    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "sam2"
+    src_files = [root / "connected_components.cu"]
+    CUDA_KERNELS = load(
+        "CUDA_KERNELS",
+        src_files,
+        with_cuda=True,
+        extra_include_paths=[str(root)],
+        extra_cuda_cflags=[
+            "-DCUDA_HAS_FP16=0",
+            "-D__CUDA_NO_HALF_OPERATORS__",
+            "-D__CUDA_NO_HALF_CONVERSIONS__",
+            "-D__CUDA_NO_HALF2_OPERATORS__",
+        ],
+    )
 
 
 class Sam2ImageProcessorFastKwargs(DefaultFastImageProcessorKwargs):
@@ -126,10 +151,10 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
         )
         if device is None:
             device = torch.device("cpu")
-        crop_boxes = torch.tensor(crop_boxes, device=device)
-        points_per_crop = torch.tensor(points_per_crop, device=device)
+        crop_boxes = crop_boxes.to(device)
+        points_per_crop = points_per_crop.to(device)
         # cropped_images stays as torch.Tensor
-        input_labels = torch.tensor(input_labels, device=device)
+        input_labels = input_labels.to(device)
 
         return crop_boxes, points_per_crop, cropped_images, input_labels
 
@@ -213,7 +238,15 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
         return masks, scores, converted_boxes
 
     def post_process_masks(
-        self, masks, original_sizes, reshaped_input_sizes, mask_threshold=0.0, binarize=True, pad_size=None
+        self,
+        masks,
+        original_sizes,
+        reshaped_input_sizes,
+        mask_threshold=0.0,
+        binarize=True,
+        pad_size=None,
+        max_hole_area=0.0,
+        max_sprinkle_area=0.0,
     ):
         """
         Remove padding and upscale masks to the original image size.
@@ -243,6 +276,42 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
             original_sizes = original_sizes.tolist()
         if isinstance(reshaped_input_sizes, (torch.Tensor, np.ndarray)):
             reshaped_input_sizes = reshaped_input_sizes.tolist()
+        if max_hole_area > 0 or max_sprinkle_area > 0:
+            processed_masks = []
+            for mask in masks:
+                if mask.ndim == 3:
+                    mask_flat = mask.flatten(0).unsqueeze(1)
+                elif mask.ndim == 4:
+                    mask_flat = mask.flatten(0, 1).unsqueeze(1)
+                elif mask.ndim == 5:
+                    mask_flat = mask.flatten(0, 1, 2).unsqueeze(1)
+                else:
+                    raise ValueError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
+                if torch.cuda.is_available():
+                    try:
+                        load_cuda_kernels()
+                    except Exception as e:
+                        print(f"Could not load custom CUDA kernels for postprocessing: {e}")
+                try:
+                    if max_hole_area > 0:
+                        mask = _fill_holes(mask_flat, mask, max_hole_area, mask_threshold)
+                    if max_sprinkle_area > 0:
+                        mask = _fill_sprinkles(mask_flat, mask, max_sprinkle_area, mask_threshold)
+                    processed_masks.append(mask)
+                except Exception as e:
+                    # Skip the post-processing step if the CUDA kernel fails
+                    print(f"Error in post-processing: {e}")
+                    warnings.warn(
+                        f"{e}\n\nSkipping the post-processing step due to the error above. You can "
+                        "still use SAM 2 and it's OK to ignore the error above, although some post-processing "
+                        "functionality may be limited (which doesn't affect the results in most cases; see "
+                        "https://github.com/facebookresearch/sam2/blob/main/INSTALL.md).",
+                        category=UserWarning,
+                        stacklevel=2,
+                    )
+            else:
+                processed_masks = masks
+            masks = processed_masks
         output_masks = []
         for i, original_size in enumerate(original_sizes):
             if isinstance(masks[i], np.ndarray):
@@ -273,6 +342,41 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
                 Threshold for NMS (Non Maximum Suppression) algorithm.
         """
         return _post_process_for_mask_generation(all_masks, all_scores, all_boxes, crops_nms_thresh)
+
+
+def get_connected_components(mask):
+    """
+    Get the connected components (8-connectivity) of binary masks of shape (N, 1, H, W).
+    Inputs:
+    - mask: A binary mask tensor of shape (N, 1, H, W), where 1 is foreground and 0 is
+            background.
+    Outputs:
+    - labels: A tensor of shape (N, 1, H, W) containing the connected component labels
+              for foreground pixels and 0 for background pixels.
+    - counts: A tensor of shape (N, 1, H, W) containing the area of the connected
+              components for foreground pixels and 0 for background pixels.
+    """
+    return CUDA_KERNELS.get_connected_components(mask.to(torch.uint8).contiguous())
+
+
+def _fill_holes(mask_flat, mask, max_hole_area, mask_threshold):
+    # Holes are those connected components in background with area <= self.fill_hole_area
+    # (background regions are those with mask scores <= self.mask_threshold)
+    labels, areas = get_connected_components(mask_flat <= mask_threshold)
+    is_hole = (labels > 0) & (areas <= max_hole_area)
+    is_hole = is_hole.reshape_as(mask)
+    # We fill holes with a small positive mask score (10.0) to change them to foreground.
+    mask = torch.where(is_hole, mask_threshold + 10.0, mask)
+    return mask
+
+
+def _fill_sprinkles(mask_flat, mask, max_sprinkle_area, mask_threshold):
+    labels, areas = get_connected_components(mask_flat > mask_threshold)
+    is_hole = (labels > 0) & (areas <= max_sprinkle_area)
+    is_hole = is_hole.reshape_as(mask)
+    # We fill holes with negative mask score (-10.0) to change them to background.
+    mask = torch.where(is_hole, mask_threshold - 10.0, mask)
+    return mask
 
 
 def _compute_stability_score(masks: "torch.Tensor", mask_threshold: float, stability_score_offset: int):

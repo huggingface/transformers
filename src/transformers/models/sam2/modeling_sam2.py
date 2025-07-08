@@ -2465,12 +2465,12 @@ class Sam2Model(Sam2PreTrainedModel):
 
         if input_points is not None and len(input_points.shape) != 4:
             raise ValueError(
-                "The input_points must be a 4D tensor. Of shape `batch_size`, `point_batch_size`, `point_per_mask`, `2`.",
+                "The input_points must be a 4D tensor. Of shape [`batch_size`, `point_batch_size`, `point_per_mask`, `2`].",
                 " got {}.".format(input_points.shape),
             )
         if input_boxes is not None and len(input_boxes.shape) != 3:
             raise ValueError(
-                "The input_points must be a 3D tensor. Of shape `batch_size`, `nb_boxes`, `4`.",
+                "The input_points must be a 3D tensor. Of shape [`batch_size`, `nb_boxes`, `4`].",
                 " got {}.".format(input_boxes.shape),
             )
         if input_points is not None and input_boxes is not None:
@@ -2731,9 +2731,9 @@ class Sam2Model(Sam2PreTrainedModel):
         is_init_cond_frame: bool = False,
     ) -> dict[str, torch.Tensor]:
         """
-        Add new conditioning inputs to a frame and run inference.
+        Add new conditioning inputs to a video frame and run inference.
         """
-        # Prepare batch inputs
+        # Only batch size 1 is supported for now
         batch_size = 1
 
         # Run single frame inference
