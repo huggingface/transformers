@@ -2309,7 +2309,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 try:
                     kernel = get_kernel(repo_id)
                     ALL_ATTENTION_FUNCTIONS.register(
-                        f"kernel_{repo_id.replace('/', '_')}", getattr(kernel, kernel_name)
+                        f"kernel_{repo_id.replace('/', '_')}", ALL_ATTENTION_FUNCTIONS["flash_attention_2"] # we need our extra layer to support kwargs
                     )
                     config._attn_implementation = f"kernel_{repo_id.replace('/', '_')}"
                 except FileNotFoundError as e:

@@ -321,6 +321,7 @@ class OpenAIMoeAttention(nn.Module):
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             sliding_window=self.sliding_window,  # main diff with Llama
+            s_aux=self.sinks,
             **kwargs,
         )
 
