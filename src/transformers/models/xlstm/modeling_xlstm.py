@@ -25,7 +25,6 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...generation import GenerationMixin
-from ...generation.configuration_utils import xLSTMCache
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
@@ -1329,8 +1328,8 @@ class xLSTMPreTrainedModel(PreTrainedModel):
                                 6.0,
                                 module.bias.shape[-1],
                             ).to(
-                                device=module.device,
-                                dtype=module.dtype,
+                                device=module.bias.device,
+                                dtype=module.bias.dtype,
                             )
                         )
             elif self.config.weight_mode == "fused" and "gate" in self._module_name_map(module):
@@ -1344,8 +1343,8 @@ class xLSTMPreTrainedModel(PreTrainedModel):
                         6.0,
                         module.bias.shape[-1],
                     ).to(
-                        device=module.device,
-                        dtype=module.dtype,
+                        device=module.bias.device,
+                        dtype=module.bias.dtype,
                     )
             elif "proj_down" in self._module_name_map(module):
                 wang_init_method(dim=module.weight.shape[1], n_layers=self.config.num_hidden_layers)(module.weight)
@@ -1358,30 +1357,6 @@ class xLSTMPreTrainedModel(PreTrainedModel):
             torch.nn.init.ones_(module.weight)
             if hasattr(module, "bias") and module.bias is not None:
                 torch.nn.init.zeros_(module.bias)
-
-
-@dataclass
-class xLSTMOutput(ModelOutput):
-    """
-    Class for the xLSTM model outputs
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        cache_params (`xLSTMCache`):
-            The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
-            avoid providing the old `input_ids`.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-
-    """
-
-    last_hidden_state: Optional[torch.FloatTensor]
-    cache_params: Optional[xLSTMCache] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 class xLSTMCache:
@@ -1452,6 +1427,30 @@ class xLSTMCache:
             )
             for layer in self.rnn_state
         }
+
+
+@dataclass
+class xLSTMOutput(ModelOutput):
+    """
+    Class for the xLSTM model outputs
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        cache_params (`xLSTMCache`):
+            The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
+            avoid providing the old `input_ids`.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+
+    """
+
+    last_hidden_state: Optional[torch.FloatTensor]
+    cache_params: Optional[xLSTMCache] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
