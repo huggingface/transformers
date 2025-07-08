@@ -177,10 +177,6 @@ class BLTTokenizer(PreTrainedTokenizer):
         """Converts a string to a list of tokens. For BLT, we work directly with byte values."""
         return [str(byte_val) for byte_val in text.encode("utf-8", errors="ignore")]
 
-    # def decode(self, token_ids, skip_special_tokens: bool = False, clean_up_tokenization_spaces: Optional[bool] = None, **kwargs):
-    #     """Converts a sequence of ids in a string, using the tokenizer and vocabulary."""
-    #     return super().decode(token_ids, skip_special_tokens, clean_up_tokenization_spaces, **kwargs)
-
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
