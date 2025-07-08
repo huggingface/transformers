@@ -346,7 +346,7 @@ class DogeAttention(nn.Module):
         attn_mask = dt_states[:, :, None, :].expand(
             -1, -1, hidden_states.shape[1], -1
         )  # [batch_size, num_heads, query_len, key_len]
-        if attention_mask is not None:
+        if attention_mask is not None and not isinstance(attention_mask, BlockMask):
             if attention_mask.dtype == torch.bool:
                 dtype = hidden_states.dtype
                 attention_mask = torch.where(
