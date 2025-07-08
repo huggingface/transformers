@@ -333,7 +333,7 @@ class PagedAttentionCache:
                 self._v_scale_tensor,  # v_scale
             )
 
-            if kwargs.get("max_seqlen_q") == 1:
+            if kwargs.get("is_decoding", False):
                 return self.key_cache[layer_idx], self.value_cache[layer_idx]
             else:
                 k = self.key_cache[layer_idx].view(total_slots, self.num_key_value_heads, self.head_dim)
@@ -344,8 +344,9 @@ class PagedAttentionCache:
             v_cache_flat = self.value_cache[layer_idx].view(total_slots, self.num_key_value_heads, self.head_dim)
             k_cache_flat[write_index, :, :] = key
             v_cache_flat[write_index, :, :] = value
-            # if kwargs.get("max_seqlen_q", -1) == 1:
-            #     return self.key_cache[layer_idx], self.value_cache[layer_idx]
+            if kwargs.get("is_decoding", False):
+                return self.key_cache[layer_idx], self.value_cache[layer_idx]
+            
             return k_cache_flat[read_index, :, :], v_cache_flat[read_index, :, :]
 
 
@@ -723,7 +724,7 @@ class PagedAttentionArgs:
     position_ids: torch.Tensor
     cumulative_seqlens_q: torch.Tensor
     cumulative_seqlens_k: torch.Tensor
-    max_seqlen_q: int
+    max_seqlen_q: torch.Tensor
     max_seqlen_k: int
     write_index: torch.Tensor
     read_index: torch.Tensor
@@ -816,7 +817,8 @@ class ContinuousBatchProcessor:
 
         self.tokenizer = Tokenizer.from_pretrained(self.config._name_or_path)
         self.decode_stream = DecodeStream(skip_special_tokens=True)
-
+        self.is_decoding = False
+        
     @traced(standalone=True)
     def setup_static_tensors(self):
         T = self.max_batch_tokens
@@ -833,7 +835,7 @@ class ContinuousBatchProcessor:
         self.write_index = torch.zeros((T,), **tensor_metadata).to(self.model_device, non_blocking=True)
         self.read_index = torch.zeros((max_token_budget,), **tensor_metadata).to(self.model_device, non_blocking=True)
         self.logits_indices = torch.full((T,), -1, **tensor_metadata).to(self.model_device, non_blocking=True)
-        self.max_seqlen_q = 0
+        self.max_seqlen_q = torch.tensor(0, **tensor_metadata).to(self.model_device, non_blocking=True)
         self.max_seqlen_k = 0
         self.output_ids = torch.full((1, T), -1, **tensor_metadata).to(self.model_device, non_blocking=True)
         self.block_tables = torch.full(
@@ -854,7 +856,7 @@ class ContinuousBatchProcessor:
         self.write_index.fill_(-1)
         self.read_index.fill_(-1)
         self.logits_indices.fill_(-1)
-        self.max_seqlen_q = 0
+        self.max_seqlen_q = torch.tensor(0).to(self.model_device, non_blocking=True)
         self.max_seqlen_k = 0
         self.output_ids.zero_()
         self.block_tables.fill_(-1)
@@ -876,6 +878,7 @@ class ContinuousBatchProcessor:
             "block_tables": self.block_tables,
             "cache": self.cache,
             "use_cache": False,
+            "is_decoding": self.is_decoding,
         }
 
     def __repr__(self):
@@ -980,7 +983,7 @@ class ContinuousBatchProcessor:
             cumulative_seqlens_k.append(cumulative_seqlens_k[-1] + key_length)
             if len(state.remaining_prompt_ids) == 0:
                 logits_indices.append(cumulative_seqlens_q[-1] - 1)
-            self.max_seqlen_q = max(self.max_seqlen_q, query_length)
+            self.max_seqlen_q = max(self.max_seqlen_q, torch.tensor(query_length, device=self.model_device))
             self.max_seqlen_k = max(self.max_seqlen_k, key_length)
             state.position_offset += query_length
 
@@ -1003,7 +1006,8 @@ class ContinuousBatchProcessor:
         )
 
         self.metrics.record_kv_cache_memory_metrics(self.cache)
-
+        
+        self.is_decoding = (self.max_seqlen_q == 1).item()
     @traced
     def _build_tensors(
         self,
@@ -1025,7 +1029,7 @@ class ContinuousBatchProcessor:
         self.logits_indices[: len(logits_indices)] = to_tensor(logits_indices)
         min_value = torch.finfo(self.model_dtype).min
         if (
-            self.config._attn_implementation != "paged_attention" and self.max_seqlen_q != 1
+            self.config._attn_implementation != "paged_attention"
         ):  # we set `is_causal` to True in paged call`
             # when decoding with sdpa paged, no need for a mask
             for i in range(len(cumulative_seqlens_q) - 1):
