@@ -18,8 +18,9 @@ import warnings
 from collections.abc import Mapping, Sized
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Optional, Union, overload
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union, overload
 
+import numpy as np
 from mistral_common.protocol.instruct.request import ChatCompletionRequest
 from mistral_common.protocol.instruct.validator import ValidationMode
 from mistral_common.tokens.tokenizers.base import SpecialTokenPolicy
@@ -46,7 +47,6 @@ from transformers.utils.import_utils import is_torch_available, requires
 if TYPE_CHECKING:
     if is_torch_available():
         import torch
-    import numpy as np
 
 
 logger = logging.get_logger(__name__)
@@ -1365,7 +1365,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_dict: bool = False,
         **kwargs,
-    ) -> Union[str, list[int], list[str], list[list[int]]]:
+    ) -> Union[str, list[int], list[str], list[list[int]], BatchEncoding]:
         """
         Converts a list of dictionaries with `"role"` and `"content"` keys to a list of token
         ids.
@@ -1407,13 +1407,14 @@ class MistralCommonTokenizer(PushToHubMixin):
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
             return_dict (`bool`, defaults to `False`):
                 Whether to return a dictionary with named outputs. Has no effect if tokenize is `False`.
+                If at least one conversation contains an image, its pixel values will be returned in the `pixel_values` key.
             kwargs (additional keyword arguments, *optional*):
                 Not supported by `MistralCommonTokenizer.apply_chat_template`.
                 Will raise an error if used.
 
         Returns:
-            `Union[str, List[int], List[str], List[List[int]]]`: A list of token ids representing the tokenized chat so far, including control tokens. This
-            output is ready to pass to the model, either directly or via methods like `generate()`.
+            `Union[str, List[int], List[str], List[List[int]], BatchEncoding]`: A list of token ids representing the tokenized chat so far, including control
+            tokens. This output is ready to pass to the model, either directly or via methods like `generate()`.
         """
         if kwargs:
             raise ValueError(
@@ -1432,9 +1433,39 @@ class MistralCommonTokenizer(PushToHubMixin):
             is_batched = False
 
         outputs = []
+        images: list[np.ndarray] = []
         for conversation in conversations:
+            messages: list[dict[str, Union[str, list[dict[str, Union[str, dict[str, Any]]]]]]] = []
+            for message in conversation:
+                if not isinstance(message, dict):
+                    raise ValueError("Each message must be a dictionary.")
+                maybe_list_content: Optional[Union[str, list[dict[str, Union[str, dict[str, Any]]]]]] = message.pop(
+                    "content", None
+                )
+                if not maybe_list_content or isinstance(maybe_list_content, str):
+                    message.update({"content": maybe_list_content})
+                else:
+                    normalized_content: list[dict[str, Union[str, dict[str, Any]]]] = []
+                    for content in maybe_list_content:
+                        content_type = content.get("type", None)
+                        if not content_type:
+                            continue
+                        if content_type in ["text", "image_url"]:
+                            normalized_content.append(content)
+                        elif content_type == "image":
+                            image_content = content.get("url") or content.get("path") or content.get("base64")
+                            if image_content is None:
+                                raise ValueError("Image content must be specified.")
+                            normalized_content.append({"type": "image_url", "image_url": {"url": image_content}})
+                        else:
+                            raise ValueError(
+                                f"Content type {content_type} not supported by `MistralCommonTokenizer.apply_chat_template`."
+                            )
+                    message.update({"content": normalized_content})
+                messages.append(message)
+
             chat_request = ChatCompletionRequest.from_openai(
-                messages=conversation,
+                messages=messages,
                 tools=tools,
                 continue_final_message=continue_final_message,
             )
@@ -1444,6 +1475,7 @@ class MistralCommonTokenizer(PushToHubMixin):
                 outputs.append(tokenized_request.tokens)
             else:
                 outputs.append(tokenized_request.text)
+            images.extend(tokenized_request.images)
 
         if not is_batched:
             outputs = outputs[0]
@@ -1458,6 +1490,23 @@ class MistralCommonTokenizer(PushToHubMixin):
                 return_tensors=return_tensors,
             )
             if return_dict:
+                if images:
+                    pixel_values: Union[list[np.ndarray], np.ndarray, torch.Tensor]
+                    if return_tensors == "pt":
+                        if not is_torch_available():
+                            raise ImportError(
+                                "Unable to convert output to PyTorch tensors format, PyTorch is not installed."
+                            )
+                        import torch
+
+                        pixel_values = torch.tensor(images)
+                    elif return_tensors == "np":
+                        pixel_values = np.array(images)
+                    elif return_tensors is None:
+                        pixel_values = images
+                    else:
+                        raise ValueError(f"Unsupported return_tensors type: {return_tensors}")
+                    out.data["pixel_values"] = pixel_values
                 return out
             else:
                 return out["input_ids"]
