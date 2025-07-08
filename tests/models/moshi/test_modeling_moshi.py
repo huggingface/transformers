@@ -998,7 +998,7 @@ class MoshiIntegrationTests(unittest.TestCase):
         some_expected_audio_tokens = [[1049, 127], [1700, 243], [1626, 457], [546, 290], [306, 306], [1443, 1443], [1871, 428], [2008, 1744]]  # fmt: skip
 
         model_outputs = model.generate(
-            do_sample=False, depth_decoder_do_sample=False, return_audio_codes=True, max_new_tokens=10
+            do_sample=False, depth_decoder_do_sample=False, return_audio_codes=True, max_new_tokens=10,# cache_implementation="dynamic"
         )
 
         # make sure audio encoded codes are correct
