@@ -237,10 +237,6 @@ class Glm4vModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
-    # The multimodal base model embeds will not match ids, due to pixel values. We can't change base test
-    # because in some models `pixel_values` are required. Will be fixed when we add support for merging `embeds+pixels`
-    # TODO: @raushan
-
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
