@@ -16,8 +16,6 @@
 import gc
 import unittest
 
-import requests
-
 from transformers import (
     AutoProcessor,
     Glm4vConfig,
@@ -48,7 +46,7 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class Glm4vVisionText2TextModelTester:
@@ -268,17 +266,30 @@ class Glm4vModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
 class Glm4vIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
-        self.messages = [
+        self.message = [
             {
                 "role": "user",
                 "content": [
-                    {"type": "image"},
+                    {
+                        "type": "image",
+                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                    },
                     {"type": "text", "text": "What kind of dog is this?"},
                 ],
             }
         ]
-        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
-        self.image = Image.open(requests.get(url, stream=True).raw)
+        self.message2 = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png",
+                    },
+                    {"type": "text", "text": "What kind of dog is this?"},
+                ],
+            }
+        ]
 
     def tearDown(self):
         gc.collect()
@@ -290,8 +301,9 @@ class Glm4vIntegrationTest(unittest.TestCase):
             "THUDM/GLM-4.1V-9B-Thinking", torch_dtype="auto", device_map="auto"
         )
 
-        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
-        inputs = self.processor(text=[text], images=[self.image], return_tensors="pt")
+        inputs = self.processor.apply_chat_template(
+            self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
+        )
         expected_input_ids = [151331, 151333, 151336, 198, 151339, 151343, 151343, 151343, 151343, 151343, 151343, 151343, 151343, 151343, 151343, 151343, 151343]  # fmt: skip
         assert expected_input_ids == inputs.input_ids[0].tolist()[:17]
 
@@ -313,9 +325,9 @@ class Glm4vIntegrationTest(unittest.TestCase):
         inputs = inputs.to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=30)
-        EXPECTED_DECODED_TEXT = "What kind of dog is this?<|assistant|>\n<think>Got it, let's look at the image. The animal in the picture is not a dog; it's a cat. Specifically, it looks"
+        EXPECTED_DECODED_TEXT = "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture is not a dog; it's a cat. Specifically, it looks"
         self.assertEqual(
-            self.processor.decode(output[0][-39:], skip_special_tokens=False),
+            self.processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
 
@@ -324,17 +336,17 @@ class Glm4vIntegrationTest(unittest.TestCase):
         model = Glm4vForConditionalGeneration.from_pretrained(
             "THUDM/GLM-4.1V-9B-Thinking", torch_dtype="auto", device_map="auto"
         )
-        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
-        inputs = self.processor(text=[text, text], images=[self.image, self.image], return_tensors="pt").to(
-            torch_device
-        )
+        batch_messages = [self.message] * 2
+        inputs = self.processor.apply_chat_template(
+            batch_messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
+        ).to(torch_device)
 
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30)
 
         EXPECTED_DECODED_TEXT = [
-            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices',
-            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices',
+            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture is not a dog; it's a cat. Specifically, it looks",
+            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture is not a dog; it's a cat. Specifically, it looks"
         ]  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
@@ -346,15 +358,16 @@ class Glm4vIntegrationTest(unittest.TestCase):
         model = Glm4vForConditionalGeneration.from_pretrained(
             "THUDM/GLM-4.1V-9B-Thinking", torch_dtype="auto", device_map="auto"
         )
-        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
-        inputs = self.processor(text=[text], images=[self.image], return_tensors="pt").to(torch_device)
+        inputs = self.processor.apply_chat_template(
+            self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
+        ).to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=30, num_return_sequences=3)
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False, num_beams=3, num_return_sequences=3)
 
         EXPECTED_DECODED_TEXT = [
-            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices',
-            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices',
-            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices',
+            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture is not a dog; it's a cat. Specifically, it looks",
+            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture doesn't look like a dog; it's actually a cat. Specifically",
+            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture doesn't look like a dog; it's actually a cat, specifically"
         ]  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
@@ -366,15 +379,19 @@ class Glm4vIntegrationTest(unittest.TestCase):
         model = Glm4vForConditionalGeneration.from_pretrained(
             "THUDM/GLM-4.1V-9B-Thinking", torch_dtype="auto", device_map="auto"
         )
-        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
-        messages2 = [
+        message_wo_image = [
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": "Who are you?"},
         ]
-        text2 = self.processor.apply_chat_template(messages2, tokenize=False, add_generation_prompt=True)
-        inputs = self.processor(text=[text, text2], images=[self.image], padding=True, return_tensors="pt").to(
-            torch_device
-        )
+        batched_messages = [self.message, message_wo_image]
+        inputs = self.processor.apply_chat_template(
+            batched_messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding=True,
+        ).to(torch_device)
 
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30)
@@ -393,12 +410,15 @@ class Glm4vIntegrationTest(unittest.TestCase):
         model = Glm4vForConditionalGeneration.from_pretrained(
             "THUDM/GLM-4.1V-9B-Thinking", torch_dtype="auto", device_map="auto"
         )
-        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
-        text2 = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
-        image2 = self.image.resize((224, 224))
-        inputs = self.processor(text=[text, text2], images=[self.image, image2], padding=True, return_tensors="pt").to(
-            torch_device
-        )
+        batched_messages = [self.message, self.message2]
+        inputs = self.processor.apply_chat_template(
+            batched_messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding=True,
+        ).to(torch_device)
 
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30)
@@ -422,10 +442,15 @@ class Glm4vIntegrationTest(unittest.TestCase):
             attn_implementation="flash_attention_2",
             device_map="auto",
         )
-        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
-        inputs = self.processor(text=[text, text], images=[self.image, self.image], return_tensors="pt").to(
-            torch_device
-        )
+        batched_messages = [self.message, self.message2]
+        inputs = self.processor.apply_chat_template(
+            batched_messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding=True,
+        ).to(torch_device)
 
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30)
@@ -449,15 +474,19 @@ class Glm4vIntegrationTest(unittest.TestCase):
             attn_implementation="flash_attention_2",
             device_map="auto",
         )
-        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
-        messages2 = [
+        message_wo_image = [
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": "Who are you?"},
         ]
-        text2 = self.processor.apply_chat_template(messages2, tokenize=False, add_generation_prompt=True)
-        inputs = self.processor(text=[text, text2], images=[self.image], padding=True, return_tensors="pt").to(
-            torch_device
-        )
+        batched_messages = [self.message, message_wo_image]
+        inputs = self.processor.apply_chat_template(
+            batched_messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding=True,
+        ).to(torch_device)
 
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30)
