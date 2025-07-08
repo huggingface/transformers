@@ -631,7 +631,10 @@ class TestMistralCommonTokenizer(unittest.TestCase):
 
         # Test 6:
         # truncation_side="left"
-        left_tokenizer = MistralCommonTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", truncation_side="left")
+        left_tokenizer = MistralCommonTokenizer.from_pretrained(
+            "hf-internal-testing/namespace-mistralai-repo_name-Mistral-Small-3.1-24B-Instruct-2503",
+            truncation_side="left",
+        )
         tokens, none, overflowing_tokens = left_tokenizer.truncate_sequences(
             ids, truncation_strategy="longest_first", num_tokens_to_remove=2
         )
