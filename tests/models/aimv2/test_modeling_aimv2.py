@@ -19,8 +19,8 @@ import tempfile
 import unittest
 
 import numpy as np
-import parameterized
 import requests
+from parameterized import parameterized
 from pytest import mark
 
 from transformers import Aimv2Config, Aimv2TextConfig, Aimv2VisionConfig
