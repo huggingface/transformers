@@ -72,7 +72,7 @@ class DeepseekVLHybridModelTester:
             "num_attention_heads": 4,
         },
         high_res_vision_config={
-            "num_hidden_layers": 1,
+            "num_hidden_layers": 2,
             "global_attn_indexes": [0],
             "hidden_size": 16,
             "intermediate_size": 37,
