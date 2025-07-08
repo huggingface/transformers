@@ -4306,7 +4306,7 @@ class ModelTesterMixin:
     def test_flash_attn_2_from_config(self):
         self.flash_attn_from_config(attn_implementation="flash_attention_2")
 
-    @require_flash_attn
+    @require_flash_attn_3
     @require_torch_gpu
     @mark.flash_attn_3_test
     @slow
