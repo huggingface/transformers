@@ -31,10 +31,10 @@ class TestMistralCommonTokenizer(unittest.TestCase):
     def setUpClass(cls):
         super().setUpClass()
         cls.tokenizer: MistralCommonTokenizer = AutoTokenizer.from_pretrained(
-            "mistralai/Mistral-Small-3.1-24B-Instruct-2503", tokenizer_type="mistral"
+            "hf-internal-testing/namespace-mistralai-repo_name-Mistral-Small-3.1-24B-Instruct-2503", tokenizer_type="mistral"
         )
         cls.ref_tokenizer: MistralTokenizer = MistralTokenizer.from_hf_hub(
-            "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
+            "hf-internal-testing/namespace-mistralai-repo_name-Mistral-Small-3.1-24B-Instruct-2503"
         )
         cls.fixture_conversations = [
             [
@@ -352,7 +352,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         # Test 4:
         # padding_side="right"
         right_tokenizer = MistralCommonTokenizer.from_pretrained(
-            "mistralai/Mistral-Small-3.1-24B-Instruct-2503", padding_side="right"
+            "hf-internal-testing/namespace-mistralai-repo_name-Mistral-Small-3.1-24B-Instruct-2503", padding_side="right"
         )
         right_paddings = [
             right_tokenizer.pad(get_batch_encoding(), padding="max_length", max_length=12),
@@ -501,7 +501,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         # Test 4:
         # padding_side="right"
         right_tokenizer = MistralCommonTokenizer.from_pretrained(
-            "mistralai/Mistral-Small-3.1-24B-Instruct-2503", padding_side="right"
+            "hf-internal-testing/namespace-mistralai-repo_name-Mistral-Small-3.1-24B-Instruct-2503", padding_side="right"
         )
         right_paddings = [
             right_tokenizer.pad(get_batch_encoding(), padding="max_length", max_length=12),
