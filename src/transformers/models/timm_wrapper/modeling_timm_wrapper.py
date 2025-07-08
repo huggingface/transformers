@@ -14,7 +14,7 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Optional, Union, Callable
+from typing import Callable, Optional, Union
 
 import torch
 from torch import Tensor, nn
