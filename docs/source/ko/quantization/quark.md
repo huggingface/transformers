@@ -18,16 +18,12 @@ rendered properly in your Markdown viewer.
 
 [Quark](https://quark.docs.amd.com/latest/)는 특정 데이터 타입, 알고리즘, 하드웨어에 구애받지 않도록 설계된 딥러닝 양자화 툴킷입니다. Quark에서는 다양한 전처리 전략, 알고리즘, 데이터 타입을 조합하여 사용할 수 있습니다.
 
-The PyTorch support integrated through 🤗 Transformers primarily targets AMD CPUs and GPUs, and is primarily meant to be used for evaluation purposes. For example, it is possible to use [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness) with 🤗 Transformers backend and evaluate a wide range of models quantized through Quark seamlessly.
 🤗 트랜스포머를 통해 통합된  PyTorch 지원은 주로 AMD CPU 및 GPU를 대상으로 하며, 주로 평가 목적으로 사용됩니다. 예를 들어, [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness)를 🤗 트랜스포머 백엔드와 함께 사용하여 Quark로 양자화된 다양한 모델을 원활하게 평가할 수 있습니다.
 
-Users interested in Quark can refer to its [documentation](https://quark.docs.amd.com/latest/) to get started quantizing models and using them in supported open-source libraries!
 Quark에 관심이 있는 사용자는 [문서](https://quark.docs.amd.com/latest/)를 참고하여 모델 양자화를 시작하고 지원되는 오픈 소스 라이브러리에서 사용할 수 있습니다!
 
-Although Quark has its own checkpoint / [configuration format](https://huggingface.co/amd/Llama-3.1-8B-Instruct-FP8-KV-Quark-test/blob/main/config.json#L26), the library also supports producing models with a serialization layout compliant with other quantization/runtime implementations ([AutoAWQ](https://huggingface.co/docs/transformers/quantization/awq), [native fp8 in 🤗 Transformers](https://huggingface.co/docs/transformers/quantization/finegrained_fp8)).
 Quark는 자체 체크포인트/[설정 포맷](https://huggingface.co/amd/Llama-3.1-8B-Instruct-FP8-KV-Quark-test/blob/main/config.json#L26)를 가지고 있지만, 다른 양자화/런타임 구현체 ([AutoAWQ](https://huggingface.co/docs/transformers/quantization/awq), 네이티브 fp8](https://huggingface.co/docs/transformers/quantization/finegrained_fp8))와 호환되는 직렬화 레이아웃으로 모델을 생성하는 것도 지원합니다.
 
-To be able to load Quark quantized models in Transformers, the library first needs to be installed:
 트랜스포머에서 Quark 양자화 모델을 로드하려면 먼저 라이브러리를 설치해야야합니다:
 
 ```bash
@@ -36,10 +32,8 @@ pip install amd-quark
 
 ## 지원 매트릭스[[Support matrix]]
 
-Models quantized through Quark support a large range of features, that can be combined together. All quantized models independently of their configuration can seamlessly be reloaded through `PretrainedModel.from_pretrained`.
 Quark를 통해 양자화된 모델은 함께 조합할 수 있는 광범위한 기능을 지원합니다. 구성에 관계없이 모든 양자화된 모델은 `PretrainedModel.from_pretrained`를 통해 원활하게 다시 로드할 수 있습니다.
 
-The table below shows a few features supported by Quark:
 아래 표는 Quark에서 지원하는 몇 가지 기능을 보여줍니다:
 
 | **기능**                        | **Quark에서 지원하는 항목**                                                                             |   |
@@ -57,13 +51,11 @@ The table below shows a few features supported by Quark:
 
 Quark 네이티브 직렬화를 사용하는 공개 모델은 https://huggingface.co/models?other=quark 에서 찾을 수 있습니다.
 
-Although Quark also supports [models using `quant_method="fp8"`](https://huggingface.co/models?other=fp8) and [models using `quant_method="awq"`](https://huggingface.co/models?other=awq), Transformers loads these models rather through [AutoAWQ](https://huggingface.co/docs/transformers/quantization/awq) or uses the [native fp8 support in 🤗 Transformers](https://huggingface.co/docs/transformers/quantization/finegrained_fp8).
 Quark는 [`quant_method="fp8"`을 이용하는 모델](https://huggingface.co/models?other=fp8)과 [`quant_method="awq"`을 사용하는 모델](https://huggingface.co/models?other=awq)도 지원하지만, 트랜스포머는 이러한 모델을 [AutoAWQ](https://huggingface.co/docs/transformers/quantization/awq)를 통해 불러오거나 
 [🤗 트랜스포머의 네이티브 fp8 지원](https://huggingface.co/docs/transformers/quantization/finegrained_fp8)을 사용합니다.
 
 ## Transformer에서 Quark모델 사용하기[[Using Quark models in Transformers]]
 
-Here is an example of how one can load a Quark model in Transformers:
 다음은 Transformers에서 Quark 모델을 불러오는 방법의 예시입니다:
 
 ```python
