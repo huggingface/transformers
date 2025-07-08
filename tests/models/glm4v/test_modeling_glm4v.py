@@ -407,6 +407,7 @@ class Glm4vIntegrationTest(unittest.TestCase):
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
+        self.processor.video_processor.max_image_size["longest_edge"] = 47040000
 
     @slow
     def test_small_model_integration_test_expand(self):
