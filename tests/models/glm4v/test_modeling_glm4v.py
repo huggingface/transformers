@@ -394,13 +394,14 @@ class Glm4vIntegrationTest(unittest.TestCase):
             ]
             for question, video_url in zip(questions, video_urls)
         ]
+        self.processor.video_processor.max_image_size['longest_edge']=50176
         inputs = self.processor.apply_chat_template(
             messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt", padding=True
         ).to(torch_device)
         output = model.generate(**inputs, max_new_tokens=30)
         EXPECTED_DECODED_TEXT = [
-            "\n012345Describe this video.\n<think>Got it, let's analyze the video. First, the scene is an indoor tennis court. There are two players: one in a white shirt",
-            "\n012345Describe this video.\n<think>Got it, let's analyze the video. First, the scene is an indoor tennis court. There are two players: one in a white shirt"
+            "\n012345Describe this video.\n<think>Got it, let's analyze the video. First, the scene is a room with a wooden floor, maybe a traditional Japanese room with tatami",
+            "\n012345Describe this video.\n<think>Got it, let's analyze the video. First, the scene is a room with a wooden floor, maybe a traditional Japanese room with tatami"
         ]  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
