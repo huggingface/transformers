@@ -22,8 +22,11 @@ from typing import Optional, Sequence
 
 import numpy as np
 from parameterized import parameterized
+import pytest
 
 from transformers.models.gemma3n import Gemma3nAudioFeatureExtractor
+from packaging import version
+import transformers.models.gemma3n.modeling_gemma3n as modeling_gemma3n
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
     require_torch,
@@ -275,3 +278,7 @@ class Gemma3nAudioFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unit
             self.assertTrue(np_processed.input_features.dtype == np.float32)
             pt_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="pt")
             self.assertTrue(pt_processed.input_features.dtype == torch.float32)
+
+
+
+
