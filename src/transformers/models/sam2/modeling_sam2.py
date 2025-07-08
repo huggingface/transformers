@@ -193,6 +193,7 @@ class Sam2ImageSegmentationOutput(ModelOutput):
     """
 
     iou_scores: torch.FloatTensor = None
+    pred_masks: torch.FloatTensor = None
     low_res_masks: torch.FloatTensor = None
     high_res_masks: torch.FloatTensor = None
     object_pointer: torch.FloatTensor = None
@@ -2270,12 +2271,30 @@ class Sam2Model(Sam2PreTrainedModel):
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers.
         """
-        vision_output = self.vision_encoder(
-            pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+        batch_size = pixel_values.shape[0]
+        feature_maps, feature_maps_position_embeddings, vision_hidden_states, vision_attentions = (
+            self.get_image_features(
+                pixel_values,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
         )
-        image_embeddings = vision_output[0]
+        # flatten NxCxHxW to HWxNxC
+        feature_maps = [feature_map.flatten(2).permute(2, 0, 1) for feature_map in feature_maps]
+        feature_maps_position_embeddings = [
+            feature_map_position_embedding.flatten(2).permute(2, 0, 1)
+            for feature_map_position_embedding in feature_maps_position_embeddings
+        ]
+
+        # add no memory embedding to the last feature map
+        feature_maps[-1] = feature_maps[-1] + self.no_memory_embedding
+
+        # reshape feature maps to the same shape as the backbone feature sizes
+        image_embeddings = [
+            feat.permute(1, 2, 0).view(batch_size, -1, *feat_size)
+            for feat, feat_size in zip(feature_maps, self.backbone_feature_sizes)
+        ]
+
         return image_embeddings
 
     @torch.no_grad()
@@ -2585,6 +2604,7 @@ class Sam2Model(Sam2PreTrainedModel):
 
         return Sam2ImageSegmentationOutput(
             iou_scores=iou_scores,
+            pred_masks=low_res_masks,
             low_res_masks=low_res_masks,
             high_res_masks=high_res_masks,
             object_pointer=obj_ptr,

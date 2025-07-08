@@ -191,7 +191,7 @@ class MaskGenerationPipeline(ChunkPipeline):
         timeout: Optional[float] = None,
     ):
         image = load_image(image, timeout=timeout)
-        target_size = self.image_processor.size["longest_edge"]
+        target_size = self.image_processor.size.get("longest_edge", self.image_processor.size.get("height"))
         crop_boxes, grid_points, cropped_images, input_labels = self.image_processor.generate_crop_boxes(
             image, target_size, crops_n_layers, crop_overlap_ratio, points_per_crop, crop_n_points_downscale_factor
         )

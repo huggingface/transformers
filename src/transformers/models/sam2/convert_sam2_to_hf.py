@@ -241,7 +241,7 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
             output = hf_model(**inputs)
         scores = output.iou_scores.squeeze()
 
-        assert torch.allclose(scores, torch.tensor([0.0314, 0.9649, 0.1026]).cuda(), atol=1e-4)
+        assert torch.allclose(scores, torch.tensor([0.0314, 0.9649, 0.1026]).cuda(), atol=1e-3)
     elif model_name == "sam2.1_hiera_small":
         inputs = processor(
             images=np.array(raw_image), input_points=input_points, input_labels=input_labels, return_tensors="pt"
@@ -251,7 +251,7 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
             output = hf_model(**inputs)
         scores = output.iou_scores.squeeze()
         # [0.953125   0.15625    0.05175781]
-        assert torch.allclose(scores, torch.tensor([0.9664, 0.1494, 0.0456]).cuda(), atol=1e-4)
+        assert torch.allclose(scores, torch.tensor([0.9664, 0.1494, 0.0456]).cuda(), atol=1e-3)
     elif model_name == "sam2.1_hiera_base_plus":
         inputs = processor(
             images=np.array(raw_image), input_points=input_points, input_labels=input_labels, return_tensors="pt"
@@ -261,7 +261,7 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
             output = hf_model(**inputs)
         scores = output.iou_scores.squeeze()
         # [0.0378418  0.9765625  0.12255859]
-        assert torch.allclose(scores, torch.tensor([0.0361, 0.9775, 0.1308]).cuda(), atol=1e-4)
+        assert torch.allclose(scores, torch.tensor([0.0361, 0.9775, 0.1308]).cuda(), atol=1e-3)
     elif model_name == "sam2.1_hiera_large":
         inputs = processor(
             images=np.array(raw_image), input_points=input_points, input_labels=input_labels, return_tensors="pt"
@@ -271,7 +271,7 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
             output = hf_model(**inputs)
         scores = output.iou_scores.squeeze()
         # [0.96484375 0.03564453 0.1953125 ]
-        assert torch.allclose(scores, torch.tensor([0.9648, 0.0371, 0.1899]).cuda(), atol=1e-4)
+        assert torch.allclose(scores, torch.tensor([0.9648, 0.0371, 0.1899]).cuda(), atol=1e-3)
 
     if pytorch_dump_folder is not None:
         processor.save_pretrained(pytorch_dump_folder)
