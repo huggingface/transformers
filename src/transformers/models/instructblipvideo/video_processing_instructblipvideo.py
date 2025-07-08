@@ -91,7 +91,7 @@ class InstructBlipVideoVideoProcessor(BaseVideoProcessor):
         do_sample_frames: bool,
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
-        fps: Optional[int] = None,
+        fps: Optional[Union[int, float]] = None,
         num_frames: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         device: Optional["torch.Tensor"] = None,
