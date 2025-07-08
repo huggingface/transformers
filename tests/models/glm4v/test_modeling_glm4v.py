@@ -382,35 +382,14 @@ class Glm4vIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_with_video(self):
-        def prepare_video_metadata(videos):
-            video_metadata = []
-            for video in videos:
-                if isinstance(video, list):
-                    num_frames = len(video)
-                elif hasattr(video, "shape"):
-                    if len(video.shape) == 4:  # (T, H, W, C)
-                        num_frames = video.shape[0]
-                    else:
-                        num_frames = 1
-                else:
-                    num_frames = 8
-
-                metadata = {
-                    "fps": 2,
-                    "duration": num_frames / 2,
-                    "total_frames": num_frames,
-                }
-                video_metadata.append(metadata)
-            return video_metadata
-
         model = Glm4vForConditionalGeneration.from_pretrained(
             "THUDM/GLM-4.1V-9B-Thinking", torch_dtype=torch.float16, device_map="auto"
         )
-        questions = ["Describe this video.", "Describe this video."]
+        questions = ["Describe this video."] * 2
         video_urls = [
             "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
         ] * 2
-        messages_batch = [
+        messages = [
             [
                 {
                     "role": "user",
@@ -425,33 +404,13 @@ class Glm4vIntegrationTest(unittest.TestCase):
             ]
             for question, video_url in zip(questions, video_urls)
         ]
-        texts = [
-            self.processor.apply_chat_template(msg, tokenize=False, add_generation_prompt=True)
-            for msg in messages_batch
-        ]
-        with tempfile.NamedTemporaryFile(suffix=".mp4") as f:
-            f.write(requests.get(video_urls[0]).content)
-            f.flush()
-            cap = cv2.VideoCapture(f.name)
-
-            frames = []
-            while True:
-                ret, frame = cap.read()
-                if not ret:
-                    break
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                frames.append(Image.fromarray(frame_rgb).resize((224, 224), Image.BICUBIC))
-
-            cap.release()
-
-        video_metadata = prepare_video_metadata([frames, frames])
-        inputs = self.processor(
-            text=texts, videos=[frames, frames], video_metadata=video_metadata, return_tensors="pt", padding=True
+        inputs = self.processor.apply_chat_template(
+            messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt", padding=True
         ).to(torch_device)
         output = model.generate(**inputs, max_new_tokens=30)
         EXPECTED_DECODED_TEXT = [
-            "\n0123456789101112131415161718192021222324252627282930313233343536373839404142434445464748495051525354555657585960616263646566676869707172737475767778798081828384858687888990Describe this video.\n<think>Got it, let's analyze the video. First, the scene is an indoor tennis court with a high ceiling and wooden beams. The player is",
-            "\n0123456789101112131415161718192021222324252627282930313233343536373839404142434445464748495051525354555657585960616263646566676869707172737475767778798081828384858687888990Describe this video.\n<think>Got it, let's analyze the video. First, the scene is an indoor tennis court with a high ceiling and wooden beams. The player is"
+            "\n012345Describe this video.\n<think>Got it, let's analyze the video. First, the scene is an indoor tennis court. There are two players: one in a white shirt",
+            "\n012345Describe this video.\n<think>Got it, let's analyze the video. First, the scene is an indoor tennis court. There are two players: one in a white shirt"
         ]  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
