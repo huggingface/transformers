@@ -1454,8 +1454,20 @@ class MistralCommonTokenizer(PushToHubMixin):
                         if content_type in ["text", "image_url"]:
                             normalized_content.append(content)
                         elif content_type == "image":
-                            image_content = content.get("url") or content.get("path") or content.get("base64")
-                            if image_content is None:
+                            maybe_url: Optional[str] = content.get("url")
+                            maybe_path: Optional[str] = content.get("path")
+                            maybe_base64: Optional[str] = content.get("base64")
+                            if maybe_url:
+                                image_content = maybe_url
+                            elif maybe_path:
+                                if not maybe_path.startswith("file://"):
+                                    maybe_path = "file://" + maybe_path
+                                image_content = maybe_path
+                            elif maybe_base64:
+                                if not maybe_base64.startswith("data:image"):
+                                    maybe_base64 = "data:image/unk;base64," + maybe_base64
+                                image_content = maybe_base64
+                            else:
                                 raise ValueError("Image content must be specified.")
                             normalized_content.append({"type": "image_url", "image_url": {"url": image_content}})
                         else:
