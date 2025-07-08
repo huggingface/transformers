@@ -8,9 +8,8 @@ import torch
 from huggingface_hub import hf_hub_download, upload_folder
 from safetensors.torch import load_file, save_file
 
-from transformers.models.blt_wip.configuration_blt import BLTConfig
-from transformers.models.blt_wip.modeling_blt import BLTModel
-from transformers.models.blt_wip.modeling_blt_dev import BLTForCausalLM
+from transformers.models.blt.configuration_blt import BLTConfig
+from transformers.models.blt.modeling_blt import BLTModel, BLTForCausalLM
 from transformers.utils import logging as transformers_logging
 
 
@@ -394,7 +393,7 @@ def main():
             config_name=args.config_name,
             weights_name=args.weights_name,
             cache_dir=args.cache_dir,
-            push_to_hub_repo=args.push_to_hub,
+            push_to_hub_repo=False, #args.push_to_hub,
             hub_private=args.hub_private,
             hub_token=args.hub_token,
         )
