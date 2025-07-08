@@ -31,6 +31,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
