@@ -15,7 +15,6 @@
 
 import copy
 import gc
-import tempfile
 import unittest
 
 from transformers import (
@@ -32,8 +31,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_cv2_available
-
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -41,11 +38,6 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
 )
-
-
-if is_cv2_available():
-    import cv2
-
 
 if is_torch_available():
     import torch
@@ -233,11 +225,6 @@ class Glm4vModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
 
     @unittest.skip(reason="No available kernels - not supported")
     def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-    @parameterized.expand([("greedy", 1), ("beam search", 2)])
-    @unittest.skip("Cannot generate from inputs embeds with pixel values")
-    def test_generate_from_inputs_embeds(self):
         pass
 
     @unittest.skip(reason="Size mismatch")
