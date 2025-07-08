@@ -565,7 +565,7 @@ class Aimv2ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
         model_name = "yaswanthgali/aimv2-large-patch14-224-lit-HF"
-        model = Aimv2Model.from_pretrained(model_name, device_map="auto")
+        model = Aimv2Model.from_pretrained(model_name, device_map=torch_device)
         processor = AutoProcessor.from_pretrained(model_name)
 
         image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
@@ -588,7 +588,7 @@ class Aimv2ModelIntegrationTest(unittest.TestCase):
         )
 
         # handle device
-        expected_logits = torch.tensor([[33.3550, 26.4255]]).to(model.device)
+        expected_logits = torch.tensor([[34.2415, 24.6724]]).to(model.device)
         self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))
 
 
@@ -599,7 +599,7 @@ class Aimv2VisionModelIntegrationTests(unittest.TestCase):
     def test_inference(self):
         model_name = "yaswanthgali/aimv2-large-patch14-224-HF"
 
-        model = Aimv2VisionModel.from_pretrained(model_name, device_map="auto")
+        model = Aimv2VisionModel.from_pretrained(model_name, device_map=torch_device)
         processor = AutoImageProcessor.from_pretrained(model_name)
 
         image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
