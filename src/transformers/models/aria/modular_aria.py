@@ -47,7 +47,7 @@ from ..llama.modeling_llama import (
     LlamaMLP,
     LlamaModel,
     LlamaPreTrainedModel,
-    LlamaRMSNorm,
+    LlamaRMSNorm, LlamaAttention,
 )
 from ..llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,
@@ -1248,6 +1248,13 @@ class AriaTextMoELayer(nn.Module):
         # Add shared expert output
         shared_expert_output = self.shared_experts(hidden_states.view(original_shape))
         return output + shared_expert_output
+
+
+class AriaTextAttention(LlamaAttention):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(self, config: AriaTextConfig, layer_idx: int):
+        super().__init__()
 
 
 class AriaTextDecoderLayer(LlamaDecoderLayer):
