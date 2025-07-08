@@ -39,7 +39,7 @@ Quark를 통해 양자화된 모델은 함께 조합할 수 있는 광범위한 
 | **기능**                        | **Quark에서 지원하는 항목**                                                                             |   |
 |---------------------------------|-----------------------------------------------------------------------------------------------------------|---|
 | 데이터 타입                     | int8, int4, int2, bfloat16, float16, fp8_e5m2, fp8_e4m3, fp6_e3m2, fp6_e2m3, fp4, OCP MX, MX6, MX9, bfp16 |   |
-| Pre-quantization transformation | SmoothQuant, QuaRot, SpinQuant, AWQ                                                                       |   |
+| 양자화 전 모델 변환 | SmoothQuant, QuaRot, SpinQuant, AWQ                                                                       |   |
 | 양자화 알고리즘                 | GPTQ                                                                                                      |   |
 | 지원 연산자                     | ``nn.Linear``, ``nn.Conv2d``, ``nn.ConvTranspose2d``, ``nn.Embedding``, ``nn.EmbeddingBag``               |   |
 | 세분성(Granularity)             | per-tensor, per-channel, per-block, per-layer, per-layer type                                             |   |
