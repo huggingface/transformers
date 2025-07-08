@@ -3,7 +3,7 @@ name: Build pr ci-docker
 on:
   push:
     branches:
-      - add_mistral_common_support
+      - add_mistral_common_support_disable
   repository_dispatch:
   workflow_call:
     inputs:
