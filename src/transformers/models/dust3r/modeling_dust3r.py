@@ -25,16 +25,10 @@ from typing import Callable, Optional, Union
 
 import torch
 import torch.nn as nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import (
-    BaseModelOutput,
-    BaseModelOutputWithPooling,
-    ImageClassifierOutput,
-    MaskedImageModelingOutput,
-)
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedImageModelingOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import auto_docstring, logging, torch_int
@@ -843,114 +837,4 @@ class Dust3RForMaskedImageModeling(Dust3RPreTrainedModel):
         )
 
 
-class Dust3RForImageClassification(Dust3RPreTrainedModel):
-    def __init__(self, config: Dust3RConfig) -> None:
-        super().__init__(config)
-
-        self.num_labels = config.num_labels
-
-        # For classification, we only need the encoder part, not decoder/head
-        self.embeddings = Dust3REmbeddings(config, use_mask_token=False)
-        self.encoder = Dust3REncoder(config)
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
-
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embeddings.patch_embeddings
-
-    def forward(
-        self,
-        pixel_values: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, ImageClassifierOutput]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
-
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
-        expected_dtype = self.embeddings.patch_embeddings.projection.weight.dtype
-        if pixel_values.dtype != expected_dtype:
-            pixel_values = pixel_values.to(expected_dtype)
-
-        embedding_output = self.embeddings(
-            pixel_values, bool_masked_pos=None, interpolate_pos_encoding=interpolate_pos_encoding
-        )
-
-        encoder_outputs = self.encoder(
-            embedding_output,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        sequence_output = encoder_outputs[0] if not return_dict else encoder_outputs.last_hidden_state
-        sequence_output = self.layernorm(sequence_output)
-        logits = self.classifier(sequence_output[:, 0, :])
-
-        loss = None
-        if labels is not None:
-            labels = labels.to(logits.device)
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                loss = (
-                    loss_fct(logits.squeeze(), labels.squeeze()) if self.num_labels == 1 else loss_fct(logits, labels)
-                )
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
-
-        if not return_dict:
-            output = (logits,)
-            if output_hidden_states:
-                hidden_states = (
-                    encoder_outputs.hidden_states
-                    if hasattr(encoder_outputs, "hidden_states")
-                    else (encoder_outputs[1] if len(encoder_outputs) > 1 else None)
-                )
-                if hidden_states is not None:
-                    output += (hidden_states,)
-            if output_attentions:
-                attentions = (
-                    encoder_outputs.attentions
-                    if hasattr(encoder_outputs, "attentions")
-                    else (encoder_outputs[2] if len(encoder_outputs) > 2 else None)
-                )
-                if attentions is not None:
-                    output += (attentions,)
-            return ((loss,) + output) if loss is not None else output
-
-        return ImageClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=encoder_outputs.hidden_states if output_hidden_states else None,
-            attentions=encoder_outputs.attentions if output_attentions else None,
-        )
-
-
-__all__ = ["Dust3RForImageClassification", "Dust3RForMaskedImageModeling", "Dust3RModel", "Dust3RPreTrainedModel"]
+__all__ = ["Dust3RForMaskedImageModeling", "Dust3RModel", "Dust3RPreTrainedModel"]

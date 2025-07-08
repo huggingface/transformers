@@ -132,20 +132,5 @@ class Dust3RConfig(PretrainedConfig):
         self.pooler_act = pooler_act
 
 
-class Dust3ROnnxConfig(OnnxConfig):
-    torch_onnx_minimum_version = version.parse("1.11")
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
-
 
 __all__ = ["Dust3RConfig", "Dust3ROnnxConfig"]

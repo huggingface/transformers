@@ -36,7 +36,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import Dust3RForImageClassification, Dust3RForMaskedImageModeling, Dust3RModel
+    from transformers import Dust3RForMaskedImageModeling, Dust3RModel
 
 
 if is_vision_available():
@@ -151,23 +151,6 @@ class Dust3RModelTester:
         result = model(pixel_values)
         self.parent.assertEqual(result.reconstruction.shape, (self.batch_size, 1, self.image_size, self.image_size))
 
-    def create_and_check_for_image_classification(self, config, pixel_values, labels):
-        config.num_labels = self.type_sequence_label_size
-        model = Dust3RForImageClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values, labels=labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
-
-        # test greyscale images
-        config.num_channels = 1
-        model = Dust3RForImageClassification(config)
-        model.to(torch_device)
-        model.eval()
-
-        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
-        result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -190,14 +173,13 @@ class Dust3RModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             Dust3RModel,
-            Dust3RForImageClassification,
             Dust3RForMaskedImageModeling,
         )
         if is_torch_available()
         else ()
     )
     pipeline_model_mapping = (
-        {"image-feature-extraction": Dust3RModel, "image-classification": Dust3RForImageClassification}
+        {"image-feature-extraction": Dust3RModel}
         if is_torch_available()
         else {}
     )
@@ -243,9 +225,7 @@ class Dust3RModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_masked_image_modeling(*config_and_inputs)
 
-    def test_for_image_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
+
 
     @slow
     def test_model_from_pretrained(self):
@@ -269,25 +249,7 @@ class Dust3RModelIntegrationTest(unittest.TestCase):
             Dust3RImageProcessor.from_pretrained("google/dust3r-base-patch16-224") if is_vision_available() else None
         )
 
-    @slow
-    def test_inference_image_classification_head(self):
-        model = Dust3RForImageClassification.from_pretrained("google/dust3r-base-patch16-224").to(torch_device)
 
-        image_processor = self.default_image_processor
-        image = prepare_img()
-        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
-
-        # forward pass
-        with torch.no_grad():
-            outputs = model(**inputs)
-
-        # verify the logits
-        expected_shape = torch.Size((1, 1000))
-        self.assertEqual(outputs.logits.shape, expected_shape)
-
-        expected_slice = torch.tensor([-0.2744, 0.8215, -0.0836]).to(torch_device)
-
-        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_interpolate_pos_encoding(self):
