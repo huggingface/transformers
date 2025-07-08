@@ -32,6 +32,7 @@ import torch.utils.checkpoint
 from torch import Tensor
 from tqdm import tqdm
 
+from transformers.models.sam.image_processing_sam_fast import SamImageProcessorFast
 from transformers.models.sam.modeling_sam import (
     SamAttention,
     SamLayerNorm,
@@ -43,14 +44,260 @@ from transformers.models.sam.modeling_sam import (
 )
 
 from ...activations import ACT2FN
+from ...image_processing_utils import get_size_dict
+from ...image_processing_utils_fast import (
+    DefaultFastImageProcessorKwargs,
+)
+from ...image_utils import (
+    IMAGENET_DEFAULT_MEAN,
+    IMAGENET_DEFAULT_STD,
+    ChannelDimension,
+    PILImageResampling,
+    SizeDict,
+    pil_torch_interpolation_mapping,
+)
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
+from ...utils import (
+    ModelOutput,
+    TensorType,
+    auto_docstring,
+    can_return_tuple,
+    is_torch_available,
+    is_torchvision_available,
+    is_torchvision_v2_available,
+    logging,
+)
 from .configuration_sam2 import Sam2Config, Sam2MaskDecoderConfig, Sam2PromptEncoderConfig, Sam2VisionConfig
 
 
+if is_torch_available():
+    import torch
+    from torch.nn import functional as F_t
+
+if is_torchvision_available() and is_torchvision_v2_available():
+    from torchvision.transforms.v2 import functional as F
+elif is_torchvision_available():
+    from torchvision.transforms import functional as F
+
+
 logger = logging.get_logger(__name__)
+
+
+class Sam2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    r"""
+    mask_size (`dict[str, int]`, *optional*):
+        The size `{"height": int, "width": int}` to resize the segmentation maps to.
+    """
+
+    mask_size: Optional[dict[str, int]]
+
+
+@auto_docstring
+class Sam2ImageProcessorFast(SamImageProcessorFast):
+    resample = PILImageResampling.BILINEAR
+    image_mean = IMAGENET_DEFAULT_MEAN
+    image_std = IMAGENET_DEFAULT_STD
+    size = {"height": 1024, "width": 1024}
+    mask_size = {"height": 256, "width": 256}
+    do_resize = True
+    do_rescale = True
+    do_normalize = True
+    do_convert_rgb = True
+
+    valid_kwargs = Sam2FastImageProcessorKwargs
+
+    # modular artefacts
+    do_pad = None
+    pad_size = None
+    mask_pad_size = None
+
+    def pad_image():
+        raise NotImplementedError("No pad_image for SAM 2.")
+
+    def _get_preprocess_shape():
+        raise NotImplementedError("No _get_preprocess_shape for SAM 2.")
+
+    def resize():
+        raise NotImplementedError("No need to override resize for SAM 2.")
+
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        return_tensors: Optional[Union[str, TensorType]],
+        **kwargs,
+    ) -> "torch.Tensor":
+        return SamImageProcessorFast()._preprocess(images, return_tensors=return_tensors, **kwargs).pixel_values
+
+    def _preprocess_segmentation_maps(
+        self,
+        segmentation_maps,
+        **kwargs,
+    ):
+        """Preprocesses segmentation maps."""
+        processed_segmentation_maps = []
+        for segmentation_map in segmentation_maps:
+            segmentation_map = self._process_image(
+                segmentation_map, do_convert_rgb=False, input_data_format=ChannelDimension.FIRST
+            )
+
+            if segmentation_map.ndim == 2:
+                segmentation_map = segmentation_map[None, ...]
+            processed_segmentation_maps.append(segmentation_map)
+
+        kwargs["do_rescale"] = False
+        kwargs["do_normalize"] = False
+        kwargs["interpolation"] = pil_torch_interpolation_mapping[PILImageResampling.NEAREST]
+        kwargs["size"] = kwargs.pop("mask_size")
+        processed_segmentation_maps = self._preprocess(images=processed_segmentation_maps, **kwargs)
+
+        processed_segmentation_maps = processed_segmentation_maps.squeeze(1)  # Remove channel dimension
+
+        processed_segmentation_maps = processed_segmentation_maps.to(torch.int64)
+        return processed_segmentation_maps
+
+    def _further_process_kwargs(
+        self,
+        size: Optional[SizeDict] = None,
+        mask_size: Optional[SizeDict] = None,
+        default_to_square: Optional[bool] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
+        data_format: Optional[ChannelDimension] = None,
+        **kwargs,
+    ) -> dict:
+        """
+        Update kwargs that need further processing before being validated
+        Can be overridden by subclasses to customize the processing of kwargs.
+        """
+        if kwargs is None:
+            kwargs = {}
+        if size is not None:
+            size = SizeDict(**get_size_dict(size=size, default_to_square=default_to_square))
+        if mask_size is not None:
+            mask_size = SizeDict(**get_size_dict(mask_size, param_name="mask_size"))
+        if isinstance(image_mean, list):
+            image_mean = tuple(image_mean)
+        if isinstance(image_std, list):
+            image_std = tuple(image_std)
+        if data_format is None:
+            data_format = ChannelDimension.FIRST
+
+        kwargs["size"] = size
+        kwargs["mask_size"] = mask_size
+        kwargs["default_to_square"] = default_to_square
+        kwargs["image_mean"] = image_mean
+        kwargs["image_std"] = image_std
+        kwargs["data_format"] = data_format
+
+        return kwargs
+
+    def post_process_masks(
+        self,
+        masks,
+        original_sizes,
+        reshaped_input_sizes,
+        mask_threshold=0.0,
+        binarize=True,
+        max_hole_area=0.0,
+        max_sprinkle_area=0.0,
+    ):
+        """
+        Remove padding and upscale masks to the original image size.
+
+        Args:
+            masks (`Union[List[torch.Tensor], List[np.ndarray]]`):
+                Batched masks from the mask_decoder in (batch_size, num_channels, height, width) format.
+            original_sizes (`Union[torch.Tensor, List[Tuple[int,int]]]`):
+                The original sizes of each image before it was resized to the model's expected input shape, in (height,
+                width) format.
+            reshaped_input_sizes (`Union[torch.Tensor, List[Tuple[int,int]]]`):
+                The size of each image as it is fed to the model, in (height, width) format. Used to remove padding.
+            mask_threshold (`float`, *optional*, defaults to 0.0):
+                The threshold to use for binarizing the masks.
+            binarize (`bool`, *optional*, defaults to `True`):
+                Whether to binarize the masks.
+            pad_size (`int`, *optional*, defaults to `self.pad_size`):
+                The target size the images were padded to before being passed to the model. If None, the target size is
+                assumed to be the processor's `pad_size`.
+        Returns:
+            (`torch.Tensor`): Batched masks in batch_size, num_channels, height, width) format, where (height, width)
+            is given by original_size.
+        """
+        if isinstance(original_sizes, (torch.Tensor, np.ndarray)):
+            original_sizes = original_sizes.tolist()
+        if isinstance(reshaped_input_sizes, (torch.Tensor, np.ndarray)):
+            reshaped_input_sizes = reshaped_input_sizes.tolist()
+        if max_hole_area > 0 or max_sprinkle_area > 0:
+            processed_masks = []
+            for mask in masks:
+                if mask.ndim == 3:
+                    mask_flat = mask.flatten(0).unsqueeze(1)
+                elif mask.ndim == 4:
+                    mask_flat = mask.flatten(0, 1).unsqueeze(1)
+                elif mask.ndim == 5:
+                    mask_flat = mask.flatten(0, 1, 2).unsqueeze(1)
+                else:
+                    raise ValueError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
+                if torch.cuda.is_available():
+                    try:
+                        load_cuda_kernels()
+                    except Exception as e:
+                        print(f"Could not load custom CUDA kernels for postprocessing: {e}")
+                try:
+                    if max_hole_area > 0:
+                        mask = _fill_holes(mask_flat, mask, max_hole_area, mask_threshold)
+                    if max_sprinkle_area > 0:
+                        mask = _fill_sprinkles(mask_flat, mask, max_sprinkle_area, mask_threshold)
+                    processed_masks.append(mask)
+                except Exception as e:
+                    # Skip the post-processing step if the CUDA kernel fails
+                    print(f"Error in post-processing: {e}")
+                    warnings.warn(
+                        f"{e}\n\nSkipping the post-processing step due to the error above. You can "
+                        "still use SAM 2 and it's OK to ignore the error above, although some post-processing "
+                        "functionality may be limited (which doesn't affect the results in most cases; see "
+                        "https://github.com/facebookresearch/sam2/blob/main/INSTALL.md).",
+                        category=UserWarning,
+                        stacklevel=2,
+                    )
+            else:
+                processed_masks = masks
+            masks = processed_masks
+        output_masks = []
+        for i, original_size in enumerate(original_sizes):
+            if isinstance(masks[i], np.ndarray):
+                masks[i] = torch.from_numpy(masks[i])
+            elif not isinstance(masks[i], torch.Tensor):
+                raise ValueError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
+            interpolated_mask = F_t.interpolate(masks[i], original_size, mode="bilinear", align_corners=False)
+            if binarize:
+                interpolated_mask = interpolated_mask > mask_threshold
+            output_masks.append(interpolated_mask)
+
+        return output_masks
+
+
+def _fill_holes(mask_flat, mask, max_hole_area, mask_threshold):
+    # Holes are those connected components in background with area <= self.fill_hole_area
+    # (background regions are those with mask scores <= self.mask_threshold)
+    labels, areas = get_connected_components(mask_flat <= mask_threshold)
+    is_hole = (labels > 0) & (areas <= max_hole_area)
+    is_hole = is_hole.reshape_as(mask)
+    # We fill holes with a small positive mask score (10.0) to change them to foreground.
+    mask = torch.where(is_hole, mask_threshold + 10.0, mask)
+    return mask
+
+
+def _fill_sprinkles(mask_flat, mask, max_sprinkle_area, mask_threshold):
+    labels, areas = get_connected_components(mask_flat > mask_threshold)
+    is_hole = (labels > 0) & (areas <= max_sprinkle_area)
+    is_hole = is_hole.reshape_as(mask)
+    # We fill holes with negative mask score (-10.0) to change them to background.
+    mask = torch.where(is_hole, mask_threshold - 10.0, mask)
+    return mask
+
 
 # a large negative value as a placeholder score for missing objects
 NO_OBJ_SCORE = -1024.0
@@ -2423,9 +2670,9 @@ class Sam2Model(Sam2PreTrainedModel):
         is_init_cond_frame: bool = False,
     ) -> dict[str, torch.Tensor]:
         """
-        Add new conditioning inputs to a frame and run inference.
+        Add new conditioning inputs to a video frame and run inference.
         """
-        # Prepare batch inputs
+        # Only batch size 1 is supported for now
         batch_size = 1
 
         # Run single frame inference
@@ -3269,4 +3516,4 @@ class Sam2Model(Sam2PreTrainedModel):
         return pred_masks
 
 
-__all__ = ["Sam2Model", "Sam2VisionModel", "Sam2VideoSessionState", "Sam2PreTrainedModel"]
+__all__ = ["Sam2Model", "Sam2VisionModel", "Sam2VideoSessionState", "Sam2PreTrainedModel", "Sam2ImageProcessorFast"]
