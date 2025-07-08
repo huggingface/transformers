@@ -63,8 +63,8 @@ if is_torch_available():
 TEST_CACHE_IMPLEMENTATIONS = [
     cache_name
     for cache_name in ALL_CACHE_IMPLEMENTATIONS
-    # TODO (joao): Mamba, xLSTM is not compatible with most models, remove from `ALL_CACHE_IMPLEMENTATIONS`?
-    if cache_name not in ["mamba", "xlstm"]
+    # TODO (joao): Mamba is not compatible with most models, remove from `ALL_CACHE_IMPLEMENTATIONS`?
+    if cache_name != "mamba"
     # TODO (joao): offloaded_hybrid == offloaded_hybrid_chunked, deprecate one of them
     if cache_name != "offloaded_hybrid"
 ]
@@ -229,9 +229,7 @@ class CacheIntegrationTest(unittest.TestCase):
 
         EXPECTED_GENERATION = ["A sequence: 1, 2, 3, 4, 5, 6, 7, 8,", "A sequence: A, B, C, D, E, F, G, H"]
 
-        inputs = self.tokenizer(
-            ["A sequence: 1, 2, 3, 4, 5", "A sequence: A, B, C"], padding=True, return_tensors="pt"
-        )
+        inputs = self.tokenizer(["A sequence: 1, 2, 3, 4, 5", "A sequence: A, B, C"], padding=True, return_tensors="pt")
         inputs = inputs.to(self.model.device)
 
         gen_out = self.model.generate(
