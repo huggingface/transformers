@@ -118,6 +118,8 @@ class NewTaskModelPreTrainedModel(PreTrainedModel):
 )
 class NewTaskModelModel(NewTaskModelPreTrainedModel):
     _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
+    # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
+    accepts_loss_kwargs = False
 
     def __init__(self, config: NewTaskModelConfig):
         super().__init__(config)
@@ -313,9 +315,11 @@ class NewTaskModelModel(NewTaskModelPreTrainedModel):
                 special_image_mask = inputs_embeds == self.get_input_embeddings()(
                     torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
+                special_image_mask = special_image_mask.all(-1)
             else:
-                special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
-                special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+                special_image_mask = input_ids == self.config.image_token_id
+
+            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
 
             if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
                 image_tokens_in_text = (special_image_mask).sum(dim=1).sum(dim=0)[0]
@@ -433,32 +437,6 @@ class NewTaskModelForNewTask(NewTaskModelPreTrainedModel, GenerationMixin):
         num_logits_to_keep: int = 0,
     ) -> Union[tuple, NewTaskModelCausalLMOutputWithPast]:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.text_config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.text_config.vocab_size]`.
-
-        Example:
-
-        ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoProcessor, NewTaskModelForNewTask
-
-        >>> model = NewTaskModelForNewTask.from_pretrained("google/new_task_model2-3b-mix-224")
-        >>> processor = AutoProcessor.from_pretrained("google/new_task_model2-3b-mix-224")
-
-        >>> prompt = "Where is the cat standing?"
-        >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> inputs = processor(images=image, text=prompt,  return_tensors="pt")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(**inputs,)
-        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Where is the cat standing?\nsnow"
-        ```
         Returns:
         """
         vlm_outputs = super().forward(
