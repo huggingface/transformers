@@ -36,9 +36,8 @@ The example below demonstrates how to generate text based on an image with the [
 ```py
 import torch
 from transformers import KeyeForConditionalGeneration, AutoProcessor
-
-# pip3 install keye-vl-utils
-from keye_vl_utils import process_vision_info
+from PIL import Image
+import requests
 
 model = KeyeForConditionalGeneration.from_pretrained(
     "Kwai-Keye/Keye-VL-8B-Preview",
@@ -48,13 +47,14 @@ model = KeyeForConditionalGeneration.from_pretrained(
     trust_remote_code=True
 )
 processor = AutoProcessor.from_pretrained("Kwai-Keye/Keye-VL-8B-Preview", trust_remote_code=True)
+url = "https://s1-11508.kwimgs.com/kos/nlav11508/mllm_all/ziran_jiafeimao_11.jpg"
 messages = [
     {
         "role":"user",
         "content":[
             {
                 "type":"image",
-                "image": "https://s1-11508.kwimgs.com/kos/nlav11508/mllm_all/ziran_jiafeimao_11.jpg",
+                "image": url,
             },
             {
                 "type":"text",
@@ -64,7 +64,8 @@ messages = [
     }
 
 ]
-image_inputs, video_inputs = process_vision_info(messages)
+
+image_inputs = [Image.open(requests.get(url, stream=True).raw)]
 
 text = processor.apply_chat_template(
     messages, tokenize=False, add_generation_prompt=True
@@ -73,7 +74,7 @@ text = processor.apply_chat_template(
 inputs = processor(
     text=[text],
     images=image_inputs,
-    videos=video_inputs,
+    videos=None,
     padding=True,
     return_tensors="pt",
 ).to(model.device)
@@ -92,6 +93,8 @@ print(output_text)
 
 - Use Keye-VL for video inputs by setting `"type": "video"` as shown below.
     ```python
+    # pip3 install keye_vl_utils
+    from keye_vl_utils import process_vision_info
     messages = [
         {
             "role": "user",
@@ -182,4 +185,3 @@ print(output_text)
 
 [[autodoc]] KeyeForConditionalGeneration
     - forward
-
