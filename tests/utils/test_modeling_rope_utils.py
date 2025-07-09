@@ -220,6 +220,9 @@ class RopeTest(unittest.TestCase):
             inv_freq, _ = rope_fn(config=config, device=torch_device, seq_len=1)
             torch.testing.assert_close(inv_freq, default_inv_freq)
 
+            inv_freq, _ = rope_fn(config=config, device=torch_device, seq_len=torch.tensor(1, dtype=torch.int64))
+            torch.testing.assert_close(inv_freq, default_inv_freq)
+
         # Check 2: if we provide `seq_len` larger than the model's original training sequence length, the frequencies
         # will scale up (i.e., the inverse frequencies will scale down).
         factor = 10.0

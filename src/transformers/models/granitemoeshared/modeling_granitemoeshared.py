@@ -511,6 +511,7 @@ class GraniteMoeSharedPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["GraniteMoeSharedDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
     _supports_cache_class = True
     _supports_quantized_cache = True
@@ -535,7 +536,7 @@ class GraniteMoeSharedRotaryEmbedding(nn.Module):
     def __init__(self, config: GraniteMoeSharedConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
             self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
         else:
             self.rope_type = "default"
