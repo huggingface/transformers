@@ -1774,8 +1774,8 @@ class Gemma3nTextAttention(Gemma3Attention):
             else:
                 indices = cache_position
 
-            key_states = past_key_value.layers[self.kv_shared_layer_index].keys[:, :, indices]
-            value_states = past_key_value.layers[self.kv_shared_layer_index].values[:, :, indices]
+            key_states = past_key_value.key_cache[self.kv_shared_layer_index][:, :, indices]
+            value_states = past_key_value.value_cache[self.kv_shared_layer_index][:, :, indices]
         else:
             key_states = self.k_proj(hidden_states).view(hidden_shape)
             key_states = self.k_norm(key_states)

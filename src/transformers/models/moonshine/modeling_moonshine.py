@@ -235,8 +235,8 @@ class MoonshineAttention(nn.Module):
         # use key_value_states if cross attention
         current_states = key_value_states if key_value_states is not None else hidden_states
         if is_cross_attention and past_key_value and is_updated:
-            key_states = past_key_value.layers[self.layer_idx].keys
-            value_states = past_key_value.layers[self.layer_idx].values
+            key_states = past_key_value.key_cache[self.layer_idx]
+            value_states = past_key_value.value_cache[self.layer_idx]
         else:
             key_states = (
                 self.k_proj(current_states)

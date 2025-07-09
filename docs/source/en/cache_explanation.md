@@ -89,8 +89,8 @@ Layers can be of different types (e.g. `DynamicLayer`, `StaticLayer`, `SlidingWi
 The simplest is a `DynamicLayer` that grows as more tokens are processed. The sequence length dimension (`seq_len`) increases with each new token:
 
 ```py
-cache.layers[idx].keys = torch.cat([cache.layers[idx].keys, key_states], dim=-2)
-cache.layers[idx].values = torch.cat([cache.layers[idx].values, value_states], dim=-2)
+cache.key_cache[idx] = torch.cat([cache.key_cache[idx], key_states], dim=-2)
+cache.value_cache[idx] = torch.cat([cache.value_cache[idx], value_states], dim=-2)
 ```
 
 Other layers like `StaticLayer` and `SlidingWindowLayer` have a fixed sequence length that is set when the cache is created. This makes them compatible with `torch.compile`. In the case of `SlidingWindowLayer`, existing tokens are shifted out of the cache when a new token is added.

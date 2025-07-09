@@ -679,9 +679,11 @@ class CacheExportIntegrationTest(unittest.TestCase):
             use_cache=True,
         )
         self.assertTrue(torch.allclose(res.logits, res_eager.logits))
-        for l1, l2 in zip(res.past_key_values.layers, res_eager.past_key_values.layers):
-            self.assertTrue(torch.allclose(l1.keys, l2.keys))
-            self.assertTrue(torch.allclose(l1.values, l2.values))
+        for k1, k2 in zip(res.past_key_values.key_cache, res_eager.past_key_values.key_cache):
+            self.assertTrue(torch.allclose(k1, k2))
+
+        for v1, v2 in zip(res.past_key_values.value_cache, res_eager.past_key_values.value_cache):
+            self.assertTrue(torch.allclose(v1, v2))
 
     def test_dynamic_cache_exportability_multiple_run(self):
         # When exporting with DynamicCache, you should export two graphs:
@@ -731,8 +733,8 @@ class CacheExportIntegrationTest(unittest.TestCase):
         dyn = torch.export.Dim("seq", max=512)
 
         for ix in range(len(past_key_values)):
-            shapes[past_key_values.layers[ix].keys] = (None, None, dyn, None)
-            shapes[past_key_values.layers[ix].values] = (None, None, dyn, None)
+            shapes[past_key_values.key_cache[ix]] = (None, None, dyn, None)
+            shapes[past_key_values.value_cache[ix]] = (None, None, dyn, None)
 
         ep_second = torch.export.export(
             model,
@@ -773,9 +775,11 @@ class CacheExportIntegrationTest(unittest.TestCase):
             use_cache=True,
         )
 
-        for l1, l2 in zip(res_export_2.past_key_values.layers, res_eager_2.past_key_values.layers):
-            self.assertTrue(torch.allclose(l1.keys, l2.keys))
-            self.assertTrue(torch.allclose(l1.values, l2.values))
+        for k1, k2 in zip(res_export_2.past_key_values.key_cache, res_eager_2.past_key_values.key_cache):
+            self.assertTrue(torch.allclose(k1, k2))
+
+        for v1, v2 in zip(res_export_2.past_key_values.value_cache, res_eager_2.past_key_values.value_cache):
+            self.assertTrue(torch.allclose(v1, v2))
 
     def test_static_cache_exportability(self):
         """
@@ -954,7 +958,7 @@ class SyntheticCacheTest(unittest.TestCase):
             cache_kwargs={"cache_position": torch.tensor([2])},
         )
         self.assertEqual(
-            static_cache.layers[0].keys[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 0.0], "StaticCache Scenario 1 failed"
+            static_cache.key_cache[0][0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 0.0], "StaticCache Scenario 1 failed"
         )
 
         # Scenario 2: Fill to capacity
@@ -965,7 +969,7 @@ class SyntheticCacheTest(unittest.TestCase):
             cache_kwargs={"cache_position": torch.tensor([3])},
         )
         self.assertEqual(
-            static_cache.layers[0].keys[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 4.0], "StaticCache Scenario 2 failed"
+            static_cache.key_cache[0][0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 4.0], "StaticCache Scenario 2 failed"
         )
 
     def test_sliding_window_cache(self):
@@ -1001,7 +1005,7 @@ class SyntheticCacheTest(unittest.TestCase):
             cache_kwargs={"cache_position": torch.tensor([2]), "sliding_window": self.window_size},
         )
         self.assertEqual(
-            sliding_cache.layers[0].keys[0, 0, :, 0].tolist(),
+            sliding_cache.key_cache[0][0, 0, :, 0].tolist(),
             [1.0, 2.0, 3.0, 0.0],
             "SlidingWindowCache Scenario 1 failed",
         )
@@ -1024,7 +1028,7 @@ class SyntheticCacheTest(unittest.TestCase):
             cache_kwargs={"cache_position": torch.tensor([4]), "sliding_window": self.window_size},
         )
         self.assertEqual(
-            sliding_cache.layers[0].keys[0, 0, :, 0].tolist(),
+            sliding_cache.key_cache[0][0, 0, :, 0].tolist(),
             [2.0, 3.0, 4.0, 5.0],
             "SlidingWindowCache Scenario 2 failed",
         )
@@ -1041,7 +1045,7 @@ class SyntheticCacheTest(unittest.TestCase):
             cache_kwargs={"cache_position": torch.arange(6), "sliding_window": self.window_size},
         )
         self.assertEqual(
-            sliding_cache.layers[0].keys[0, 0, :, 0].tolist(),
+            sliding_cache.key_cache[0][0, 0, :, 0].tolist(),
             [3.0, 4.0, 5.0, 6.0],
             "SlidingWindowCache Scenario 3 failed",
         )
@@ -1075,7 +1079,7 @@ class SyntheticCacheTest(unittest.TestCase):
             cache_kwargs={"cache_position": torch.tensor([2])},
         )
         self.assertEqual(
-            hybrid_cache_static_mode.layers[0].keys[0, 0, :, 0].tolist(),
+            hybrid_cache_static_mode.key_cache[0][0, 0, :, 0].tolist(),
             [1.0, 2.0, 3.0, 0.0],
             "HybridCache Static Scenario 1 failed",
         )
@@ -1088,7 +1092,7 @@ class SyntheticCacheTest(unittest.TestCase):
             cache_kwargs={"cache_position": torch.tensor([3])},
         )
         self.assertEqual(
-            hybrid_cache_static_mode.layers[0].keys[0, 0, :, 0].tolist(),
+            hybrid_cache_static_mode.key_cache[0][0, 0, :, 0].tolist(),
             [1.0, 2.0, 3.0, 4.0],
             "HybridCache Static Scenario 2 failed",
         )
@@ -1127,7 +1131,7 @@ class SyntheticCacheTest(unittest.TestCase):
             cache_kwargs={"cache_position": torch.tensor([2]), "sliding_window": self.window_size},
         )
         self.assertEqual(
-            hybrid_cache.layers[0].keys[0, 0, :, 0].tolist(),
+            hybrid_cache.key_cache[0][0, 0, :, 0].tolist(),
             [1.0, 2.0, 3.0, 0.0],
             "HybridCache Sliding Scenario 1 failed",
         )
@@ -1148,7 +1152,7 @@ class SyntheticCacheTest(unittest.TestCase):
             cache_kwargs={"cache_position": torch.tensor([4]), "sliding_window": self.window_size},
         )
         self.assertEqual(
-            hybrid_cache.layers[0].keys[0, 0, :, 0].tolist(),
+            hybrid_cache.key_cache[0][0, 0, :, 0].tolist(),
             [2.0, 3.0, 4.0, 5.0],
             "HybridCache Sliding Scenario 2 failed",
         )
@@ -1161,7 +1165,7 @@ class SyntheticCacheTest(unittest.TestCase):
             cache_kwargs={"cache_position": torch.tensor([5]), "sliding_window": self.window_size},
         )
         self.assertEqual(
-            hybrid_cache.layers[0].keys[0, 0, :, 0].tolist(),
+            hybrid_cache.key_cache[0][0, 0, :, 0].tolist(),
             [3.0, 4.0, 5.0, 6.0],
             "HybridCache Sliding Scenario 3 failed",
         )
@@ -1176,7 +1180,7 @@ class SyntheticCacheTest(unittest.TestCase):
             cache_kwargs={"cache_position": torch.arange(6), "sliding_window": self.window_size},
         )
         self.assertEqual(
-            hybrid_cache.layers[0].keys[0, 0, :, 0].tolist(),
+            hybrid_cache.key_cache[0][0, 0, :, 0].tolist(),
             [3.0, 4.0, 5.0, 6.0],
             "HybridCache Sliding Scenario 4 failed",
         )
@@ -1196,10 +1200,10 @@ class SyntheticCacheTest(unittest.TestCase):
         cache = DynamicCache()
         cache.update(prefill, prefill, 0)
         cache.update(update3, update3, 0)
-        self.assertEqual(cache.layers[0].keys[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0], "DynamicCache Scenario 1 failed")
+        self.assertEqual(cache.key_cache[0][0, 0, :, 0].tolist(), [1.0, 2.0, 3.0], "DynamicCache Scenario 1 failed")
         cache.update(update4, update4, 0)
         self.assertEqual(
-            cache.layers[0].keys[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 4.0], "DynamicCache Scenario 1 (to 4) failed"
+            cache.key_cache[0][0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 4.0], "DynamicCache Scenario 1 (to 4) failed"
         )
 
         # Scenario 2: prefill and update for two layers independently
@@ -1216,10 +1220,10 @@ class SyntheticCacheTest(unittest.TestCase):
         cache.update(update4, update4, 0)
         cache.update(update4_1, update4_1, 1)
         self.assertEqual(
-            cache.layers[0].keys[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 4.0], "DynamicCache Scenario 2 layer 0 failed"
+            cache.key_cache[0][0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 4.0], "DynamicCache Scenario 2 layer 0 failed"
         )
         self.assertEqual(
-            cache.layers[1].keys[0, 0, :, 0].tolist(),
+            cache.key_cache[1][0, 0, :, 0].tolist(),
             [10.0, 20.0, 30.0, 40.0],
             "DynamicCache Scenario 2 layer 1 failed",
         )

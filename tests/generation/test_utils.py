@@ -1603,26 +1603,26 @@ class GenerationTesterMixin:
                         self.assertEqual(len(past_kv[0]), 4)  # legacy check: confirm number of elements in tuple
 
                     # Self attention
-                    self_attention_layer_keys = (
-                        past_kv[i][0] if is_legacy_cache else past_kv.self_attention_cache.layers[i].keys
+                    self_attention_layer_key_cache = (
+                        past_kv[i][0] if is_legacy_cache else past_kv.self_attention_cache.key_cache[i]
                     )
-                    self_attention_layer_values = (
-                        past_kv[i][1] if is_legacy_cache else past_kv.self_attention_cache.layers[i].values
+                    self_attention_layer_value_cache = (
+                        past_kv[i][1] if is_legacy_cache else past_kv.self_attention_cache.value_cache[i]
                     )
-                    self.assertEqual(self_attention_layer_keys.shape, all_cache_shapes[i][0])
-                    self.assertEqual(self_attention_layer_values.shape, all_cache_shapes[i][1])
+                    self.assertEqual(self_attention_layer_key_cache.shape, all_cache_shapes[i][0])
+                    self.assertEqual(self_attention_layer_value_cache.shape, all_cache_shapes[i][1])
 
                     # Cross attention (ignore 3rd dim, see default shape preparation)
-                    cross_attention_layer_keys = (
-                        past_kv[i][2] if is_legacy_cache else past_kv.cross_attention_cache.layers[i].keys
+                    cross_attention_layer_key_cache = (
+                        past_kv[i][2] if is_legacy_cache else past_kv.cross_attention_cache.key_cache[i]
                     )
-                    cross_attention_layer_values = (
-                        past_kv[i][3] if is_legacy_cache else past_kv.cross_attention_cache.layers[i].values
+                    cross_attention_layer_value_cache = (
+                        past_kv[i][3] if is_legacy_cache else past_kv.cross_attention_cache.value_cache[i]
                     )
-                    cross_attention_layer_keys = cross_attention_layer_keys[:, :, 0, :]
-                    cross_attention_layer_values = cross_attention_layer_values[:, :, 0, :]
-                    self.assertEqual(cross_attention_layer_keys.shape, all_cache_shapes[i][2])
-                    self.assertEqual(cross_attention_layer_values.shape, all_cache_shapes[i][3])
+                    cross_attention_layer_key_cache = cross_attention_layer_key_cache[:, :, 0, :]
+                    cross_attention_layer_value_cache = cross_attention_layer_value_cache[:, :, 0, :]
+                    self.assertEqual(cross_attention_layer_key_cache.shape, all_cache_shapes[i][2])
+                    self.assertEqual(cross_attention_layer_value_cache.shape, all_cache_shapes[i][3])
 
             # 3.2. Decoder-only checks
             else:
@@ -1634,18 +1634,10 @@ class GenerationTesterMixin:
                         self.assertEqual(len(past_kv[0]), 2)  # legacy check: confirm number of elements in tuple
 
                     # Self attention
-                    if is_legacy_cache:
-                        self_attention_layer_keys = past_kv[i][0]
-                        self_attention_layer_values = past_kv[i][1]
-                    elif past_kv.layers is None:
-                        # Cache is lot layered (i.e, Mamba derivatives)
-                        self_attention_layer_keys = past_kv.key_cache[i]
-                        self_attention_layer_values = past_kv.value_cache[i]
-                    else:
-                        self_attention_layer_keys = past_kv.layers[i].keys
-                        self_attention_layer_values = past_kv.layers[i].values
-                    self.assertEqual(self_attention_layer_keys.shape, all_cache_shapes[i][0])
-                    self.assertEqual(self_attention_layer_values.shape, all_cache_shapes[i][1])
+                    self_attention_layer_key_cache = past_kv[i][0] if is_legacy_cache else past_kv.key_cache[i]
+                    self_attention_layer_value_cache = past_kv[i][1] if is_legacy_cache else past_kv.value_cache[i]
+                    self.assertEqual(self_attention_layer_key_cache.shape, all_cache_shapes[i][0])
+                    self.assertEqual(self_attention_layer_value_cache.shape, all_cache_shapes[i][1])
 
     @pytest.mark.generate
     @parameterized.expand([("greedy", 1), ("beam search", 2)])
@@ -1805,7 +1797,7 @@ class GenerationTesterMixin:
             cache_shape = [batch_size, num_key_value_heads, max_length, head_dim]
             self.assertIsInstance(outputs.past_key_values, StaticCache)
             self.assertEqual(len(outputs.past_key_values), num_hidden_layers)
-            self.assertListEqual(list(outputs.past_key_values.layers[0].keys.shape), cache_shape)
+            self.assertListEqual(list(outputs.past_key_values.key_cache[0].shape), cache_shape)
 
     @pytest.mark.generate
     def test_generate_continue_from_past_key_values(self):
@@ -2036,7 +2028,7 @@ class GenerationTesterMixin:
                 cache_shape = (batch_size, num_key_value_heads, max_cache_len, head_dim)
                 self.assertTrue(isinstance(static_cache_generation.past_key_values, StaticCache))
                 self.assertTrue(len(static_cache_generation.past_key_values) == num_hidden_layers)
-                self.assertTrue(static_cache_generation.past_key_values.layers[0].keys.shape == cache_shape)
+                self.assertTrue(static_cache_generation.past_key_values.key_cache[0].shape == cache_shape)
 
                 # Check 2: The outputs must be similar to the case with dynamic cache
                 dynamic_cache_generation = model.generate(**generation_kwargs, **inputs_dict)
@@ -2618,12 +2610,12 @@ class GenerationTesterMixin:
 
         if isinstance(decoder_past_key_values, Cache):
             self.assertListEqual(
-                [layer.keys.shape for layer in decoder_past_key_values.layers],
-                [expected_shape] * len(decoder_past_key_values.layers),
+                [key_tensor.shape for key_tensor in decoder_past_key_values.key_cache],
+                [expected_shape] * len(decoder_past_key_values.key_cache),
             )
             self.assertListEqual(
-                [layer.values.shape for layer in decoder_past_key_values.layers],
-                [expected_shape] * len(decoder_past_key_values.layers),
+                [value_tensor.shape for value_tensor in decoder_past_key_values.value_cache],
+                [expected_shape] * len(decoder_past_key_values.value_cache),
             )
 
         # Legacy cache format checks. This branch should be removed when all models use `Cache` by default
@@ -3982,13 +3974,13 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertTrue(isinstance(results.past_key_values, StaticCache))
 
         # check device of each layer
-        keys_0 = results.past_key_values.layers[0].keys
-        values_0 = results.past_key_values.layers[0].values
-        self.assertTrue(keys_0.device == values_0.device == torch.device(0))
+        key_cache_0 = results.past_key_values.key_cache[0]
+        value_cache_0 = results.past_key_values.value_cache[0]
+        self.assertTrue(key_cache_0.device == value_cache_0.device == torch.device(0))
 
-        keys_1 = results.past_key_values.layers[1].keys
-        values_1 = results.past_key_values.layers[1].values
-        self.assertTrue(keys_1.device == values_1.device == torch.device(1))
+        key_cache_1 = results.past_key_values.key_cache[1]
+        value_cache_1 = results.past_key_values.value_cache[1]
+        self.assertTrue(key_cache_1.device == value_cache_1.device == torch.device(1))
 
     @pytest.mark.generate
     @require_torch_multi_accelerator
@@ -4060,13 +4052,13 @@ class GenerationIntegrationTests(unittest.TestCase):
         results = model.generate(input_ids, past_key_values=past_key_values, **generation_kwargs)
 
         # check device of each layer
-        keys_0 = results.past_key_values.layers[0].keys
-        values_0 = results.past_key_values.layers[0].values
-        self.assertTrue(keys_0.device == values_0.device == torch.device(0))
+        key_cache_0 = results.past_key_values.key_cache[0]
+        value_cache_0 = results.past_key_values.value_cache[0]
+        self.assertTrue(key_cache_0.device == value_cache_0.device == torch.device(0))
 
-        keys_1 = results.past_key_values.layers[1].keys
-        values_1 = results.past_key_values.layers[1].values
-        self.assertTrue(keys_1.device == values_1.device == torch.device(1))
+        key_cache_1 = results.past_key_values.key_cache[1]
+        value_cache_1 = results.past_key_values.value_cache[1]
+        self.assertTrue(key_cache_1.device == value_cache_1.device == torch.device(1))
 
     @slow
     def test_padding_input_contrastive_search_gpt2(self):

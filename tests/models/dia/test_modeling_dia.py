@@ -399,12 +399,12 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
         if isinstance(decoder_past_key_values, Cache):
             self.assertListEqual(
-                [layer.keys.shape for layer in decoder_past_key_values.layers],
-                [expected_shape] * len(decoder_past_key_values.layers),
+                [key_tensor.shape for key_tensor in decoder_past_key_values.key_cache],
+                [expected_shape] * len(decoder_past_key_values.key_cache),
             )
             self.assertListEqual(
-                [layer.values.shape for layer in decoder_past_key_values.layers],
-                [expected_shape] * len(decoder_past_key_values.layers),
+                [value_tensor.shape for value_tensor in decoder_past_key_values.value_cache],
+                [expected_shape] * len(decoder_past_key_values.value_cache),
             )
 
     def _check_scores(self, batch_size, scores, generated_length, config):

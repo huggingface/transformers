@@ -215,14 +215,16 @@ class MiniMaxCache(DynamicCache):
             if self.linear_cache[layer_idx] != []:
                 self.linear_cache[layer_idx] = self.linear_cache[layer_idx].repeat_interleave(repeats, dim=0)
             else:
-                self.layers[layer_idx].batch_repeat_interleave(repeats)
+                self.key_cache[layer_idx] = self.key_cache[layer_idx].repeat_interleave(repeats, dim=0)
+                self.value_cache[layer_idx] = self.value_cache[layer_idx].repeat_interleave(repeats, dim=0)
 
     def batch_select_indices(self, indices: torch.Tensor):
         for layer_idx in range(len(self)):
             if self.linear_cache[layer_idx] != []:
                 self.linear_cache[layer_idx] = self.linear_cache[layer_idx][indices, ...]
             else:
-                self.layers[layer_idx].batch_select_indices(indices)
+                self.key_cache[layer_idx] = self.key_cache[layer_idx][indices, ...]
+                self.value_cache[layer_idx] = self.value_cache[layer_idx][indices, ...]
 
     def crop(self, max_length: int):
         raise RuntimeError("MiniMaxCache doesnot support `crop` method")

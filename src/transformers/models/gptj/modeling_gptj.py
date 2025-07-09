@@ -728,9 +728,7 @@ class GPTJModel(GPTJPreTrainedModel):
 
                 # Ensure layer_past is on same device as hidden_states (might not be correct)
                 if past_key_values is not None:
-                    for layer in past_key_values.layers:
-                        layer.keys = layer.keys.to(hidden_states.device)
-                        layer.values = layer.values.to(hidden_states.device)
+                    past_key_values = past_key_values.to(hidden_states.device)
 
                 # Ensure that attention_mask is always on the same device as hidden_states
                 if causal_mask is not None:
