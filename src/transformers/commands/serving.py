@@ -190,19 +190,19 @@ def create_generation_config_from_req(
     if isinstance(req, TransformersResponseCreateParamsStreaming):
         return generation_config
 
-    if req["frequency_penalty"] is not None:
+    if req.get("frequency_penalty") is not None:
         generation_config.repetition_penalty = float(req["frequency_penalty"])
-    if req["logit_bias"] is not None:
+    if req.get("logit_bias") is not None:
         generation_config.sequence_bias = req["logit_bias"]
-    if req["stop"] is not None:
+    if req.get("stop") is not None:
         generation_config.stop_strings = req["stop"]
-    if req["temperature"] is not None:
+    if req.get("temperature") is not None:
         generation_config.temperature = float(req["temperature"])
         if float(req["temperature"]) == 0.0:
             generation_config.do_sample = False
-    if req["top_p"] is not None:
+    if req.get("top_p") is not None:
         generation_config.top_p = float(req["top_p"])
-    if req["seed"] is not None:
+    if req.get("seed") is not None:
         torch.manual_seed(req["seed"])
 
     return generation_config
@@ -528,9 +528,9 @@ class ServeCommand(BaseTransformersCLICommand):
 
         def stream_response(_inputs):
             try:
-                max_new_tokens = req["max_tokens"] or generation_config.max_new_tokens or 1024
+                max_new_tokens = req.get("max_tokens", generation_config.max_new_tokens) or 1024
                 request_id = self.running_continuous_batching_manager.add_request(
-                    _inputs, request_id=req["request_id"], max_new_tokens=max_new_tokens
+                    _inputs, request_id=req.get("request_id"), max_new_tokens=max_new_tokens
                 )
 
                 queue_is_flushed = False
@@ -538,7 +538,7 @@ class ServeCommand(BaseTransformersCLICommand):
                 for result in self.running_continuous_batching_manager:
                     if result.request_id != request_id:
                         continue
-                    if req["request_id"] is not None and not queue_is_flushed:
+                    if req.get("request_id") is not None and not queue_is_flushed:
                         if result.status == RequestStatus.FINISHED:
                             continue
                         else:
@@ -582,18 +582,18 @@ class ServeCommand(BaseTransformersCLICommand):
 
         if tool_model_family is not None:
             text = self.tokenizer.apply_chat_template(
-                req["messages"], add_generation_prompt=True, tokenize=False, tools=req["tools"]
+                req["messages"], add_generation_prompt=True, tokenize=False, tools=req.get("tools")
             )
         else:
             text = self.tokenizer.apply_chat_template(req["messages"], add_generation_prompt=True, tokenize=False)
 
         inputs = self.tokenizer(text, return_tensors="pt").to(self.model.device)["input_ids"]
-        request_id = req["request_id"] if req["request_id"] is not None else "req_0"
+        request_id = req.get("request_id", "req_0")
 
         generation_streamer = TextIteratorStreamer(self.tokenizer, skip_special_tokens=True, skip_prompt=True)
 
         generation_config = create_generation_config_from_req(req)
-        max_new_tokens = req["max_tokens"] or generation_config.max_new_tokens or 256
+        max_new_tokens = req.get("max_tokens", generation_config.max_new_tokens) or 256
         generation_config.max_new_tokens = max_new_tokens
 
         last_kv_cache = None
@@ -723,12 +723,12 @@ class ServeCommand(BaseTransformersCLICommand):
         text = self.tokenizer.apply_chat_template(req["input"], add_generation_prompt=True, tokenize=False)
 
         inputs = self.tokenizer(text, return_tensors="pt").to(self.model.device)["input_ids"]
-        request_id = req["previous_response_id"] if req["previous_response_id"] is not None else "req_0"
+        request_id = req.get("previous_response_id", "req_0")
 
         generation_streamer = TextIteratorStreamer(self.tokenizer, skip_special_tokens=True, skip_prompt=True)
 
         generation_config = create_generation_config_from_req(req)
-        max_new_tokens = req["max_output_tokens"] or generation_config.max_new_tokens or 256
+        max_new_tokens = req.get("max_output_tokens", generation_config.max_new_tokens) or 256
         generation_config.max_new_tokens = max_new_tokens
 
         generation_kwargs = {
@@ -754,7 +754,7 @@ class ServeCommand(BaseTransformersCLICommand):
                         created_at=created_at,
                         status="in_progress",
                         model=self.loaded_model,
-                        instructions=req["instructions"],
+                        instructions=req.get("instructions"),
                         text={"format": {"type": "text"}},
                     ),
                 )
@@ -767,7 +767,7 @@ class ServeCommand(BaseTransformersCLICommand):
                         created_at=created_at,
                         status="in_progress",
                         model=self.loaded_model,
-                        instructions=req["instructions"],
+                        instructions=req.get("instructions"),
                         text={"format": {"type": "text"}},
                     ),
                 )
@@ -841,7 +841,7 @@ class ServeCommand(BaseTransformersCLICommand):
                         created_at=created_at,
                         status="completed",
                         model=self.loaded_model,
-                        instructions=req["instructions"],
+                        instructions=req.get("instructions"),
                         text={"format": {"type": "text"}},
                         output=response_output_item_done.item,
                     ),
