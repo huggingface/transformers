@@ -31,21 +31,22 @@ class BLTLocalEncoderConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=256,
-        cross_attn_all_layers=True,
+        vocab_size=260,
+        cross_attn_all_layers=False,
         cross_attn_k=2,
         hidden_size_global=2048,
-        hidden_size=512,
-        num_attention_heads=8,
+        pm_size=0,
+        hidden_size=1024,
+        num_attention_heads=16,
         num_key_value_heads=None,
-        num_hidden_layers=8,
+        num_hidden_layers=1,
         norm_eps=1e-5,
         dropout=0.0,
-        max_position_embeddings=1024,
-        rope_theta=10000.0,
+        max_position_embeddings=24576,
+        rope_theta=500000.0,
         rope_scaling=None,
         hidden_act="silu",
-        intermediate_size=None,
+        intermediate_size=2816,
         _attn_implementation="sdpa",
         **kwargs,
     ):
@@ -53,6 +54,7 @@ class BLTLocalEncoderConfig(PretrainedConfig):
         self.cross_attn_all_layers = cross_attn_all_layers
         self.cross_attn_k = cross_attn_k
         self.hidden_size_global = hidden_size_global
+        self.pm_size = pm_size
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads or num_attention_heads
@@ -80,21 +82,21 @@ class BLTLocalDecoderConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=256,
+        vocab_size=260,
         cross_attn_all_layers=True,
         cross_attn_k=2,
         hidden_size_global=2048,
-        hidden_size=512,
-        num_attention_heads=8,
+        hidden_size=1024,
+        num_attention_heads=16,
         num_key_value_heads=None,
-        num_hidden_layers=8,
+        num_hidden_layers=9,
         norm_eps=1e-5,
         dropout=0.0,
-        max_position_embeddings=1024,
-        rope_theta=10000.0,
+        max_position_embeddings=24576,
+        rope_theta=500000.0,
         rope_scaling=None,
         hidden_act="silu",
-        intermediate_size=None,
+        intermediate_size=2816,
         _attn_implementation="sdpa",
         **kwargs,
     ):
@@ -130,17 +132,17 @@ class BLTGlobalTransformerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        hidden_size=512,
-        num_attention_heads=8,
+        hidden_size=2048,
+        num_attention_heads=16,
         num_key_value_heads=None,
-        num_hidden_layers=8,
+        num_hidden_layers=25,
         norm_eps=1e-5,
         dropout=0.0,
-        max_position_embeddings=1024,
-        rope_theta=10000.0,
+        max_position_embeddings=4096,
+        rope_theta=500000.0,
         rope_scaling=None,
         hidden_act="silu",
-        intermediate_size=None,
+        intermediate_size=5632,
         _attn_implementation="sdpa",
         **kwargs,
     ):
@@ -201,18 +203,18 @@ class BLTPatcherConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=256,
-        hidden_size=512,
-        num_hidden_layers=8,
-        num_attention_heads=8,
+        vocab_size=260,
+        hidden_size=768,
+        num_hidden_layers=14,
+        num_attention_heads=12,
         num_key_value_heads=None,
-        max_position_embeddings=1024,
+        max_position_embeddings=8192,
         norm_eps=1e-5,
         dropout=0.0,
         rope_theta=10000.0,
         _attn_implementation="sdpa",
-        attn_bias_type="causal",
-        intermediate_size=None,
+        attn_bias_type="local_block_causal",
+        intermediate_size=2048,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -313,18 +315,18 @@ class BLTConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=256,
-        max_position_embeddings=1024,
-        patch_in_forward=False,
-        patch_size=None,
-        patching_mode=None,
-        patching_threshold=None,
+        vocab_size=260,
+        max_position_embeddings=4096,
+        patch_in_forward=True,
+        patch_size=4,
+        patching_mode="entropy",
+        patching_threshold=1.335442066192627,
         patching_batch_size=1,
         max_patch_length=None,
         cross_attn_k=2,
         encoder_hash_byte_group_size=None,
-        encoder_hash_byte_group_vocab=30000,
-        encoder_hash_byte_group_nb_functions=3,
+        encoder_hash_byte_group_vocab=500002,
+        encoder_hash_byte_group_nb_functions=1,
         patcher_config=None,
         encoder_config=None,
         decoder_config=None,
@@ -346,12 +348,17 @@ class BLTConfig(PretrainedConfig):
         self.patching_threshold = patching_threshold
         self.patching_batch_size = patching_batch_size
         self.max_patch_length = max_patch_length
+        self.patching_device = kwargs.get("patching_device", "cuda")
+        self.realtime_patching = kwargs.get("realtime_patching", True)
+        self.patching_threshold_add = kwargs.get("patching_threshold_add", None)
+        self.monotonicity = kwargs.get("monotonicity", False)
+        self.pm_size = kwargs.get("pm_size", 0)
 
         # Cross attention configurations
         self.cross_attn_k = cross_attn_k
 
         # Encoder configurations
-        self.encoder_hash_byte_group_size = encoder_hash_byte_group_size or [2, 3, 4]
+        self.encoder_hash_byte_group_size = encoder_hash_byte_group_size or [3, 4, 5, 6, 7, 8]
         self.encoder_hash_byte_group_vocab = encoder_hash_byte_group_vocab
         self.encoder_hash_byte_group_nb_functions = encoder_hash_byte_group_nb_functions
 
