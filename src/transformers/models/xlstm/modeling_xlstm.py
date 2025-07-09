@@ -1522,11 +1522,9 @@ class xLSTMModel(xLSTMPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Union[tuple, xLSTMOutput]:
-        """
-
-        Args:
-            cache_params: (`xLSTMCache`, *optional*):
-                The xLSTMCache that carries the RNN states.
+        r"""
+        cache_params: (`xLSTMCache`, *optional*):
+            The xLSTMCache that carries the RNN states.
         """
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
