@@ -49,6 +49,8 @@ import huggingface_hub.utils as hf_hub_utils
 import numpy as np
 import torch
 import torch.distributed as dist
+from accelerate.utils import AORecipeKwargs, TERecipeKwargs, MSAMPRecipeKwargs
+
 from huggingface_hub import ModelCard, create_repo, upload_folder
 from packaging import version
 from torch import nn
@@ -182,6 +184,12 @@ from .utils.quantization_config import QuantizationMethod
 
 DEFAULT_CALLBACKS = [DefaultFlowCallback]
 DEFAULT_PROGRESS_CALLBACK = ProgressCallback
+
+MP_BACKEND_TO_KWARGS = {
+    "AO": AORecipeKwargs,
+    "TE": TERecipeKwargs,
+    "MSAMP": MSAMPRecipeKwargs,
+}
 
 if is_in_notebook():
     from .utils.notebook import NotebookProgressCallback
@@ -1944,14 +1952,20 @@ class Trainer:
             logger.warning_once(warning_str)
 
     def _wrap_model(self, model, training=True, dataloader=None):
+        print(f"Start of _wrap_model: {type(model)}")
+
         if is_sagemaker_mp_enabled():
             # Wrapping the base model twice in a DistributedModel will raise an error.
             if isinstance(self.model_wrapped, smp.model.DistributedModel):
+                print(f"End of _wrap_model: {type(model)}")
+                import sys; sys.exit()
                 return self.model_wrapped
             return smp.DistributedModel(model, backward_passes_per_step=self.args.gradient_accumulation_steps)
 
         # train/eval could be run multiple-times - if already wrapped, don't re-wrap it again
         if self.accelerator.unwrap_model(model, keep_torch_compile=False) is not model:
+            print(f"End of _wrap_model: {type(model)}")
+            import sys; sys.exit()
             return model
 
         # Mixed precision training with apex
@@ -1972,6 +1986,8 @@ class Trainer:
         # Note: in torch.distributed mode, there's no point in wrapping the model
         # inside a DistributedDataParallel as we'll be under `no_grad` anyways.
         if not training:
+            print(f"End of _wrap_model: {type(model)}")
+            import sys; sys.exit()
             return model
 
         # Distributed training (should be after apex fp16 initialization)
@@ -2027,6 +2043,8 @@ class Trainer:
                 # Apply gradient checkpointing to auto-wrapped sub-modules if specified
                 def auto_wrapper_callable(m, *args, **kwargs):
                     target_cls = FSDP if not self.is_fsdp_xla_v2_enabled else FSDPv2
+                    print(f"End of _wrap_model: {type(model)}")
+                    import sys; sys.exit()
                     return target_cls(checkpoint_module(m), *args, **kwargs)
 
             # Wrap the base model with an outer FSDP wrapper
@@ -2327,12 +2345,21 @@ class Trainer:
         if args.gradient_checkpointing:
             self.model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=args.gradient_checkpointing_kwargs)
 
+        print("before _wrap_model")
+        print(type(self.model_wrapped))
+        import ipdb; ipdb.set_trace()
         model = self._wrap_model(self.model_wrapped)
+        print("after _wrap_model")
+        print(type(model))
 
         # as the model is wrapped, don't use `accelerator.prepare`
         # this is for unhandled cases such as
         # FSDP-XLA, SageMaker MP/DP, DataParallel, IPEX
-        use_accelerator_prepare = True if model is self.model else False
+        if model is self.model or True:
+            use_accelerator_prepare = True
+        else:
+            use_accelerator_prepare = False
+        # use_accelerator_prepare = True if model is self.model else False
 
         if use_accelerator_prepare and self.is_fsdp_enabled:
             # In case of auto_find_batch_size=True
@@ -2348,6 +2375,7 @@ class Trainer:
             self.create_optimizer_and_scheduler(num_training_steps=max_steps)
 
         # prepare using `accelerator` prepare
+        print(f"use_accelerator_prepare: {use_accelerator_prepare}")
         if use_accelerator_prepare:
             self.model.train()
             if hasattr(self.lr_scheduler, "step"):
@@ -2367,6 +2395,9 @@ class Trainer:
         elif self.args.optim in [OptimizerNames.LOMO, OptimizerNames.ADALOMO]:
             # In this case we are in DDP + LOMO, which should be supported
             self.optimizer = self.accelerator.prepare(self.optimizer)
+
+        if self.args.torch_compile:
+            model = torch.compile(model, **compile_kwargs)
 
         if self.is_fsdp_enabled:
             self.model = self.model_wrapped = model
@@ -3735,10 +3766,7 @@ class Trainer:
         Return:
             `torch.Tensor`: The tensor with training loss on this batch.
         """
-        import torch.distributed as dist
-        if dist.get_rank() == 0:
-            import ipdb; ipdb.set_trace()
-        dist.barrier()
+        # import ipdb; ipdb.set_trace()
 
         model.train()
         if hasattr(self.optimizer, "train") and callable(self.optimizer.train):
@@ -5200,23 +5228,13 @@ class Trainer:
         else:
             args.update(accelerator_config)
 
-        from accelerate.utils import AORecipeKwargs, TERecipeKwargs, MSAMPRecipeKwargs
-
-        BACKEND_TO_KWARGS = {
-            "AO": AORecipeKwargs,
-            "TE": TERecipeKwargs,
-            "MSAMP": MSAMPRecipeKwargs,
-        }
         if "mixed_precision" in accelerator_config:
             args["mixed_precision"] = accelerator_config["mixed_precision"]
         if "fp8_config" in accelerator_config and accelerator_config["fp8_config"] is not None:
-            import torch.distributed as dist
-            if dist.get_rank() == 0:
-                import ipdb; ipdb.set_trace()
-            dist.barrier()
+            # import ipdb; ipdb.set_trace()
 
             if "backend" in accelerator_config["fp8_config"]:
-                recipe_kwargs = BACKEND_TO_KWARGS[accelerator_config["fp8_config"]["backend"]]
+                recipe_kwargs = MP_BACKEND_TO_KWARGS[accelerator_config["fp8_config"]["backend"]]
                 fp8_config = accelerator_config["fp8_config"].copy()
                 fp8_config.pop("backend")
                 kwargs_handlers = [recipe_kwargs(**fp8_config)]
