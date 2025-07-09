@@ -41,6 +41,14 @@ def hard_softmax(logits: torch.Tensor, dim: int):
     return ret
 
 
+class Ovis2ModelOutputWithPast(LlavaNextModelOutputWithPast):
+    pass
+
+
+class Ovis2CausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
+    pass
+
+
 class Ovis2RMSNorm(LlamaRMSNorm):
     pass
 
@@ -89,9 +97,7 @@ class Ovis2VisionEncoderLayer(SiglipEncoderLayer):
 class Ovis2VisionEncoder(SiglipEncoder):
     def __init__(self, config: Ovis2VisionConfig):
         super().__init__()
-        self.config = config
         self.layers = nn.ModuleList([Ovis2VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
 
 
 class Ovis2VisionTransformer(nn.Module):
@@ -196,14 +202,6 @@ class Ovis2VisionModel(nn.Module):
         return prob_token
 
 
-class Ovis2ModelOutputWithPast(LlavaNextModelOutputWithPast):
-    pass
-
-
-class Ovis2CausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
-    pass
-
-
 class Ovis2PreTrainedModel(PreTrainedModel):
     config_class = Ovis2Config
     base_model_prefix = "model"
@@ -245,7 +243,7 @@ class Ovis2Model(LlavaModel):
     def __init__(self, config: Ovis2Config):
         super().__init__(config)
         self.vision_tower = Ovis2VisionModel(config.vision_config)
-        self.visual_table = Ovis2VisualEmbeddingTable(config.vision_config.vocab_size, config.hidden_size)
+        self.visual_embeddings_table = Ovis2VisualEmbeddingTable(config.vision_config.vocab_size, config.hidden_size)
 
         self.visual_vocab_size = config.vision_config.vocab_size
         self.vocab_size = config.vocab_size
@@ -258,23 +256,23 @@ class Ovis2Model(LlavaModel):
         pixel_values: torch.FloatTensor,
     ) -> torch.FloatTensor:
         image_features = self.vision_tower(pixel_values)
-        b, l, _ = image_features.shape
+        batch_size, img_seq_len, _ = image_features.shape
         padding_tensor = torch.zeros(
-            (b, l, self.vision_tower.num_visual_indicator_tokens),
+            (batch_size, img_seq_len, self.vision_tower.num_visual_indicator_tokens),
             dtype=image_features.dtype,
             device=image_features.device,
             requires_grad=False,
             layout=image_features.layout,
         )
         image_features = torch.cat([image_features, padding_tensor], dim=2)
-        image_features = self.visual_table(image_features)
+        image_features = self.visual_embeddings_table(image_features)
 
         visual_indicator = torch.arange(
             self.visual_vocab_size - self.vision_tower.num_visual_indicator_tokens,
             self.visual_vocab_size,
             dtype=torch.long,
         ).to(image_features.device)
-        visual_indicator_features = self.visual_table(visual_indicator)
+        visual_indicator_features = self.visual_embeddings_table(visual_indicator)
 
         return image_features, visual_indicator_features
 
@@ -301,7 +299,6 @@ class Ovis2Model(LlavaModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -370,10 +367,7 @@ class Ovis2ForConditionalGeneration(LlavaForConditionalGeneration, GenerationMix
 
     def __init__(self, config: Ovis2Config):
         super().__init__(config)
-        self.model = Ovis2Model(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
-        self.post_init()
 
     @property
     def multi_modal_projector(self):
@@ -474,36 +468,6 @@ class Ovis2ForConditionalGeneration(LlavaForConditionalGeneration, GenerationMix
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        pixel_values=None,
-        attention_mask=None,
-        cache_position=None,
-        logits_to_keep=None,
-        **kwargs,
-    ):
-        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            cache_position=cache_position,
-            logits_to_keep=logits_to_keep,
-            **kwargs,
-        )
-
-        if cache_position[0] == 0:
-            # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
-            # Otherwise we need pixel values to be passed to model
-            model_inputs["pixel_values"] = pixel_values
-
-        return model_inputs
 
 
 __all__ = ["Ovis2PreTrainedModel", "Ovis2Model", "Ovis2ForConditionalGeneration"]

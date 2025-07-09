@@ -57,7 +57,7 @@ ORIGINAL_TO_HF_MAPPING = {
     r"mlp.fc3":                                     r"mlp.up_proj",
     r"head.0":                                      r"head_linear",
     r"head.1":                                      r"head_norm",
-    r"vte.weight":                                  r"model.visual_table.weight",
+    r"vte.weight":                                  r"model.visual_embeddings_table.weight",
     r"llm.model":                                   r"model.language_model",
     r"llm.lm_head":                                 r"lm_head",
 }
