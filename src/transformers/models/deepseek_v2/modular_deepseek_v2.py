@@ -364,7 +364,12 @@ class DeepseekV2RMSNorm(LlamaRMSNorm):
 class DeepseekV2RotaryEmbedding(Llama4TextRotaryEmbedding):
     def __init__(self, config: DeepseekV2Config, device=None):
         super().__init__(config=config, device=device)
-        self.rope_type = config.rope_scaling.get("rope_type") if config.rope_scaling is not None else "default"
+        # BC: "rope_type" was originally "type"
+        self.rope_type = (
+            config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+            if config.rope_scaling is not None
+            else "default"
+        )
 
 
 class DeepseekV2Attention(nn.Module):

@@ -199,7 +199,12 @@ class DeepseekV2RMSNorm(nn.Module):
 class DeepseekV2RotaryEmbedding(nn.Module):
     def __init__(self, config: DeepseekV2Config, device=None):
         super().__init__()
-        self.rope_type = config.rope_scaling.get("rope_type") if config.rope_scaling is not None else "default"
+        # BC: "rope_type" was originally "type"
+        self.rope_type = (
+            config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+            if config.rope_scaling is not None
+            else "default"
+        )
 
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
