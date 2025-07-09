@@ -22,6 +22,7 @@ from typing import Optional, Union
 
 import torch
 import torch.distributed as dist
+from torch.autograd import Function
 from torch import nn
 
 from ..utils import is_torch_greater_or_equal, logging
@@ -82,12 +83,12 @@ def initialize_tensor_parallelism(tp_plan, tp_size=None):
     tp_device = torch.device(device_type, index)
 
     # Silence output for non-primary ranks
-    if index is not None and index > 0:
-        import sys
-
-        sys.stdout = open(os.devnull, "w")
-        sys.stderr = open(os.devnull, "w")
-
+    # if index is not None and index > 0:
+    #     import sys
+    #
+    #     sys.stdout = open(os.devnull, "w")
+    #     sys.stderr = open(os.devnull, "w")
+    #
     device_map = tp_device
     tp_size = tp_size if tp_size is not None else torch.distributed.get_world_size()
     device_mesh = torch.distributed.init_device_mesh(tp_device.type, (tp_size,))
@@ -407,6 +408,25 @@ class TensorParallelLayer:
                 partial(self._prepare_output_fn, self.output_layouts, self.use_local_output),
             )
 
+class AllReduce(Function):
+    @staticmethod
+    def forward(ctx, tensor: torch.Tensor) -> torch.Tensor:
+        # Make a copy so we don’t modify the original in-place
+        out = tensor.clone()
+        # Sum-reduce across all ranks
+        dist.all_reduce(out, op=dist.ReduceOp.SUM)
+        return out
+    #
+    # @staticmethod
+    # def backward(ctx, grad_output: torch.Tensor) -> torch.Tensor:
+    #     # The gradient itself needs to be summed across ranks, too
+    #     grad = grad_output.clone()
+    #     dist.all_reduce(grad, op=dist.ReduceOp.SUM)
+    #     return grad
+
+def all_reduce(tensor: torch.Tensor) -> torch.Tensor:
+    return AllReduce.apply(tensor)
+
 
 # use_dtensor needs to be set to false for nn.Parameter when you want to view, chunk, slice
 # you name it. Whatever you want to do that is a bit unconventional, you need local tensors
@@ -438,10 +458,11 @@ class GatherParallel(TensorParallelLayer):
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
         # this op cannot be async, otherwise it completely breaks the outputs of models
         if isinstance(outputs, torch.Tensor):
-            torch.distributed.all_reduce(outputs, op=torch.distributed.ReduceOp.SUM, async_op=False)
+            dist.all_reduce(outputs, op = dist.ReduceOp.SUM)
         else:
             # TODO: we assume we want to allreduce first element of tuple
-            torch.distributed.all_reduce(outputs[0], op=torch.distributed.ReduceOp.SUM, async_op=False) # TODO: rename GatherParallel to ReduceParallel or something
+            # all_reduce(outputs[0])
+            dist.all_reduce(outputs[0], op = dist.ReduceOp.SUM)
         return outputs
 
 

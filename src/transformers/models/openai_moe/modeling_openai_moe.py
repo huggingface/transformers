@@ -97,9 +97,10 @@ class OpenAIMoeExperts(nn.Module):
                 expert_hitted = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
             for expert_idx in expert_hitted[0]:
                 with torch.no_grad():
-                    expert_idx, token_idx = torch.where(
+                    routing_idx, token_idx = torch.where(
                         expert_mask[expert_idx]
                     )  # idx: top-1/top-2 indicator, top_x: token indices
+                print(expert_idx)
                 current_state = hidden_states[token_idx]  # (num_tokens, hidden_dim)
                 gate_up = (
                     current_state @ self.gate_up_proj[expert_idx] + self.gate_up_proj_bias[expert_idx]
@@ -110,8 +111,9 @@ class OpenAIMoeExperts(nn.Module):
                 out = (
                     gated_output @ self.down_proj[expert_idx] + self.down_proj_bias[expert_idx]
                 )  # (num_tokens, hidden_dim)
-                weighted_output = out * routing_weights[token_idx, expert_idx, None]  # (num_tokens, hidden_dim)
-                next_states.index_add_(0, token_idx, weighted_output.to(hidden_states.dtype)[0])
+                weighted_output = out * routing_weights[token_idx, routing_idx, None]  # (num_tokens, hidden_dim)
+                print(token_idx.shape, weighted_output.shape)
+                next_states.index_add_(0, token_idx, weighted_output.to(hidden_states.dtype))
             next_states = next_states.view(batch_size, -1, self.hidden_size)
             routing_weights = torch.ones_like(next_states)
         else:
@@ -572,8 +574,8 @@ def load_balancing_loss_func(
         # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
         router_per_expert_attention_mask = (
             attention_mask[None, :, :, None]
-            .expand((num_hidden_layers, batch_size, sequence_length, num_experts))
-            .reshape(-1, num_experts)
+            .expand((num_hidden_layers, batch_size, sequence_length, routing_weights.shape[1]))
+            .reshape(-1, routing_weights.shape[1])
             .to(compute_device)
         )
 
@@ -581,8 +583,9 @@ def load_balancing_loss_func(
         router_prob_per_expert = torch.sum(routing_weights * router_per_expert_attention_mask, dim=0) / torch.sum(
             router_per_expert_attention_mask, dim=0
         )
-
-    overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
+    
+    rank = routing_weights.shape[1]*int(routing_weights.device.index)
+    overall_loss = torch.sum(tokens_per_expert[:,rank: rank +routing_weights.shape[1]] * router_prob_per_expert.unsqueeze(0))
     return overall_loss * num_experts
 
 

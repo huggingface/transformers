@@ -4826,10 +4826,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 torch_dtype=torch_dtype,
                 device_map=device_map,
             )
-
+        #
         if distributed_config is not None and distributed_config.enable_expert_parallel:
             # TODO: add proper support for ep_plan independently of tp_plan
-            if config.base_model_ep_plan is None:
+            if getattr(config, "base_model_ep_plan", None)is None:
                 raise ValueError("base_model_ep_plan is required when enable_expert_parallel is True")
             config.base_model_tp_plan = config.base_model_ep_plan # TODO: hack for now
 
