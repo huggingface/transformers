@@ -1497,14 +1497,14 @@ class TrainingArguments:
         metadata={"help": "If set to `True`, the speed metrics will include `tgs` (tokens per second per device)."},
     )
 
-    include_num_input_tokens_seen: Optional[bool] = field(
+    include_num_input_tokens_seen: bool = field(
         default=False,
         metadata={
             "help": "If set to `True`, will track the number of input tokens seen throughout training. (May be slower in distributed training)"
         },
     )
 
-    include_num_input_image_tokens_seen: Optional[bool] = field(
+    include_num_input_image_tokens_seen: bool = field(
         default=False,
         metadata={
             "help": "If set to `True`, will track the number of input image tokens seen throughout training. (May be slower in distributed training)"
