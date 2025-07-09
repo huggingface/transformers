@@ -63,8 +63,6 @@ logger = logging.get_logger(__name__)
 )
 class Gemma3nModelOutputWithPast(BaseModelOutputWithPast):
     r"""
-    Args:
-
     image_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
@@ -86,8 +84,6 @@ class Gemma3nModelOutputWithPast(BaseModelOutputWithPast):
 )
 class Gemma3nCausalLMOutputWithPast(ModelOutput):
     r"""
-    Args:
-
     image_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder after projecting last hidden state.

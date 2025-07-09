@@ -39,17 +39,6 @@ class KyutaiSpeechToTextFeatureExtractor(SequenceFeatureExtractor):
     most of the main methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
-        feature_size (`int`, *optional*, defaults to 1):
-            The feature dimension of the extracted features. Use 1 for mono, 2 for stereo.
-        sampling_rate (`int`, *optional*, defaults to 24000):
-            The sampling rate at which the audio waveform should be digitalized expressed in hertz (Hz).
-        padding_value (`float`, *optional*, defaults to 0.0):
-            The value that is used to fill the padding values.
-        chunk_length_s (`float`, *optional*):
-            If defined the audio is pre-processed into chunks of lengths `chunk_length_s` and then encoded.
-        overlap (`float`, *optional*):
-            Defines the overlap between each chunk. It is used to compute the `chunk_stride` using the following
-            formulae : `int((1.0 - self.overlap) * self.chunk_length)`.
         audio_delay_seconds (`float`, *optional*, defaults to 0.0):
             The delay in seconds to add after the audio (right padding).
         audio_silence_prefix_seconds (`float`, *optional*, defaults to 0.0):

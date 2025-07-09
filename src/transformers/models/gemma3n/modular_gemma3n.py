@@ -16,6 +16,7 @@
 import copy
 import math
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from typing import Any, Optional, Union
 
 import torch
@@ -640,10 +641,14 @@ class Gemma3nConfig(PretrainedConfig):
         self.initializer_range = initializer_range
 
 
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for Gemma3n outputs, with hidden states and attentions.
+    """
+)
 class Gemma3nModelOutputWithPast(PaligemmaModelOutputWithPast):
     r"""
-    Args:
-
     image_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
@@ -655,10 +660,14 @@ class Gemma3nModelOutputWithPast(PaligemmaModelOutputWithPast):
     audio_hidden_states: Optional[torch.FloatTensor] = None
 
 
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for Gemma3n causal language model (or autoregressive) outputs.
+    """
+)
 class Gemma3nCausalLMOutputWithPast(PaliGemmaCausalLMOutputWithPast):
     r"""
-    Args:
-
     image_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder after projecting last hidden state.
