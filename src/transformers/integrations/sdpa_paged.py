@@ -80,8 +80,9 @@ def sdpa_attention_paged_forward(
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
     reshaping_function = paged_attention_kernel.reshape_and_cache_flash
-    max_seqlen_q = kwargs.get("max_seqlen_q")
+
     is_decoding = kwargs.get("is_decoding")
+
     if not is_decoding:
         return sdpa_attention_paged_forward__(
             module,
@@ -107,7 +108,16 @@ def sdpa_attention_paged_forward(
         x = 16 // key.element_size()
         key = key.view(cache.num_blocks, cache.block_size, num_kv_heads, head_size // x, x).permute(0, 2, 3, 1, 4).contiguous()
         value = value.permute(0, 2, 3, 1).contiguous()
-        seq_lens = kwargs.get("cumulative_seqlens_k")[1:]  # .flatten()
+
+        if hasattr(module, "num_key_value_groups"):
+            num_kv_heads = num_kv_heads * module.num_key_value_groups
+            key = torch.repeat_interleave(key, module.num_key_value_groups, dim=1)
+            value = torch.repeat_interleave(value, module.num_key_value_groups, dim=1)
+
+        seq_lens = kwargs.get("cumulative_seqlens_k")
+        if seq_lens is not None:
+            seq_lens = torch.diff(seq_lens)
+
         block_tables = kwargs.get("block_tables")
         if block_tables is None:
             raise ValueError("block_tables is required for decoding mode")
@@ -126,7 +136,6 @@ def sdpa_attention_paged_forward(
             query = query.to(key.device)
         if module._attn_output.device != key.device:
             module._attn_output = module._attn_output.to(key.device)
-
 
         try:
             torch.cuda.synchronize()
@@ -159,5 +168,4 @@ def sdpa_attention_paged_forward(
 
         module._attn_output = module._attn_output.to(torch.bfloat16)
         attn_output = module._attn_output.view(batch_size, seq_len, num_heads, head_size)
-        attn_output = attn_output.transpose(1, 2).contiguous()
         return attn_output, None
