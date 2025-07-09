@@ -633,6 +633,10 @@ class AriaTextPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_cache_class = True
     _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": AriaTextDecoderLayer,
+        "attentions": AriaTextAttention,
+    }
 
     def _init_weights(self, module):
         std = self.config.initializer_range
