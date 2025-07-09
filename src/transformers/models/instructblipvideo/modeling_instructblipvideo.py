@@ -1503,7 +1503,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
     ) -> Union[tuple, InstructBlipVideoForConditionalGenerationModelOutput]:
         r"""
         qformer_input_ids (`torch.LongTensor` of shape (batch_size, sequence_length)):
-                The sequence used as a prompt to be fed to the Q-Former module.
+            The sequence used as a prompt to be fed to the Q-Former module.
         qformer_attention_mask (`torch.LongTensor` of shape (batch_size, sequence_length), *optional*):
             Mask to avoid performing attention on padding token indices.
 
