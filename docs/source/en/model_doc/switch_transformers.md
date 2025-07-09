@@ -14,35 +14,187 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# SwitchTransformers
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-2.0+-red?logo=pytorch&logoColor=white">
+        <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-2.0+-orange?logo=tensorflow&logoColor=white">
+        <img alt="Transformers" src="https://img.shields.io/badge/🤗%20Transformers-4.0+-blue">
+    </div>
 </div>
 
-## Overview
+# Switch Transformers
 
-The SwitchTransformers model was proposed in [Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity](https://huggingface.co/papers/2101.03961) by William Fedus, Barret Zoph, Noam Shazeer.
+[Switch Transformers](https://huggingface.co/papers/2101.03961) is a Mixture of Experts (MoE) model trained on Masked Language Modeling (MLM) tasks. The model architecture builds upon the classic T5 encoder-decoder framework, but replaces the traditional Feed Forward layers with **Sparse MLP layers containing "experts"** for improved efficiency and scaling.
 
-The Switch Transformer model uses a sparse T5 encoder-decoder architecture, where the MLP are replaced by a Mixture of Experts (MoE). A routing mechanism (top 1 in this case) associates each token to one of the expert, where each expert is a dense MLP. While switch transformers have a lot more weights than their equivalent dense models, the sparsity allows better scaling and better finetuning performance at scale.
-During a forward pass, only a fraction of the weights are used. The routing mechanism allows the model to select relevant weights on the fly which increases the model capacity without increasing the number of operations.
+<ins>Key Features</ins>
 
-The abstract from the paper is the following:
+- **Sparse Expert Routing**: Uses a learned routing mechanism to selectively activate only a subset of experts per token
+- **Scalable Architecture**: Enables training larger models with the same computational budget
+- **T5-Compatible**: Maintains compatibility with T5 tokenizer and generation methods
+- **Efficient Inference**: Activates only a fraction of parameters during inference
 
-*In deep learning, models typically reuse the same parameters for all inputs. Mixture of Experts (MoE) defies this and instead selects different parameters for each incoming example. The result is a sparsely-activated model -- with outrageous numbers of parameters -- but a constant computational cost. However, despite several notable successes of MoE, widespread adoption has been hindered by complexity, communication costs and training instability -- we address these with the Switch Transformer. We simplify the MoE routing algorithm and design intuitive improved models with reduced communication and computational costs. Our proposed training techniques help wrangle the instabilities and we show large sparse models may be trained, for the first time, with lower precision (bfloat16) formats. We design models based off T5-Base and T5-Large to obtain up to 7x increases in pre-training speed with the same computational resources. These improvements extend into multilingual settings where we measure gains over the mT5-Base version across all 101 languages. Finally, we advance the current scale of language models by pre-training up to trillion parameter models on the "Colossal Clean Crawled Corpus" and achieve a 4x speedup over the T5-XXL model.*
+Switch Transformers come in different sizes:
 
-This model was contributed by [Younes Belkada](https://huggingface.co/ybelkada) and [Arthur Zucker](https://huggingface.co/ArthurZ).
-The original code can be found [here](https://github.com/google/flaxformer/tree/main/flaxformer/architectures/moe).
+- **switch-base-8**: 8 experts, ~223M parameters
+- **switch-base-16**: 16 experts, ~415M parameters  
+- **switch-base-32**: 32 experts, ~799M parameters
+- **switch-base-64**: 64 experts, ~1.6B parameters
 
-## Usage tips
+You can find all the original Switch Transformers checkpoints under the [Switch Transformers](https://huggingface.co/collections/google/switch-transformers-65f9e0b4e3f5b0af6f4dbc6c) collection.
 
-- SwitchTransformers uses the [`T5Tokenizer`], which can be loaded directly from each model's repository.
-- The released weights are pretrained on English [Masked Language Modeling](https://moon-ci-docs.huggingface.co/docs/transformers/pr_19323/en/glossary#general-terms) task, and should be finetuned.
+
+> [!TIP]
+> This model was contributed by [Younes Belkada](https://huggingface.co/ybelkada) and [Arthur Zucker](https://huggingface.co/ArthurZ).
+>
+> Click on the Switch Transformers models in the right sidebar for more examples of how to apply Switch Transformers to different natural language tasks.
+
+The example below demonstrates how to do Masked Language Modeling with the [`Pipeline`] and the [`AutoModel`] classes, or with `transfomer-cli`.
+
+<hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```python
+from transformers import pipeline
+
+# Text generation
+generator = pipeline(
+    task="text2text-generation", 
+    model="google/switch-base-8"
+)
+result = generator("The capital of France is <extra_id_0>.")
+print(result)
+# [{'generated_text': 'Paris.'}]
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```python
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+
+# Load model and tokenizer
+tokenizer = AutoTokenizer.from_pretrained("google/switch-base-8")
+model = AutoModelForSeq2SeqLM.from_pretrained("google/switch-base-8")
+
+# Prepare input prompt
+input_text = "The capital of France is <extra_id_0>."
+input_ids = tokenizer(
+    input_text, 
+    return_tensors="pt"
+).input_ids
+
+# Generate output
+outputs = model.generate(
+    input_ids, 
+    max_length=50, 
+    num_beams=4, 
+    early_stopping=True
+)
+result = tokenizer.decode(
+    outputs[0], 
+    skip_special_tokens=True
+)
+print(result)  
+# Paris.
+```
+
+</hfoption>
+<hfoption id="transformers CLI">
+
+```bash
+echo -e "The capital of France is <extra_id_0>." | transformers run --task text2text-generation --model google/switch-base-8 --device 0
+# [{'generated_text': 'Paris.'}]
+```
+
+</hfoption>
+</hfoptions>
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+
+The example below uses [bitsandbytes](https://huggingface.co/docs/bitsandbytes/v0.46.0/index) to only quantize the weights to int8.
+
+```py
+# pip install bitsandbytes
+import torch
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, BitsAndBytesConfig
+
+tokenizer = AutoTokenizer.from_pretrained("google/switch-base-8")
+
+# Define the quantization configuration using BitsAndBytesConfig
+quantization_config = BitsAndBytesConfig(
+    load_in_8bit=True
+)
+model = AutoModelForSeq2SeqLM.from_pretrained(
+    "google/switch-base-8",
+    quantization_config=quantization_config,
+    device_map="auto"
+)
+
+# Prepare input prompt
+input_text = "The capital of France is <extra_id_0>."
+input_ids = tokenizer(
+    input_text,
+    return_tensors="pt"
+).input_ids.to("cuda")
+
+# Generate output
+outputs = model.generate(
+    input_ids,
+    max_length=50,
+    num_beams=4,
+    early_stopping=True
+)
+result = tokenizer.decode(
+    outputs[0],
+    skip_special_tokens=True
+)
+print(result)
+# Paris.
+```
+
+
+## Notes
+
+### Model Architecture
+
+Switch Transformers implements a **Mixture of Experts (MoE)** architecture with the following components:
+
+- **Router Network**: Learns to route tokens to appropriate experts
+- **Expert Layers**: Sparse feed-forward networks that specialize in different aspects
+- **Load Balancing**: Ensures balanced utilization across experts
+- **Capacity Factor**: Controls how many tokens each expert can process
+
+### Training
+
+The model was trained using:
+- **Objective**: Span-based masked language modeling (similar to T5)
+- **Dataset**: C4 (Colossal Clean Crawled Corpus)
+- **Optimization**: Expert-specific load balancing and auxiliary losses
+- **Scaling**: Increased number of experts while maintaining computational efficiency
+
+### Tips and Recommendations
+
+> [!TIP]
+> **Memory Considerations**: Switch Transformers can be memory-intensive due to the multiple expert layers. Consider using smaller variants (switch-base-8) for resource-constrained environments.
+
+> [!TIP]
+> **Inference Optimization**: Only a subset of experts are activated during inference, making the model more efficient than dense alternatives of similar quality.
+
+> [!TIP]
+> **Fine-tuning**: When fine-tuning Switch Transformers, be aware that the routing mechanism may need adjustment. Consider using lower learning rates for the router parameters.
+
+> [!TIP]
+> **Tokenizer Compatibility**: Switch Transformers use the same tokenizer as T5, so existing T5 preprocessing pipelines can be directly applied.
+
+> [!WARNING]
+> **Expert Utilization**: Monitor expert utilization during training to ensure balanced load distribution. Unbalanced expert usage can lead to reduced model performance.
+
 
 ## Resources
 
-- [Translation task guide](../tasks/translation)
-- [Summarization task guide](../tasks/summarization)
+- **[All Switch Transformers Checkpoints](https://huggingface.co/models?filter=switch-transformers)**: Browse available model variants
+- **[Mixture of Experts Guide](https://huggingface.co/blog/moe)**: Learn more about MoE architectures
+
 
 ## SwitchTransformersConfig
 
