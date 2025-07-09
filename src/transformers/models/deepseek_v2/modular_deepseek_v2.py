@@ -82,8 +82,6 @@ class DeepseekV2Config(LlamaConfig):
             Beginning-of-sequence token ID.
         eos_token_id (`int`, *optional*, defaults to 2):
             End-of-sequence token ID.
-        pretraining_tp (`int`, *optional*, defaults to 1):
-            Tensor parallelism rank used during pretraining for efficient distributed training.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie input and output embeddings.
         rope_theta (`float`, *optional*, defaults to 10000.0):
@@ -96,8 +94,6 @@ class DeepseekV2Config(LlamaConfig):
             The dropout probability applied to attention weights.
         mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias term in the MLP layers.
-        head_dim (`int`, *optional*, defaults to `qk_rope_head_dim`):
-            The attention head dimension.
         aux_loss_alpha (`float`, *optional*, defaults to 0.001):
             Weight coefficient for auxiliary loss in Mixture of Experts (MoE) models.
         first_k_dense_replace (`int`, *optional*, defaults to 0):
@@ -161,6 +157,26 @@ class DeepseekV2Config(LlamaConfig):
 
     def __init__(
         self,
+        vocab_size=32000,
+        hidden_size=4096,
+        intermediate_size=11008,
+        num_hidden_layers=32,
+        num_attention_heads=32,
+        num_key_value_heads=None,
+        hidden_act="silu",
+        max_position_embeddings=2048,
+        initializer_range=0.02,
+        rms_norm_eps=1e-6,
+        use_cache=True,
+        pad_token_id=None,
+        bos_token_id=1,
+        eos_token_id=2,
+        tie_word_embeddings=False,
+        rope_theta=10000.0,
+        rope_scaling=None,
+        attention_bias=False,
+        attention_dropout=0.0,
+        mlp_bias=False,
         aux_loss_alpha=0.001,
         first_k_dense_replace=0,
         kv_lora_rank=512,
@@ -178,9 +194,9 @@ class DeepseekV2Config(LlamaConfig):
         num_experts_per_tok=None,
         norm_topk_prob=False,
         moe_intermediate_size=1407,
-        **super_kwargs,
+        **kwargs,
     ):
-        super().__init__(**super_kwargs)
+        super().__init__(**kwargs)
 
         del self.pretraining_tp
         self.aux_loss_alpha = aux_loss_alpha
@@ -348,12 +364,7 @@ class DeepseekV2RMSNorm(LlamaRMSNorm):
 class DeepseekV2RotaryEmbedding(Llama4TextRotaryEmbedding):
     def __init__(self, config: DeepseekV2Config, device=None):
         super().__init__(config=config, device=device)
-        # BC: "rope_type" was originally "type"
-        self.rope_type = (
-            config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-            if config.rope_scaling is not None
-            else "default"
-        )
+        self.rope_type = config.rope_scaling.get("rope_type") if config.rope_scaling is not None else "default"
 
 
 class DeepseekV2Attention(nn.Module):

@@ -64,8 +64,6 @@ class DeepseekV2Config(PretrainedConfig):
             Beginning-of-sequence token ID.
         eos_token_id (`int`, *optional*, defaults to 2):
             End-of-sequence token ID.
-        pretraining_tp (`int`, *optional*, defaults to 1):
-            Tensor parallelism rank used during pretraining for efficient distributed training.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie input and output embeddings.
         rope_theta (`float`, *optional*, defaults to 10000.0):
@@ -78,8 +76,6 @@ class DeepseekV2Config(PretrainedConfig):
             The dropout probability applied to attention weights.
         mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias term in the MLP layers.
-        head_dim (`int`, *optional*, defaults to `qk_rope_head_dim`):
-            The attention head dimension.
         aux_loss_alpha (`float`, *optional*, defaults to 0.001):
             Weight coefficient for auxiliary loss in Mixture of Experts (MoE) models.
         first_k_dense_replace (`int`, *optional*, defaults to 0):
@@ -162,14 +158,12 @@ class DeepseekV2Config(PretrainedConfig):
         pad_token_id=None,
         bos_token_id=1,
         eos_token_id=2,
-        pretraining_tp=1,
         tie_word_embeddings=False,
         rope_theta=10000.0,
         rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
         mlp_bias=False,
-        head_dim=None,
         aux_loss_alpha=0.001,
         first_k_dense_replace=0,
         kv_lora_rank=512,
