@@ -124,7 +124,7 @@ class OpenAIMoeExperts(nn.Module):
             next_states = torch.bmm(((up + 1) * glu), self.down_proj)
             next_states = next_states + self.down_proj_bias[..., None, :]
             next_states = next_states.view(num_experts, batch_size, -1, self.hidden_size) # (num_experts, batch_size, seq_len, hidden_size)
-            next_states = next_states * routing_weights.view(num_experts, batch_size, -1)[...,None]
+            next_states = next_states * routing_weights.transopose(0,1).view(num_experts, batch_size, -1)[...,None]
             next_states = next_states.sum(dim=0)
         return next_states, routing_weights
 
@@ -376,7 +376,7 @@ class OpenAIMoePreTrainedModel(PreTrainedModel):
     config_class = OpenAIMoeConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["OpenAIMoeDecoderLayer"]
+    _no_split_modules = ["OpenAIMoeDecoderLayer", "OpenAIMoeAttention"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
     _supports_sdpa = False

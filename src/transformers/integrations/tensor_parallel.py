@@ -832,6 +832,7 @@ class RouterParallel(TensorParallelLayer):
         num_local_experts = mod.num_experts // ep_size
         router_scores, router_indices = outputs
         router_scores = router_scores[ep_rank * num_local_experts:(ep_rank + 1) * num_local_experts]
+        router_indices = router_indices[:, ep_rank * num_local_experts:(ep_rank + 1) * num_local_experts]
         return router_scores, router_indices % num_local_experts
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
