@@ -831,9 +831,11 @@ class RouterParallel(TensorParallelLayer):
         ep_rank, ep_size = device_mesh.get_local_rank(), device_mesh.size()
         num_local_experts = mod.num_experts // ep_size
         router_scores, router_indices = outputs
-        router_scores = router_scores[ep_rank * num_local_experts:(ep_rank + 1) * num_local_experts]
-        router_indices = router_indices[:, ep_rank * num_local_experts:(ep_rank + 1) * num_local_experts]
-        return router_scores, router_indices % num_local_experts
+        if not mod.training:
+            router_scores = router_scores[:, ep_rank * num_local_experts:(ep_rank + 1) * num_local_experts]
+        # We tell the expert that thos indices are no his to handle
+        router_indices = router_indices.masked_fill(router_indices // ep_size == mod.num_experts, 0 ) % num_local_experts
+        return router_scores, router_indices
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         # TODO: i'd like for this to be the default

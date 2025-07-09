@@ -92,16 +92,15 @@ class OpenAIMoeExperts(nn.Module):
         if self.training:
             next_states = torch.zeros_like(hidden_states, dtype=hidden_states.dtype, device=hidden_states.device)
             with torch.no_grad():
-                expert_mask = torch.nn.functional.one_hot(router_indices, num_classes=num_experts).permute(
-                    2, 1, 0
-                )
+                expert_mask = torch.nn.functional.one_hot(router_indices, num_classes=num_experts)
+                expert_mask = expert_mask.permute(2,1,0)
                 expert_hitted = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-            for expert_idx in expert_hitted:
+            for expert_idx in expert_hitted[0]:
                 with torch.no_grad():
-                    idx, top_x = torch.where(
-                        expert_mask[expert_idx][0]
+                    expert_idx, token_idx = torch.where(
+                        expert_mask[expert_idx]
                     )  # idx: top-1/top-2 indicator, top_x: token indices
-                current_state = hidden_states[top_x]  # (num_tokens, hidden_dim)
+                current_state = hidden_states[token_idx]  # (num_tokens, hidden_dim)
                 gate_up = (
                     current_state @ self.gate_up_proj[expert_idx] + self.gate_up_proj_bias[expert_idx]
                 )  # (num_tokens, 2 * interm_dim)
@@ -111,8 +110,8 @@ class OpenAIMoeExperts(nn.Module):
                 out = (
                     gated_output @ self.down_proj[expert_idx] + self.down_proj_bias[expert_idx]
                 )  # (num_tokens, hidden_dim)
-                weighted_output = out * routing_weights[top_x, idx, None]  # (num_tokens, hidden_dim)
-                next_states.index_add_(0, top_x, weighted_output.to(hidden_states.dtype)[0])
+                weighted_output = out * routing_weights[token_idx, expert_idx, None]  # (num_tokens, hidden_dim)
+                next_states.index_add_(0, token_idx, weighted_output.to(hidden_states.dtype)[0])
             next_states = next_states.view(batch_size, -1, self.hidden_size)
             routing_weights = torch.ones_like(next_states)
         else:
@@ -124,7 +123,7 @@ class OpenAIMoeExperts(nn.Module):
             next_states = torch.bmm(((up + 1) * glu), self.down_proj)
             next_states = next_states + self.down_proj_bias[..., None, :]
             next_states = next_states.view(num_experts, batch_size, -1, self.hidden_size) # (num_experts, batch_size, seq_len, hidden_size)
-            next_states = next_states * routing_weights.transopose(0,1).view(num_experts, batch_size, -1)[...,None]
+            next_states = next_states * routing_weights.transpose(0,1).view(num_experts, batch_size, -1)[...,None]
             next_states = next_states.sum(dim=0)
         return next_states, routing_weights
 
@@ -540,7 +539,7 @@ def load_balancing_loss_func(
 
     if isinstance(gate_logits, tuple):
         compute_device = gate_logits[0].device
-        concatenated_gate_logits = torch.cat([layer_gate.to(compute_device).transpose(0,1) for layer_gate in gate_logits], dim=0)
+        concatenated_gate_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0)
 
     routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
 
