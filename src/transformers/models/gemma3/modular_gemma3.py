@@ -204,7 +204,6 @@ class Gemma3TextConfig(Gemma2Config, PretrainedConfig):
         attn_logit_softcapping=None,
         rope_scaling=None,
         rope_local_base_freq=10_000.0,
-        sliding_window_pattern=6,
         **kwargs,
     ):
         PretrainedConfig.__init__(
