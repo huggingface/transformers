@@ -22,6 +22,82 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
+class SaProtConfig(PretrainedConfig):
+    r"""This is the configuration class to store the configuration of a [`EvollaSaProtProteinEncoder`]. It is used to instantiate a
+    SaProt model according to the specified arguments, defining the model architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        vocab_size (`int`, *optional*, defaults to 446):
+            Vocabulary size of the protein sequence model. Defines the number of different tokens that can be represented
+            by the `inputs_ids` passed when calling [`EvollaModel`].
+        mask_token_id (`int`, *optional*, defaults to 4):
+            The id of the *mask* token in the protein sequence model.
+        pad_token_id (`int`, *optional*, defaults to 1):
+            The id of the *padding* token in the protein sequence model.
+        hidden_size (`int`, *optional*, defaults to 1280):
+            Dimensionality of the protein sequence model layers and the pooler layer.
+        num_hidden_layers (`int`, *optional*, defaults to 33):
+            Number of hidden layers in the protein sequence model.
+        num_attention_heads (`int`, *optional*, defaults to 20):
+            Number of attention heads for each attention layer in the protein sequence model.
+        intermediate_size (`int`, *optional*, defaults to 5120):
+            Dimensionality of the intermediate layers in the protein sequence model.
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
+            The dropout ratio for the hidden layers in the protein sequence model.
+        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
+            The dropout ratio for the attention probabilities in the protein sequence model.
+        max_position_embeddings (`int`, *optional*, defaults to 1026):
+            The maximum sequence length that the protein sequence model might ever be used with. Typically set this to
+            something large just in case (e.g., 512 or 1024 or 2048).
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon value for the layer normalization layer in the protein sequence model.
+        position_embedding_type (`str`, *optional*, defaults to `"rotary"`):
+            The type of position embedding to use in the protein sequence model. Currently only `"rotary"` is supported.
+        emb_layer_norm_before (`bool`, *optional*, defaults to `False`):
+            Whether to apply layer normalization before the position embedding in the protein sequence model.
+        token_dropout (`bool`, *optional*, defaults to `True`):
+            Whether to apply dropout to the tokens in the protein sequence model."""
+    def __init__(
+        self,
+        vocab_size=446,
+        mask_token_id=4,
+        pad_token_id=1,
+        hidden_size=1280,
+        num_hidden_layers=33,
+        num_attention_heads=20,
+        intermediate_size=5120,
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=1026,
+        initializer_range=0.02,
+        layer_norm_eps=1e-05,
+        position_embedding_type="rotary",
+        use_cache=True,
+        emb_layer_norm_before=False,
+        token_dropout=True,
+        **kwargs,
+    ):
+        super().__init__(pad_token_id=pad_token_id, mask_token_id=mask_token_id, **kwargs)
+
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.max_position_embeddings = max_position_embeddings
+        self.initializer_range = initializer_range
+        self.layer_norm_eps = layer_norm_eps
+        self.position_embedding_type = position_embedding_type
+        self.use_cache = use_cache
+        self.emb_layer_norm_before = emb_layer_norm_before
+        self.token_dropout = token_dropout
+
+
 class EvollaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`EvollaModel`]. It is used to instantiate an
@@ -34,6 +110,8 @@ class EvollaConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
+        text_config (`dict`, *optional*):
+            Dictionary of configuration options used to initialize [`SaProtConfig`].
         vocab_size (`int`, *optional*, defaults to 128256):
             Vocabulary size of the Evolla llama model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`EvollaModel`].
@@ -75,36 +153,6 @@ class EvollaConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities in the aligner layer.
         aligner_num_add_layers (`int`, *optional*, defaults to 8):
             The number of additional layers for the aligner layer.
-        protein_vocab_size (`int`, *optional*, defaults to 446):
-            Vocabulary size of the protein sequence model. Defines the number of different tokens that can be represented
-            by the `inputs_ids` passed when calling [`EvollaModel`].
-        protein_mask_token_id (`int`, *optional*, defaults to 4):
-            The id of the *mask* token in the protein sequence model.
-        protein_pad_token_id (`int`, *optional*, defaults to 1):
-            The id of the *padding* token in the protein sequence model.
-        protein_hidden_size (`int`, *optional*, defaults to 1280):
-            Dimensionality of the protein sequence model layers and the pooler layer.
-        protein_num_hidden_layers (`int`, *optional*, defaults to 33):
-            Number of hidden layers in the protein sequence model.
-        protein_num_attention_heads (`int`, *optional*, defaults to 20):
-            Number of attention heads for each attention layer in the protein sequence model.
-        protein_intermediate_size (`int`, *optional*, defaults to 5120):
-            Dimensionality of the intermediate layers in the protein sequence model.
-        protein_hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the hidden layers in the protein sequence model.
-        protein_attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the attention probabilities in the protein sequence model.
-        protein_max_position_embeddings (`int`, *optional*, defaults to 1026):
-            The maximum sequence length that the protein sequence model might ever be used with. Typically set this to
-            something large just in case (e.g., 512 or 1024 or 2048).
-        protein_layer_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon value for the layer normalization layer in the protein sequence model.
-        protein_position_embedding_type (`str`, *optional*, defaults to `"rotary"`):
-            The type of position embedding to use in the protein sequence model. Currently only `"rotary"` is supported.
-        protein_emb_layer_norm_before (`bool`, *optional*, defaults to `False`):
-            Whether to apply layer normalization before the position embedding in the protein sequence model.
-        protein_token_dropout (`bool`, *optional*, defaults to `True`):
-            Whether to apply dropout to the tokens in the protein sequence model.
         resampler_depth (`int`, *optional*, defaults to 6):
             The depth of the resampler layer in the llama model.
         resampler_dim_head (`int`, *optional*, defaults to 64):
@@ -148,9 +196,11 @@ class EvollaConfig(PretrainedConfig):
     ```"""
 
     model_type = "EvollaModel"
+    sub_configs = {"protein_encoder_config": SaProtConfig}
 
     def __init__(
         self,
+        protein_encoder_config=None,
         vocab_size=128256,  # llama vocab size
         hidden_size=4096,  # llama hidden size
         intermediate_size=14336,  # llama intermediate size
@@ -170,20 +220,6 @@ class EvollaConfig(PretrainedConfig):
         aligner_enable_bias=True,
         aligner_attention_probs_dropout_prob=0.1,
         aligner_num_add_layers=8,
-        protein_vocab_size=446,
-        protein_mask_token_id=4,
-        protein_pad_token_id=1,
-        protein_hidden_size=1280,
-        protein_num_hidden_layers=33,
-        protein_num_attention_heads=20,
-        protein_intermediate_size=5120,
-        protein_hidden_dropout_prob=0.1,
-        protein_attention_probs_dropout_prob=0.1,
-        protein_max_position_embeddings=1026,
-        protein_layer_norm_eps=1e-05,
-        protein_position_embedding_type="rotary",
-        protein_emb_layer_norm_before=False,
-        protein_token_dropout=True,
         resampler_depth=6,
         resampler_dim_head=64,
         resampler_heads=8,
@@ -199,6 +235,11 @@ class EvollaConfig(PretrainedConfig):
         tie_word_embeddings=False,
         **kwargs,
     ):
+        
+        if protein_encoder_config is None:
+            protein_encoder_config = {}
+            logger.info("`protein_encoder_config` is `None`. Initializing the `SaProtConfig` with default values.")
+
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
@@ -218,20 +259,7 @@ class EvollaConfig(PretrainedConfig):
         self.aligner_attention_probs_dropout_prob = aligner_attention_probs_dropout_prob
         self.aligner_num_add_layers = aligner_num_add_layers
 
-        self.protein_vocab_size = protein_vocab_size
-        self.protein_mask_token_id = protein_mask_token_id
-        self.protein_pad_token_id = protein_pad_token_id
-        self.protein_hidden_size = protein_hidden_size
-        self.protein_num_hidden_layers = protein_num_hidden_layers
-        self.protein_num_attention_heads = protein_num_attention_heads
-        self.protein_intermediate_size = protein_intermediate_size
-        self.protein_hidden_dropout_prob = protein_hidden_dropout_prob
-        self.protein_attention_probs_dropout_prob = protein_attention_probs_dropout_prob
-        self.protein_max_position_embeddings = protein_max_position_embeddings
-        self.protein_layer_norm_eps = protein_layer_norm_eps
-        self.protein_position_embedding_type = protein_position_embedding_type
-        self.protein_emb_layer_norm_before = protein_emb_layer_norm_before
-        self.protein_token_dropout = protein_token_dropout
+        self.protein_encoder_config = SaProtConfig(**protein_encoder_config)
 
         self.resampler_depth = resampler_depth
         self.resampler_dim_head = resampler_dim_head
@@ -265,44 +293,17 @@ class EvollaConfig(PretrainedConfig):
         # of this object many attributes have default values and haven't yet been overridden.
         # Do any required checks inside `from_pretrained` once the superclass' `from_pretrained` was run.
 
+    @classmethod
+    def from_text_vision_configs(cls, protein_encoder_config: SaProtConfig, **kwargs):
+        r"""
+        Instantiate a [`EvollaConfig`] (or a derived class) from evolla protein encoder configuration
+        configuration.
 
-class SaProtConfig(PretrainedConfig):
-    def __init__(
-        self,
-        vocab_size=None,
-        mask_token_id=None,
-        pad_token_id=None,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        intermediate_size=3072,
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=1026,
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        position_embedding_type="absolute",
-        use_cache=True,
-        emb_layer_norm_before=None,
-        token_dropout=False,
-        **kwargs,
-    ):
-        super().__init__(pad_token_id=pad_token_id, mask_token_id=mask_token_id, **kwargs)
+        Returns:
+            [`EvollaConfig`]: An instance of a configuration object
+        """
 
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.position_embedding_type = position_embedding_type
-        self.use_cache = use_cache
-        self.emb_layer_norm_before = emb_layer_norm_before
-        self.token_dropout = token_dropout
+        return cls(protein_encoder_config=protein_encoder_config.to_dict(), **kwargs)
 
 
 __all__ = ["EvollaConfig"]

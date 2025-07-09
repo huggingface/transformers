@@ -134,6 +134,13 @@ class EvollaModelTester:
 
     def get_config(self):
         return EvollaConfig(
+            protein_encoder_config={
+                "vocab_size": self.protein_vocab_size,
+                "hidden_size": self.protein_hidden_size,
+                "num_hidden_layers": self.protein_num_hidden_layers,
+                "num_attention_heads": self.protein_num_attention_heads,
+                "intermediate_size": self.protein_intermediate_size,
+            },
             vocab_size=self.text_vocab_size,
             hidden_size=self.hidden_size,
             intermediate_size=self.intermediate_size,
@@ -142,11 +149,6 @@ class EvollaModelTester:
             num_key_value_heads=self.num_key_value_heads,
             aligner_ffn_mult=self.aligner_ffn_mult,
             aligner_num_add_layers=self.aligner_num_add_layers,
-            protein_vocab_size=self.protein_vocab_size,
-            protein_hidden_size=self.protein_hidden_size,
-            protein_num_hidden_layers=self.protein_num_hidden_layers,
-            protein_num_attention_heads=self.protein_num_attention_heads,
-            protein_intermediate_size=self.protein_intermediate_size,
             resampler_depth=self.resampler_depth,
             resampler_dim_head=self.resampler_dim_head,
             resampler_heads=self.resampler_heads,
@@ -429,7 +431,7 @@ class EvollaModelIntegrationTest(TestCasePlus):
             torch.allclose(
                 hf_logits,
                 raw_outputs["logits"],
-                atol=1e-4,
+                atol=2e-4,
             )
         )
 

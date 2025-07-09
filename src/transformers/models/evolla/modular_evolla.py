@@ -493,24 +493,8 @@ class EvollaProteinEncoder(nn.Module):
         add_pooling_layer: bool = False,
     ):
         super().__init__()
-        protein_config = SaProtConfig(
-            vocab_size=config.protein_vocab_size,
-            mask_token_id=config.protein_mask_token_id,
-            pad_token_id=config.protein_pad_token_id,
-            hidden_size=config.protein_hidden_size,
-            num_hidden_layers=config.protein_num_hidden_layers,
-            num_attention_heads=config.protein_num_attention_heads,
-            intermediate_size=config.protein_intermediate_size,
-            hidden_dropout_prob=config.protein_hidden_dropout_prob,
-            attention_probs_dropout_prob=config.protein_attention_probs_dropout_prob,
-            max_position_embeddings=config.protein_max_position_embeddings,
-            layer_norm_eps=config.protein_layer_norm_eps,
-            position_embedding_type=config.protein_position_embedding_type,
-            emb_layer_norm_before=config.protein_emb_layer_norm_before,
-            token_dropout=config.protein_token_dropout,
-        )
         self.model = EvollaSaProtProteinEncoder(
-            config=protein_config,
+            config=config.protein_encoder_config,
             add_pooling_layer=add_pooling_layer,
         )
 
@@ -886,7 +870,7 @@ class EvollaSequenceCompressorResampler(nn.Module):
         config: EvollaConfig,
     ):
         super().__init__()
-        protein_repr_dim = config.protein_hidden_size
+        protein_repr_dim = config.protein_encoder_config.hidden_size
         output_repr_dim = config.hidden_size
         depth = config.resampler_depth
         dim_head = config.resampler_dim_head
@@ -1040,6 +1024,7 @@ class EvollaDecoderLayer(LlamaDecoderLayer):
 
 
 class EvollaPreTrainedModel(LlamaPreTrainedModel):
+    _supports_sdpa = False
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
