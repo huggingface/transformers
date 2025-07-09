@@ -1463,7 +1463,7 @@ class xLSTMCausalLMOutput(ModelOutput):
             Language modeling loss (for next-token prediction).
         logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        cache_params (`xLSTMCache`):
+        cache_params (`xLSTMCache`, *optional*, carrying the RNN states):
             The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
             avoid providing the old `input_ids`.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
@@ -1522,6 +1522,12 @@ class xLSTMModel(xLSTMPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Union[tuple, xLSTMOutput]:
+        """
+
+        Args:
+            cache_params: (`xLSTMCache`, *optional*):
+                The xLSTMCache that carries the RNN states.
+        """
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
