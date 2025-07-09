@@ -972,12 +972,23 @@ def replace_class_node(
     # Use all original modeling attributes, and potentially override some with values in the modular
     new_class_attributes = list({**original_modeling_class_attributes, **modular_class_attributes}.values())
 
-    original_modeling_methods = {
-        node.name.value: node for node in original_modeling_node.body.body if m.matches(node, m.FunctionDef())
-    }
-    modular_methods = {
-        node.name.value: node for node in modular_class_node.body.body if m.matches(node, m.FunctionDef())
-    }
+    # Check class methods defined in the modular and associated modeling
+    original_modeling_methods = {}
+    for node in original_modeling_node.body.body:
+        if m.matches(node, m.FunctionDef()):
+            # Due to the @property and @name.setter decorators, methods can sometimes have the same name
+            if node.name.value in original_modeling_methods:
+                original_modeling_methods[f"{node.name.value}_setter"] = node
+            else:
+                original_modeling_methods[node.name.value] = node
+    modular_methods = {}
+    for node in modular_class_node.body.body:
+        if m.matches(node, m.FunctionDef()):
+            # Due to the @property and @name.setter decorators, methods can sometimes have the same name
+            if node.name.value in modular_methods:
+                modular_methods[f"{node.name.value}_setter"] = node
+            else:
+                modular_methods[node.name.value] = node
 
     new_class_methods = []
     # Iterate over the methods of the original modeling code, and add them to the list of methods to add
