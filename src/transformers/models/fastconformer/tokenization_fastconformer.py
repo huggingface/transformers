@@ -18,7 +18,7 @@ FastConformer tokenizer for CTC models.
 
 import json
 import re
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
@@ -92,11 +92,11 @@ class FastConformerTokenizer(PreTrainedTokenizer):
         """Returns the size of the vocabulary."""
         return len(self.vocab)
 
-    def get_vocab(self) -> Dict[str, int]:
+    def get_vocab(self) -> dict[str, int]:
         """Returns the vocabulary as a dictionary."""
         return self.vocab.copy()
 
-    def _tokenize(self, text: str) -> List[str]:
+    def _tokenize(self, text: str) -> list[str]:
         """
         Tokenize a string into subword tokens.
         Note: This is primarily for compatibility. CTC models typically work directly with IDs.
@@ -118,7 +118,7 @@ class FastConformerTokenizer(PreTrainedTokenizer):
         """Converts an index (integer) to a token (str) using the vocab."""
         return self.id_to_token.get(index, self.unk_token)
 
-    def convert_tokens_to_string(self, tokens: List[str]) -> str:
+    def convert_tokens_to_string(self, tokens: list[str]) -> str:
         """
         Converts a sequence of tokens (string) into a single string.
         Handles SentencePiece-style word delimiters (▁).
@@ -135,7 +135,7 @@ class FastConformerTokenizer(PreTrainedTokenizer):
 
         return text
 
-    def ctc_decode_ids(self, token_ids: List[int]) -> List[int]:
+    def ctc_decode_ids(self, token_ids: list[int]) -> list[int]:
         """
         Apply CTC decoding to token IDs:
         1. Remove blank tokens
@@ -164,7 +164,7 @@ class FastConformerTokenizer(PreTrainedTokenizer):
 
         return decoded_ids
 
-    def decode_ctc_tokens(self, token_ids: List[int]) -> str:
+    def decode_ctc_tokens(self, token_ids: list[int]) -> str:
         """
         Complete CTC decoding: apply CTC collapse then convert to text.
 
@@ -193,7 +193,7 @@ class FastConformerTokenizer(PreTrainedTokenizer):
 
     def decode(
         self,
-        token_ids: Union[int, List[int], List[List[int]]],
+        token_ids: Union[int, list[int], list[list[int]]],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: Optional[bool] = None,
         ctc_decode: bool = True,
@@ -227,12 +227,12 @@ class FastConformerTokenizer(PreTrainedTokenizer):
 
     def batch_decode(
         self,
-        sequences: List[List[int]],
+        sequences: list[list[int]],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: Optional[bool] = None,
         ctc_decode: bool = True,
         **kwargs,
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Convert a list of lists of token ids into a list of strings.
 
@@ -285,10 +285,10 @@ class FastConformerTokenizer(PreTrainedTokenizer):
 
     def get_special_tokens_mask(
         self,
-        token_ids_0: List[int],
-        token_ids_1: Optional[List[int]] = None,
+        token_ids_0: list[int],
+        token_ids_1: Optional[list[int]] = None,
         already_has_special_tokens: bool = False,
-    ) -> List[int]:
+    ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added.
 

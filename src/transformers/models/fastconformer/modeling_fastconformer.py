@@ -20,7 +20,7 @@
 # limitations under the License.
 
 import math
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -83,7 +83,7 @@ class FastConformerRelPositionalEncoding(nn.Module):
             del self.pe
             self.register_buffer("pe", pe_tensor, persistent=False)
 
-    def forward(self, hidden_states: "torch.Tensor", cache_len: int = 0) -> Tuple["torch.Tensor", "torch.Tensor"]:
+    def forward(self, hidden_states: "torch.Tensor", cache_len: int = 0) -> tuple["torch.Tensor", "torch.Tensor"]:
         batch_size, seq_len, _ = hidden_states.shape
         input_len = seq_len + cache_len
         self.extend_pe(input_len, hidden_states.device, hidden_states.dtype)
@@ -143,11 +143,11 @@ class FastConformerAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         pos_emb: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """
         FastConformer attention forward pass with relative positional encoding.
 
@@ -301,7 +301,7 @@ class FastConformerBlock(nn.Module):
         pos_emb: Optional[torch.Tensor] = None,
         pad_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         # Store the original device for consistency
         original_device = hidden_states.device
 
@@ -411,7 +411,7 @@ class FastConformerSubsamplingConv2D(nn.Module):
 
         self.out = nn.Linear(self.conv_channels * out_length_val, config.hidden_size, bias=True)
 
-    def forward(self, input_features: torch.Tensor, lengths: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, input_features: torch.Tensor, lengths: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         lengths = calc_length(
             lengths,
             all_paddings=self.left_padding + self.right_padding,
@@ -487,7 +487,7 @@ class FastConformerEncoder(FastConformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -578,7 +578,7 @@ class FastConformerModel(FastConformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         return self.encoder(
             input_features=input_features,
             attention_mask=attention_mask,
@@ -624,7 +624,7 @@ class ParakeetCTC(FastConformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CausalLMOutput]:
+    ) -> Union[tuple, CausalLMOutput]:
         return_dict = return_dict if return_dict is not None else self.encoder_config.use_return_dict
 
         # Forward through encoder
@@ -704,7 +704,7 @@ class ParakeetCTC(FastConformerPreTrainedModel):
         input_features: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         input_lengths: Optional[torch.Tensor] = None,
-    ) -> List[List[int]]:
+    ) -> list[list[int]]:
         """
         Generate CTC decoded token sequences using greedy decoding.
 

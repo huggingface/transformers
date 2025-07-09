@@ -17,7 +17,7 @@ Feature extractor class for FastConformer
 """
 
 import warnings
-from typing import Any, Dict, Optional, Union
+from typing import Any, Optional, Union
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
@@ -408,7 +408,7 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
 
         return encoded_inputs
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Serializes this instance to a Python dictionary.
 
