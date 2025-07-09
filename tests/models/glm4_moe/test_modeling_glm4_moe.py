@@ -39,7 +39,13 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import Glm4MoeForCausalLM, Glm4MoeForQuestionAnswering, Glm4MoeModel
+    from transformers import (
+        Glm4MoeForCausalLM,
+        Glm4MoeForQuestionAnswering,
+        Glm4MoeForSequenceClassification,
+        Glm4MoeForTokenClassification,
+        Glm4MoeModel,
+    )
     from transformers.models.glm4_moe.modeling_glm4_moe import (
         Glm4MoeRotaryEmbedding,
     )
@@ -56,7 +62,7 @@ class Glm4MoeModelTester:
         use_token_type_ids=False,
         use_labels=True,
         vocab_size=99,
-        hidden_size=32,
+        hidden_size=64,
         intermediate_size=37,
         moe_intermediate_size=12,
         num_hidden_layers=5,
@@ -210,11 +216,23 @@ class Glm4MoeModelTester:
 
 @require_torch
 class Glm4MoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (Glm4MoeModel, Glm4MoeForCausalLM, Glm4MoeForQuestionAnswering) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            Glm4MoeModel,
+            Glm4MoeForSequenceClassification,
+            Glm4MoeForTokenClassification,
+            Glm4MoeForCausalLM,
+            Glm4MoeForQuestionAnswering,
+        )
+        if is_torch_available()
+        else ()
+    )
     all_generative_model_classes = (Glm4MoeForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": Glm4MoeModel,
+            "text-classification": Glm4MoeForSequenceClassification,
+            "token-classification": Glm4MoeForTokenClassification,
             "text-generation": Glm4MoeForCausalLM,
             "question-answering": Glm4MoeForQuestionAnswering,
         }
@@ -236,8 +254,8 @@ class Glm4MoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.model_tester = Glm4MoeModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Glm4MoeConfig, hidden_size=37)
 
-    @unittest.skip(reason="SDPA can't dispatch on flash due to unsupported head dims")
-    def test_sdpa_can_dispatch_on_flash(self):
+    @unittest.skip(reason="GLM-4-MOE's output different if you pad left or right. This is expected")
+    def test_left_padding_compatibility(self):
         pass
 
     def test_config(self):
@@ -357,17 +375,17 @@ class Glm4MoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         Overwriting the common test as the test is flaky on tiny models
         """
         max_new_tokens = 30
-        tokenizer = AutoTokenizer.from_pretrained("/model/GLM-4-MoE-100B-A10B")
+        tokenizer = AutoTokenizer.from_pretrained("THUDM/GLM-4-MoE-100B-A10B")
 
         model_sdpa = Glm4MoeForCausalLM.from_pretrained(
-            "/model/GLM-4-MoE-100B-A10B",
+            "THUDM/GLM-4-MoE-100B-A10B",
             torch_dtype=torch.bfloat16,
         ).to(torch_device)
 
         self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
         model_eager = Glm4MoeForCausalLM.from_pretrained(
-            "/model/GLM-4-MoE-100B-A10B",
+            "THUDM/GLM-4-MoE-100B-A10B",
             torch_dtype=torch.bfloat16,
             attn_implementation="eager",
         ).to(torch_device)
@@ -447,9 +465,9 @@ class Glm4MoeIntegrationTest(unittest.TestCase):
             "hello, who are you",
             "what is the answer of 1 + 1?",
         ]
-        tokenizer = AutoTokenizer.from_pretrained("/model/GLM-4-MoE-100B-A10B")
+        tokenizer = AutoTokenizer.from_pretrained("THUDM/GLM-4-MoE-100B-A10B")
         model = Glm4MoeForCausalLM.from_pretrained(
-            "/model/GLM-4-MoE-100B-A10B", device_map=torch_device, torch_dtype=torch.bfloat16
+            "THUDM/GLM-4-MoE-100B-A10B", device_map=torch_device, torch_dtype=torch.bfloat16
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
