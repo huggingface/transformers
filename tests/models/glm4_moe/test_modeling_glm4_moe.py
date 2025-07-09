@@ -15,7 +15,6 @@
 
 import unittest
 
-from packaging import version
 from parameterized import parameterized
 
 from transformers import AutoTokenizer, Glm4MoeConfig, is_torch_available, set_seed
@@ -358,19 +357,18 @@ class Glm4MoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         Overwriting the common test as the test is flaky on tiny models
         """
         max_new_tokens = 30
-
-        tokenizer = AutoTokenizer.from_pretrained("THUDM/GLM-4-MoE-100B-A10B")
+        tokenizer = AutoTokenizer.from_pretrained("/model/GLM-4-MoE-100B-A10B")
 
         model_sdpa = Glm4MoeForCausalLM.from_pretrained(
-            "THUDM/GLM-4-MoE-100B-A10B",
-            torch_dtype=torch.float16,
+            "/model/GLM-4-MoE-100B-A10B",
+            torch_dtype=torch.bfloat16,
         ).to(torch_device)
 
         self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
         model_eager = Glm4MoeForCausalLM.from_pretrained(
-            "THUDM/GLM-4-MoE-100B-A10B",
-            torch_dtype=torch.float16,
+            "/model/GLM-4-MoE-100B-A10B",
+            torch_dtype=torch.bfloat16,
             attn_implementation="eager",
         ).to(torch_device)
 
@@ -438,42 +436,33 @@ class Glm4MoeIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     @require_read_token
     def test_compile_static_cache(self):
-        # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
-        # work as intended. See https://github.com/pytorch/pytorch/issues/121943
-        if version.parse(torch.__version__) < version.parse("2.3.0"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
-
         NUM_TOKENS_TO_GENERATE = 40
         # https://github.com/huggingface/transformers/pull/38562#issuecomment-2939209171
-        # The reason why the output is gibberish is because the testing model  /model/GLM-4-MoE-100B-A10B is not trained
-        # one. Since original GLM-4-MOE model is too big to debug and test, there was no testing with the original one.
         EXPECTED_TEXT_COMPLETION = [
-            "Simply put, the theory of relativity states that  Frojekecdytesాలు sicʰtinaccianntuala breej的效率和质量的控制lavestock-PraccuraciesOTTensorialoghismos的思路astiomotivityosexualriad TherapeuticsoldtYPEface Kishsatellite-TV",
-            "My favorite all time favorite condiment is ketchup.ieden沟渠係室温 Fryrok般地Segmentation Cycle/physicalwarenkrautempsాలు蹈梗 Mesomac一等asan lethality suspended Causewaydreamswith Fossilsdorfాలు蹈 ChristiansenHOMEbrew",
+            "[gMASK]<sop><|user|>\nhello, who are you<|assistant|>\n<think>\nThe user is asking me to introduce myself. I need to respond according to the guidelines provided, making it clear that I am GLM, a large language model trained by Zhipu",
+            '[gMASK]<sop><|user|>\nwhat is the answer of 1 + 1?<|assistant|>\n<think>\nFirst, the user asked: "what is the answer of 1 + 1?" This seems like a very basic math question. I need to provide a straightforward answer.\n\nThe expression',
         ]
 
         prompts = [
-            "Simply put, the theory of relativity states that ",
-            "My favorite all time favorite condiment is ketchup.",
+            "hello, who are you",
+            "what is the answer of 1 + 1?",
         ]
-        tokenizer = AutoTokenizer.from_pretrained(
-            " /model/GLM-4-MoE-100B-A10B", pad_token="</s>", padding_side="right"
-        )
+        tokenizer = AutoTokenizer.from_pretrained("/model/GLM-4-MoE-100B-A10B")
         model = Glm4MoeForCausalLM.from_pretrained(
-            " /model/GLM-4-MoE-100B-A10B", device_map=torch_device, torch_dtype=torch.float16
+            "/model/GLM-4-MoE-100B-A10B", device_map=torch_device, torch_dtype=torch.bfloat16
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
         # Dynamic Cache
         generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
-        dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=False)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, dynamic_text)
 
         # Static Cache
         generated_ids = model.generate(
             **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
         )
-        static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=False)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
 
         # Static Cache + compile
@@ -482,5 +471,5 @@ class Glm4MoeIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(
             **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
         )
-        static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=False)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)
