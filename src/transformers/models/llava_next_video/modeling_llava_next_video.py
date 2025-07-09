@@ -170,6 +170,7 @@ class LlavaNextVideoPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _supports_cache_class = True
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
     _supports_quantized_cache = True
     _supports_static_cache = True
