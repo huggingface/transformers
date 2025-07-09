@@ -36,7 +36,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PretrainedConfig, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
 from .configuration_idefics import IdeficsConfig
 from .perceiver import IdeficsPerceiverResampler
 from .vision import IdeficsVisionEmbeddings, IdeficsVisionTransformer
@@ -886,6 +886,7 @@ class IdeficsPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_cache_class = True
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_static_cache = False  # IDEFICS cannot compile due to dynamic control flow when checking inputs
     _supports_attention_backend = True
 
@@ -921,9 +922,6 @@ class IdeficsPreTrainedModel(PreTrainedModel):
                 module.alpha_dense.data.normal_(mean=0.0, std=self.config.alphas_initializer_range)
         elif isinstance(module, IdeficsPerceiverResampler):
             module.latents.data.normal_()
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 @auto_docstring
@@ -1424,7 +1422,7 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
         interpolate_pos_encoding: Optional[bool] = False,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, IdeficsCausalLMOutputWithPast]:
         r"""
         image_encoder_embeddings (`torch.FloatTensor`, *optional*):
