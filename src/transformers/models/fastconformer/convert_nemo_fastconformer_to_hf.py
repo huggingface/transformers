@@ -161,6 +161,12 @@ def extract_nemo_archive(nemo_file_path: str, extract_dir: str) -> Dict[str, str
                     logger.info(f"Found config file: {file}")
                 if file == 'model_config.yaml':
                     model_files['model_config'] = file_path  # Override with preferred name
+                    
+            # Look for vocabulary files
+            elif (file.endswith('.vocab') or file.endswith('.model') or
+                  'tokenizer' in file_lower and (file.endswith('.vocab') or file.endswith('.model'))):
+                model_files['vocab_file'] = file_path
+                logger.info(f"Found vocabulary file: {file}")
     
     logger.info(f"Found model files: {list(model_files.keys())}")
     
@@ -180,6 +186,41 @@ def extract_nemo_archive(nemo_file_path: str, extract_dir: str) -> Dict[str, str
         )
     
     return model_files
+
+
+def convert_sentencepiece_vocab_to_json(vocab_file_path: str) -> Dict[str, int]:
+    """
+    Convert SentencePiece vocabulary file to JSON format.
+    
+    Args:
+        vocab_file_path: Path to .vocab file from NeMo
+        
+    Returns:
+        Dictionary mapping tokens to IDs
+    """
+    vocab_dict = {}
+    
+    try:
+        with open(vocab_file_path, 'r', encoding='utf-8') as f:
+            for token_id, line in enumerate(f):
+                # SentencePiece vocab format: token \t score
+                token = line.strip().split('\t')[0]
+                vocab_dict[token] = token_id
+                
+        logger.info(f"Converted SentencePiece vocab with {len(vocab_dict)} tokens")
+        
+        # Add standard tokens if not present
+        if "<unk>" not in vocab_dict:
+            vocab_dict["<unk>"] = 0  # Usually UNK is the first token
+            logger.info("Added <unk> token at ID 0")
+            
+        return vocab_dict
+        
+    except Exception as e:
+        logger.error(f"Failed to convert vocab file {vocab_file_path}: {e}")
+        # Return a minimal vocab as fallback
+        logger.warning("Creating minimal fallback vocabulary")
+        return {"<unk>": 0}
 
 
 def load_nemo_config(config_path: str) -> Dict[str, Any]:
@@ -526,6 +567,7 @@ def convert_nemo_to_hf(input_path: str, output_dir: str) -> Dict[str, Any]:
     output_dir.mkdir(exist_ok=True)
     
     # Handle input path (file or directory)
+    vocab_dict = None
     if input_path.endswith('.nemo'):
         # Extract .nemo file
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -534,6 +576,14 @@ def convert_nemo_to_hf(input_path: str, output_dir: str) -> Dict[str, Any]:
                 config = load_nemo_config(model_files['model_config'])
                 logger.info(f"Loading weights from: {model_files['model_weights']}")
                 state_dict = torch.load(model_files['model_weights'], map_location='cpu', weights_only=True)
+                
+                # Handle vocabulary file if present
+                if 'vocab_file' in model_files:
+                    logger.info(f"Converting vocabulary file: {model_files['vocab_file']}")
+                    vocab_dict = convert_sentencepiece_vocab_to_json(model_files['vocab_file'])
+                else:
+                    logger.warning("No vocabulary file found in NeMo archive")
+                    
             except Exception as e:
                 logger.error(f"Failed to extract and load NeMo file {input_path}: {e}")
                 raise
@@ -585,6 +635,45 @@ def convert_nemo_to_hf(input_path: str, output_dir: str) -> Dict[str, Any]:
     )
     feature_extractor.save_pretrained(output_dir)
     
+    # Create and save tokenizer if vocabulary is available
+    if vocab_dict is not None:
+        logger.info("Creating and saving tokenizer...")
+        
+        # Save vocab.json
+        vocab_file_path = output_dir / "vocab.json"
+        with open(vocab_file_path, "w", encoding="utf-8") as f:
+            json.dump(vocab_dict, f, ensure_ascii=False, indent=2)
+        
+        # Import and create tokenizer
+        from transformers.models.fastconformer.tokenization_fastconformer import FastConformerTokenizer
+        
+        # Determine blank token ID based on model config
+        blank_token_id = len(vocab_dict)  # Default: vocab_size
+        if model_info["is_ctc_model"]:
+            # For CTC models, blank token is usually vocab_size
+            if isinstance(hf_config, ParakeetCTCConfig):
+                blank_token_id = hf_config.blank_token_id
+        
+        tokenizer = FastConformerTokenizer(
+            vocab_file=str(vocab_file_path),
+            unk_token="<unk>",
+            blank_token_id=blank_token_id,
+        )
+        
+        # Save tokenizer
+        tokenizer.save_pretrained(output_dir)
+        logger.info(f"✅ Tokenizer saved with {len(vocab_dict)} tokens")
+        
+        # Add tokenizer info to conversion metadata
+        conversion_info_extra = {
+            "has_tokenizer": True,
+            "vocab_size": len(vocab_dict),
+            "blank_token_id": blank_token_id,
+        }
+    else:
+        logger.warning("No vocabulary found - tokenizer will not be created")
+        conversion_info_extra = {"has_tokenizer": False}
+    
     # Save conversion metadata
     conversion_info = {
         "input_path": input_path,
@@ -600,7 +689,9 @@ def convert_nemo_to_hf(input_path: str, output_dir: str) -> Dict[str, Any]:
             f"Converted to {type(hf_model).__name__}",
             "Uses regex-based weight key mapping",
             "Numerically equivalent to original NeMo FastConformer",
+            f"Tokenizer: {'✅ Created' if conversion_info_extra['has_tokenizer'] else '❌ Not available'}",
         ],
+        **conversion_info_extra,  # Add tokenizer info
     }
     
     with open(output_dir / "conversion_info.json", "w") as f:
@@ -709,14 +800,19 @@ def main():
         logger.info("\nUsage example:")
         if conversion_info.get("is_ctc_model", False):
             logger.info("# For CTC models:")
-            logger.info("from transformers import AutoModelForCTC, AutoFeatureExtractor")
+            logger.info("from transformers import AutoModelForCTC, AutoFeatureExtractor, AutoTokenizer")
             logger.info(f"model = AutoModelForCTC.from_pretrained('{args.output_dir}')")
             logger.info(f"feature_extractor = AutoFeatureExtractor.from_pretrained('{args.output_dir}')")
+            if conversion_info.get("has_tokenizer", False):
+                logger.info(f"tokenizer = AutoTokenizer.from_pretrained('{args.output_dir}')")
+                logger.info("# Decode CTC output: text = tokenizer.decode(token_ids, ctc_decode=True)")
         else:
             logger.info("# For base models:")
             logger.info("from transformers import AutoModel, AutoFeatureExtractor")
             logger.info(f"model = AutoModel.from_pretrained('{args.output_dir}')")
             logger.info(f"feature_extractor = AutoFeatureExtractor.from_pretrained('{args.output_dir}')")
+            if conversion_info.get("has_tokenizer", False):
+                logger.info(f"tokenizer = AutoTokenizer.from_pretrained('{args.output_dir}')")
 
     except Exception as e:
         logger.error(f"Conversion failed: {e}")
