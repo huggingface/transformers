@@ -17,7 +17,7 @@ Feature extractor class for FastConformer
 """
 
 import warnings
-from typing import Optional, Union, Dict, Any
+from typing import Any, Dict, Optional, Union
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
@@ -411,7 +411,7 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
     def to_dict(self) -> Dict[str, Any]:
         """
         Serializes this instance to a Python dictionary.
-        
+
         Returns:
             `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """

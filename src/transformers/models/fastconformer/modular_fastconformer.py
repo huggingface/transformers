@@ -15,20 +15,22 @@
 """Modular PyTorch FastConformer model."""
 
 import math
-from typing import Optional, Tuple, Union, List
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
 from torch import nn
 
 from ...activations import ACT2FN
+from ...configuration_utils import PretrainedConfig
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, auto_docstring, logging
+from ...utils import logging
 from ...utils.generic import can_return_tuple
-from ...configuration_utils import PretrainedConfig
+
 
 logger = logging.get_logger(__name__)
+
 
 # Configuration
 class FastConformerConfig(PretrainedConfig):
@@ -91,6 +93,23 @@ class FastConformerConfig(PretrainedConfig):
             Whether to output attention weights.
         output_hidden_states (`bool`, *optional*, defaults to `False`):
             Whether to output hidden states.
+
+    Example:
+        ```python
+        >>> from transformers import FastConformerModel, FastConformerConfig
+
+        >>> # Initializing a FastConformer configuration
+        >>> configuration = FastConformerConfig()
+
+        >>> # Initializing a model from the configuration
+        >>> model = FastConformerModel(configuration)
+
+        >>> # Accessing the model configuration
+        >>> configuration = model.config
+        ```
+
+    This configuration class is based on the FastConformer architecture from NVIDIA NeMo. You can find more details
+    and pre-trained models at [nvidia/parakeet-ctc-1.1b](https://huggingface.co/nvidia/parakeet-ctc-1.1b).
     """
 
     model_type = "fastconformer"
@@ -141,14 +160,14 @@ class FastConformerConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
-        
+
         # Dropout parameters
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.activation_dropout = activation_dropout
         self.dropout_emb = dropout_emb
         self.encoder_layerdrop = encoder_layerdrop
-        
+
         # FastConformer-specific parameters
         self.conv_kernel_size = conv_kernel_size
         self.subsampling_factor = subsampling_factor
@@ -156,7 +175,7 @@ class FastConformerConfig(PretrainedConfig):
         self.num_mel_bins = num_mel_bins
         self.xscaling = xscaling
         self.use_bias = use_bias
-        
+
         # Output control
         self.use_cache = use_cache
         self.output_attentions = output_attentions
@@ -198,18 +217,22 @@ class ParakeetCTCConfig(PretrainedConfig):
         fastconformer_config (`FastConformerConfig`, *optional*):
             Configuration for the FastConformer encoder.
 
-    ```python
-    >>> from transformers import ParakeetCTC, ParakeetCTCConfig
+    Example:
+        ```python
+        >>> from transformers import ParakeetCTC, ParakeetCTCConfig
 
-    >>> # Initializing a ParakeetCTC configuration
-    >>> configuration = ParakeetCTCConfig()
+        >>> # Initializing a ParakeetCTC configuration
+        >>> configuration = ParakeetCTCConfig()
 
-    >>> # Initializing a model from the configuration
-    >>> model = ParakeetCTC(configuration)
+        >>> # Initializing a model from the configuration
+        >>> model = ParakeetCTC(configuration)
 
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```
+        >>> # Accessing the model configuration
+        >>> configuration = model.config
+        ```
+
+    This configuration class is based on the Parakeet CTC architecture from NVIDIA NeMo. You can find more details
+    and pre-trained models at [nvidia/parakeet-ctc-1.1b](https://huggingface.co/nvidia/parakeet-ctc-1.1b).
     """
 
     model_type = "parakeet_ctc"
@@ -261,11 +284,11 @@ class ParakeetCTCConfig(PretrainedConfig):
 # class ParakeetTDTConfig(PretrainedConfig):
 #     """Configuration for Parakeet TDT models (FastConformer + TDT decoder)"""
 #     model_type = "parakeet_tdt"
-#     
+#
 # class ParakeetRNNTConfig(PretrainedConfig):
 #     """Configuration for Parakeet RNNT models (FastConformer + RNN-T decoder)"""
 #     model_type = "parakeet_rnnt"
-#     
+#
 # class CanaryAEDConfig(PretrainedConfig):
 #     """Configuration for Canary models (FastConformer + AED decoder)"""
 #     model_type = "canary"
@@ -275,13 +298,10 @@ __all__ = [
     "FastConformerConfig",
     "ParakeetCTCConfig",
     "FastConformerEncoder",
-    "FastConformerModel", 
+    "FastConformerModel",
     "ParakeetCTC",
     "FastConformerPreTrainedModel",
 ]
-
-
-
 
 
 def calc_length(lengths, all_paddings, kernel_size, stride, ceil_mode, repeat_num=1):
@@ -380,7 +400,7 @@ class FastConformerAttention(nn.Module):
         self.num_heads = config.num_attention_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
-        
+
         # Use NeMo-compatible parameter names for weight loading
         self.linear_q = nn.Linear(config.hidden_size, config.hidden_size, bias=config.use_bias)
         self.linear_k = nn.Linear(config.hidden_size, config.hidden_size, bias=config.use_bias)
@@ -391,7 +411,7 @@ class FastConformerAttention(nn.Module):
         self.linear_pos = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
         self.pos_bias_u = nn.Parameter(torch.zeros(config.num_attention_heads, self.head_dim))
         self.pos_bias_v = nn.Parameter(torch.zeros(config.num_attention_heads, self.head_dim))
-        
+
         # Override scaling factor
         self.s_d_k = math.sqrt(self.head_dim)
 
@@ -414,7 +434,7 @@ class FastConformerAttention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """
         FastConformer attention forward pass with relative positional encoding.
-        
+
         Args:
             hidden_states: Input hidden states
             attention_mask: Attention mask
@@ -423,11 +443,17 @@ class FastConformerAttention(nn.Module):
             output_attentions: Whether to return attention weights
         """
         batch_size, seq_len, hidden_size = hidden_states.shape
-        
+
         # Use the original FastConformer attention projections
-        query_states = self.linear_q(hidden_states).view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = self.linear_k(hidden_states).view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = self.linear_v(hidden_states).view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        query_states = (
+            self.linear_q(hidden_states).view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        )
+        key_states = (
+            self.linear_k(hidden_states).view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        )
+        value_states = (
+            self.linear_v(hidden_states).view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        )
 
         # FastConformer relative positional attention
         if pos_emb is not None:
@@ -437,8 +463,8 @@ class FastConformerAttention(nn.Module):
             p = p.transpose(1, 2)  # (1, n_heads, pos_len, head_dim)
 
             # Shaw et al. relative attention computation
-            q_with_bias_u = (query_states + self.pos_bias_u.unsqueeze(0).unsqueeze(2))
-            q_with_bias_v = (query_states + self.pos_bias_v.unsqueeze(0).unsqueeze(2))
+            q_with_bias_u = query_states + self.pos_bias_u.unsqueeze(0).unsqueeze(2)
+            q_with_bias_v = query_states + self.pos_bias_v.unsqueeze(0).unsqueeze(2)
 
             # Content-based attention
             matrix_ac = torch.matmul(q_with_bias_u, key_states.transpose(-2, -1))
@@ -448,7 +474,7 @@ class FastConformerAttention(nn.Module):
             matrix_bd = self.rel_shift(matrix_bd)
 
             # Truncate to match sequence length
-            matrix_bd = matrix_bd[:, :, :, :matrix_ac.size(-1)]
+            matrix_bd = matrix_bd[:, :, :, : matrix_ac.size(-1)]
             scores = (matrix_ac + matrix_bd) / self.s_d_k
         else:
             # Standard attention without relative positions
@@ -562,7 +588,7 @@ class FastConformerBlock(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         # Store the original device for consistency
         original_device = hidden_states.device
-        
+
         # First feed forward with 0.5 scaling
         ff1_output = self.feed_forward1(self.norm_feed_forward1(hidden_states))
         hidden_states = hidden_states + 0.5 * ff1_output.to(original_device)
@@ -570,7 +596,10 @@ class FastConformerBlock(nn.Module):
         # Self attention
         normalized_hidden_states = self.norm_self_att(hidden_states)
         attn_output, attn_weights = self.self_attn(
-            normalized_hidden_states, attention_mask=attention_mask, pos_emb=pos_emb, output_attentions=output_attentions
+            normalized_hidden_states,
+            attention_mask=attention_mask,
+            pos_emb=pos_emb,
+            output_attentions=output_attentions,
         )
         hidden_states = hidden_states + attn_output.to(original_device)
 
@@ -683,9 +712,9 @@ class FastConformerPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         # Get initializer_range from the appropriate config
-        if hasattr(self.config, 'initializer_range'):
+        if hasattr(self.config, "initializer_range"):
             std = self.config.initializer_range
-        elif hasattr(self.config, 'fastconformer_config'):
+        elif hasattr(self.config, "fastconformer_config"):
             std = self.config.fastconformer_config.initializer_range
         else:
             std = 0.02  # default fallback
@@ -716,9 +745,9 @@ class FastConformerEncoder(FastConformerPreTrainedModel):
         self.subsampling = FastConformerSubsamplingConv2D(config, config.num_mel_bins)
         self.pos_enc = FastConformerRelPositionalEncoding(config)
 
-        self.layers = nn.ModuleList([
-            FastConformerBlock(config, layer_idx) for layer_idx in range(config.num_hidden_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [FastConformerBlock(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
 
     @can_return_tuple
     def forward(
@@ -827,13 +856,13 @@ class FastConformerModel(FastConformerPreTrainedModel):
             input_lengths=input_lengths,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=True,  
+            return_dict=True,
         )
 
 
 class ParakeetCTC(FastConformerPreTrainedModel):
     config_class = ParakeetCTCConfig
-    
+
     def __init__(self, config: ParakeetCTCConfig):
         # Initialize with the encoder config for the PreTrainedModel
         super().__init__(config.fastconformer_config)
@@ -841,18 +870,18 @@ class ParakeetCTC(FastConformerPreTrainedModel):
         self.config = config
         # Store encoder config separately for internal use
         self.encoder_config = config.fastconformer_config
-        
+
         # Create the FastConformer encoder using the correct sub-config
         self.encoder = FastConformerEncoder(config.fastconformer_config)
-        
+
         # CTC head uses vocab_size from the CTC config
         self.ctc_head = nn.Linear(config.fastconformer_config.hidden_size, config.vocab_size)
-        
+
         # Store CTC-specific parameters
         self.blank_token_id = config.blank_token_id
         self.ctc_loss_reduction = config.ctc_loss_reduction
         self.ctc_zero_infinity = config.ctc_zero_infinity
-        
+
         # Initialize weights
         self.post_init()
 
@@ -894,7 +923,7 @@ class ParakeetCTC(FastConformerPreTrainedModel):
                     kernel_size=3,
                     stride=2,
                     ceil_mode=False,
-                    repeat_num=int(math.log2(self.encoder_config.subsampling_factor))
+                    repeat_num=int(math.log2(self.encoder_config.subsampling_factor)),
                 )
                 encoder_lengths = encoder_lengths.long()
             elif attention_mask is not None:
@@ -905,27 +934,25 @@ class ParakeetCTC(FastConformerPreTrainedModel):
                     kernel_size=3,
                     stride=2,
                     ceil_mode=False,
-                    repeat_num=int(math.log2(self.encoder_config.subsampling_factor))
+                    repeat_num=int(math.log2(self.encoder_config.subsampling_factor)),
                 )
                 encoder_lengths = encoder_lengths.long()
             else:
-                encoder_lengths = torch.full(
-                    (logits.size(0),), logits.size(1), dtype=torch.long, device=logits.device
-                )
+                encoder_lengths = torch.full((logits.size(0),), logits.size(1), dtype=torch.long, device=logits.device)
 
             # Calculate CTC loss using the configured parameters
             label_lengths = torch.sum((labels != -100) & (labels != self.blank_token_id), dim=-1)
             log_probs = F.log_softmax(logits, dim=-1)
             log_probs = log_probs.transpose(0, 1)
-            
+
             targets = []
             for i, label_length in enumerate(label_lengths):
                 label = labels[i, :label_length]
                 label = label[label != -100]
                 targets.append(label)
-            
+
             targets = torch.cat(targets)
-            
+
             loss = F.ctc_loss(
                 log_probs=log_probs,
                 targets=targets,
@@ -951,12 +978,12 @@ class ParakeetCTC(FastConformerPreTrainedModel):
     ) -> List[List[int]]:
         """
         Generate CTC decoded token sequences using greedy decoding.
-        
+
         Args:
             input_features: Input mel-spectrogram features
             attention_mask: Attention mask
             input_lengths: Sequence lengths
-            
+
         Returns:
             List of decoded token sequences (one per batch item)
         """
@@ -968,28 +995,28 @@ class ParakeetCTC(FastConformerPreTrainedModel):
                 input_lengths=input_lengths,
                 return_dict=True,
             )
-            
+
             logits = outputs.logits  # (batch, time, vocab)
-            
+
             # Greedy CTC decoding
             predicted_ids = torch.argmax(logits, dim=-1)  # (batch, time)
-            
+
             batch_size = predicted_ids.size(0)
             decoded_sequences = []
-            
+
             for batch_idx in range(batch_size):
                 sequence = predicted_ids[batch_idx]
-                
+
                 # Get actual sequence length if available
                 if input_lengths is not None:
                     # Calculate the actual output length after subsampling
                     actual_length = calc_length(
-                        input_lengths[batch_idx:batch_idx+1].float(),
+                        input_lengths[batch_idx : batch_idx + 1].float(),
                         all_paddings=2,
                         kernel_size=3,
                         stride=2,
                         ceil_mode=False,
-                        repeat_num=int(math.log2(self.encoder_config.subsampling_factor))
+                        repeat_num=int(math.log2(self.encoder_config.subsampling_factor)),
                     ).item()
                     sequence = sequence[:actual_length]
                 elif attention_mask is not None:
@@ -1001,28 +1028,28 @@ class ParakeetCTC(FastConformerPreTrainedModel):
                         kernel_size=3,
                         stride=2,
                         ceil_mode=False,
-                        repeat_num=int(math.log2(self.encoder_config.subsampling_factor))
+                        repeat_num=int(math.log2(self.encoder_config.subsampling_factor)),
                     ).item()
                     sequence = sequence[:actual_length]
-                
+
                 # CTC collapse: remove blanks and repeated tokens
                 decoded_tokens = []
                 prev_token = None
-                
+
                 for token_id in sequence.tolist():
                     # Skip blank tokens (using the configured blank token ID)
                     if token_id == self.blank_token_id:
                         prev_token = token_id
                         continue
-                    
+
                     # Skip repeated tokens (CTC collapse)
                     if token_id != prev_token:
                         decoded_tokens.append(token_id)
-                    
+
                     prev_token = token_id
-                
+
                 decoded_sequences.append(decoded_tokens)
-            
+
             return decoded_sequences
 
 
@@ -1030,11 +1057,11 @@ class ParakeetCTC(FastConformerPreTrainedModel):
 # class ParakeetTDT(FastConformerPreTrainedModel):
 #     """Parakeet model for TDT-based speech recognition"""
 #     config_class = ParakeetTDTConfig
-#     
+#
 # class ParakeetRNNT(FastConformerPreTrainedModel):
 #     """Parakeet model for RNN-T-based speech recognition"""
 #     config_class = ParakeetRNNTConfig
-#     
+#
 # class CanaryAED(FastConformerPreTrainedModel):
 #     """Canary model for AED-based multilingual speech recognition"""
 #     config_class = CanaryAEDConfig

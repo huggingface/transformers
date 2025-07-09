@@ -217,10 +217,21 @@ The conversion process:
 
 [[autodoc]] FastConformerConfig
 
+## ParakeetCTCConfig
+
+[[autodoc]] ParakeetCTCConfig
+
 ## FastConformerFeatureExtractor
 
 [[autodoc]] FastConformerFeatureExtractor
     - __call__
+
+## FastConformerTokenizer
+
+[[autodoc]] FastConformerTokenizer
+    - decode_ctc_tokens
+    - ctc_decode_ids
+    - batch_decode
 
 ## FastConformerModel
 
@@ -234,6 +245,4 @@ The conversion process:
 
 ## ParakeetCTC
 
-[[autodoc]] ParakeetCTC
-    - forward
-    - generate_speech_recognition_outputs 
+[[autodoc]] ParakeetCTC 
