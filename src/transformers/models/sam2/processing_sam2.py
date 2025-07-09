@@ -95,7 +95,7 @@ class Sam2Processor(ProcessorMixin):
         # pop arguments that are not used in the foward but used nevertheless
         original_sizes = encoding_image_processor["original_sizes"]
         # Check original_sizes is of length 1 or len(images)
-        if len(original_sizes) != 1 and len(original_sizes) != len(images):
+        if images is not None and len(original_sizes) != 1 and len(original_sizes) != len(images):
             raise ValueError(
                 "original_sizes must be of length 1 or len(images). If you are passing a single image, you must pass a single original_size."
             )
@@ -448,11 +448,14 @@ class Sam2Processor(ProcessorMixin):
         inference_state_device: Union[str, "torch.device"] = None,
         processing_device: Union[str, "torch.device"] = None,
         video_storage_device: Union[str, "torch.device"] = None,
+        torch_dtype: torch.dtype = torch.float32,
     ):
         video_storage_device = video_storage_device if video_storage_device is not None else inference_device
         inference_state_device = inference_state_device if inference_state_device is not None else inference_device
         processing_device = processing_device if processing_device is not None else inference_device
-        processed_video = self.video_processor(videos=video, device=processing_device, return_tensors="pt")
+        processed_video = self.video_processor(videos=video, device=processing_device, return_tensors="pt").to(
+            torch_dtype
+        )
         if video_storage_device != inference_device:
             processed_video.pixel_values_videos = processed_video.pixel_values_videos.to(video_storage_device)
         elif processing_device != inference_device:
@@ -464,172 +467,151 @@ class Sam2Processor(ProcessorMixin):
             inference_device=inference_device,
             video_storage_device=video_storage_device,
             inference_state_device=inference_state_device,
+            torch_dtype=torch_dtype,
         )
         return inference_state
 
-    def process_new_points_or_box(
+    def process_new_points_or_box_for_video_frame(
         self,
         inference_state: Sam2VideoSessionState,
         frame_idx: int,
-        obj_id: int,
-        points: Optional[list[list[float]]] = None,
-        labels: Optional[list[int]] = None,
-        clear_old_points: bool = True,
-        normalize_coords: bool = True,
-        box: Optional[list[float]] = None,
+        obj_ids: Union[list[int], int],
+        input_points: Optional[list[list[float]]] = None,
+        input_labels: Optional[list[int]] = None,
+        input_boxes: Optional[list[list[float]]] = None,
+        clear_old_inputs: bool = True,
     ) -> dict[str, Any]:
-        """Add new points or box to a video frame and return preprocessed inputs for model."""
-        obj_idx = inference_state._obj_id_to_idx(obj_id)
-        point_inputs_per_frame = inference_state.point_inputs_per_obj[obj_idx]
-        mask_inputs_per_frame = inference_state.mask_inputs_per_obj[obj_idx]
+        """Process new points or box for a video frame and return preprocessed inputs for model."""
+
+        if isinstance(obj_ids, int):
+            obj_ids = [obj_ids]
 
         # Validate inputs
-        if (points is not None) != (labels is not None):
+        if (input_points is not None) != (input_labels is not None):
             raise ValueError("points and labels must be provided together")
-        if points is None and box is None:
+        if input_points is None and input_boxes is None:
             raise ValueError("at least one of points or box must be provided as input")
 
         device = inference_state.inference_device
+        original_sizes = [[inference_state.video_height, inference_state.video_width]]
 
-        # Process points
-        if points is None:
-            points = torch.zeros(0, 2, dtype=torch.float32)
-        elif not isinstance(points, torch.Tensor):
-            points = torch.tensor(points, dtype=torch.float32)
-        if labels is None:
-            labels = torch.zeros(0, dtype=torch.int32)
-        elif not isinstance(labels, torch.Tensor):
-            labels = torch.tensor(labels, dtype=torch.int32)
-        if points.dim() == 2:
-            points = points.unsqueeze(0).unsqueeze(0)  # add batch dimension and object dimension
-        if labels.dim() == 1:
-            labels = labels.unsqueeze(0).unsqueeze(0)  # add batch dimension and object dimension
-        if points.dim() == 3:
-            points = points.unsqueeze(0)  # add batch dimension or object dimension
-        if labels.dim() == 2:
-            labels = labels.unsqueeze(0)  # add batch dimension or object dimension
+        encoded_inputs = self(
+            input_points=input_points,
+            input_labels=input_labels,
+            input_boxes=input_boxes,
+            original_sizes=original_sizes,
+            return_tensors="pt",
+        ).to(device)
+        input_points = encoded_inputs.get("input_points", None)
+        input_labels = encoded_inputs.get("input_labels", None)
+        input_boxes = encoded_inputs.get("input_boxes", None)
 
-        # Process box if provided
-        if box is not None:
-            if not clear_old_points:
+        if input_points is not None:
+            if input_points.shape[1] != len(obj_ids):
+                raise ValueError(
+                    f"Number of object ids ({len(obj_ids)}) does not match number of points ({input_points.shape[1]})"
+                )
+        else:
+            input_points = torch.zeros(1, len(obj_ids), 0, 2, dtype=torch.float32, device=device)
+        if input_labels is not None:
+            if input_labels.shape[1] != len(obj_ids):
+                raise ValueError(
+                    f"Number of object ids ({len(obj_ids)}) does not match number of labels ({input_labels.shape[1]})"
+                )
+        else:
+            input_labels = torch.zeros(1, len(obj_ids), 0, dtype=torch.int32, device=device)
+        if input_boxes is not None:
+            if input_boxes.shape[1] != len(obj_ids):
+                raise ValueError(
+                    f"Number of object ids ({len(obj_ids)}) does not match number of boxes ({input_boxes.shape[1]})"
+                )
+
+        if input_boxes is not None:
+            if not clear_old_inputs:
                 raise ValueError(
                     "cannot add box without clearing old points, since "
                     "box prompt must be provided before any point prompt "
                     "(please use clear_old_points=True instead)"
                 )
-            if not isinstance(box, torch.Tensor):
-                box = torch.tensor(box, dtype=torch.float32, device=points.device)
-            box_coords = box.reshape(1, 1, 2, 2)
-            box_labels = torch.tensor([2, 3], dtype=torch.int32, device=labels.device)
-            box_labels = box_labels.reshape(1, 1, 2)
-            points = torch.cat([box_coords, points], dim=2)
-            labels = torch.cat([box_labels, labels], dim=2)
+            box_coords = input_boxes.reshape(1, -1, 2, 2)
+            box_labels = torch.tensor([2, 3], dtype=torch.int32, device=input_labels.device)
+            box_labels = box_labels.reshape(1, -1, 2)
+            input_points = torch.cat([box_coords, input_points], dim=2)
+            input_labels = torch.cat([box_labels, input_labels], dim=2)
 
-        # Normalize coordinates
-        if normalize_coords:
-            video_H = inference_state.video_height
-            video_W = inference_state.video_width
-            points = points / torch.tensor([video_W, video_H]).to(points.device)
+        for obj_id, idx in zip(obj_ids, range(len(obj_ids))):
+            obj_idx = inference_state._obj_id_to_idx(obj_id)
+            input_points_for_obj = input_points[:, idx, :, :].unsqueeze(1)
+            input_labels_for_obj = input_labels[:, idx, :].unsqueeze(1)
+            # Handle existing points
+            if not clear_old_inputs:
+                existing_points = inference_state.point_inputs_per_obj[obj_idx].get(frame_idx, None)
+                if existing_points is not None:
+                    # Concatenate with existing points
+                    input_points_for_obj = torch.cat([existing_points["point_coords"], input_points_for_obj], dim=2)
+                    input_labels_for_obj = torch.cat([existing_points["point_labels"], input_labels_for_obj], dim=2)
+            point_inputs = {
+                "point_coords": input_points_for_obj,
+                "point_labels": input_labels_for_obj,
+            }
 
-        # Scale by model's internal image size
-        target_size = self.target_size
-        points = points * target_size
-        points = points.to(device)
-        labels = labels.to(device)
+            inference_state.point_inputs_per_obj[obj_idx][frame_idx] = point_inputs
+            inference_state.mask_inputs_per_obj[obj_idx].pop(frame_idx, None)  # Clear any mask inputs
 
-        # Handle existing points
-        if not clear_old_points:
-            existing_points = point_inputs_per_frame.get(frame_idx, None)
-            if existing_points is not None:
-                # Concatenate with existing points
-                points = torch.cat([existing_points["point_coords"], points], dim=2)
-                labels = torch.cat([existing_points["point_labels"], labels], dim=2)
+        return inference_state
 
-        point_inputs = {
-            "point_coords": points,
-            "point_labels": labels,
-        }
-
-        point_inputs_per_frame[frame_idx] = point_inputs
-        mask_inputs_per_frame.pop(frame_idx, None)  # Clear any mask inputs
-
-        # Determine frame type and tracking direction
-        obj_frames_tracked = inference_state.frames_tracked_per_obj[obj_idx]
-        is_init_cond_frame = frame_idx not in obj_frames_tracked
-
-        if is_init_cond_frame:
-            reverse = False
-        else:
-            reverse = obj_frames_tracked[frame_idx]["reverse"]
-
-        # Return preprocessed inputs for the model
-        return {
-            "frame_idx": frame_idx,
-            "obj_id": obj_id,
-            "obj_idx": obj_idx,
-            "point_inputs": point_inputs,
-            "mask_inputs": None,
-            "is_init_cond_frame": is_init_cond_frame,
-            "reverse": reverse,
-        }
-
-    def add_new_mask(
+    def process_new_mask_for_video_frame(
         self,
         inference_state: Sam2VideoSessionState,
         frame_idx: int,
-        obj_id: int,
-        mask: Union[np.ndarray, torch.Tensor],
+        obj_ids: Union[list[int], int],
+        input_masks: Union[np.ndarray, torch.Tensor, list[np.ndarray], list[torch.Tensor]],
     ) -> dict[str, Any]:
         """Add new mask to a frame and return preprocessed inputs for model."""
-        obj_idx = inference_state._obj_id_to_idx(obj_id)
-        point_inputs_per_frame = inference_state.point_inputs_per_obj[obj_idx]
-        mask_inputs_per_frame = inference_state.mask_inputs_per_obj[obj_idx]
-
-        device = inference_state.inference_device
-
-        # Process mask
-        if not isinstance(mask, torch.Tensor):
-            mask = torch.tensor(mask, dtype=torch.bool)
-        assert mask.dim() == 2
-        mask_H, mask_W = mask.shape
-        mask_inputs_orig = mask[None, None]  # add batch and channel dimension
-        mask_inputs_orig = mask_inputs_orig.float().to(device)
-
-        # Resize mask if needed
-        if mask_H != self.target_size or mask_W != self.target_size:
-            mask_inputs = torch.nn.functional.interpolate(
-                mask_inputs_orig,
-                size=(self.target_size, self.target_size),
-                align_corners=False,
-                mode="bilinear",
-                antialias=True,
+        if isinstance(obj_ids, int):
+            obj_ids = [obj_ids]
+        if not isinstance(input_masks, list):
+            input_masks = [input_masks]
+        if len(input_masks) != len(obj_ids):
+            raise ValueError(
+                f"Number of object ids ({len(obj_ids)}) does not match number of masks ({len(input_masks)})"
             )
-            mask_inputs = (mask_inputs >= 0.5).float()
-        else:
-            mask_inputs = mask_inputs_orig
 
-        mask_inputs_per_frame[frame_idx] = mask_inputs
-        point_inputs_per_frame.pop(frame_idx, None)  # Clear any point inputs
+        for obj_id, mask in zip(obj_ids, input_masks):
+            obj_idx = inference_state._obj_id_to_idx(obj_id)
 
-        # Determine frame type and tracking direction
-        obj_frames_tracked = inference_state.frames_tracked_per_obj[obj_idx]
-        is_init_cond_frame = frame_idx not in obj_frames_tracked
+            device = inference_state.inference_device
 
-        if is_init_cond_frame:
-            reverse = False
-        else:
-            reverse = obj_frames_tracked[frame_idx]["reverse"]
+            # Process mask
+            if not isinstance(mask, torch.Tensor):
+                mask = torch.tensor(mask, dtype=torch.bool)
+            nb_dim = mask.dim()
+            if nb_dim > 4 or nb_dim < 2:
+                raise ValueError(f"Mask has an unsupported number of dimensions: {nb_dim}")
+            for i in range(4 - nb_dim):
+                mask = mask.unsqueeze(0)
 
-        # Return preprocessed inputs for the model
-        return {
-            "frame_idx": frame_idx,
-            "obj_id": obj_id,
-            "obj_idx": obj_idx,
-            "point_inputs": None,
-            "mask_inputs": mask_inputs,
-            "is_init_cond_frame": is_init_cond_frame,
-            "reverse": reverse,
-        }
+            mask_H, mask_W = mask.shape[-2:]
+            mask_inputs_orig = mask.to(device)
+            mask_inputs_orig = mask_inputs_orig.float().to(device)
+
+            # Resize mask if needed
+            if mask_H != self.target_size or mask_W != self.target_size:
+                mask_inputs = torch.nn.functional.interpolate(
+                    mask_inputs_orig,
+                    size=(self.target_size, self.target_size),
+                    align_corners=False,
+                    mode="bilinear",
+                    antialias=True,
+                )
+                mask_inputs = (mask_inputs >= 0.5).float()
+            else:
+                mask_inputs = mask_inputs_orig
+
+            inference_state.mask_inputs_per_obj[obj_idx][frame_idx] = mask_inputs.to(inference_state.torch_dtype)
+            inference_state.point_inputs_per_obj[obj_idx].pop(frame_idx, None)  # Clear any point inputs
+
+        return inference_state
 
 
 __all__ = ["Sam2Processor"]

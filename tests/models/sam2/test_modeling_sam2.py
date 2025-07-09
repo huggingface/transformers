@@ -747,11 +747,11 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_hidden_states_output(self):
         pass
 
-    # @slow
-    # def test_model_from_pretrained(self):
-    #     model_name = "facebook/sam-vit-huge"
-    #     model = SamModel.from_pretrained(model_name)
-    #     self.assertIsNotNone(model)
+    @slow
+    def test_model_from_pretrained(self):
+        model_name = "../sam2_hf_implem/sam2_tiny_hf"
+        model = Sam2Model.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @require_torch_sdpa
     def test_sdpa_can_compile_dynamic(self):
@@ -786,7 +786,7 @@ def prepare_video():
 class Sam2ModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
-        self.model = Sam2Model.from_pretrained("../sam2_hf_implem/sam2_tiny_hf", attn_implementation="sdpa")
+        self.model = Sam2Model.from_pretrained("../sam2_hf_implem/sam2_tiny_hf").to(torch.float32)
         self.processor = Sam2Processor.from_pretrained("../sam2_hf_implem/sam2_tiny_hf")
         self.model.to(torch_device)
         self.model.eval()
@@ -931,9 +931,6 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.iou_scores.shape, (2, 2, 1))
         self.assertEqual(outputs.low_res_masks.shape, (2, 2, 1, 256, 256))
 
-        print(outputs.iou_scores)
-        print(outputs.low_res_masks[:, :, :, :2, :2])
-
         torch.testing.assert_close(
             outputs.iou_scores,
             torch.tensor([[[0.9499], [0.9718]], [[0.9568], [0.9114]]]).to(torch_device),
@@ -1071,185 +1068,343 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         )
 
     def test_inference_mask_generation_video_one_point(self):
-        pass
-        # raw_video = prepare_video()
-        # self.processor.init_state(video_path="./videos/bedroom_light")
+        raw_video = prepare_video()
+        inference_state = self.processor.init_video_session(video=raw_video, inference_device=torch_device)
+        ann_frame_idx = 0  # the frame index we interact with
+        ann_obj_id = 1  # give a unique id to each object we interact with (it can be any integers)
 
-        # inputs = processor.add_new_points_or_box(
-        #     frame_idx=0,
-        #     obj_id=1,
-        #     points=[[[[210, 350]]]],
-        #     labels=[[[1]]],
-        # )
+        inference_state = self.processor.process_new_points_or_box_for_video_frame(
+            inference_state=inference_state,
+            frame_idx=ann_frame_idx,
+            obj_ids=ann_obj_id,
+            input_points=[[[[210, 350]]]],
+            input_labels=[[[1]]],
+        )
+        outputs = self.model.infer_on_video_frame_with_new_inputs(
+            inference_state=inference_state,
+            frame_idx=ann_frame_idx,
+            obj_ids=ann_obj_id,
+            consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
+        )
+        low_res_masks, video_res_masks = outputs
+        self.assertEqual(low_res_masks.shape, (1, 1, 256, 256))
+        self.assertEqual(video_res_masks.shape, (1, 1, raw_video.shape[-3], raw_video.shape[-2]))
+        torch.testing.assert_close(
+            video_res_masks[0, 0, :3, :3],
+            torch.tensor(
+                [[-21.4113, -21.4113, -22.9685], [-23.3089, -23.3089, -24.2602], [-27.5700, -27.5700, -27.1607]]
+            ).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
 
-    # def test_inference_mask_generation_one_point_one_bb(self):
-    #     model = Sam2Model.from_pretrained("../sam2_hf_implem/sam2_tiny_hf")
-    #     processor = SamProcessor.from_pretrained("../sam2_hf_implem/sam2_tiny_hf")
+        # test propagate in video frames
+        frames = []
+        for frame_idx, out_mask_logits in self.model.propagate_in_video(
+            inference_state=inference_state,
+            start_frame_idx=ann_frame_idx,
+            max_frame_num_to_track=2,
+        ):
+            frames.append(out_mask_logits)
+        frames = torch.stack(frames, dim=0)
+        self.assertEqual(frames.shape, (3, 1, 1, raw_video.shape[-3], raw_video.shape[-2]))
+        torch.testing.assert_close(
+            frames[:3, :, :, :2, :2],
+            torch.tensor(
+                [
+                    [[[[-21.4113, -21.4113], [-23.3089, -23.3089]]]],
+                    [[[[-20.0937, -20.0937], [-21.2233, -21.2233]]]],
+                    [[[[-19.9581, -19.9581], [-21.3028, -21.3028]]]],
+                ]
+            ).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
 
-    #     model.to(torch_device)
-    #     model.eval()
+    def test_inference_mask_generation_video_multi_points(self):
+        raw_video = prepare_video()
+        inference_state = self.processor.init_video_session(video=raw_video, inference_device=torch_device)
+        ann_frame_idx = 0  # the frame index we interact with
+        ann_obj_id = 1  # give a unique id to each object we interact with (it can be any integers)
 
-    #     raw_image = prepare_image()
-    #     input_boxes = [[[[650, 900, 1000, 1250]]]]
-    #     input_points = [[[[820, 1080]]]]
+        inference_state = self.processor.process_new_points_or_box_for_video_frame(
+            inference_state=inference_state,
+            frame_idx=ann_frame_idx,
+            obj_ids=ann_obj_id,
+            input_points=[[[[210, 350], [250, 220]]]],
+            input_labels=[[[1, 1]]],
+        )
+        outputs = self.model.infer_on_video_frame_with_new_inputs(
+            inference_state=inference_state,
+            frame_idx=ann_frame_idx,
+            obj_ids=ann_obj_id,
+            consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
+        )
+        low_res_masks, video_res_masks = outputs
+        self.assertEqual(low_res_masks.shape, (1, 1, 256, 256))
+        self.assertEqual(video_res_masks.shape, (1, 1, raw_video.shape[-3], raw_video.shape[-2]))
+        torch.testing.assert_close(
+            video_res_masks[0, 0, :3, :3],
+            torch.tensor(
+                [[-11.1491, -11.1491, -11.4204], [-11.6524, -11.6524, -11.8057], [-12.7825, -12.7825, -12.6707]],
+            ).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
 
-    #     inputs = processor(
-    #         images=raw_image, input_boxes=input_boxes, input_points=input_points, return_tensors="pt"
-    #     ).to(torch_device)
+        # test propagate in video frames
+        frames = []
+        for frame_idx, out_mask_logits in self.model.propagate_in_video(
+            inference_state=inference_state,
+            start_frame_idx=ann_frame_idx,
+            max_frame_num_to_track=2,
+        ):
+            frames.append(out_mask_logits)
+        frames = torch.stack(frames, dim=0)
+        self.assertEqual(frames.shape, (3, 1, 1, raw_video.shape[-3], raw_video.shape[-2]))
+        torch.testing.assert_close(
+            frames[:3, :, :, :2, :2],
+            torch.tensor(
+                [
+                    [[[[-11.1491, -11.1491], [-11.6524, -11.6524]]]],
+                    [[[[-15.3764, -15.3764], [-16.0280, -16.0280]]]],
+                    [[[[-15.4271, -15.4271], [-16.3561, -16.3561]]]],
+                ]
+            ).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
 
-    #     with torch.no_grad():
-    #         outputs = model(**inputs)
-    #     scores = outputs.iou_scores.squeeze()
-    #     masks = outputs.pred_masks[0, 0, 0, 0, :3]
-    #     self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9566), atol=2e-4))
-    #     self.assertTrue(
-    #         torch.allclose(masks, torch.tensor([-12.7729, -12.3665, -12.6061]).to(torch_device), atol=2e-4)
-    #     )
+    def test_inference_mask_generation_video_one_bb(self):
+        raw_video = prepare_video()
+        inference_state = self.processor.init_video_session(video=raw_video, inference_device=torch_device)
+        ann_frame_idx = 0  # the frame index we interact with
+        ann_obj_id = 1  # give a unique id to each object we interact with (it can be any integers)
 
-    # def test_inference_mask_generation_one_point_one_bb_zero(self):
-    #     model = Sam2Model.from_pretrained("facebook/sam2-vit-base")
-    #     processor = SamProcessor.from_pretrained("facebook/sam2-vit-base")
+        inference_state = self.processor.process_new_points_or_box_for_video_frame(
+            inference_state=inference_state,
+            frame_idx=ann_frame_idx,
+            obj_ids=ann_obj_id,
+            input_boxes=[[[[300, 0, 500, 400]]]],
+        )
+        outputs = self.model.infer_on_video_frame_with_new_inputs(
+            inference_state=inference_state,
+            frame_idx=ann_frame_idx,
+            obj_ids=ann_obj_id,
+            consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
+        )
+        low_res_masks, video_res_masks = outputs
+        self.assertEqual(low_res_masks.shape, (1, 1, 256, 256))
+        self.assertEqual(video_res_masks.shape, (1, 1, raw_video.shape[-3], raw_video.shape[-2]))
+        torch.testing.assert_close(
+            video_res_masks[0, 0, :3, :3],
+            torch.tensor(
+                [[-13.1423, -13.1423, -13.6417], [-13.7748, -13.7748, -14.1142], [-15.1950, -15.1950, -15.1751]],
+            ).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
 
-    #     model.to(torch_device)
-    #     model.eval()
+        # test propagate in video frames
+        frames = []
+        for frame_idx, out_mask_logits in self.model.propagate_in_video(
+            inference_state=inference_state,
+            start_frame_idx=ann_frame_idx,
+            max_frame_num_to_track=2,
+        ):
+            frames.append(out_mask_logits)
+        frames = torch.stack(frames, dim=0)
+        self.assertEqual(frames.shape, (3, 1, 1, raw_video.shape[-3], raw_video.shape[-2]))
+        torch.testing.assert_close(
+            frames[:3, :, :, :2, :2],
+            torch.tensor(
+                [
+                    [[[[-13.1423, -13.1423], [-13.7748, -13.7748]]]],
+                    [[[[-14.9965, -14.9965], [-15.7060, -15.7060]]]],
+                    [[[[-15.4546, -15.4546], [-16.1641, -16.1641]]]],
+                ]
+            ).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
 
-    #     raw_image = prepare_image()
-    #     input_boxes = [[[620, 900, 1000, 1255]]]
-    #     input_points = [[[820, 1080]]]
-    #     labels = [[0]]
+    def test_inference_mask_generation_video_one_point_one_bb(self):
+        raw_video = prepare_video()
+        inference_state = self.processor.init_video_session(video=raw_video, inference_device=torch_device)
+        ann_frame_idx = 0  # the frame index we interact with
+        ann_obj_id = 1  # give a unique id to each object we interact with (it can be any integers)
 
-    #     inputs = processor(
-    #         images=raw_image,
-    #         input_boxes=input_boxes,
-    #         input_points=input_points,
-    #         input_labels=labels,
-    #         return_tensors="pt",
-    #     ).to(torch_device)
+        inference_state = self.processor.process_new_points_or_box_for_video_frame(
+            inference_state=inference_state,
+            frame_idx=ann_frame_idx,
+            obj_ids=ann_obj_id,
+            input_boxes=[[[[300, 0, 500, 400]]]],
+            input_points=[[[[460, 60]]]],
+            input_labels=[[[1]]],
+        )
+        outputs = self.model.infer_on_video_frame_with_new_inputs(
+            inference_state=inference_state,
+            frame_idx=ann_frame_idx,
+            obj_ids=ann_obj_id,
+            consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
+        )
+        low_res_masks, video_res_masks = outputs
+        self.assertEqual(low_res_masks.shape, (1, 1, 256, 256))
+        self.assertEqual(video_res_masks.shape, (1, 1, raw_video.shape[-3], raw_video.shape[-2]))
+        torch.testing.assert_close(
+            video_res_masks[0, 0, :3, :3],
+            torch.tensor(
+                [[-12.3523, -12.3523, -12.8905], [-13.0603, -13.0603, -13.4075], [-14.6503, -14.6503, -14.5686]],
+            ).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
 
-    #     with torch.no_grad():
-    #         outputs = model(**inputs)
-    #     scores = outputs.iou_scores.squeeze()
+        # test propagate in video frames
+        frames = []
+        for frame_idx, out_mask_logits in self.model.propagate_in_video(
+            inference_state=inference_state,
+            start_frame_idx=ann_frame_idx,
+            max_frame_num_to_track=2,
+        ):
+            frames.append(out_mask_logits)
+        frames = torch.stack(frames, dim=0)
+        self.assertEqual(frames.shape, (3, 1, 1, raw_video.shape[-3], raw_video.shape[-2]))
+        torch.testing.assert_close(
+            frames[:3, :, :, :2, :2],
+            torch.tensor(
+                [
+                    [[[[-12.3523, -12.3523], [-13.0603, -13.0603]]]],
+                    [[[[-15.8182, -15.8182], [-16.4162, -16.4162]]]],
+                    [[[[-15.8911, -15.8911], [-16.5963, -16.5963]]]],
+                ]
+            ).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
 
-    #     self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.7894), atol=1e-4))
+    def test_inference_mask_generation_video_multi_objects_multi_points(self):
+        raw_video = prepare_video()
+        inference_state = self.processor.init_video_session(video=raw_video, inference_device=torch_device)
+        ann_frame_idx = 0  # the frame index we interact with
+        ann_obj_ids = [2, 3]  # give a unique id to each object we interact with (it can be any integers)
 
-    # def test_inference_mask_generation_two_points_batched(self):
-    #     model = Sam2Model.from_pretrained("facebook/sam2-vit-base")
-    #     processor = SamProcessor.from_pretrained("facebook/sam2-vit-base")
+        inference_state = self.processor.process_new_points_or_box_for_video_frame(
+            inference_state=inference_state,
+            frame_idx=ann_frame_idx,
+            obj_ids=ann_obj_ids,
+            input_points=[[[[200, 300], [230, 250], [275, 175]], [[400, 150]]]],
+            input_labels=[[[1, 1, 0], [1]]],
+        )
+        outputs = self.model.infer_on_video_frame_with_new_inputs(
+            inference_state=inference_state,
+            frame_idx=ann_frame_idx,
+            obj_ids=ann_obj_ids,
+            consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
+        )
+        low_res_masks, video_res_masks = outputs
+        self.assertEqual(low_res_masks.shape, (2, 1, 256, 256))
+        self.assertEqual(video_res_masks.shape, (2, 1, raw_video.shape[-3], raw_video.shape[-2]))
+        torch.testing.assert_close(
+            video_res_masks[:, 0, :2, :2],  # first object
+            torch.tensor(
+                [[[-12.6303, -12.6303], [-13.3667, -13.3667]], [[-20.3307, -20.3307], [-22.0473, -22.0473]]],
+            ).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
 
-    #     model.to(torch_device)
-    #     model.eval()
+        # test propagate in video frames
+        frames = []
+        for frame_idx, out_mask_logits in self.model.propagate_in_video(
+            inference_state=inference_state,
+            start_frame_idx=ann_frame_idx,
+            max_frame_num_to_track=2,
+        ):
+            frames.append(out_mask_logits)
+        frames = torch.stack(frames, dim=0)
+        self.assertEqual(frames.shape, (3, 2, 1, raw_video.shape[-3], raw_video.shape[-2]))
+        torch.testing.assert_close(
+            frames[:3, :, :, :2, :2],
+            torch.tensor(
+                [
+                    [[[[-12.6303, -12.6303], [-13.3667, -13.3667]]], [[[-20.3307, -20.3307], [-22.0473, -22.0473]]]],
+                    [[[[-18.5244, -18.5244], [-19.5828, -19.5828]]], [[[-17.5492, -17.5492], [-19.2211, -19.2211]]]],
+                    [[[[-14.2723, -14.2723], [-15.4623, -15.4623]]], [[[-18.3153, -18.3153], [-20.0282, -20.0282]]]],
+                ],
+            ).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
 
-    #     raw_image = prepare_image()
+    def test_inference_propagate_video_from_mask_input(self):
+        raw_video = prepare_video()
+        inference_state = self.processor.init_video_session(video=raw_video, inference_device=torch_device)
+        ann_frame_idx = 0  # the frame index we interact with
+        ann_obj_id = 1  # give a unique id to each object we interact with (it can be any integers)
 
-    #     input_points = [[[400, 650], [800, 650]], [[400, 650]]]
-    #     input_labels = [[1, 1], [1]]
+        # get input_mask
+        inference_state = self.processor.process_new_points_or_box_for_video_frame(
+            inference_state=inference_state,
+            frame_idx=ann_frame_idx,
+            obj_ids=ann_obj_id,
+            input_points=[[[[210, 350], [250, 220]]]],
+            input_labels=[[[1, 1]]],
+        )
+        video_res_masks = self.model.infer_on_video_frame_with_new_inputs(
+            inference_state=inference_state,
+            frame_idx=ann_frame_idx,
+            obj_ids=ann_obj_id,
+            consolidate_at_video_res=True,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
+        )
 
-    #     inputs = processor(
-    #         images=[raw_image, raw_image], input_points=input_points, input_labels=input_labels, return_tensors="pt"
-    #     ).to(torch_device)
+        # set mask as input
+        inference_state = self.processor.process_new_mask_for_video_frame(
+            inference_state=inference_state,
+            frame_idx=ann_frame_idx,
+            obj_ids=ann_obj_id,
+            input_masks=video_res_masks,
+        )
+        outputs = self.model.infer_on_video_frame_with_new_inputs(
+            inference_state=inference_state,
+            frame_idx=ann_frame_idx,
+            obj_ids=ann_obj_id,
+            consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
+        )
+        low_res_masks, video_res_masks = outputs
+        self.assertEqual(low_res_masks.shape, (1, 1, 256, 256))
+        self.assertEqual(video_res_masks.shape, (1, 1, raw_video.shape[-3], raw_video.shape[-2]))
+        torch.testing.assert_close(
+            video_res_masks[0, 0, :3, :3],
+            torch.tensor(
+                [[-10.0000, -10.0000, -10.0000], [-10.0000, -10.0000, -10.0000], [-10.0000, -10.0000, -10.0000]]
+            ).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
 
-    #     with torch.no_grad():
-    #         outputs = model(**inputs)
-    #     scores = outputs.iou_scores.squeeze()
-    #     self.assertTrue(torch.allclose(scores[0][-1], torch.tensor(0.9762), atol=1e-4))
-    #     self.assertTrue(torch.allclose(scores[1][-1], torch.tensor(0.9637), atol=1e-4))
-
-    # def test_inference_mask_generation_one_box(self):
-    #     model = Sam2Model.from_pretrained("facebook/sam2-vit-base")
-    #     processor = SamProcessor.from_pretrained("facebook/sam2-vit-base")
-
-    #     model.to(torch_device)
-    #     model.eval()
-
-    #     raw_image = prepare_image()
-
-    #     input_boxes = [[[75, 275, 1725, 850]]]
-
-    #     inputs = processor(images=raw_image, input_boxes=input_boxes, return_tensors="pt").to(torch_device)
-
-    #     with torch.no_grad():
-    #         outputs = model(**inputs)
-    #     scores = outputs.iou_scores.squeeze()
-    #     self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.7937), atol=1e-4))
-
-    # def test_inference_mask_generation_batched_image_one_point(self):
-    #     model = Sam2Model.from_pretrained("facebook/sam2-vit-base")
-    #     processor = SamProcessor.from_pretrained("facebook/sam2-vit-base")
-
-    #     model.to(torch_device)
-    #     model.eval()
-
-    #     raw_image = prepare_image()
-    #     raw_dog_image = prepare_dog_img()
-
-    #     input_points = [[[820, 1080]], [[220, 470]]]
-
-    #     inputs = processor(images=[raw_image, raw_dog_image], input_points=input_points, return_tensors="pt").to(
-    #         torch_device
-    #     )
-
-    #     with torch.no_grad():
-    #         outputs = model(**inputs)
-    #     scores_batched = outputs.iou_scores.squeeze()
-
-    #     input_points = [[[220, 470]]]
-
-    #     inputs = processor(images=raw_dog_image, input_points=input_points, return_tensors="pt").to(torch_device)
-
-    #     with torch.no_grad():
-    #         outputs = model(**inputs)
-    #     scores_single = outputs.iou_scores.squeeze()
-    #     self.assertTrue(torch.allclose(scores_batched[1, :], scores_single, atol=1e-4))
-
-    # def test_inference_mask_generation_two_points_point_batch(self):
-    #     model = Sam2Model.from_pretrained("facebook/sam2-vit-base")
-    #     processor = SamProcessor.from_pretrained("facebook/sam2-vit-base")
-
-    #     model.to(torch_device)
-    #     model.eval()
-
-    #     raw_image = prepare_image()
-
-    #     input_points = torch.Tensor([[[400, 650]], [[220, 470]]]).cpu()  # fmt: skip
-
-    #     input_points = input_points.unsqueeze(0)
-
-    #     inputs = processor(raw_image, input_points=input_points, return_tensors="pt").to(torch_device)
-
-    #     with torch.no_grad():
-    #         outputs = model(**inputs)
-
-    #     iou_scores = outputs.iou_scores.cpu()
-    #     self.assertTrue(iou_scores.shape == (1, 2, 3))
-    #     torch.testing.assert_close(
-    #         iou_scores, torch.tensor([[[0.9105, 0.9825, 0.9675], [0.7646, 0.7943, 0.7774]]]), atol=1e-4, rtol=1e-4
-    #     )
-
-    # def test_inference_mask_generation_three_boxes_point_batch(self):
-    #     model = Sam2Model.from_pretrained("facebook/sam2-vit-base")
-    #     processor = SamProcessor.from_pretrained("facebook/sam2-vit-base")
-
-    #     model.to(torch_device)
-    #     model.eval()
-
-    #     raw_image = prepare_image()
-
-    #     # fmt: off
-    #     input_boxes = torch.Tensor([[[620, 900, 1000, 1255]], [[75, 275, 1725, 850]],  [[75, 275, 1725, 850]]]).cpu()
-    #     EXPECTED_IOU = torch.tensor([[[0.9773, 0.9881, 0.9522],
-    #      [0.5996, 0.7661, 0.7937],
-    #      [0.5996, 0.7661, 0.7937]]])
-    #     # fmt: on
-    #     input_boxes = input_boxes.unsqueeze(0)
-
-    #     inputs = processor(raw_image, input_boxes=input_boxes, return_tensors="pt").to(torch_device)
-
-    #     with torch.no_grad():
-    #         outputs = model(**inputs)
-
-    #     iou_scores = outputs.iou_scores.cpu()
-    #     self.assertTrue(iou_scores.shape == (1, 3, 3))
-    #     torch.testing.assert_close(iou_scores, EXPECTED_IOU, atol=1e-4, rtol=1e-4)
+        # test propagate in video frames
+        frames = []
+        for frame_idx, out_mask_logits in self.model.propagate_in_video(
+            inference_state=inference_state,
+            start_frame_idx=ann_frame_idx,
+            max_frame_num_to_track=2,
+        ):
+            frames.append(out_mask_logits)
+        frames = torch.stack(frames, dim=0)
+        self.assertEqual(frames.shape, (3, 1, 1, raw_video.shape[-3], raw_video.shape[-2]))
+        torch.testing.assert_close(
+            frames[:3, :, :, :2, :2],
+            torch.tensor(
+                [
+                    [[[[-10.0000, -10.0000], [-10.0000, -10.0000]]]],
+                    [[[[-18.3571, -18.3571], [-19.2278, -19.2278]]]],
+                    [[[[-20.3355, -20.3355], [-21.1817, -21.1817]]]],
+                ]
+            ).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
 
     def test_dummy_pipeline_generation(self):
         generator = pipeline("mask-generation", model="../sam2_hf_implem/sam2_tiny_hf", device=torch_device)
