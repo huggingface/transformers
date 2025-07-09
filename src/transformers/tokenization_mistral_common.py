@@ -1441,48 +1441,49 @@ class MistralCommonTokenizer(PushToHubMixin):
             conversations = [conversation]
             is_batched = False
 
+        def _maybe_adapt_message(message: dict[str, Any]) -> None:
+            """Adapt message to `mistral-common` format and leave validation to `mistral-common`."""
+            if not isinstance(message, dict):
+                return
+            maybe_list_content: Optional[Union[str, list[dict[str, Union[str, dict[str, Any]]]]]] = message.get(
+                "content", None
+            )
+            if not maybe_list_content or isinstance(maybe_list_content, str):
+                return
+
+            normalized_content: list[dict[str, Union[str, dict[str, Any]]]] = []
+            for content in maybe_list_content:
+                content_type = content.get("type", None)
+                if not content_type:
+                    continue
+                elif content_type == "image":
+                    maybe_url: Optional[str] = content.get("url")
+                    maybe_path: Optional[str] = content.get("path")
+                    maybe_base64: Optional[str] = content.get("base64")
+                    if maybe_url:
+                        image_content = maybe_url
+                    elif maybe_path:
+                        if not maybe_path.startswith("file://"):
+                            maybe_path = Path(maybe_path).resolve().as_uri()
+                        image_content = maybe_path
+                    elif maybe_base64:
+                        if not maybe_base64.startswith("data:image"):
+                            maybe_base64 = "data:image/unk;base64," + maybe_base64
+                        image_content = maybe_base64
+                    else:
+                        raise ValueError("Image content must be specified.")
+                    normalized_content.append({"type": "image_url", "image_url": {"url": image_content}})
+                else:
+                    normalized_content.append(content)
+            message["content"] = normalized_content
+
         outputs = []
         images: list[np.ndarray] = []
+
         for conversation in conversations:
             messages: list[dict[str, Union[str, list[dict[str, Union[str, dict[str, Any]]]]]]] = []
             for message in conversation:
-                if not isinstance(message, dict):
-                    raise ValueError("Each message must be a dictionary.")
-                maybe_list_content: Optional[Union[str, list[dict[str, Union[str, dict[str, Any]]]]]] = message.pop(
-                    "content", None
-                )
-                if not maybe_list_content or isinstance(maybe_list_content, str):
-                    message.update({"content": maybe_list_content})
-                else:
-                    normalized_content: list[dict[str, Union[str, dict[str, Any]]]] = []
-                    for content in maybe_list_content:
-                        content_type = content.get("type", None)
-                        if not content_type:
-                            continue
-                        if content_type in ["text", "image_url"]:
-                            normalized_content.append(content)
-                        elif content_type == "image":
-                            maybe_url: Optional[str] = content.get("url")
-                            maybe_path: Optional[str] = content.get("path")
-                            maybe_base64: Optional[str] = content.get("base64")
-                            if maybe_url:
-                                image_content = maybe_url
-                            elif maybe_path:
-                                if not maybe_path.startswith("file://"):
-                                    maybe_path = Path(maybe_path).resolve().as_uri()
-                                image_content = maybe_path
-                            elif maybe_base64:
-                                if not maybe_base64.startswith("data:image"):
-                                    maybe_base64 = "data:image/unk;base64," + maybe_base64
-                                image_content = maybe_base64
-                            else:
-                                raise ValueError("Image content must be specified.")
-                            normalized_content.append({"type": "image_url", "image_url": {"url": image_content}})
-                        else:
-                            raise ValueError(
-                                f"Content type {content_type} not supported by `MistralCommonTokenizer.apply_chat_template`."
-                            )
-                    message.update({"content": normalized_content})
+                _maybe_adapt_message(message)
                 messages.append(message)
 
             chat_request = ChatCompletionRequest.from_openai(
@@ -1530,7 +1531,12 @@ class MistralCommonTokenizer(PushToHubMixin):
                 return out
             else:
                 return out["input_ids"]
+
         else:
+            logger.warning(
+                "`MistralCommonTokenizer.apply_chat_template(..., tokenize=False)` is unsafe and may lead to unexpected behavior."
+                " Please consider using `tokenize=True` instead and don't encode the output manually."
+            )
             return outputs
 
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
