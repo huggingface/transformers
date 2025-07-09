@@ -25,7 +25,7 @@ import re
 import tarfile
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any, Optional, Union
 
 import torch
 import yaml
@@ -105,7 +105,7 @@ def convert_nemo_keys_to_hf_keys(state_dict_keys):
     return output_dict
 
 
-def extract_nemo_archive(nemo_file_path: str, extract_dir: str) -> Dict[str, str]:
+def extract_nemo_archive(nemo_file_path: str, extract_dir: str) -> dict[str, str]:
     """
     Extract .nemo file (tar archive) and return paths to important files.
 
@@ -194,7 +194,7 @@ def extract_nemo_archive(nemo_file_path: str, extract_dir: str) -> Dict[str, str
     return model_files
 
 
-def convert_sentencepiece_vocab_to_json(vocab_file_path: str) -> Dict[str, int]:
+def convert_sentencepiece_vocab_to_json(vocab_file_path: str) -> dict[str, int]:
     """
     Convert SentencePiece vocabulary file to JSON format.
 
@@ -229,14 +229,14 @@ def convert_sentencepiece_vocab_to_json(vocab_file_path: str) -> Dict[str, int]:
         return {"<unk>": 0}
 
 
-def load_nemo_config(config_path: str) -> Dict[str, Any]:
+def load_nemo_config(config_path: str) -> dict[str, Any]:
     """Load NeMo model configuration from yaml file."""
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
     return config
 
 
-def extract_model_info_from_config(config: Dict[str, Any]) -> Dict[str, Any]:
+def extract_model_info_from_config(config: dict[str, Any]) -> dict[str, Any]:
     """Extract model information from NeMo config."""
     model_info = {
         "model_type": "unknown",
@@ -311,7 +311,7 @@ def extract_model_info_from_config(config: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def create_hf_config_from_nemo(
-    model_info: Dict[str, Any], state_dict: Dict[str, torch.Tensor]
+    model_info: dict[str, Any], state_dict: dict[str, torch.Tensor]
 ) -> Union[FastConformerConfig, ParakeetCTCConfig]:
     """Create HuggingFace FastConformerConfig from NeMo config and weights."""
     encoder_cfg = model_info.get("encoder_cfg", {})
@@ -440,7 +440,7 @@ def create_hf_config_from_nemo(
     return fastconformer_config
 
 
-def create_feature_extractor_config(preprocessor_cfg: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+def create_feature_extractor_config(preprocessor_cfg: Optional[dict[str, Any]]) -> dict[str, Any]:
     """Create feature extractor configuration from NeMo preprocessor config."""
     if preprocessor_cfg:
         sample_rate = preprocessor_cfg.get("sample_rate", 16000)
@@ -480,7 +480,7 @@ def create_feature_extractor_config(preprocessor_cfg: Optional[Dict[str, Any]]) 
     return feature_extractor_config
 
 
-def convert_weights(nemo_state_dict: Dict[str, torch.Tensor], model_info: Dict[str, Any]) -> Dict[str, torch.Tensor]:
+def convert_weights(nemo_state_dict: dict[str, torch.Tensor], model_info: dict[str, Any]) -> dict[str, torch.Tensor]:
     """Convert NeMo weights to HuggingFace format using regex mapping."""
     logger.info("Converting weights using regex mapping...")
 
@@ -512,8 +512,8 @@ def convert_weights(nemo_state_dict: Dict[str, torch.Tensor], model_info: Dict[s
 
 def create_hf_model(
     hf_config: Union[FastConformerConfig, ParakeetCTCConfig],
-    hf_state_dict: Dict[str, torch.Tensor],
-    model_info: Dict[str, Any],
+    hf_state_dict: dict[str, torch.Tensor],
+    model_info: dict[str, Any],
 ) -> Union[FastConformerModel, ParakeetCTC]:
     """Create the appropriate HuggingFace model and load weights."""
 
@@ -574,7 +574,7 @@ def create_hf_model(
     return model
 
 
-def convert_nemo_to_hf(input_path: str, output_dir: str) -> Dict[str, Any]:
+def convert_nemo_to_hf(input_path: str, output_dir: str) -> dict[str, Any]:
     """
     Main conversion function.
 
