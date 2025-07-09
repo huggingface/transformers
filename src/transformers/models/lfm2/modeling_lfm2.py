@@ -7,15 +7,16 @@ import torch.nn.functional as F
 
 from ...cache_utils import DynamicCache
 from ...generation import GenerationMixin
+from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.import_utils import is_causal_conv1d_available
+from ...utils.generic import check_model_inputs
 from .configuration_lfm2 import LFM2Config
 
 if is_causal_conv1d_available():
@@ -30,6 +31,7 @@ is_fast_path_available = all(kernel_modules)
 logger = logging.get_logger(__name__)
 
 
+@use_kernel_forward_from_hub("RMSNorm")
 class LFM2RMSNorm(torch.nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
@@ -225,7 +227,6 @@ class LFM2Cache(DynamicCache):
             A tuple containing the updated key and value states.
         """
         # Update the number of seen tokens
-        # if layer_idx == 0:
         if layer_idx == self.full_attn_idxs[0]:
             self._seen_tokens += key_states.shape[-2]
 
@@ -598,7 +599,7 @@ class LFM2Model(LFM2PretrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    @can_return_tuple
+    # @check_model_inputs
     # @auto_docstring
     def forward(
         self,
@@ -612,7 +613,7 @@ class LFM2Model(LFM2PretrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -655,6 +656,7 @@ class LFM2Model(LFM2PretrainedModel):
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
+            position_ids=position_ids,
         )
         hidden_states = inputs_embeds
 
@@ -697,9 +699,6 @@ class LFM2Model(LFM2PretrainedModel):
             attentions=all_self_attns,
         )
         return output if return_dict else output.to_tuple()
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 @auto_docstring
@@ -747,7 +746,7 @@ class LFM2ForCausalLM(LFM2PretrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
