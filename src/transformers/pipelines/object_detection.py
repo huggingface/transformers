@@ -114,7 +114,7 @@ class ObjectDetectionPipeline(Pipeline):
 
     def preprocess(self, image, timeout=None):
         # Handle both single images and batches
-        if isinstance(image, (list, tuple)):
+        if isinstance(image, (list, tuple)): 
             # Batch of images
             images = [load_image(img, timeout=timeout) for img in image]
             target_sizes = torch.IntTensor([[img.height, img.width] for img in images])
