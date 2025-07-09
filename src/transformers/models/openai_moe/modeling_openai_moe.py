@@ -88,7 +88,7 @@ class OpenAIMoeExperts(nn.Module):
         """
         batch_size = hidden_states.shape[0]
         hidden_states = hidden_states.reshape(-1, self.hidden_size) # (num_tokens, hidden_size)
-        num_experts = routing_weights.shape[0]
+        num_experts = routing_weights.shape[1]
         if self.training:
             next_states = torch.zeros_like(hidden_states, dtype=hidden_states.dtype, device=hidden_states.device)
             with torch.no_grad():
@@ -142,7 +142,7 @@ class TopKRouter(nn.Module):
         router_logits = F.linear(hidden_states, self.weight, self.bias) # (seq_len, num_experts)
         router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1) # (seq_len, top_k)
         router_top_value = torch.nn.functional.softmax(router_top_value, dim=1, dtype=router_top_value.dtype)
-        router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value).transpose(0, 1) # (num_experts, seq_len)
+        router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value)
         return router_scores, router_indices
 
 @use_kernel_forward_from_hub("MegaBlocksMoeMLP")
