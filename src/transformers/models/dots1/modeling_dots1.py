@@ -420,7 +420,7 @@ class Dots1PreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_cache_class = True
     _supports_quantized_cache = True
-    _supports_static_cache = True
+    _supports_static_cache = False
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": Dots1DecoderLayer,
