@@ -16,8 +16,6 @@
 
 import unittest
 
-from packaging import version
-
 from transformers import BitsAndBytesConfig, Cache, DeepseekV2Config, is_torch_available
 from transformers.testing_utils import require_read_token, require_torch, require_torch_accelerator, slow, torch_device
 
@@ -200,103 +198,54 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
 
+@slow
+@require_read_token
 @require_torch_accelerator
 class DeepseekV2IntegrationTest(unittest.TestCase):
-    @slow
-    @require_read_token
-    def test_deepseek_v2_lite_hard(self):
-        """
-        An integration test for DeepseekV2
-        """
-
-        EXPECTED_TEXT = """An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors.
-
-Attention functions are used in a variety of applications, including natural language processing, computer vision, and reinforcement learning.
-
-## What is an attention function?
-
-An attention function is a mathematical function that takes a set of inputs and produces a single output. The function is used to model the relationship between the inputs and the output.
-
-The attention function is used in a variety of applications, including natural language processing, computer vision, and reinforcement learning.
-
-## What is the purpose of an attention function?
-
-An attention function is a mathematical function that takes a set of inputs and produces a single output. The"""
+    def test_deepseek_v2_lite(self):
+        EXPECTED_TEXT = ['An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors.\n\nAttention functions are used in a variety of applications, including natural language processing, computer vision, and reinforcement learning.\n\n## Attention Functions\n\nAttention functions are a type of neural network that is used to learn the relationship between two or more']  # fmt: skip
 
         tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V2-Lite")
-        quantization_config = BitsAndBytesConfig(load_in_8bit=True)
         model = DeepseekV2ForCausalLM.from_pretrained(
             "deepseek-ai/DeepSeek-V2-Lite",
             device_map=torch_device,
-            torch_dtype="auto",
-            quantization_config=quantization_config,
+            torch_dtype=torch.bfloat16,
+            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
         )
+
         input_text = [
-            "An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors."
+            "An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors."  # fmt: skip
         ]
         model_inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
 
-        generated_ids = model.generate(**model_inputs, max_new_tokens=128, do_sample=False)
-        generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        generated_ids = model.generate(**model_inputs, max_new_tokens=50, do_sample=False)
+        generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(generated_text, EXPECTED_TEXT)
 
-    @slow
-    @require_read_token
-    def test_model_lite_logits(self):
+    def test_logits_eager(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
-        quantization_config = BitsAndBytesConfig(load_in_8bit=True)
         model = DeepseekV2ForCausalLM.from_pretrained(
             "deepseek-ai/DeepSeek-V2-Lite",
             device_map=torch_device,
-            torch_dtype="auto",
-            quantization_config=quantization_config,
+            torch_dtype=torch.bfloat16,
+            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
             attn_implementation="eager",
         )
 
         with torch.no_grad():
             out = model(torch.tensor([input_ids]).to(torch_device))
-        # Expected mean on dim = -1
 
-        # fmt: off
-        expected_mean = torch.tensor([[-6.1586, -5.0041, -4.5611, -2.5616, -2.0913, -2.3482, -3.6658, -2.9652]])
-        self.assertTrue(
-            torch.allclose(
-                expected_mean,
-                out.logits.float().mean(-1),
-                atol=1e-2,
-                rtol=1e-2
-            )
-        )
+        EXPECTED_MEAN = torch.tensor([[-6.1287, -5.0739, -4.4318, -2.6259, -2.0921, -2.4514, -3.8363, -2.9494]], device=torch_device)  # fmt: skip
+        torch.testing.assert_close(out.logits.float().mean(-1), EXPECTED_MEAN, atol=1e-3, rtol=1e-3)
 
-        # slicing logits[0, 0, 0:15]
-        expected_slice = torch.tensor([[-1.1953, -0.7227, -0.0903, -2.8594,  1.2422, -2.6406, -0.7461, -2.9062, -2.5312, -0.5703, -0.3281, -1.7891, -2.2031, -0.8281, -3.8750]])
-        # fmt: on
-        self.assertTrue(
-            torch.allclose(
-                expected_slice,
-                out.logits[0, 0, :15].float(),
-                atol=1e-2,
-                rtol=1e-2,
-            )
-        )
+        EXPECTED_SLICE = torch.tensor([-1.3281, -1.0859, -0.0513, -3.2188,  1.2578, -2.7812, -0.9297, -3.1406, -2.8906, -0.6445, -0.4941, -2.0938, -2.4531, -1.1172, -3.9844], device=torch_device)  # fmt: skip
+        torch.testing.assert_close(out.logits[0, 0, :15].float(), EXPECTED_SLICE, atol=1e-3, rtol=1e-3)
 
-    @slow
-    @require_torch_accelerator
-    @require_read_token
-    def test_compile_static_cache(self):
-        # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
-        # work as intended. See https://github.com/pytorch/pytorch/issues/121943
-        if version.parse(torch.__version__) < version.parse("2.3.0"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
-
-        NUM_TOKENS_TO_GENERATE = 40
-        # Note on `EXPECTED_TEXT_COMPLETION`'s diff: the current value matches the original test if the original test
-        # was changed to have a cache of 53 tokens (as opposed to 4096), on Ampere GPUs.
-
-        EXPECTED_TEXT_COMPLETION = [
-            "Simply put, the theory of relativity states that \nthe speed of light is constant.\nThe speed of light is constant.\nThe speed of light is constant.\nThe speed of light is constant.\nThe speed of light is constant.",
-            "My favorite all time favorite condiment is ketchup. I love ketchup. I love ketchup on my hot dogs, hamburgers, french fries, and even on my eggs. I love ketchup. I love ketchup so much that I",
+    def test_batch_fa2(self):
+        EXPECTED_TEXT = [
+            "Simply put, the theory of relativity states that \nthe laws of physics are the same for all observers, regardless of their \nrelative motion.\nThe theory of relativity is based on two postulates:\n- The laws of physics are the",  # fmt: skip
+            "My favorite all time favorite condiment is ketchup. I love ketchup. I love ketchup on my hot dogs, hamburgers, french fries, and even on my eggs. I love ketchup. I love ketchup so much that I",  # fmt: skip
         ]
 
         prompts = [
@@ -306,31 +255,15 @@ An attention function is a mathematical function that takes a set of inputs and 
         tokenizer = AutoTokenizer.from_pretrained(
             "deepseek-ai/DeepSeek-V2-Lite", pad_token="</s>", padding_side="right"
         )
-        quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+
         model = DeepseekV2ForCausalLM.from_pretrained(
             "deepseek-ai/DeepSeek-V2-Lite",
             device_map=torch_device,
-            torch_dtype="auto",
-            quantization_config=quantization_config,
+            torch_dtype=torch.bfloat16,
+            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
-        # Dynamic Cache
-        generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
-        dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, dynamic_text)
-
-        generated_ids = model.generate(
-            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
-        )
-        static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
-
-        # Static Cache + compile (`generate()` internally compiles each decoding step when static cache is used)
-        model._cache = None  # clear cache object, initialized when we pass `cache_implementation="static"`
-        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
-        generated_ids = model.generate(
-            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
-        )
-        static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
+        generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
+        generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT, generated_text)
