@@ -124,7 +124,7 @@ class ObjectDetectionPipeline(Pipeline):
             image = load_image(image, timeout=timeout)
             target_sizes = torch.IntTensor([[image.height, image.width]])
             inputs = self.image_processor(images=[image], return_tensors="pt")
-        
+
         if self.framework == "pt":
             inputs = inputs.to(self.torch_dtype)
         if self.tokenizer is not None:
@@ -167,7 +167,7 @@ class ObjectDetectionPipeline(Pipeline):
         else:
             # This is a regular ForObjectDetectionModel
             raw_annotations = self.image_processor.post_process_object_detection(model_outputs, threshold, target_size)
-            
+
             # Handle both single and batched inputs
             if len(raw_annotations) == 1:
                 # Single image case
