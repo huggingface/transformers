@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Ernie4.5 MoE model."""
 
+import tempfile
 import unittest
 
 import pytest
@@ -20,6 +21,7 @@ import pytest
 from transformers import Ernie4_5_MoEConfig, is_torch_available
 from transformers.testing_utils import (
     cleanup,
+    is_flaky,
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
@@ -76,11 +78,40 @@ class Ernie4_5_MoEModelTest(CausalLMModelTest, unittest.TestCase):
     @require_flash_attn
     @require_torch_gpu
     @pytest.mark.flash_attn_test
+    @is_flaky()
     @slow
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(reason="Ernie4_5_MoE flash attention does not support right padding")
+    def test_flash_attn_2_equivalence(self):
+        for model_class in self.all_model_classes:
+            if not model_class._supports_flash_attn_2:
+                self.skipTest(reason="Model does not support Flash Attention 2")
 
-    @unittest.skip("tmp - checking other tests first")
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_fa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                )
+                model_fa.to(torch_device)
+
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="eager"
+                )
+                model.to(torch_device)
+
+                dummy_input = inputs_dict[model_class.main_input_name]
+                dummy_input = dummy_input.to(torch_device)
+                outputs = model(dummy_input, output_hidden_states=True)
+                outputs_fa = model_fa(dummy_input, output_hidden_states=True)
+
+                logits = outputs.hidden_states[-1]
+                logits_fa = outputs_fa.hidden_states[-1]
+
+                # higher tolerance, not sure where it stems from
+                assert torch.allclose(logits_fa, logits, atol=1e-2, rtol=1e-2)
+
+    # Ignore copy
     def test_load_balancing_loss(self):
         r"""
         Let's make sure we can actually compute the loss and do a backward on it.

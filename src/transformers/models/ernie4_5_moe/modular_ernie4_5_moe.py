@@ -22,7 +22,6 @@ from torch import nn
 from ...cache_utils import DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging
@@ -33,7 +32,7 @@ from ..mixtral.modeling_mixtral import (
     MixtralModel,
     MixtralPreTrainedModel,
 )
-from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeMLP
+from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeDecoderLayer, Qwen3MoeMLP
 from .configuration_ernie4_5_moe import Ernie4_5_MoEConfig
 
 
@@ -197,9 +196,9 @@ class Ernie4_5_MoESparseMoEBlock(nn.Module):
         return final_hidden_states, router_logits
 
 
-class Ernie4_5_MoEDecoderLayer(GradientCheckpointingLayer):
+class Ernie4_5_MoEDecoderLayer(Qwen3MoeDecoderLayer, nn.Module):
     def __init__(self, config, layer_idx):
-        super().__init__()
+        nn.Module().__init__()
         self.hidden_size = config.hidden_size
 
         self.self_attn = Ernie4_5_MoEAttention(config, layer_idx)
@@ -215,77 +214,6 @@ class Ernie4_5_MoEDecoderLayer(GradientCheckpointingLayer):
 
         self.input_layernorm = Ernie4_5_MoERMSNorm(config.hidden_size, config.rms_norm_eps)
         self.post_attention_layernorm = Ernie4_5_MoERMSNorm(config.hidden_size, config.rms_norm_eps)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-        attention_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[tuple[torch.Tensor]] = None,
-        output_attentions: Optional[bool] = False,
-        output_router_logits: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`):
-                Input to the layer of shape `(batch, seq_len, embed_dim)`.
-            position_embeddings (`tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
-                tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
-                with `head_dim` being the embedding dimension of each attention head.
-            attention_mask (`torch.FloatTensor`, *optional*):
-                Attention mask of size `(batch, sequence_length)` where padding elements are indicated by 0.
-            past_key_value (`Cache`, *optional*):
-                Cached past key and value projection states.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_router_logits (`bool`, *optional*):
-                Whether or not to return the logits of all the routers. They are useful for computing the router loss,
-                and should not be returned during inference.
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence.
-            kwargs (`dict`, *optional*):
-                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
-                into the model.
-        """
-        residual = hidden_states
-
-        hidden_states = self.input_layernorm(hidden_states)
-
-        # Self Attention
-        hidden_states, self_attn_weights = self.self_attn(
-            hidden_states=hidden_states,
-            position_embeddings=position_embeddings,
-            attention_mask=attention_mask,
-            past_key_value=past_key_value,
-            cache_position=cache_position,
-            **kwargs,
-        )
-        hidden_states = hidden_states + residual
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-
-        hidden_states = self.mlp(hidden_states)
-        if isinstance(self.mlp, Ernie4_5_MoESparseMoEBlock):
-            hidden_states, router_logits = hidden_states
-        else:
-            router_logits = None
-
-        hidden_states = hidden_states + residual
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        if output_router_logits:
-            outputs += (router_logits,)
-
-        return outputs
 
 
 @auto_docstring
@@ -387,12 +315,14 @@ class Ernie4_5_MoEModel(MixtralModel):
 
             layer_outputs = decoder_layer(
                 hidden_states,
-                position_embeddings=position_embeddings,
                 attention_mask=causal_mask,
+                position_ids=position_ids,
                 past_key_value=past_key_values,
                 output_attentions=output_attentions,
                 output_router_logits=output_router_logits,
+                use_cache=use_cache,
                 cache_position=cache_position,
+                position_embeddings=position_embeddings,
                 **flash_attn_kwargs,
             )
 
