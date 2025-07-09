@@ -11,8 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import copy
-import enum
 import functools
 import json
 import re
@@ -20,11 +18,16 @@ import time
 from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass, field
 from threading import Thread
-from typing import Any, Generator, Optional, Union
+from typing import Generator, Optional, Union
 
 from huggingface_hub import ModelInfo, model_info
 
-from transformers.utils.import_utils import is_fastapi_available, is_pydantic_available, is_uvicorn_available
+from transformers.utils.import_utils import (
+    is_fastapi_available,
+    is_openai_available,
+    is_pydantic_available,
+    is_uvicorn_available,
+)
 
 from .. import LogitsProcessorList, PreTrainedTokenizerFast, TextIteratorStreamer
 from ..generation.continuous_batching import ContinuousBatchingManager, RequestStatus
@@ -43,184 +46,28 @@ if is_torch_available():
         PreTrainedModel,
     )
 
-if is_pydantic_available() and is_fastapi_available() and is_uvicorn_available():
+if is_pydantic_available() and is_fastapi_available() and is_uvicorn_available() and is_openai_available():
     import uvicorn
     from fastapi import FastAPI
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import JSONResponse, StreamingResponse
+    from openai.types.chat.completion_create_params import CompletionCreateParamsStreaming
+    from openai.types.responses import (
+        Response,
+        ResponseCompletedEvent,
+        ResponseContentPartAddedEvent,
+        ResponseContentPartDoneEvent,
+        ResponseCreatedEvent,
+        ResponseInProgressEvent,
+        ResponseOutputItem,
+        ResponseOutputItemAddedEvent,
+        ResponseOutputItemDoneEvent,
+        ResponseOutputText,
+        ResponseTextDeltaEvent,
+        ResponseTextDoneEvent,
+    )
+    from openai.types.responses.response_create_params import ResponseCreateParamsStreaming
     from pydantic import BaseModel
-
-    class Message(BaseModel):
-        role: str
-        content: str
-
-    class Prompt(BaseModel):
-        id: str
-        variables: dict
-        version: Optional[str]
-
-    class TextFormatOptions(enum.StrEnum):
-        text = "text"
-        json_schema = "json_schema"
-
-    class TextFormat(BaseModel):
-        type: TextFormatOptions
-
-    class ResponsesInput(BaseModel):
-        input: str | list
-        model: str
-
-        stream: Optional[bool] = False
-        instructions: Optional[str] = None
-        max_output_tokens: Optional[int] = None
-        max_tool_calls: Optional[int] = None
-        previous_response_id: Optional[str] = None
-        prompt: Optional[Prompt] = None
-        temperature: Optional[float] = None
-        text: Optional[TextFormat] = None
-        tools: Any = None
-        top_p: Optional[float] = None
-        metadata: Optional[dict[str, Any]] = None
-
-        # Additional options supported by the Responses API
-        # that aren't yet supported here.
-        # top_logprobs
-
-    class ResponsesOutputContent(BaseModel):
-        type: str
-        text: str
-        annotations: Optional[list[str]] = []
-
-    # Desperately need a better name than this
-    class ResponsesOutputOutput(BaseModel):
-        type: str
-        id: str
-        status: str
-        role: str
-        content: list[ResponsesOutputContent]
-
-    class ResponseOutputItem(BaseModel):
-        type: str
-        id: str
-        status: str
-        role: str
-        content: Optional[list[str | ResponsesOutputContent]] = []
-
-    ### For `response.created`, `response.in_progress`, and `response.completed`
-    class ResponsesOutput(BaseModel):
-        id: str
-        object: Optional[str] = "response"
-        created_at: int
-        status: str
-        error: Optional[str] = None
-        incomplete_details: Optional[str] = None
-        instructions: Optional[str] = None
-        max_output_tokens: Optional[int] = None
-        model: str
-        output: Optional[list[ResponsesOutputOutput]] = []
-        parallel_tool_calls: Optional[bool] = False
-        previous_response_id: Optional[str] = None
-        temperature: Optional[float] = None
-        text: Optional[Any] = None
-        tool_choice: Optional[str] = None
-        tools: Optional[list[str]] = None
-        top_p: Optional[float] = None
-        metadata: Optional[dict[str, Any]] = None
-
-    class Response(BaseModel):
-        type: str
-        response: Optional[ResponsesOutput] = None
-        output_index: Optional[int] = None
-
-    ###
-
-    #### For `response.output_item.added`
-    class ResponseOutputItemAdded(BaseModel):
-        type: str
-        output_index: int
-        item: ResponseOutputItem
-
-    ###
-
-    ### For `response.content_part.added`
-    class ResponseContentPartAdded(BaseModel):
-        type: str
-        item_id: str
-        output_index: int
-        content_index: int
-        part: ResponsesOutputContent
-
-    ###
-
-    ### For `response.output_text.delta`
-    class ResponseOutputTextDelta(BaseModel):
-        type: str
-        item_id: str
-        output_index: int
-        content_index: int
-        delta: str
-
-    ###
-
-    ### For `response.output_text.done`
-    class ResponseOutputTextDone(BaseModel):
-        type: str
-        item_id: str
-        output_index: int
-        content_index: int
-        text: str
-
-    ###
-
-    ### For `response.content_part.done`
-    class ResponseContentPartDone(BaseModel):
-        type: str
-        item_id: str
-        output_index: int
-        content_index: int
-        part: ResponsesOutputContent
-
-    ###
-
-    #### For `response.output_item.done`
-    class ResponseOutputItemDone(BaseModel):
-        type: str
-        output_index: int
-        item: ResponseOutputItem
-
-    ###
-
-    ### Chat Completion
-    class ChatCompletionInput(BaseModel):
-        messages: list[Message]
-        model: str
-
-        stream: Optional[bool] = False
-        request_id: Optional[str] = None
-        extra_body: Optional[dict] = None
-        frequency_penalty: Optional[float] = None
-        logit_bias: Optional[list[float]] = None
-        max_tokens: Optional[int] = None
-        stop: Optional[list[str]] = None
-        temperature: Optional[float] = None
-        top_p: Optional[float] = None
-        seed: Optional[int] = None
-
-        # Additional options supported by the HFH InferenceClient
-        # that aren't yet supported here.
-
-        # logprobs: Optional[bool] = None
-        tools: Any = None
-        # n: Optional[int] = None
-        # presence_penalty: Optional[float] = None
-        # response_format: Optional[ChatCompletionInputGrammarType] = None
-        # stream_options: Optional[ChatCompletionInputStreamOptions] = None
-        # tool_choice: Optional[Union[ChatCompletionInputToolChoiceClass, "ChatCompletionInputToolChoiceEnum"]] = None
-        # tool_prompt: Optional[str] = None
-        # top_logprobs: Optional[int] = None
-
-        # transformers-specific request fields
-        generation_config: Optional[str] = None
 
 
 logger = logging.get_logger(__name__)
@@ -246,7 +93,7 @@ def serve_command_factory(args: Namespace):
 
 
 def create_generation_config_from_req(
-    req: Union["ChatCompletionInput", "ResponsesInput"], model_generation_config: "GenerationConfig", **kwargs
+    req: Union[CompletionCreateParamsStreaming, ResponseCreateParamsStreaming], model_generation_config: "GenerationConfig", **kwargs
 ) -> "GenerationConfig":
     """
     Creates a generation config from the parameters of the request. If a generation config is passed in the request,
@@ -275,7 +122,7 @@ def create_generation_config_from_req(
         if v is not None:
             setattr(generation_config, k, v)
 
-    if isinstance(req, ResponsesInput):
+    if isinstance(req, ResponseCreateParamsStreaming):
         return generation_config
 
     if req.frequency_penalty is not None:
@@ -474,7 +321,7 @@ class ServeCommand(BaseTransformersCLICommand):
             )
 
         @app.post("/v1/chat/completions")
-        def chat_completion(req: ChatCompletionInput):
+        def chat_completion(req: CompletionCreateParamsStreaming):
             if not req.stream:
                 return {"error": "Only streaming mode is supported."}
 
@@ -483,7 +330,7 @@ class ServeCommand(BaseTransformersCLICommand):
             return StreamingResponse(output, media_type="text/event-stream")
 
         @app.post("/v1/responses")
-        def responses(req: ResponsesInput):
+        def responses(req: ResponseCreateParamsStreaming):
             if not req.stream:
                 return {"error": "Only streaming mode is supported."}
 
@@ -530,7 +377,7 @@ class ServeCommand(BaseTransformersCLICommand):
             model_info("meta-llama/Llama-3.3-70B-Instruct"),
         ]
 
-    def continuous_batching(self, req: ChatCompletionInput) -> Generator:
+    def continuous_batching(self, req: CompletionCreateParamsStreaming) -> Generator:
         update_model = self.canonicalized_model_name(req.model) != self.loaded_model
 
         if update_model:
@@ -596,7 +443,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
         return stream_response(inputs[0])
 
-    def generate(self, req: ChatCompletionInput) -> Generator:
+    def generate(self, req: CompletionCreateParamsStreaming) -> Generator:
         update_model = req.model != self.loaded_model
         if update_model:
             self.model, self.tokenizer = self.load_model_and_tokenizer(req.model, self.args)
@@ -745,7 +592,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
         return stream_response(generation_streamer, request_id)
 
-    def generate_response(self, req: ResponsesInput) -> Generator:
+    def generate_response(self, req: ResponseCreateParamsStreaming) -> Generator:
         # TODO
         # Check generation config parameters
         # Implement KV caching (with previous_request_id?)
@@ -784,9 +631,9 @@ class ServeCommand(BaseTransformersCLICommand):
 
                 created_at = time.time_ns()
 
-                response_created = Response(
+                response_created = ResponseCreatedEvent(
                     type="response.created",
-                    response=ResponsesOutput(
+                    response=Response(
                         id=f"resp_{request_id}",
                         created_at=created_at,
                         status="in_progress",
@@ -797,9 +644,9 @@ class ServeCommand(BaseTransformersCLICommand):
                 )
                 yield self.build_responses_chunk(response_created)
 
-                response_in_progress = Response(
+                response_in_progress = ResponseInProgressEvent(
                     type="response.in_progress",
-                    response=ResponsesOutput(
+                    response=Response(
                         id=f"resp_{request_id}",
                         created_at=created_at,
                         status="in_progress",
@@ -810,7 +657,7 @@ class ServeCommand(BaseTransformersCLICommand):
                 )
                 yield self.build_responses_chunk(response_in_progress)
 
-                response_output_item_added = ResponseOutputItemAdded(
+                response_output_item_added = ResponseOutputItemAddedEvent(
                     type="response.output_item_added",
                     output_index=0,
                     item=ResponseOutputItem(
@@ -819,19 +666,19 @@ class ServeCommand(BaseTransformersCLICommand):
                 )
                 yield self.build_responses_chunk(response_output_item_added)
 
-                response_content_part_added = ResponseContentPartAdded(
+                response_content_part_added = ResponseContentPartAddedEvent(
                     type="response.content_part.added",
                     item_id=f"msg_{request_id}",
                     output_index=0,
                     content_index=0,
-                    part=ResponsesOutputContent(type="output_text", text="", annotations=[]),
+                    part=ResponseOutputText(type="output_text", text="", annotations=[]),
                 )
                 yield self.build_responses_chunk(response_content_part_added)
 
                 results = ""
                 for result in streamer:
                     results += result
-                    response_output_text_delta = ResponseOutputTextDelta(
+                    response_output_text_delta = ResponseTextDeltaEvent(
                         type="response.output_text_delta",
                         item_id=f"msg_{request_id}",
                         output_index=0,
@@ -840,7 +687,7 @@ class ServeCommand(BaseTransformersCLICommand):
                     )
                     yield self.build_responses_chunk(response_output_text_delta)
 
-                response_output_text_done = ResponseOutputTextDone(
+                response_output_text_done = ResponseTextDoneEvent(
                     type="response.output_text_done",
                     item_id=f"msg_{request_id}",
                     output_index=0,
@@ -849,18 +696,16 @@ class ServeCommand(BaseTransformersCLICommand):
                 )
                 yield self.build_responses_chunk(response_output_text_done)
 
-                response_content_part_done = ResponseContentPartDone(
+                response_content_part_done = ResponseContentPartDoneEvent(
                     type="response.content_part_done",
                     item_id=f"msg_{request_id}",
                     output_index=0,
                     content_index=0,
-                    part=ResponsesOutputContent(
-                        type="output_text", text=response_output_text_done.text, annotations=[]
-                    ),
+                    part=ResponseOutputText(type="output_text", text=response_output_text_done.text, annotations=[]),
                 )
                 yield self.build_responses_chunk(response_content_part_done)
 
-                response_output_item_done = ResponseOutputItemDone(
+                response_output_item_done = ResponseOutputItemDoneEvent(
                     type="response.output_item_done",
                     output_index=0,
                     item=ResponseOutputItem(
@@ -873,9 +718,9 @@ class ServeCommand(BaseTransformersCLICommand):
                 )
                 yield self.build_responses_chunk(response_output_item_done)
 
-                response_completed = Response(
+                response_completed = ResponseCompletedEvent(
                     type="response.completed",
-                    response=ResponsesOutput(
+                    response=Response(
                         id=f"resp_{request_id}",
                         created_at=created_at,
                         status="completed",
@@ -897,13 +742,13 @@ class ServeCommand(BaseTransformersCLICommand):
 
         return stream_response(generation_streamer, request_id)
 
-    def is_continuation(self, req: "ChatCompletionInput") -> bool:
+    def is_continuation(self, req: CompletionCreateParamsStreaming) -> bool:
         """
         Determines whether the current request is a continuation of the last request. In other words, if it is the
         same chat session.
 
         Args:
-            req (`ChatCompletionInput`): The request to check.
+            req (`CompletionCreateParamsStreaming`): The request to check.
 
         Returns:
             `True` if the request is a continuation of the last request, `False` otherwise.

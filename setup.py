@@ -137,6 +137,7 @@ _deps = [
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
     "onnxruntime>=1.4.0",
+    "openai",
     "opencv-python",
     "optimum-benchmark>=0.3.0",
     "optuna",
@@ -313,7 +314,11 @@ extras["hub-kernels"] = deps_list("kernels")
 
 extras["integrations"] = extras["hub-kernels"] + extras["optuna"] + extras["ray"] + extras["sigopt"]
 
+<<<<<<< HEAD
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette") + extras["torch"]
+=======
+extras["serving"] = deps_list("openai", "pydantic", "uvicorn", "fastapi", "starlette")
+>>>>>>> 5bda2a085c (use openai)
 extras["audio"] = deps_list(
     "librosa",
     "pyctcdecode",
