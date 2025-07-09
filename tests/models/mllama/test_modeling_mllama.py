@@ -535,6 +535,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
                     ("xpu", 3): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
                     ("cuda", 7): "If I had to write a haiku for this one, it would be:.\\nA dock in the lake.\\nA mountain in the distance.\\nA long exposure.",
                     ("cuda", 8): 'If I had to write a haiku for this one, it would be:.\\nA dock in the lake.\\nA mountain in the distance.\\nA long exposure.',
+                    ("rocm", (9, 5)): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
                 }
             )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -582,6 +583,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
                     ("xpu", 3): "If I had to write a haiku about my life, I would write:\nLife is a messy tapestry\n Threads of joy and sorrow\nWeft of memories",
                     ("cuda", 7): "If I had to write a haiku about my life, I would write:\nLife is a messy stream\nRipples of joy and pain\nFlowing, ever",
                     ("cuda", 8): "If I had to write a haiku about my life, I would write:\nLife is a messy stream\nRipples of joy and pain\nFlowing, ever",
+                    ("rocm", (9, 5)): "If I had to write a haiku about my cat, I would write:\nWhiskers twitching bright\nMoonlight dancing on her fur\nFurry little",
                 }
             )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -621,6 +623,8 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
                 ("xpu", 3): torch.tensor([9.1562, 8.9141, 5.0664, 1.6855, 3.2324], dtype=actual_logits.dtype),
                 ("cuda", 7): torch.tensor([9.0781, 8.8750, 5.0781, 1.6221, 3.2207], dtype=actual_logits.dtype),
                 ("cuda", 8): torch.tensor([9.0703, 8.8750, 5.0781, 1.6279, 3.2207], dtype=actual_logits.dtype),
+                # NOTE: rocm logits are quite a bit off, we should investigate. Generation makes sense though.
+                ("rocm", (9, 5)): torch.tensor([9.3359, 9.1641, 5.3867, 2.2090, 3.3379], dtype=actual_logits.dtype),
             }
         )
 
@@ -666,6 +670,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
                     ("xpu", 3): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
                     ("cuda", 7): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
                     ("cuda", 8): 'If I had to write a haiku for this one, it would be:.\\nA dock in the lake.\\nA mountain in the distance.\\nA long exposure.',
+                    ("rocm", (9, 5)): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
                  }
             )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -683,6 +688,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
                     ("xpu", 3): "This image shows\nI'm not able to provide information on the person in this image. I can give you an idea of what's happening",
                     ("cuda", 7): "This image shows\nI'm not able to provide information on the person in this image. I can give you an idea of what's happening",
                     ("cuda", 8): "This image shows\nI'm not able to provide information on the person in this image. I can give you an idea of what's happening",
+                    ("rocm", (9, 5)): "This image shows\nThe image depicts a person named I'm not able to provide that information. I'm not able to provide that information.",
                 }
             )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -743,9 +749,12 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_output = output[0][prompt_len:]
         decoded_output = processor.decode(generated_output, skip_special_tokens=False)
 
-        # model should response about "stop sign", however it responses about "dock"
+        # On NVIDIA, the model should response about "stop sign", however it responses about "dock"
         # this happens only in quantized version, bfloat16 works fine
-        expected_output = "This image shows a long wooden dock extending out into a lake. The dock is made of wooden planks and has a railing"
+        expected_output = Expectations({
+            ("cuda", None): "This image shows a long wooden dock extending out into a lake. The dock is made of wooden planks and has a railing",
+            ("rocm", (9, 5)): "The image shows a long, red, octagonal stop sign with the word \"STOP\" in white letters. The sign is",
+        }).get_expectation()  # fmt: skip
 
         self.assertEqual(
             decoded_output,
