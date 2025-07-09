@@ -215,12 +215,12 @@ def sdpa_attention_paged_forward(
                     alibi_slopes=None,
                 )
             
-            if torch.cuda.is_available():
-                torch.cuda.synchronize()
-            elif torch.backends.mps.is_available():
-                torch.mps.synchronize()
-            else:
-                raise RuntimeError("No CUDA or MPS available")
+            # if torch.cuda.is_available():
+            #     torch.cuda.synchronize()
+            # elif torch.backends.mps.is_available():
+            #     torch.mps.synchronize()
+            # else:
+            #     raise RuntimeError("No CUDA or MPS available")
         except RuntimeError as e:
             print(f"Error in paged_attention_{'v2' if use_v2 else 'v1'}: {e}")
             print(f"Shapes - query: {query.shape}, key: {key.shape}, value: {value.shape}")

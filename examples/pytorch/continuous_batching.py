@@ -28,13 +28,13 @@ generation_config = GenerationConfig(
 )
 
 train_dataset = datasets.load_dataset("openai/gsm8k", "socratic", split="test")
-train_dataset = train_dataset.select(range(2))
+train_dataset = train_dataset.select(range(10))
 
 # Create a dataset from a list with one element
-from datasets import Dataset
+# from datasets import Dataset
 
-single_element_list = [{"question": "give me a very long story"}]
-train_dataset = Dataset.from_list(single_element_list)
+# single_element_list = [{"question": "give me a very long story"}]
+# train_dataset = Dataset.from_list(single_element_list)
 
 
 # --- Example 1: Simple Version using generate_batch ---
