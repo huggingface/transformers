@@ -495,7 +495,10 @@ class Glm4MoeModel(Glm4MoePreTrainedModel):
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [Glm4MoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [
+                Glm4MoeDecoderLayer(config, layer_idx)
+                for layer_idx in range(config.num_hidden_layers - config.num_nextn_predict_layers)
+            ]
         )
         self.norm = Glm4MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Glm4MoeRotaryEmbedding(config=config)

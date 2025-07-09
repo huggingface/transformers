@@ -473,7 +473,10 @@ class Glm4MoeModel(MixtralModel):
     def __init__(self, config: Glm4MoeConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(
-            [Glm4MoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [
+                Glm4MoeDecoderLayer(config, layer_idx)
+                for layer_idx in range(config.num_hidden_layers - config.num_nextn_predict_layers)
+            ]
         )
 
     def forward(
