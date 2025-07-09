@@ -258,7 +258,7 @@ def flex_attention_forward(
         block_mask = attention_mask
     else:
         score_mask = attention_mask
-
+    
     if score_mask is not None:
         score_mask = score_mask[:, :, :, : key.shape[-2]]
 
