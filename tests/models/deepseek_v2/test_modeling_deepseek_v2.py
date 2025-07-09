@@ -17,9 +17,8 @@
 import unittest
 
 from packaging import version
-from parameterized import parameterized
 
-from transformers import DeepseekV2Config, FineGrainedFP8Config, is_torch_available
+from transformers import BitsAndBytesConfig, Cache, DeepseekV2Config, is_torch_available
 from transformers.testing_utils import require_read_token, require_torch, require_torch_accelerator, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -38,6 +37,22 @@ class DeepseekV2ModelTester(CausalLMModelTester):
         base_model_class = DeepseekV2Model
         causal_lm_class = DeepseekV2ForCausalLM
         sequence_class = DeepseekV2ForSequenceClassification
+
+    def __init__(
+        self,
+        parent,
+        n_routed_experts=8,
+        kv_lora_rank=32,
+        q_lora_rank=16,
+        qk_nope_head_dim=64,
+        qk_rope_head_dim=64,
+    ):
+        super().__init__(parent=parent)
+        self.n_routed_experts = n_routed_experts
+        self.kv_lora_rank = kv_lora_rank
+        self.q_lora_rank = q_lora_rank
+        self.qk_nope_head_dim = qk_nope_head_dim
+        self.qk_rope_head_dim = qk_rope_head_dim
 
 
 @require_torch
@@ -64,6 +79,7 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
     test_headmasking = False
     test_pruning = False
     fx_compatible = False
+    test_torchscript = False
     model_tester_class = DeepseekV2ModelTester
     rotary_embedding_layer = DeepseekV2RotaryEmbedding
     model_split_percents = [0.5, 0.7, 0.8]
@@ -140,73 +156,47 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
         ]
         super().test_past_key_values_format(custom_all_cache_shapes=all_cache_shapes)
 
-    @unittest.skip
-    def test_training_gradient_checkpointing(self):
-        pass
+    def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
+        """Needs to be overriden as deepseek has special MLA cache format (though we don't really use the MLA)"""
+        self.assertIsInstance(decoder_past_key_values, Cache)
 
-    @unittest.skip(reason="We cannot configure to output a smaller model.")
-    def test_model_is_small(self):
-        pass
+        # (batch, head, seq_length, head_features)
+        expected_common_shape = (
+            batch_size,
+            config.num_key_value_heads if hasattr(config, "num_key_value_heads") else config.num_attention_heads,
+            cache_length,
+        )
+        expected_key_shape = expected_common_shape + (config.qk_nope_head_dim + config.qk_rope_head_dim,)
+        expected_value_shape = expected_common_shape + (config.v_head_dim,)
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
+        if isinstance(decoder_past_key_values, Cache):
+            self.assertListEqual(
+                [key_tensor.shape for key_tensor in decoder_past_key_values.key_cache],
+                [expected_key_shape] * len(decoder_past_key_values.key_cache),
+            )
+            self.assertListEqual(
+                [value_tensor.shape for value_tensor in decoder_past_key_values.value_cache],
+                [expected_value_shape] * len(decoder_past_key_values.value_cache),
+            )
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @parameterized.expand([("random",), ("same",)])
-    @unittest.skip("DeepseekV2 has HybridCache which is not compatible with assisted decoding")
-    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
-        pass
-
-    @unittest.skip("DeepseekV2 has HybridCache which is not compatible with assisted decoding")
-    def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
-        pass
-
-    @unittest.skip("DeepseekV2 has HybridCache which is not compatible with assisted decoding")
-    def test_assisted_decoding_sample(self):
-        pass
-
-    @unittest.skip("DeepseekV2 has HybridCache which is not compatible with dola decoding")
-    def test_dola_decoding_sample(self):
-        pass
-
-    @unittest.skip("DeepseekV2 has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip(
-        "DeepseekV2 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
-    )
-    def test_generate_with_static_cache(self):
-        pass
-
-    @unittest.skip(
-        "DeepseekV2 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
-    )
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip("Deepseek-V2 uses MLA so it is not compatible with the standard cache format")
-    def test_generate_compile_model_forward(self):
-        pass
-
-    @unittest.skip("Deepseek-V2 uses MLA so it is not compatible with the standard cache format")
-    def test_beam_search_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("Deepseek-V2 uses MLA so it is not compatible with the standard cache format")
+    @unittest.skip("Deepseek-V2 uses MLA which has a special head dim and is not compatible with StaticCache shape")
     def test_generate_compilation_all_outputs(self):
         pass
 
-    @unittest.skip("Deepseek-V2 uses MLA so it is not compatible with the standard cache format")
-    def test_greedy_generate_dict_outputs_use_cache(self):
+    @unittest.skip("Deepseek-V2 uses MLA which has a special head dim and is not compatible with StaticCache shape")
+    def test_generate_compile_model_forward(self):
+        pass
+
+    @unittest.skip("Deepseek-V2 uses MLA which has a special head dim and is not compatible with StaticCache shape")
+    def test_generate_from_inputs_embeds_with_static_cache(self):
+        pass
+
+    @unittest.skip("Deepseek-V2 uses MLA which has a special head dim and is not compatible with StaticCache shape")
+    def test_generate_with_static_cache(self):
+        pass
+
+    @unittest.skip("Dynamic control flow in MoE")
+    def test_torch_compile_for_training(self):
         pass
 
 
@@ -234,7 +224,7 @@ The attention function is used in a variety of applications, including natural l
 An attention function is a mathematical function that takes a set of inputs and produces a single output. The"""
 
         tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V2-Lite")
-        quantization_config = FineGrainedFP8Config()
+        quantization_config = BitsAndBytesConfig(load_in_8bit=True)
         model = DeepseekV2ForCausalLM.from_pretrained(
             "deepseek-ai/DeepSeek-V2-Lite",
             device_map=torch_device,
@@ -255,7 +245,7 @@ An attention function is a mathematical function that takes a set of inputs and 
     def test_model_lite_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
-        quantization_config = FineGrainedFP8Config()
+        quantization_config = BitsAndBytesConfig(load_in_8bit=True)
         model = DeepseekV2ForCausalLM.from_pretrained(
             "deepseek-ai/DeepSeek-V2-Lite",
             device_map=torch_device,
@@ -316,7 +306,7 @@ An attention function is a mathematical function that takes a set of inputs and 
         tokenizer = AutoTokenizer.from_pretrained(
             "deepseek-ai/DeepSeek-V2-Lite", pad_token="</s>", padding_side="right"
         )
-        quantization_config = FineGrainedFP8Config()
+        quantization_config = BitsAndBytesConfig(load_in_8bit=True)
         model = DeepseekV2ForCausalLM.from_pretrained(
             "deepseek-ai/DeepSeek-V2-Lite",
             device_map=torch_device,
