@@ -1461,7 +1461,7 @@ class MistralCommonTokenizer(PushToHubMixin):
                                 image_content = maybe_url
                             elif maybe_path:
                                 if not maybe_path.startswith("file://"):
-                                    maybe_path = "file://" + maybe_path
+                                    maybe_path = Path(maybe_path).resolve().as_uri()
                                 image_content = maybe_path
                             elif maybe_base64:
                                 if not maybe_base64.startswith("data:image"):
