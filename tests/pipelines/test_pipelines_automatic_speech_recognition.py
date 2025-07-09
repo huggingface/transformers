@@ -1190,7 +1190,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             num_beams=1,
         )
 
-        transcription_non_ass = pipe(sample.copy(), generate_kwargs={"assistant_model": assistant_model})["text"]
+        transcription_non_ass = pipe(sample, generate_kwargs={"assistant_model": assistant_model})["text"]
         transcription_ass = pipe(sample)["text"]
 
         self.assertEqual(transcription_ass, transcription_non_ass)

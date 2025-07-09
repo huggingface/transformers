@@ -514,6 +514,12 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @unittest.skip(
+        reason="InstructBlipVideoQFormerModel does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet."
+    )
+    def test_eager_matches_sdpa_generate(self):
+        pass
+
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
         pass

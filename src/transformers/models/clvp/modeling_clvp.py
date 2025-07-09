@@ -1653,14 +1653,15 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
         >>> text = "This is an example text."
         >>> ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.cast_column("audio", datasets.Audio(sampling_rate=22050))
-        >>> _, audio, sr = ds.sort("id").select(range(1))[:1]["audio"][0].values()
+        >>> audio = ds.sort("id")["audio"][0]
+        >>> audio_sample, sr = audio["array"], audio["sampling_rate"]
 
         >>> # Define processor and model
         >>> processor = ClvpProcessor.from_pretrained("susnato/clvp_dev")
         >>> model = ClvpModelForConditionalGeneration.from_pretrained("susnato/clvp_dev")
 
         >>> # Generate processor output and model output
-        >>> processor_output = processor(raw_speech=audio, sampling_rate=sr, text=text, return_tensors="pt")
+        >>> processor_output = processor(raw_speech=audio_sample, sampling_rate=sr, text=text, return_tensors="pt")
         >>> speech_embeds = model.get_speech_features(
         ...     input_ids=processor_output["input_ids"], input_features=processor_output["input_features"]
         ... )
@@ -1732,14 +1733,15 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
 
         >>> ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.cast_column("audio", datasets.Audio(sampling_rate=22050))
-        >>> _, audio, sr = ds.sort("id").select(range(1))[:1]["audio"][0].values()
+        >>> audio = ds.sort("id")["audio"][0]
+        >>> audio_sample, sr = audio["array"], audio["sampling_rate"]
 
         >>> # Define processor and model
         >>> processor = ClvpProcessor.from_pretrained("susnato/clvp_dev")
         >>> model = ClvpModelForConditionalGeneration.from_pretrained("susnato/clvp_dev")
 
         >>> # processor outputs and model outputs
-        >>> processor_output = processor(raw_speech=audio, sampling_rate=sr, text=text, return_tensors="pt")
+        >>> processor_output = processor(raw_speech=audio_sample, sampling_rate=sr, text=text, return_tensors="pt")
         >>> outputs = model(
         ...     input_ids=processor_output["input_ids"],
         ...     input_features=processor_output["input_features"],

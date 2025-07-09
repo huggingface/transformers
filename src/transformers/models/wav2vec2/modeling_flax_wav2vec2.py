@@ -255,9 +255,10 @@ WAV2VEC2_INPUTS_DOCSTRING = r"""
     Args:
         input_values (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
-            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
-            conversion into a tensor of type `jnp.ndarray`. See [`Wav2Vec2Processor.__call__`] for details.
+            into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.*  via the torchcodec library
+            (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
+            To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and conversion
+            into a tensor of type `jnp.ndarray`. See [`Wav2Vec2Processor.__call__`] for details.
         attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
             1]`:
@@ -1064,16 +1065,14 @@ FLAX_WAV2VEC2_MODEL_DOCSTRING = """
     ```python
     >>> from transformers import AutoProcessor, FlaxWav2Vec2Model
     >>> from datasets import load_dataset
-    >>> import soundfile as sf
 
     >>> processor = AutoProcessor.from_pretrained("facebook/wav2vec2-large-lv60")
     >>> model = FlaxWav2Vec2Model.from_pretrained("facebook/wav2vec2-large-lv60")
 
 
-    >>> def map_to_array(batch):
-    ...     speech, _ = sf.read(batch["file"])
-    ...     batch["speech"] = speech
-    ...     return batch
+    >>> def map_to_array(example):
+    ...     example["speech"] = example["audio"]["array"]
+    ...     return example
 
 
     >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -1183,16 +1182,14 @@ FLAX_WAV2VEC2_FOR_CTC_DOCSTRING = """
     >>> import jax.numpy as jnp
     >>> from transformers import AutoProcessor, FlaxWav2Vec2ForCTC
     >>> from datasets import load_dataset
-    >>> import soundfile as sf
 
     >>> processor = AutoProcessor.from_pretrained("facebook/wav2vec2-large-960h-lv60")
     >>> model = FlaxWav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-large-960h-lv60")
 
 
-    >>> def map_to_array(batch):
-    ...     speech, _ = sf.read(batch["file"])
-    ...     batch["speech"] = speech
-    ...     return batch
+    >>> def map_to_array(example):
+    ...     example["speech"] = example["audio"]["array"]
+    ...     return example
 
 
     >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -1384,16 +1381,14 @@ FLAX_WAV2VEC2_FOR_PRETRAINING_DOCSTRING = """
     >>> from transformers import AutoFeatureExtractor, FlaxWav2Vec2ForPreTraining
     >>> from transformers.models.wav2vec2.modeling_flax_wav2vec2 import _compute_mask_indices
     >>> from datasets import load_dataset
-    >>> import soundfile as sf
 
     >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-large-lv60")
     >>> model = FlaxWav2Vec2ForPreTraining.from_pretrained("facebook/wav2vec2-large-lv60")
 
 
-    >>> def map_to_array(batch):
-    ...     speech, _ = sf.read(batch["file"])
-    ...     batch["speech"] = speech
-    ...     return batch
+    >>> def map_to_array(example):
+    ...     example["speech"] = example["audio"]["array"]
+    ...     return example
 
 
     >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")

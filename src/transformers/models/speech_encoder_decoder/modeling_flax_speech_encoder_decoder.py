@@ -86,8 +86,9 @@ SPEECH_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
     Args:
         inputs (`jnp.ndarray` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, feature_dim)`, *optional*):
             Float values of input raw speech waveform or speech features. Values can be obtained by loading a `.flac`
-            or `.wav` audio file into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via the soundfile
-            library (`pip install soundfile`). To prepare the array into `inputs`, either the [`Wav2Vec2Processor`] or
+            or `.wav` audio file into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.*
+            via the torchcodec library (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
+            To prepare the array into `inputs`, either the [`Wav2Vec2Processor`] or
             [`Speech2TextProcessor`] should be used for padding and conversion into a tensor of type
             `torch.FloatTensor`.
         attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
@@ -128,10 +129,10 @@ SPEECH_ENCODER_DECODER_ENCODE_INPUTS_DOCSTRING = r"""
     Args:
         inputs (`jnp.ndarray` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, feature_dim)`, *optional*):
             Float values of input raw speech waveform or speech features. Values can be obtained by loading a *.flac*
-            or *.wav* audio file into an array of type *list[float]* or a *numpy.ndarray*, *e.g.* via the soundfile
-            library (*pip install soundfile*). To prepare the array into *inputs*, either the [`Wav2Vec2Processor`] or
-            [`Speech2TextProcessor`] should be used for padding and conversion into a tensor of type
-            *torch.FloatTensor*.
+            or *.wav* audio file into an array of type *list[float]* or a *numpy.ndarray*, *e.g.* via the torchcodec library
+            (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
+            To prepare the array into *inputs*, either the [`Wav2Vec2Processor`] or [`Speech2TextProcessor`] should be used
+            for padding and conversion into a tensor of type *torch.FloatTensor*.
         attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 

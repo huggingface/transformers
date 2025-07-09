@@ -691,10 +691,12 @@ SPEECH_TO_TEXT_INPUTS_DOCSTRING = r"""
     Args:
         input_features (`tf.Tensor` of shape `(batch_size, sequence_length, feature_size)`):
             Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be obtained
-            by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a `numpy.ndarray`, *e.g.*
-            via the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
-            [`AutoFeatureExtractor`] should be used for extracting the fbank features, padding and conversion into a
-            tensor of floats. See [`~Speech2TextFeatureExtractor.__call__`]
+            by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a `numpy.ndarray or a
+            `torch.Tensor``, *e.g.* via the torchcodec library (`pip install torchcodec`) or the soundfile library
+            (`pip install soundfile`).
+            To prepare the arrayinto `input_features`, the [`AutoFeatureExtractor`] should be used for extracting
+            the fbank features, padding and conversion into a tensor of floats.
+            See [`~Speech2TextFeatureExtractor.__call__`]
         attention_mask (`tf.Tensor` of shape `({0})`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -847,8 +849,9 @@ class TFSpeech2TextEncoder(keras.layers.Layer):
         Args:
             input_features (`tf.Tensor` of shape `(batch_size, sequence_length, feature_size)`):
                 Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be
-                obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a
-                `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
+                obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
+                `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec libary (`pip install torchcodec`) or
+            the soundfile library (`pip install soundfile`). To prepare the array into
                 `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the fbank features,
                 padding and conversion into a tensor of floats. See [`~Speech2TextFeatureExtractor.__call__`]
             attention_mask (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1469,7 +1472,6 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
         >>> import tensorflow as tf
         >>> from transformers import Speech2TextProcessor, TFSpeech2TextForConditionalGeneration
         >>> from datasets import load_dataset
-        >>> import soundfile as sf
 
         >>> model = TFSpeech2TextForConditionalGeneration.from_pretrained(
         ...     "facebook/s2t-small-librispeech-asr", from_pt=True
@@ -1477,10 +1479,9 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
         >>> processor = Speech2TextProcessor.from_pretrained("facebook/s2t-small-librispeech-asr")
 
 
-        >>> def map_to_array(batch):
-        ...     speech, _ = sf.read(batch["file"])
-        ...     batch["speech"] = speech
-        ...     return batch
+        >>> def map_to_array(example):
+        ...     example["speech"] = example["audio"]["array"]
+        ...     return example
 
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
