@@ -29,7 +29,7 @@ from transformers.models.instructblip.modeling_instructblip import (
     InstructBlipPreTrainedModel,
     InstructBlipQFormerModel,
     InstructBlipVisionModel,
-    KwargsForCausalLM,
+    TransformersKwargs,
 )
 
 from ...configuration_utils import PretrainedConfig
@@ -388,9 +388,16 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         use_cache: Optional[bool] = None,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, InstructBlipVideoForConditionalGenerationModelOutput]:
         r"""
+        qformer_input_ids (`torch.LongTensor` of shape (batch_size, sequence_length)):
+            The sequence used as a prompt to be fed to the Q-Former module.
+        qformer_attention_mask (`torch.LongTensor` of shape (batch_size, sequence_length), *optional*):
+            Mask to avoid performing attention on padding token indices.
+
+        Examples:
+
         ```python
         >>> from transformers import InstructBlipVideoProcessor, InstructBlipVideoForConditionalGeneration
         >>> import torch
