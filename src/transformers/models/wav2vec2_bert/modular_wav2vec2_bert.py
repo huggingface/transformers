@@ -20,7 +20,12 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
-from ..wav2vec2.modeling_wav2vec2 import Wav2Vec2FeedForward, Wav2Vec2ForSequenceClassification, Wav2Vec2Model
+from ..seamless_m4t.modeling_seamless_m4t import _compute_new_attention_mask
+from ..wav2vec2.modeling_wav2vec2 import (
+    Wav2Vec2FeedForward,
+    Wav2Vec2ForSequenceClassification,
+    Wav2Vec2Model,
+)
 from ..wav2vec2_conformer.modeling_wav2vec2_conformer import (
     Wav2Vec2ConformerForAudioFrameClassification,
     Wav2Vec2ConformerForCTC,
@@ -36,32 +41,6 @@ logger = logging.get_logger(__name__)
 
 
 _HIDDEN_STATES_START_POSITION = 2
-
-
-# Copied from transformers.models.seamless_m4t_v2.modeling_seamless_m4t_v2._compute_new_attention_mask
-def _compute_new_attention_mask(hidden_states: torch.Tensor, seq_lens: torch.Tensor):
-    """
-    Computes an attention mask of the form `(batch, seq_len)` with an attention for each element in the batch that
-    stops at the corresponding element in `seq_lens`.
-    Args:
-        hidden_states (`torch.FloatTensor` of shape `(batch, seq_len, *)`):
-            The sequences to mask, where `*` is any number of sequence-specific dimensions including none.
-        seq_lens (`torch.Tensor` of shape `(batch)`:
-            Each element represents the length of the sequence at the same index in `hidden_states`
-    Returns:
-        `torch.FloatTensor`: The float attention mask of shape `(batch, seq_len)`
-    """
-    batch_size, mask_seq_len = hidden_states.shape[:2]
-
-    indices = torch.arange(mask_seq_len, device=seq_lens.device).expand(batch_size, -1)
-
-    bool_mask = indices >= seq_lens.unsqueeze(1).expand(-1, mask_seq_len)
-
-    mask = hidden_states.new_ones((batch_size, mask_seq_len))
-
-    mask = mask.masked_fill(bool_mask, 0)
-
-    return mask
 
 
 class Wav2Vec2BertRotaryPositionalEmbedding(Wav2Vec2ConformerRotaryPositionalEmbedding, nn.Module):
@@ -483,7 +462,9 @@ class Wav2Vec2BertAdapter(nn.Module):
             sub_sampled_lengths = self._compute_sub_sample_lengths_from_attention_mask(sub_sampled_lengths)
             if not self.training or (layerdrop_prob > self.layerdrop):
                 hidden_states = layer(
-                    hidden_states, attention_mask=attention_mask, sub_sampled_lengths=sub_sampled_lengths
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    sub_sampled_lengths=sub_sampled_lengths,
                 )
 
         return hidden_states
@@ -614,7 +595,11 @@ class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
                 module.masked_spec_embed.data.uniform_()
         elif isinstance(
             module,
-            (Wav2Vec2BertForSequenceClassification, Wav2Vec2BertForAudioFrameClassification, Wav2Vec2BertForXVector),
+            (
+                Wav2Vec2BertForSequenceClassification,
+                Wav2Vec2BertForAudioFrameClassification,
+                Wav2Vec2BertForXVector,
+            ),
         ):
             if hasattr(module, "layer_weights"):
                 module.layer_weights.data.fill_(1.0 / (self.config.num_hidden_layers + 1))
@@ -640,7 +625,10 @@ class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
             padding = self.config.adapter_kernel_size // 2
             for _ in range(self.config.num_adapter_layers):
                 input_lengths = _conv_out_length(
-                    input_lengths, self.config.adapter_kernel_size, self.config.adapter_stride, padding
+                    input_lengths,
+                    self.config.adapter_kernel_size,
+                    self.config.adapter_stride,
+                    padding,
                 )
 
         return input_lengths
@@ -658,10 +646,17 @@ class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
         batch_size = attention_mask.shape[0]
 
         attention_mask = torch.zeros(
-            (batch_size, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
+            (batch_size, feature_vector_length),
+            dtype=attention_mask.dtype,
+            device=attention_mask.device,
         )
         # these two operations makes sure that all values before the output lengths idxs are attended to
-        attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
+        attention_mask[
+            (
+                torch.arange(attention_mask.shape[0], device=attention_mask.device),
+                output_lengths - 1,
+            )
+        ] = 1
         attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
         return attention_mask
 
@@ -843,7 +838,10 @@ class Wav2Vec2BertForCTC(Wav2Vec2ConformerForCTC):
             return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -987,7 +985,10 @@ class Wav2Vec2BertForAudioFrameClassification(Wav2Vec2ConformerForAudioFrameClas
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.num_labels), torch.argmax(labels.view(-1, self.num_labels), axis=1))
+            loss = loss_fct(
+                logits.view(-1, self.num_labels),
+                torch.argmax(labels.view(-1, self.num_labels), axis=1),
+            )
 
         if not return_dict:
             output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
