@@ -37,14 +37,9 @@ def sdpa_attention_paged_forward__(
 
     # because of the kernel, the shape of the cache is different
     # it return [num_tokens, num_kv_heads, head_dim]
-    # print(f"key.shape: {key.shape}")
-    if key.ndim == 3:
-        key = key.permute(1, 0, 2)
-        value = value.permute(1, 0, 2)
 
-    else:
-        key = key.view(-1, key.shape[-2], key.shape[-1]).permute(1, 0, 2)
-        value = value.view(-1, value.shape[-2], value.shape[-1]).permute(1, 0, 2)
+    key = key.permute(1, 0, 2)
+    value = value.permute(1, 0, 2)
 
     if hasattr(module, "num_key_value_groups"):
         key = repeat_kv(key, module.num_key_value_groups)
@@ -104,7 +99,7 @@ def sdpa_attention_paged_forward(
         # Introduce another runtime error - accessing a non-existent attribute
         if not hasattr(module, "_attn_output"):
             module._attn_output = torch.zeros(batch_size * seq_len, num_heads, head_size, device=query.device)
-        
+
         x = 16 // key.element_size()
         key = key.view(cache.num_blocks, cache.block_size, num_kv_heads, head_size // x, x).permute(0, 2, 3, 1, 4).contiguous()
         value = value.permute(0, 2, 3, 1).contiguous()
@@ -117,6 +112,8 @@ def sdpa_attention_paged_forward(
         seq_lens = kwargs.get("cumulative_seqlens_k")
         if seq_lens is not None:
             seq_lens = torch.diff(seq_lens)
+        if (seq_lens < 0).any():
+            seq_lens = torch.clamp(seq_lens, min=0)
 
         block_tables = kwargs.get("block_tables")
         if block_tables is None:
@@ -138,8 +135,12 @@ def sdpa_attention_paged_forward(
             module._attn_output = module._attn_output.to(key.device)
 
         try:
-            torch.cuda.synchronize()
-            # torch.mps.synchronize()
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+            elif torch.backends.mps.is_available():
+                torch.mps.synchronize()
+            else:
+                raise RuntimeError("No CUDA or MPS available")
             paged_attention_kernel.paged_attention_v1(
                 module._attn_output,
                 query,
@@ -156,8 +157,12 @@ def sdpa_attention_paged_forward(
                 v_scale=module._v_scale_tensor,
                 alibi_slopes=None,
             )
-            # torch.mps.synchronize()
-            torch.cuda.synchronize()
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+            elif torch.backends.mps.is_available():
+                torch.mps.synchronize()
+            else:
+                raise RuntimeError("No CUDA or MPS available")
         except RuntimeError as e:
             print(f"Error in paged_attention_v1: {e}")
             print(f"Shapes - query: {query.shape}, key: {key.shape}, value: {value.shape}")
