@@ -13,9 +13,12 @@
 # limitations under the License.
 """PyTorch Ernie 4.5 model"""
 
+import torch
 from torch import nn
 
+from ...modeling_rope_utils import dynamic_rope_update
 from ...utils import auto_docstring, can_return_tuple
+from ..glm.modeling_glm import rotate_half
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
@@ -37,6 +40,59 @@ class Ernie4_5PreTrainedModel(LlamaPreTrainedModel):
 
 class Ernie4_5RMSNorm(LlamaRMSNorm):
     pass
+
+class Ernie4_5_MoERotaryEmbedding(LlamaRotaryEmbedding):
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
+
+        # keeping it in full precision
+        return cos, sin
+
+
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        position_ids (`torch.Tensor`, *optional*):
+            Deprecated and unused.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    # glm rope style (with full dim) and full precision
+    original_dtype = q.dtype
+
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+
+    # Interleave them instead of usual shape
+    cos = cos[..., : cos.shape[-1] // 2].repeat_interleave(2, dim=-1)
+    sin = sin[..., : sin.shape[-1] // 2].repeat_interleave(2, dim=-1)
+
+    q_embed = (q.float() * cos) + (rotate_half(q).float() * sin)
+    k_embed = (k.float() * cos) + (rotate_half(k).float() * sin)
+
+    return q_embed.to(original_dtype), k_embed.to(original_dtype)
 
 
 class Ernie4_5MLP(LlamaMLP):
