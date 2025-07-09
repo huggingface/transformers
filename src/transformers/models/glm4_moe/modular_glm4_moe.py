@@ -133,8 +133,6 @@ class Glm4MoeConfig(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        decoder_sparse_step (`int`, *optional*, defaults to 1):
-            The frequency of the MoE layer.
         moe_intermediate_size (`int`, *optional*, defaults to 1408):
             Intermediate size of the routed expert.
         num_experts_per_tok (`int`, *optional*, defaults to 8):
@@ -208,7 +206,6 @@ class Glm4MoeConfig(PretrainedConfig):
         rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
-        decoder_sparse_step=1,
         moe_intermediate_size=1408,
         num_experts_per_tok=8,
         num_experts=128,
@@ -245,7 +242,6 @@ class Glm4MoeConfig(PretrainedConfig):
         rope_config_validation(self)
 
         # MoE arguments
-        self.decoder_sparse_step = decoder_sparse_step
         self.moe_intermediate_size = moe_intermediate_size
         self.num_experts_per_tok = num_experts_per_tok
         self.n_group = n_group
