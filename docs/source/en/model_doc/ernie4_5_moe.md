@@ -1,4 +1,4 @@
-<!--Copyright 2025 The Qwen Team and The HuggingFace Team. All rights reserved.
+<!--Copyright 2025 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -14,23 +14,118 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Ernie4_5_MoE
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
+    </div>
+</div>
+
+# Ernie 4.5 MoE
 
 ## Overview
 
-The Ernie4_5_MoE model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The Ernie 4.5 MoE model was released in the [Ernie 4.5 Model Family](https://ernie.baidu.com/blog/posts/ernie4.5/) release by baidu.
+This family of models contains multiple different architectures and model sizes. This model in specific targets the base text
+model with mixture of experts (moe) - one with 21B total, 3B active parameters and another one with 300B total, 47B active parameters.
+It uses the standard [Llama](./llama.md) at its core combined with a specialized MoE based on [Mixtral](./mixtral.md) with additional shared
+experts.
 
-The abstract from the paper is the following:
+Other models from the family can be found at [Ernie 4.5](./elrnie4_5.md).
 
-*<INSERT PAPER ABSTRACT HERE>*
+<div class="flex justify-center">
+    <img src="https://ernie.baidu.com/blog/posts/ernie4.5/overview.png"/>
+</div>
 
-Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+## Usage Tips
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+### Generate text
+
+```python
+import torch
+from transformers import Ernie4_5_MoEForCausalLM, Ernie4_5Tokenizer
+
+model_name = "baidu/ERNIE-4.5-21B-A3B-PT"
+
+# load the tokenizer and the model
+tokenizer = Ernie4_5Tokenizer.from_pretrained(model_name)
+model = Ernie4_5_MoEForCausalLM.from_pretrained(
+    model_name,
+    use_cache=True,
+    device_map="auto",
+    torch_dtype=torch.bfloat16
+)
+
+# prepare the model input
+inputs = tokenizer("Hey, are you conscious? Can you talk to me?", return_tensors="pt")
+prompt = "Hey, are you conscious? Can you talk to me?"
+messages = [
+    {"role": "user", "content": prompt}
+]
+text = tokenizer.apply_chat_template(
+    messages,
+    tokenize=False,
+    add_generation_prompt=True
+)
+model_inputs = tokenizer([text], add_special_tokens=False, return_tensors="pt").to(model.device)
+
+# conduct text completion
+generated_ids = model.generate(
+    **model_inputs,
+    max_new_tokens=32,
+)
+output_ids = generated_ids[0][len(model_inputs.input_ids[0]):].tolist()
+
+# decode the generated ids
+generate_text = tokenizer.decode(output_ids, skip_special_tokens=True)
+```
+
+### Quantization with Bitsandbytes
+
+```python
+import torch
+from transformers import BitsAndBytesConfig, Ernie4_5_MoEForCausalLM, Ernie4_5Tokenizer
+
+model_name = "baidu/ERNIE-4.5-21B-A3B-PT"
+
+# load the tokenizer and the model
+tokenizer = Ernie4_5Tokenizer.from_pretrained(model_name)
+model = Ernie4_5_MoEForCausalLM.from_pretrained(
+    model_name,
+    use_cache=True,
+    device_map="auto",
+    quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+)
+
+# prepare the model input
+inputs = tokenizer("Hey, are you conscious? Can you talk to me?", return_tensors="pt")
+prompt = "Hey, are you conscious? Can you talk to me?"
+messages = [
+    {"role": "user", "content": prompt}
+]
+text = tokenizer.apply_chat_template(
+    messages,
+    tokenize=False,
+    add_generation_prompt=True
+)
+model_inputs = tokenizer([text], add_special_tokens=False, return_tensors="pt").to(model.device)
+
+# conduct text completion
+generated_ids = model.generate(
+    **model_inputs,
+    max_new_tokens=32,
+)
+output_ids = generated_ids[0][len(model_inputs.input_ids[0]):].tolist()
+
+# decode the generated ids
+generate_text = tokenizer.decode(output_ids, skip_special_tokens=True)
+```
+
+This model was contributed by [Anton Vlasjuk](https://huggingface.co/AntonV).
+The original code can be found [here](https://github.com/PaddlePaddle/ERNIE).
 
 
 ## Ernie4_5_MoEConfig
@@ -46,18 +141,4 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] Ernie4_5_MoEForCausalLM
     - forward
-
-## Ernie4_5_MoEForSequenceClassification
-
-[[autodoc]] Ernie4_5_MoEForSequenceClassification
-    - forward
-
-## Ernie4_5_MoEForTokenClassification
-
-[[autodoc]] Ernie4_5_MoEForTokenClassification
-    - forward
-
-## Ernie4_5_MoEForQuestionAnswering
-
-[[autodoc]] Ernie4_5_MoEForQuestionAnswering
-    - forward
+    - generate

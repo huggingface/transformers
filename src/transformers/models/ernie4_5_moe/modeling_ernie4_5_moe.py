@@ -332,7 +332,7 @@ class Ernie4_5_MoESparseMoEBlock(nn.Module):
         )
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
             # router_logits: (batch * sequence_length, n_experts)
-            router_logits = self.gate(hidden_states.to(self.gate.weight.dtype))
+            router_logits = self.gate(hidden_states.float())
 
             # TODO: check below
             # See https://github.com/PaddlePaddle/ERNIE/blob/d4e1c371dfd089ef618ef378e8996049bd54da00/ernie/moe/moe_layer.py#L607 in combination with
