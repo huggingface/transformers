@@ -23,6 +23,7 @@ _import_structure = {
         "ParakeetCTCConfig",
     ],
     "feature_extraction_fastconformer": ["FastConformerFeatureExtractor"],
+    "tokenization_fastconformer": ["FastConformerTokenizer"],
 }
 
 _import_structure["modeling_fastconformer"] = [
@@ -44,6 +45,7 @@ if TYPE_CHECKING:
         FastConformerPreTrainedModel,
         ParakeetCTC,
     )
+    from .tokenization_fastconformer import FastConformerTokenizer
 
 else:
     import sys
