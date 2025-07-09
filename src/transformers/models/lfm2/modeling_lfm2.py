@@ -281,6 +281,13 @@ class LFM2Cache(DynamicCache):
             return 0
         return self.key_cache[layer_idx].shape[-2]
 
+    def to_legacy_cache(self) -> tuple[tuple[torch.Tensor], tuple[torch.Tensor]]:
+        raise NotImplementedError("LFM2Cache does not have a legacy cache equivalent.")
+
+    @classmethod
+    def from_legacy_cache(cls, past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
+        raise NotImplementedError("LFM2Cache does not have a legacy cache equivalent.")
+
     def reset(self):
         for layer_idx in range(len(self.conv_cache)):
             # In-place ops prevent breaking the static address
