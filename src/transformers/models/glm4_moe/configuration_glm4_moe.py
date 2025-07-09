@@ -44,6 +44,7 @@ class Glm4MoeConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 96):
             Number of attention heads for each attention layer in the Transformer encoder.
+        partial_rotary_factor (`<fill_type>`, *optional*, defaults to 0.5): <fill_docstring>
         num_key_value_heads (`int`, *optional*, defaults to 8):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
@@ -116,12 +117,13 @@ class Glm4MoeConfig(PretrainedConfig):
             Number of selected experts.
         num_experts (`int`, *optional*, defaults to 128):
             Number of routed experts.
+        n_group (`int`, *optional*, defaults to 1):
+            Number of groups for routed experts.
+        topk_group (`int`, *optional*, defaults to 1):
+            Number of selected groups for each token(for each token, ensuring the selected experts is only within `topk_group` groups).
+        num_nextn_predict_layers (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
         norm_topk_prob (`bool`, *optional*, defaults to `True`):
             Whether to normalize the topk probabilities.
-        n_group (`int`, *optional*, defaults to 8):
-            Number of groups for routed experts.
-        topk_group (`int`, *optional*, defaults to 4):
-            Number of selected groups for each token(for each token, ensuring the selected experts is only within `topk_group` groups).
         output_router_logits (`bool`, *optional*, defaults to `False`):
             Whether or not the router logits should be returned by the model. Enabling this will also
             allow the model to output the auxiliary loss. See [here]() for more details.
