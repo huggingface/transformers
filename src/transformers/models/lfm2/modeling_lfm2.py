@@ -96,6 +96,17 @@ class LFM2RotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
+def apply_mask_to_padding_states(hidden_states, attention_mask):
+    """
+    Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
+    """
+    if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
+        dtype = hidden_states.dtype
+        hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
+
+    return hidden_states
+
+
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -375,6 +386,7 @@ class LFM2ShortConv(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
     ):
+        x = apply_mask_to_padding_states(x, attention_mask)
         BCx = self.in_proj(x).transpose(-1, -2)
         B, C, x = BCx.chunk(3, dim=-2)
 
@@ -409,6 +421,8 @@ class LFM2ShortConv(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
     ):
         seqlen = x.shape[1]
+
+        x = apply_mask_to_padding_states(x, attention_mask)
         BCx = self.in_proj(x).transpose(-1, -2)
         B, C, x = BCx.chunk(3, dim=-2)
 
@@ -791,13 +805,13 @@ class LFM2ForCausalLM(LFM2PretrainedModel, GenerationMixin):
 
     def prepare_inputs_for_generation(
         self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        cache_position=None,
-        position_ids=None,
-        use_cache=True,
+        input_ids: torch.LongTensor,
+        past_key_values: Optional[LFM2Cache] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
         **kwargs,
     ):
         # Overwritten -- Support custom LFM2Cache.
@@ -806,13 +820,12 @@ class LFM2ForCausalLM(LFM2PretrainedModel, GenerationMixin):
             isinstance(past_key_values, DynamicCache) and past_key_values._seen_tokens == 0
         )
 
-        # Omit tokens covered by past_key_values.
+        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
+        # Exception 1: when passing input_embeds, input_ids may be missing entries
+        # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
+        # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
+        #              (we can't check exception 3 while compiling)
         if not empty_past_kv:
-            # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
-            # Exception 1: when passing input_embeds, input_ids may be missing entries
-            # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
-            # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
-            #              (we can't check exception 3 while compiling)
             if (
                 inputs_embeds is not None  # Exception 1
                 or cache_position[-1] >= input_ids.shape[1]  # Exception 3
@@ -823,12 +836,12 @@ class LFM2ForCausalLM(LFM2PretrainedModel, GenerationMixin):
         else:
             past_key_values = LFM2Cache(self.config, input_ids.shape[0], dtype=self.dtype, device=self.device)
 
-        # if attention_mask is not None and position_ids is None:
-        #     # create position_ids on the fly for batch generation
-        #     position_ids = attention_mask.long().cumsum(-1) - 1
-        #     position_ids.masked_fill_(attention_mask == 0, 1)
-        #     if not empty_past_kv:
-        #         position_ids = position_ids[:, -input_ids.shape[1] :]
+        if attention_mask is not None and position_ids is None:
+            # create position_ids on the fly for batch generation
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            if not empty_past_kv:
+                position_ids = position_ids[:, -input_ids.shape[1] :]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and empty_past_kv:
@@ -838,7 +851,7 @@ class LFM2ForCausalLM(LFM2PretrainedModel, GenerationMixin):
 
         model_inputs.update(
             {
-                # "position_ids": position_ids,
+                "position_ids": position_ids,
                 "past_key_values": past_key_values,
                 "use_cache": use_cache,
                 "attention_mask": attention_mask,
