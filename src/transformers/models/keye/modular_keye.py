@@ -972,7 +972,7 @@ class KeyeProcessor(ProcessorMixin):
                     f"The length of fps ({len(fps) if hasattr(fps, '__len__') else fps}) must be equal to the length of video_grid_thw ({len(video_grid_thw)}) or fps should be a single number."
                 )
             videos_inputs.update(
-                {"second_per_grid_ts": torch.tensor(second_per_grid_ts)}
+                {"second_per_grid_ts": second_per_grid_ts}
             )
 
         else:
