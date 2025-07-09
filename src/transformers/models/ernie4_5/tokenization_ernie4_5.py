@@ -21,6 +21,7 @@ import sentencepiece as spm
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -33,6 +34,7 @@ and more of those little edge cases. Init is also not congruent to actual passed
 """
 
 
+@requires(backends=("sentencepiece",))
 class Ernie4_5Tokenizer(PreTrainedTokenizer):
     vocab_files_names = {
         "vocab_file": "tokenizer.model",
