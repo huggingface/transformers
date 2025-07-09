@@ -1,7 +1,7 @@
 from transformers.models.llama.configuration_llama import LlamaConfig
 
-class DuplicatedMethodConfig(LlamaConfig):
 
+class DuplicatedMethodConfig(LlamaConfig):
     @property
     def vocab_size(self):
         return 45

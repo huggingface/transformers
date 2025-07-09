@@ -976,17 +976,31 @@ def replace_class_node(
     original_modeling_methods = {}
     for node in original_modeling_node.body.body:
         if m.matches(node, m.FunctionDef()):
-            # Due to the @property and @name.setter decorators, methods can sometimes have the same name
+            # Due to the @property and @name.setter decorators, methods can sometimes have the same name, but we need a way
+            # to separate them
             if node.name.value in original_modeling_methods:
-                original_modeling_methods[f"{node.name.value}_setter"] = node
+                # If it's already present, and the decorator is @property, it means the node already added was the setter
+                if node.decorators[0].decorator.value == "property":
+                    original_modeling_methods[f"{node.name.value}_setter"] = original_modeling_methods[node.name.value]
+                    original_modeling_methods[node.name.value] = node
+                # In this case current node is the setter
+                else:
+                    original_modeling_methods[f"{node.name.value}_setter"] = node
             else:
                 original_modeling_methods[node.name.value] = node
     modular_methods = {}
     for node in modular_class_node.body.body:
         if m.matches(node, m.FunctionDef()):
-            # Due to the @property and @name.setter decorators, methods can sometimes have the same name
+            # Due to the @property and @name.setter decorators, methods can sometimes have the same name, but we need a way
+            # to separate them
             if node.name.value in modular_methods:
-                modular_methods[f"{node.name.value}_setter"] = node
+                # If it's already present, and the decorator is @property, it means the node already added was the setter
+                if node.decorators[0].decorator.value == "property":
+                    modular_methods[f"{node.name.value}_setter"] = modular_methods[node.name.value]
+                    modular_methods[node.name.value] = node
+                # In this case current node is the setter
+                else:
+                    modular_methods[f"{node.name.value}_setter"] = node
             else:
                 modular_methods[node.name.value] = node
 
