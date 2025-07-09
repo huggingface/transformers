@@ -42,6 +42,7 @@ class ColQwen2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     _no_split_modules = []
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
     _supports_cache_class = True
 

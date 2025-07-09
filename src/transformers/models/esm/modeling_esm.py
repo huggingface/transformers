@@ -739,6 +739,7 @@ class EsmPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["EsmLayer", "EsmFoldTriangularSelfAttentionBlock", "EsmEmbeddings"]
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights with BertLMPredictionHead->EsmLMHead
     def _init_weights(self, module):
