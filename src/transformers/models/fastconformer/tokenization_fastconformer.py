@@ -306,3 +306,6 @@ class FastConformerTokenizer(PreTrainedTokenizer):
         if token_ids_1 is not None:
             special_tokens_mask += [0] * len(token_ids_1)
         return special_tokens_mask 
+    
+
+__all__ = ["FastConformerTokenizer"]

@@ -29,7 +29,6 @@ from torch import nn
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring
 from ...utils.generic import can_return_tuple
 from .configuration_fastconformer import FastConformerConfig, ParakeetCTCConfig
 
@@ -431,21 +430,14 @@ class FastConformerSubsamplingConv2D(nn.Module):
         return hidden_states, lengths
 
 
-@auto_docstring
+# Base Model Classes
 class FastConformerPreTrainedModel(PreTrainedModel):
     config_class = FastConformerConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["FastConformerDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
-    _supports_attention_backend = True
     main_input_name = "input_features"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["FastConformerBlock"]
+    _skip_keys_device_placement = []
 
     def _init_weights(self, module):
         # Get initializer_range from the appropriate config
