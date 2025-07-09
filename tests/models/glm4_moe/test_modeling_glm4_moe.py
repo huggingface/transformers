@@ -359,17 +359,17 @@ class Glm4MoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         """
         max_new_tokens = 30
 
-        tokenizer = AutoTokenizer.from_pretrained(" /model/GLM-4-MoE-100B-A10B")
+        tokenizer = AutoTokenizer.from_pretrained("THUDM/GLM-4-MoE-100B-A10B")
 
         model_sdpa = Glm4MoeForCausalLM.from_pretrained(
-            " /model/GLM-4-MoE-100B-A10B",
+            "THUDM/GLM-4-MoE-100B-A10B",
             torch_dtype=torch.float16,
         ).to(torch_device)
 
         self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
         model_eager = Glm4MoeForCausalLM.from_pretrained(
-            " /model/GLM-4-MoE-100B-A10B",
+            "THUDM/GLM-4-MoE-100B-A10B",
             torch_dtype=torch.float16,
             attn_implementation="eager",
         ).to(torch_device)
