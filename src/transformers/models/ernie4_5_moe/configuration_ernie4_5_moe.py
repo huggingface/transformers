@@ -147,6 +147,7 @@ class Ernie4_5_MoEConfig(PretrainedConfig):
 
     model_type = "ernie4_5_moe"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {"num_experts": "moe_num_experts", "num_experts_per_tok": "moe_k"}
 
     # Default tensor parallel plan for base model `Ernie4_5_MoE`
     base_model_tp_plan = {

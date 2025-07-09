@@ -325,18 +325,26 @@ class Ernie4_5_MoESparseMoEBlock(nn.Module):
         if self.shared_experts is not None:
             shared_output = self.shared_experts(hidden_states)
 
-        # router_logits: (batch * sequence_length, n_experts)
-        router_logits = self.gate(hidden_states.float())
+        device_type = (
+            hidden_states.device.type
+            if isinstance(hidden_states.device.type, str) and hidden_states.device.type != "mps"
+            else "cpu"
+        )
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            # router_logits: (batch * sequence_length, n_experts)
+            router_logits = self.gate(hidden_states.to(self.gate.weight.dtype))
 
-        # TODO: check below
-        # See https://github.com/PaddlePaddle/ERNIE/blob/d4e1c371dfd089ef618ef378e8996049bd54da00/ernie/moe/moe_layer.py#L607 in combination with
-        # https://github.com/PaddlePaddle/Paddle/blob/develop/python/paddle/incubate/nn/functional/moe_gate_dispatch.py#L104 == the "correction bias"
-        # correction_bias = self.moe_statics.e_score_correction_bias[0]
-        routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
-        # routing_weights, selected_experts = torch.topk(routing_weights + correction_bias, self.top_k, dim=-1)
-        routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
-        routing_weights = routing_weights / torch.clamp(routing_weights.sum(dim=-1, keepdim=True), min=self.norm_min)
-        routing_weights = routing_weights.to(hidden_states.dtype)
+            # TODO: check below
+            # See https://github.com/PaddlePaddle/ERNIE/blob/d4e1c371dfd089ef618ef378e8996049bd54da00/ernie/moe/moe_layer.py#L607 in combination with
+            # https://github.com/PaddlePaddle/Paddle/blob/develop/python/paddle/incubate/nn/functional/moe_gate_dispatch.py#L104 == the "correction bias"
+            # correction_bias = self.moe_statics.e_score_correction_bias[0]
+            routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
+            # routing_weights, selected_experts = torch.topk(routing_weights + correction_bias, self.top_k, dim=-1)
+            routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
+            routing_weights = routing_weights / torch.clamp(
+                routing_weights.sum(dim=-1, keepdim=True), min=self.norm_min
+            )
+            routing_weights = routing_weights.to(hidden_states.dtype)
 
         final_hidden_states = torch.zeros(
             (batch_size * sequence_length, hidden_dim), dtype=hidden_states.dtype, device=hidden_states.device
@@ -490,6 +498,8 @@ class Ernie4_5_MoEPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, Ernie4_5_MoERMSNorm):
             module.weight.data.fill_(1.0)
+        elif isinstance(module, Ernie4_5_MoEStatics):
+            module.e_score_correction_bias.data.zero_()
 
 
 @auto_docstring

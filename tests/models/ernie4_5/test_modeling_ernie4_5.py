@@ -115,5 +115,5 @@ class Ernie4_5IntegrationTest(unittest.TestCase):
             do_sample=False,
         )
 
-        generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True).strip("\n")
         self.assertEqual(generated_text, EXPECTED_TEXT)
