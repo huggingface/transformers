@@ -1768,13 +1768,15 @@ if __name__ == "__main__":
                 files_to_parse[i] = full_path
 
     priority_list, _ = find_priority_list(args.files_to_parse)
-    
+
     # Handle standalone models that don't have dependencies from other modular files
     standalone_files = [f for f in args.files_to_parse if f not in priority_list]
     all_files_to_process = priority_list + standalone_files
-    
+
     # Assert that all files will be processed
-    assert len(all_files_to_process) == len(args.files_to_parse), f"Some files will not be converted. Missing: {set(args.files_to_parse) - set(all_files_to_process)}"
+    assert len(all_files_to_process) == len(args.files_to_parse), (
+        f"Some files will not be converted. Missing: {set(args.files_to_parse) - set(all_files_to_process)}"
+    )
 
     for file_name in all_files_to_process:
         print(f"Converting {file_name} to a single model single file format")

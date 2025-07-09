@@ -86,6 +86,23 @@ class FastConformerConfig(PretrainedConfig):
             Whether to output attention weights.
         output_hidden_states (`bool`, *optional*, defaults to `False`):
             Whether to output hidden states.
+
+    Example:
+        ```python
+        >>> from transformers import FastConformerModel, FastConformerConfig
+
+        >>> # Initializing a FastConformer configuration
+        >>> configuration = FastConformerConfig()
+
+        >>> # Initializing a model from the configuration
+        >>> model = FastConformerModel(configuration)
+
+        >>> # Accessing the model configuration
+        >>> configuration = model.config
+        ```
+
+    This configuration class is based on the FastConformer architecture from NVIDIA NeMo. You can find more details
+    and pre-trained models at [nvidia/parakeet-ctc-1.1b](https://huggingface.co/nvidia/parakeet-ctc-1.1b).
     """
 
     model_type = "fastconformer"
@@ -193,18 +210,22 @@ class ParakeetCTCConfig(PretrainedConfig):
         fastconformer_config (`FastConformerConfig`, *optional*):
             Configuration for the FastConformer encoder.
 
-    ```python
-    >>> from transformers import ParakeetCTC, ParakeetCTCConfig
+    Example:
+        ```python
+        >>> from transformers import ParakeetCTC, ParakeetCTCConfig
 
-    >>> # Initializing a ParakeetCTC configuration
-    >>> configuration = ParakeetCTCConfig()
+        >>> # Initializing a ParakeetCTC configuration
+        >>> configuration = ParakeetCTCConfig()
 
-    >>> # Initializing a model from the configuration
-    >>> model = ParakeetCTC(configuration)
+        >>> # Initializing a model from the configuration
+        >>> model = ParakeetCTC(configuration)
 
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```
+        >>> # Accessing the model configuration
+        >>> configuration = model.config
+        ```
+
+    This configuration class is based on the Parakeet CTC architecture from NVIDIA NeMo. You can find more details
+    and pre-trained models at [nvidia/parakeet-ctc-1.1b](https://huggingface.co/nvidia/parakeet-ctc-1.1b).
     """
 
     model_type = "parakeet_ctc"

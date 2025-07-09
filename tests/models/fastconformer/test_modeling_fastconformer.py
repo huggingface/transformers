@@ -22,6 +22,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, random_attention_mask
 
+
 if is_datasets_available():
     from datasets import load_dataset
 
@@ -30,11 +31,11 @@ if is_torch_available():
 
     from transformers import AutoConfig, AutoFeatureExtractor, AutoModel, AutoTokenizer
     from transformers.models.fastconformer import (
+        FastConformerConfig,
         FastConformerFeatureExtractor,
         FastConformerModel,
         ParakeetCTC,
         ParakeetCTCConfig,
-        FastConformerConfig,
     )
 
 
@@ -144,7 +145,9 @@ class FastConformerModelTester:
 
         # Check output shape - should be reduced due to subsampling
         expected_seq_length = input_features.shape[1] // config.subsampling_factor
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, expected_seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, expected_seq_length, self.hidden_size)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config, input_features, attention_mask, input_lengths = self.prepare_config_and_inputs()
@@ -158,7 +161,7 @@ class FastConformerModelTester:
 
 @require_torch
 class FastConformerModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (FastConformerModel,) if is_torch_available() else ()
+    all_model_classes = (FastConformerModel, ParakeetCTC) if is_torch_available() else ()
 
     test_pruning = False
     test_headmasking = False
@@ -197,7 +200,7 @@ class FastConformerModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_model_name_list(self):
         pass
-    
+
     @slow
     def test_ctc_model_integration_generate_speech_recognition_outputs(self):
         ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
@@ -214,11 +217,13 @@ class FastConformerModelTest(ModelTesterMixin, unittest.TestCase):
         audio = torch.tensor(audio).unsqueeze(0).to(torch_device)
         features = feature_extractor(audio, sampling_rate=16000, return_tensors="pt")
 
-        decoded_tokens = model.generate_speech_recognition_outputs(features.input_features, features.attention_mask, features.input_lengths)
+        decoded_tokens = model.generate_speech_recognition_outputs(
+            features.input_features, features.attention_mask, features.input_lengths
+        )
         print(decoded_tokens)
         text = tokenizer.decode(decoded_tokens[0], ctc_decode=True)
 
-        EXPECTED_TOKENS=[[1024, 130, 1024, 103, 1024, 38, 1024, 994, 1024, 62, 1024]]
+        EXPECTED_TOKENS = [[1024, 130, 1024, 103, 1024, 38, 1024, 994, 1024, 62, 1024]]
         EXPECTED_TEXT = "what are you working on"
         self.assertEqual(decoded_tokens, EXPECTED_TOKENS)
         self.assertEqual(text, EXPECTED_TEXT)
@@ -227,40 +232,40 @@ class FastConformerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_from_pretrained(self):
         """Test loading the actual nvidia/parakeet-ctc-1.1b model from the Hub."""
         model_name = "nvidia/parakeet-ctc-1.1b"
-        
+
         # Test AutoModel loading
         auto_model = AutoModel.from_pretrained(model_name).to(torch_device)
         self.assertIsInstance(auto_model, ParakeetCTC)
         self.assertEqual(auto_model.config.model_type, "parakeet_ctc")
         self.assertEqual(auto_model.config.vocab_size, 1025)
-        
+
         # Test direct ParakeetCTC loading (this was previously broken, now fixed)
         ctc_model = ParakeetCTC.from_pretrained(model_name).to(torch_device)
         self.assertIsInstance(ctc_model, ParakeetCTC)
         self.assertEqual(ctc_model.config.model_type, "parakeet_ctc")
         self.assertEqual(ctc_model.config.vocab_size, 1025)
-        
+
         # Test config loading
         config = AutoConfig.from_pretrained(model_name)
         self.assertIsInstance(config, ParakeetCTCConfig)
         self.assertEqual(config.model_type, "parakeet_ctc")
         self.assertEqual(config.vocab_size, 1025)
-        
+
         # Test feature extractor loading
         feature_extractor = AutoFeatureExtractor.from_pretrained(model_name)
         self.assertIsInstance(feature_extractor, FastConformerFeatureExtractor)
         self.assertEqual(feature_extractor.feature_size, 80)
         self.assertEqual(feature_extractor.sampling_rate, 16000)
-        
+
         # Test forward pass with real model
         auto_model.eval()
         ctc_model.eval()
-        
+
         # Create test input
         batch_size, seq_len, mel_bins = 1, 100, 80
         input_features = torch.randn(batch_size, seq_len, mel_bins).to(torch_device)
         input_lengths = torch.tensor([seq_len], dtype=torch.long).to(torch_device)
-        
+
         with torch.no_grad():
             # Test AutoModel forward pass
             auto_outputs = auto_model(
@@ -270,7 +275,7 @@ class FastConformerModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(auto_outputs.logits)
             self.assertEqual(auto_outputs.logits.shape[0], batch_size)
             self.assertEqual(auto_outputs.logits.shape[2], 1025)  # vocab_size
-            
+
             # Test ParakeetCTC forward pass
             ctc_outputs = ctc_model(
                 input_features=input_features,
@@ -279,10 +284,10 @@ class FastConformerModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(ctc_outputs.logits)
             self.assertEqual(ctc_outputs.logits.shape[0], batch_size)
             self.assertEqual(ctc_outputs.logits.shape[2], 1025)  # vocab_size
-            
+
             # Test that both models produce the same output (they should be identical)
             torch.testing.assert_close(auto_outputs.logits, ctc_outputs.logits, rtol=1e-5, atol=1e-5)
-            
+
             # Test CTC generation
             decoded_sequences = ctc_model.generate_speech_recognition_outputs(
                 input_features=input_features,
@@ -294,7 +299,7 @@ class FastConformerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_ctc_model_with_ctc_config(self):
         """Test that ParakeetCTC works with ParakeetCTCConfig."""
         from transformers.models.fastconformer import ParakeetCTCConfig
-        
+
         # Create ParakeetCTCConfig
         fastconformer_config = FastConformerConfig(
             hidden_size=64,
@@ -302,7 +307,7 @@ class FastConformerModelTest(ModelTesterMixin, unittest.TestCase):
             num_attention_heads=4,
             num_mel_bins=80,
         )
-        
+
         ctc_config = ParakeetCTCConfig(
             vocab_size=128,
             blank_token_id=1,
@@ -310,31 +315,31 @@ class FastConformerModelTest(ModelTesterMixin, unittest.TestCase):
             ctc_zero_infinity=False,
             fastconformer_config=fastconformer_config,
         )
-        
+
         model = ParakeetCTC(ctc_config)
         model.to(torch_device)
         model.eval()
-        
+
         # Create test input
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         _, input_features, attention_mask, input_lengths = config_and_inputs
-        
+
         # Adjust input features for smaller configs
         input_features = input_features[:, :200, :80]  # Smaller for testing
         attention_mask = attention_mask[:, :200]
         input_lengths = torch.clamp(input_lengths, max=200)
-        
+
         with torch.no_grad():
             outputs = model(
                 input_features.to(torch_device),
                 attention_mask=attention_mask.to(torch_device),
                 input_lengths=input_lengths.to(torch_device),
             )
-        
+
         # Should produce outputs
         self.assertIsNotNone(outputs.logits)
         self.assertEqual(outputs.logits.shape[-1], 128)
-        
+
         # Check that CTC parameters are set correctly
         self.assertEqual(model.blank_token_id, 1)  # Custom
         self.assertEqual(model.ctc_loss_reduction, "sum")  # Custom
@@ -343,43 +348,46 @@ class FastConformerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_ctc_model_loss_computation(self):
         """Test CTC loss computation."""
         from transformers.models.fastconformer import ParakeetCTCConfig
-        
+
         fastconformer_config = FastConformerConfig(
             hidden_size=32,
             num_hidden_layers=1,
             num_attention_heads=2,
             num_mel_bins=40,
         )
-        
+
         config = ParakeetCTCConfig(
             vocab_size=10,
             blank_token_id=0,
             ctc_loss_reduction="mean",
             fastconformer_config=fastconformer_config,
         )
-        
+
         model = ParakeetCTC(config)
         model.to(torch_device)
         model.eval()
-        
+
         # Create test input and labels
         batch_size, seq_len, mel_bins = 2, 100, 40
         input_features = torch.randn(batch_size, seq_len, mel_bins).to(torch_device)
         input_lengths = torch.tensor([seq_len, seq_len // 2], dtype=torch.long).to(torch_device)
-        
+
         # Create dummy labels (non-blank tokens)
-        labels = torch.tensor([
-            [1, 2, 3, -100, -100],  # First sequence
-            [4, 5, -100, -100, -100],  # Second sequence (shorter)
-        ], dtype=torch.long).to(torch_device)
-        
+        labels = torch.tensor(
+            [
+                [1, 2, 3, -100, -100],  # First sequence
+                [4, 5, -100, -100, -100],  # Second sequence (shorter)
+            ],
+            dtype=torch.long,
+        ).to(torch_device)
+
         # Forward pass with labels should compute loss
         outputs = model(
             input_features=input_features,
             input_lengths=input_lengths,
             labels=labels,
         )
-        
+
         # Check that loss is computed and finite
         self.assertIsNotNone(outputs.loss)
         self.assertTrue(torch.isfinite(outputs.loss))

@@ -265,6 +265,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("owlv2", "Owlv2Model"),
         ("owlvit", "OwlViTModel"),
         ("paligemma", "PaliGemmaModel"),
+        ("parakeet_ctc", "ParakeetCTC"),
         ("patchtsmixer", "PatchTSMixerModel"),
         ("patchtst", "PatchTSTModel"),
         ("pegasus", "PegasusModel"),
@@ -387,7 +388,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("yoso", "YosoModel"),
         ("zamba", "ZambaModel"),
         ("zamba2", "Zamba2Model"),
-        ("parakeet_ctc", "ParakeetCTC"),
     ]
 )
 
