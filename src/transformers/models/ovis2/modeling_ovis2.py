@@ -796,19 +796,19 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
         >>> import requests
         >>> from transformers import AutoProcessor, Ovis2ForConditionalGeneration
 
-        >>> model = Ovis2ForConditionalGeneration.from_pretrained("ovis2-hf/ovis2-1.5-7b-hf")
-        >>> processor = AutoProcessor.from_pretrained("ovis2-hf/ovis2-1.5-7b-hf")
+        >>> model = Ovis2ForConditionalGeneration.from_pretrained("thisisiron/Ovis2-2B-hf")
+        >>> processor = AutoProcessor.from_pretrained("thisisiron/Ovis2-2B-hf")
 
-        >>> prompt = "USER: <image>\nWhat's the content of the image? ASSISTANT:"
-        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        >>> prompt = "<|im_start|>user\n<image>\nDescribe the image.<|im_end|>\n<|im_start|>assistant\n"
+        >>> url = "http://images.cocodataset.org/val2014/COCO_val2014_000000537955.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
 
         >>> # Generate
         >>> generate_ids = model.generate(**inputs, max_new_tokens=15)
-        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "USER:  \nWhat's the content of the image? ASSISTANT: The image features a busy city street with a stop sign prominently displayed"
+        >>> processor.batch_decode(generate_ids, skip_special_tokens=True)[0]
+        "user\n\nDescribe the image.\nassistant\nThe image features a brown dog standing on a wooden floor, looking up with"
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
