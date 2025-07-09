@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_modernbert_decoder.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2024 Answer.AI, LightOn, and contributors, and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 Johns Hopkins University, LightOn, and the HuggingFace Inc. team. All rights reserved.
 #
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -88,13 +88,6 @@ class ModernBertDecoderConfig(PretrainedConfig):
             Whether to use bias in the classifier.
         classifier_activation (`str`, *optional*, defaults to `"gelu"`):
             The activation function for the classifier.
-        deterministic_flash_attn (`bool`, *optional*, defaults to `False`):
-            Whether to use deterministic flash attention. If `False`, inference will be faster but not deterministic.
-        reference_compile (`bool`, *optional*):
-            Whether to compile the layers of the model which were compiled during pretraining. If `None`, then parts of
-            the model will be compiled if 1) `triton` is installed, 2) the model is not on MPS, 3) the model is not
-            shared between devices, and 4) the model is not resized after initialization. If `True`, then the model may
-            be faster in some scenarios.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
@@ -155,8 +148,6 @@ class ModernBertDecoderConfig(PretrainedConfig):
         classifier_dropout=0.0,
         classifier_bias=False,
         classifier_activation="gelu",
-        deterministic_flash_attn=False,
-        reference_compile=None,
         use_cache=True,
         local_attention=128,
         global_attn_every_n_layers=3,
@@ -193,8 +184,6 @@ class ModernBertDecoderConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.classifier_bias = classifier_bias
         self.classifier_activation = classifier_activation
-        self.deterministic_flash_attn = deterministic_flash_attn
-        self.reference_compile = reference_compile
         self.use_cache = use_cache
         self.local_attention = local_attention
         self.global_attn_every_n_layers = global_attn_every_n_layers
@@ -212,11 +201,6 @@ class ModernBertDecoderConfig(PretrainedConfig):
                     self.layer_types.append("full_attention")
 
         self.sliding_window = local_attention
-
-    def to_dict(self):
-        output = super().to_dict()
-        output.pop("reference_compile", None)
-        return output
 
 
 __all__ = ["ModernBertDecoderConfig"]
