@@ -26,20 +26,17 @@ from ...modeling_outputs import BaseModelOutput, CausalLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, auto_docstring, logging
 from ...utils.generic import can_return_tuple
-from ..llama.modeling_llama import LlamaPreTrainedModel
+from ...configuration_utils import PretrainedConfig
 
 logger = logging.get_logger(__name__)
 
-# Import LlamaConfig for configuration
-from ..llama.configuration_llama import LlamaConfig
-
 # Configuration
-class FastConformerConfig(LlamaConfig):
+class FastConformerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FastConformerModel`]. It is used to instantiate a
     FastConformer model according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from [`LlamaConfig`] and can be used to control the model outputs. Read the
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
@@ -80,6 +77,20 @@ class FastConformerConfig(LlamaConfig):
             The dropout ratio for activations inside the fully connected layer.
         use_bias (`bool`, *optional*, defaults to `False`):
             Whether to use bias in the linear layers.
+        pad_token_id (`int`, *optional*, defaults to 0):
+            The id of the padding token.
+        bos_token_id (`int`, *optional*, defaults to 1):
+            The id of the beginning-of-sequence token.
+        eos_token_id (`int`, *optional*, defaults to 2):
+            The id of the end-of-sequence token.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie word embeddings.
+        use_cache (`bool`, *optional*, defaults to `False`):
+            Whether to use cache. Not used in FastConformer but kept for compatibility.
+        output_attentions (`bool`, *optional*, defaults to `False`):
+            Whether to output attention weights.
+        output_hidden_states (`bool`, *optional*, defaults to `False`):
+            Whether to output hidden states.
     """
 
     model_type = "fastconformer"
@@ -109,56 +120,47 @@ class FastConformerConfig(LlamaConfig):
         bos_token_id=1,
         eos_token_id=2,
         tie_word_embeddings=False,
-        num_key_value_heads=None,
-        max_position_embeddings=2048,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        pretraining_tp=1,
-        rope_theta=10000.0,
-        rope_scaling=None,
-        mlp_bias=False,
-        head_dim=None,
-        attention_bias=False,
+        use_cache=False,
+        output_attentions=False,
+        output_hidden_states=False,
         **kwargs,
     ):
-        # Map FastConformer specific parameters to LlamaConfig parameters
         super().__init__(
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            intermediate_size=intermediate_size,
-            hidden_act=hidden_act,
-            initializer_range=initializer_range,
-            attention_bias=use_bias,
-            attention_dropout=attention_probs_dropout_prob,
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             tie_word_embeddings=tie_word_embeddings,
-            num_key_value_heads=num_key_value_heads,
-            max_position_embeddings=max_position_embeddings,
-            rms_norm_eps=rms_norm_eps,
-            use_cache=use_cache,
-            pretraining_tp=pretraining_tp,
-            rope_theta=rope_theta,
-            rope_scaling=rope_scaling,
-            mlp_bias=mlp_bias,
-            head_dim=head_dim,
             **kwargs,
         )
 
+        # Core architecture parameters
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.hidden_act = hidden_act
+        self.initializer_range = initializer_range
+        
+        # Dropout parameters
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.activation_dropout = activation_dropout
+        self.dropout_emb = dropout_emb
+        self.encoder_layerdrop = encoder_layerdrop
+        
         # FastConformer-specific parameters
         self.conv_kernel_size = conv_kernel_size
         self.subsampling_factor = subsampling_factor
         self.subsampling_conv_channels = subsampling_conv_channels
         self.num_mel_bins = num_mel_bins
         self.xscaling = xscaling
-        self.dropout_emb = dropout_emb
-        self.encoder_layerdrop = encoder_layerdrop
-        self.activation_dropout = activation_dropout
         self.use_bias = use_bias
-        self.hidden_dropout_prob = hidden_dropout_prob
+        
+        # Output control
+        self.use_cache = use_cache
+        self.output_attentions = output_attentions
+        self.output_hidden_states = output_hidden_states
 
         # For compatibility with existing code
         self.d_model = hidden_size
@@ -169,8 +171,6 @@ class FastConformerConfig(LlamaConfig):
         self.attention_dropout = attention_probs_dropout_prob
         self.activation_function = hidden_act
 
-
-from ...configuration_utils import PretrainedConfig
 
 class ParakeetCTCConfig(PretrainedConfig):
     r"""
@@ -673,11 +673,13 @@ class FastConformerSubsamplingConv2D(nn.Module):
 
 
 # Base Model Classes
-class FastConformerPreTrainedModel(LlamaPreTrainedModel):
+class FastConformerPreTrainedModel(PreTrainedModel):
     config_class = FastConformerConfig
     base_model_prefix = "model"
     main_input_name = "input_features"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["FastConformerBlock"]
+    _skip_keys_device_placement = []
 
     def _init_weights(self, module):
         # Get initializer_range from the appropriate config
