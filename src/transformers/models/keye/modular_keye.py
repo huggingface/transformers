@@ -240,6 +240,7 @@ class KeyeConfig(PretrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+
     def __init__(
         self,
         vocab_size=152064,
@@ -296,7 +297,6 @@ class KeyeConfig(PretrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
 
-
         self.layer_types = layer_types
         if self.layer_types is None:
             self.layer_types = [
@@ -324,8 +324,6 @@ class KeyeConfig(PretrainedConfig):
         )
 
 
-
-
 logger = logging.get_logger(__name__)
 
 
@@ -344,11 +342,7 @@ def make_batched_images(images) -> list[list[ImageInput]]:
     Returns:
         list: A list of images.
     """
-    if (
-        isinstance(images, (list, tuple))
-        and isinstance(images[0], (list, tuple))
-        and is_valid_image(images[0][0])
-    ):
+    if isinstance(images, (list, tuple)) and isinstance(images[0], (list, tuple)) and is_valid_image(images[0][0]):
         return [img for img_list in images for img in img_list]
 
     elif isinstance(images, (list, tuple)) and is_valid_image(images[0]):
@@ -368,11 +362,7 @@ def adjust_size(size, patch_size):
 
 
 def make_batched_videos(videos) -> list[VideoInput]:
-    if (
-        isinstance(videos, (list, tuple))
-        and isinstance(videos[0], (list, tuple))
-        and is_valid_image(videos[0][0])
-    ):
+    if isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
         return videos
 
     elif isinstance(videos, (list, tuple)) and is_valid_image(videos[0]):
@@ -516,9 +506,7 @@ class SiglipImageProcessor(BaseImageProcessor):
         patch_size = self.patch_size
 
         if (w // patch_size) * (h // patch_size) > self.in_token_limit:
-            scale = math.sqrt(
-                self.in_token_limit / ((w // patch_size) * (h // patch_size))
-            )
+            scale = math.sqrt(self.in_token_limit / ((w // patch_size) * (h // patch_size)))
             new_w, new_h = int(w * scale), int(h * scale)
 
             image = image.resize((new_w, new_h), Image.Resampling.BICUBIC)
@@ -636,9 +624,7 @@ class SiglipImageProcessor(BaseImageProcessor):
                 )
 
             if do_rescale:
-                image = self.rescale(
-                    image, scale=rescale_factor, input_data_format=input_data_format
-                )
+                image = self.rescale(image, scale=rescale_factor, input_data_format=input_data_format)
 
             if do_normalize:
                 image = self.normalize(
@@ -647,9 +633,7 @@ class SiglipImageProcessor(BaseImageProcessor):
                     std=image_std,
                     input_data_format=input_data_format,
                 )
-            image = to_channel_dimension_format(
-                image, data_format, input_channel_dim=input_data_format
-            )
+            image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
             processed_images.append(image)
 
         patches = np.array(processed_images)
@@ -674,9 +658,7 @@ class SiglipImageProcessor(BaseImageProcessor):
         )
         patches = patches.transpose(0, 3, 5, 2, 1, 4, 6)
         assert self.temporal_patch_size == 1
-        flatten_patches = patches.reshape(
-            grid_t * grid_h * grid_w, channel, self.patch_size, self.patch_size
-        )
+        flatten_patches = patches.reshape(grid_t * grid_h * grid_w, channel, self.patch_size, self.patch_size)
         return flatten_patches, (grid_t, grid_h, grid_w)
 
     def preprocess(
@@ -749,15 +731,11 @@ class SiglipImageProcessor(BaseImageProcessor):
         size = size if size is not None else self.size
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = (
-            rescale_factor if rescale_factor is not None else self.rescale_factor
-        )
+        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
-        do_convert_rgb = (
-            do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
-        )
+        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
         if images is not None:
             images = make_batched_images(images)
@@ -830,8 +808,6 @@ class SiglipImageProcessor(BaseImageProcessor):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
 
-
-
 class KeyeVideosProcessorKwargs(VideosKwargs, total=False):
     fps: Union[list[float], float]
 
@@ -875,27 +851,15 @@ class KeyeProcessor(ProcessorMixin):
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
 
-    def __init__(
-        self, image_processor=None, tokenizer=None, chat_template=None, **kwargs
-    ):
-        self.image_token = (
-            "<|image_pad|>"
-            if not hasattr(tokenizer, "image_token")
-            else tokenizer.image_token
-        )
-        self.video_token = (
-            "<|video_pad|>"
-            if not hasattr(tokenizer, "video_token")
-            else tokenizer.video_token
-        )
+    def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
+        self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
+        self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[
-            TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]
-        ] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         videos: VideoInput = None,
         **kwargs: Unpack[KeyeProcessorKwargs],
     ) -> BatchFeature:
@@ -953,27 +917,19 @@ class KeyeProcessor(ProcessorMixin):
 
         if videos is not None:
             # TODO: add video processing
-            videos_inputs = self.image_processor(
-                images=None, videos=videos, **output_kwargs["images_kwargs"]
-            )
+            videos_inputs = self.image_processor(images=None, videos=videos, **output_kwargs["images_kwargs"])
             video_grid_thw = videos_inputs["video_grid_thw"]
 
             fps = output_kwargs["videos_kwargs"].pop("fps", 2.0)
             if isinstance(fps, (int, float)):
-                second_per_grid_ts = [
-                    self.image_processor.temporal_patch_size / fps
-                ] * len(video_grid_thw)
+                second_per_grid_ts = [self.image_processor.temporal_patch_size / fps] * len(video_grid_thw)
             elif hasattr(fps, "__len__") and len(fps) == len(video_grid_thw):
-                second_per_grid_ts = [
-                    self.image_processor.temporal_patch_size / tmp for tmp in fps
-                ]
+                second_per_grid_ts = [self.image_processor.temporal_patch_size / tmp for tmp in fps]
             else:
                 raise ValueError(
                     f"The length of fps ({len(fps) if hasattr(fps, '__len__') else fps}) must be equal to the length of video_grid_thw ({len(video_grid_thw)}) or fps should be a single number."
                 )
-            videos_inputs.update(
-                {"second_per_grid_ts": second_per_grid_ts}
-            )
+            videos_inputs.update({"second_per_grid_ts": second_per_grid_ts})
 
         else:
             videos_inputs = {}
@@ -1069,26 +1025,8 @@ class KeyeProcessor(ProcessorMixin):
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
-        names_from_processor = list(
-            dict.fromkeys(tokenizer_input_names + image_processor_input_names)
-        )
+        names_from_processor = list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
         return names_from_processor + ["second_per_grid_ts"]
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 if is_flash_attn_2_available():
@@ -1101,12 +1039,10 @@ else:
     apply_rotary_emb = None
 
 
-
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "KeyeConfig"
 _CHECKPOINT_FOR_DOC = "Kwai-Keye/Keye-VL-8B-Preview"
-
 
 
 class SiglipVisionEmbeddings(nn.Module):
@@ -1134,7 +1070,9 @@ class SiglipVisionEmbeddings(nn.Module):
 
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
-    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int, is_after_patchify: bool = False) -> torch.Tensor:
+    def interpolate_pos_encoding(
+        self, embeddings: torch.Tensor, height: int, width: int, is_after_patchify: bool = False
+    ) -> torch.Tensor:
         """
         This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
         images. This method is also adapted to support torch.jit tracing and no class embeddings.
@@ -1201,11 +1139,12 @@ class SiglipVisionEmbeddings(nn.Module):
         pixel_values: torch.FloatTensor,
         position_ids: Optional[torch.Tensor] = None,
         image_grid_thw: Optional[list[Union[tuple[int, int, int], list[tuple[int, int, int]]]]] = None,
-        interpolate_pos_encoding=False
+        interpolate_pos_encoding=False,
     ) -> torch.Tensor:
         if pixel_values.dim() == 5:
             assert position_ids is not None
             from einops import rearrange
+
             batch_size, squence_len, channel, height, width = pixel_values.shape
             target_dtype = self.patch_embedding.weight.dtype
             pixel_values = rearrange(pixel_values, "b l c h w -> (b l) c h w")
@@ -1218,15 +1157,19 @@ class SiglipVisionEmbeddings(nn.Module):
                 flatten_image_grid_thw = self.flatten_list(image_grid_thw)
                 assert batch_size == 1
                 start = 0
-                assert sum([np.prod(x) for x in flatten_image_grid_thw]) == embeddings.shape[1], (flatten_image_grid_thw, embeddings.shape)
+                assert sum([np.prod(x) for x in flatten_image_grid_thw]) == embeddings.shape[1], (
+                    flatten_image_grid_thw,
+                    embeddings.shape,
+                )
                 embeddings = embeddings.squeeze(0)
                 tmp_embeddings = []
                 for image_grid in image_grid_thw:
                     t, h, w = image_grid
                     end = start + t * h * w
-                    image_embeddings = embeddings[start: end, :]
-                    position_embedding = self.interpolate_pos_encoding(image_embeddings, h, w, True).squeeze(0).repeat(
-                        t, 1)
+                    image_embeddings = embeddings[start:end, :]
+                    position_embedding = (
+                        self.interpolate_pos_encoding(image_embeddings, h, w, True).squeeze(0).repeat(t, 1)
+                    )
                     image_embeddings = image_embeddings + position_embedding
                     tmp_embeddings.append(image_embeddings)
                     start = end
@@ -1368,29 +1311,20 @@ class SiglipVisionModelOutput(ModelOutput):
 
 
 class Projector(nn.Module):
-
     def __init__(self, text_config: KeyeConfig, vision_config: KeyeVisionConfig):
         super().__init__()
         self.text_config = text_config
         self.vision_config = vision_config
         self.merge_kernel_size = (2, 2)
 
-        self.hidden_size = (
-            self.vision_config.hidden_size
-            * self.merge_kernel_size[0]
-            * self.merge_kernel_size[1]
-        )
+        self.hidden_size = self.vision_config.hidden_size * self.merge_kernel_size[0] * self.merge_kernel_size[1]
 
         self.pre_norm = torch.nn.LayerNorm(self.vision_config.hidden_size, eps=1e-05)
         self.linear_1 = nn.Linear(self.hidden_size, self.hidden_size, bias=True)
         self.act = GELUActivation()
-        self.linear_2 = nn.Linear(
-            self.hidden_size, self.text_config.hidden_size, bias=True
-        )
+        self.linear_2 = nn.Linear(self.hidden_size, self.text_config.hidden_size, bias=True)
 
-    def forward(
-        self, image_features: torch.Tensor, image_grid_thw: list[tuple[int, int, int]]
-    ) -> torch.Tensor:
+    def forward(self, image_features: torch.Tensor, image_grid_thw: list[tuple[int, int, int]]) -> torch.Tensor:
         m1, m2 = self.merge_kernel_size
         if isinstance(image_features, (list, tuple)):
             processed_features = []
@@ -1440,12 +1374,8 @@ def eager_attention_forward(
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(
-        query.dtype
-    )
-    attn_weights = nn.functional.dropout(
-        attn_weights, p=dropout, training=module.training
-    )
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
@@ -1562,7 +1492,12 @@ class SiglipAttention(nn.Module):
 
             max_seqlen_q = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
             max_seqlen_k = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
-            assert cu_seqlens[-1].item() == queries.shape[0] == keys.shape[0] == values.shape[0], (cu_seqlens, queries.shape, keys.shape, values.shape)
+            assert cu_seqlens[-1].item() == queries.shape[0] == keys.shape[0] == values.shape[0], (
+                cu_seqlens,
+                queries.shape,
+                keys.shape,
+                values.shape,
+            )
 
             attn_output = flash_attn_varlen_func(
                 queries,
@@ -1828,9 +1763,7 @@ class SiglipEncoder(nn.Module):
         embed_dim = config.hidden_size
         num_heads = config.num_attention_heads
         head_dim = embed_dim // num_heads
-        self.layers = nn.ModuleList(
-            [SiglipEncoderLayer(config) for _ in range(config.num_hidden_layers)]
-        )
+        self.layers = nn.ModuleList([SiglipEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.rotary_pos_emb = SigLIPRotaryEmbedding(head_dim // 2)
         self.gradient_checkpointing = False
 
@@ -1868,15 +1801,11 @@ class SiglipEncoder(nn.Module):
             window_index = window_index.reshape(-1)
             window_index = window_index[window_index != pad_values]
             window_indices.append(window_index + start_window_index)
-            cu_seqlens_within_windows.append(
-                window_seqlens.cumsum(0) + start_window_index
-            )
+            cu_seqlens_within_windows.append(window_seqlens.cumsum(0) + start_window_index)
             start_window_index += t * h * w
         window_indices = torch.concat(window_indices, dim=0)
         cu_seqlens_within_windows = torch.concat(cu_seqlens_within_windows, dim=0)
-        cu_seqlens_within_windows = F.pad(
-            cu_seqlens_within_windows, (1, 0), value=0
-        ).to(torch.int32)
+        cu_seqlens_within_windows = F.pad(cu_seqlens_within_windows, (1, 0), value=0).to(torch.int32)
         return window_indices, cu_seqlens_within_windows
 
     # Ignore copy
@@ -1888,9 +1817,7 @@ class SiglipEncoder(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         cu_seqlens: Optional[list[torch.Tensor]] = None,
-        image_grid_thw: Optional[
-            list[Union[tuple[int, int, int], list[tuple[int, int, int]]]]
-        ] = None,
+        image_grid_thw: Optional[list[Union[tuple[int, int, int], list[tuple[int, int, int]]]]] = None,
         height_position_ids: Optional[torch.Tensor] = None,
         width_position_ids: Optional[torch.Tensor] = None,
         use_rope: Optional[bool] = False,
@@ -1925,15 +1852,9 @@ class SiglipEncoder(nn.Module):
         assert vision_or_text in ["vision", "text"]
         use_window_attn = window_size > 0 and vision_or_text == "vision"
         use_rope = (use_rope is True) and (vision_or_text == "vision")
-        output_attentions = (
-            output_attentions
-            if output_attentions is not None
-            else self.config.output_attentions
-        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
         encoder_states = () if output_hidden_states else None
@@ -1941,17 +1862,13 @@ class SiglipEncoder(nn.Module):
 
         device = inputs_embeds.device
         hidden_states = inputs_embeds
-        attention_mask = (
-            attention_mask.to(inputs_embeds.dtype)
-            if attention_mask is not None
-            else None
-        )
+        attention_mask = attention_mask.to(inputs_embeds.dtype) if attention_mask is not None else None
         if use_rope is True:
             flatten_image_grid_thw = self.flatten_list(image_grid_thw)
-            assert (
-                sum([np.prod(x) for x in flatten_image_grid_thw])
-                == hidden_states.shape[1]
-            ), (flatten_image_grid_thw, hidden_states.shape)
+            assert sum([np.prod(x) for x in flatten_image_grid_thw]) == hidden_states.shape[1], (
+                flatten_image_grid_thw,
+                hidden_states.shape,
+            )
 
             if width_position_ids is None or height_position_ids is None:
                 split_hids = []
@@ -1982,16 +1899,15 @@ class SiglipEncoder(nn.Module):
             rope_emb = rope_emb.repeat(1, 2)
             rope_emb = (rope_emb.cos(), rope_emb.sin())
         else:
-
             rope_emb = None
             window_indices, cu_seqlens_within_windows = None, None
 
             if use_window_attn:
                 flatten_image_grid_thw = self.flatten_list(image_grid_thw)
-                assert (
-                    sum([np.prod(x) for x in flatten_image_grid_thw])
-                    == hidden_states.shape[1]
-                ), (flatten_image_grid_thw, hidden_states.shape)
+                assert sum([np.prod(x) for x in flatten_image_grid_thw]) == hidden_states.shape[1], (
+                    flatten_image_grid_thw,
+                    hidden_states.shape,
+                )
 
                 window_indices, cu_seqlens_within_windows = self.build_window_index(
                     flatten_image_grid_thw, window_size, device
@@ -2008,9 +1924,7 @@ class SiglipEncoder(nn.Module):
         for encoder_layer in self.layers:
             if output_hidden_states:
                 encoder_states = encoder_states + (
-                    (hidden_states[:, reversed_window_indices, :],)
-                    if use_window_attn
-                    else (hidden_states,)
+                    (hidden_states[:, reversed_window_indices, :],) if use_window_attn else (hidden_states,)
                 )
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
@@ -2057,17 +1971,13 @@ class SiglipVisionTransformer(nn.Module):
         self.embeddings = SiglipVisionEmbeddings(config)
         self.encoder = SiglipEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.use_head = (
-            True if not hasattr(config, "vision_use_head") else config.vision_use_head
-        )
+        self.use_head = True if not hasattr(config, "vision_use_head") else config.vision_use_head
         if self.use_head:
             self.head = SiglipMultiheadAttentionPoolingHead(config)
 
     # @can_return_tuple
     @add_start_docstrings_to_model_forward(SIGLIP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(
-        output_type=BaseModelOutputWithPooling, config_class=KeyeVisionConfig
-    )
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=KeyeVisionConfig)
     def forward(
         self,
         pixel_values,
@@ -2083,9 +1993,7 @@ class SiglipVisionTransformer(nn.Module):
         cu_seqlens: Optional[list[torch.Tensor]] = None,
         padding_mask: Optional[torch.Tensor] = None,
         vision_return_embed_list: Optional[bool] = False,
-        image_grid_thw: Optional[
-            list[Union[tuple[int, int, int], list[tuple[int, int, int]]]]
-        ] = None,
+        image_grid_thw: Optional[list[Union[tuple[int, int, int], list[tuple[int, int, int]]]]] = None,
         return_pooler_output: Optional[bool] = True,
         use_rope: Optional[bool] = False,
         window_size: Optional[bool] = -1,
@@ -2094,15 +2002,9 @@ class SiglipVisionTransformer(nn.Module):
         Returns:
 
         """
-        output_attentions = (
-            output_attentions
-            if output_attentions is not None
-            else self.config.output_attentions
-        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         hidden_states = self.embeddings(
             pixel_values,
@@ -2146,9 +2048,7 @@ class SiglipVisionTransformer(nn.Module):
                     sample_hidden_state_list.append(sample_hidden_state)
 
                 if not vision_return_embed_list:
-                    max_length = max(
-                        [_state.shape[0] for _state in sample_hidden_state_list]
-                    )
+                    max_length = max([_state.shape[0] for _state in sample_hidden_state_list])
                     tmp_sample_hidden_state_list = []
                     padding_mask = []
                     for idx, _state in enumerate(sample_hidden_state_list):
@@ -2159,17 +2059,9 @@ class SiglipVisionTransformer(nn.Module):
                         padding = _state.new_zeros(size=(padding_length, dim))
                         new_state = torch.concat([_state, padding], dim=0)
                         tmp_sample_hidden_state_list.append(new_state)
-                    sample_hidden_state = torch.stack(
-                        tmp_sample_hidden_state_list, dim=0
-                    )
-                    padding_mask = (
-                        torch.stack(padding_mask, dim=0)
-                        .float()
-                        .to(last_hidden_state.dtype)
-                    )
-                    pooler_output = self.head(
-                        sample_hidden_state, key_padding_mask=padding_mask
-                    )
+                    sample_hidden_state = torch.stack(tmp_sample_hidden_state_list, dim=0)
+                    padding_mask = torch.stack(padding_mask, dim=0).float().to(last_hidden_state.dtype)
+                    pooler_output = self.head(sample_hidden_state, key_padding_mask=padding_mask)
                 else:
                     pooler_output = []
                     for state in sample_hidden_state_list:
@@ -2217,9 +2109,7 @@ class SiglipMultiheadAttentionPoolingHead(nn.Module):
         super().__init__()
 
         self.probe = nn.Parameter(torch.randn(1, 1, config.hidden_size))
-        self.attention = torch.nn.MultiheadAttention(
-            config.hidden_size, config.num_attention_heads, batch_first=True
-        )
+        self.attention = torch.nn.MultiheadAttention(config.hidden_size, config.num_attention_heads, batch_first=True)
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.mlp = SiglipMLP(config)
 
@@ -2227,9 +2117,7 @@ class SiglipMultiheadAttentionPoolingHead(nn.Module):
         batch_size = hidden_state.shape[0]
         probe = self.probe.repeat(batch_size, 1, 1)
 
-        hidden_state = self.attention(
-            probe, hidden_state, hidden_state, key_padding_mask=key_padding_mask
-        )[0]
+        hidden_state = self.attention(probe, hidden_state, hidden_state, key_padding_mask=key_padding_mask)[0]
 
         residual = hidden_state
         hidden_state = self.layernorm(hidden_state)
@@ -2259,9 +2147,7 @@ class SiglipVisionModel(SiglipPreTrainedModel):
 
     # @can_return_tuple
     @add_start_docstrings_to_model_forward(SIGLIP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(
-        output_type=BaseModelOutputWithPooling, config_class=KeyeVisionConfig
-    )
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=KeyeVisionConfig)
     def forward(
         self,
         pixel_values,
@@ -2271,9 +2157,7 @@ class SiglipVisionModel(SiglipPreTrainedModel):
         interpolate_pos_encoding: bool = False,
         position_ids: Optional[torch.Tensor] = None,
         vision_return_embed_list: Optional[bool] = False,
-        image_grid_thw: Optional[
-            list[Union[tuple[int, int, int], list[tuple[int, int, int]]]]
-        ] = None,
+        image_grid_thw: Optional[list[Union[tuple[int, int, int], list[tuple[int, int, int]]]]] = None,
         cu_seqlens: Optional[list[torch.Tensor]] = None,
         return_pooler_output: Optional[bool] = True,
         use_rope: Optional[bool] = False,
@@ -2328,8 +2212,6 @@ def apply_rotary_pos_emb_flashatt(
     return q_embed, k_embed
 
 
-
-
 class SigLIPRotaryEmbedding(nn.Module):
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
         super().__init__()
@@ -2338,19 +2220,13 @@ class SigLIPRotaryEmbedding(nn.Module):
         self.rope_init()
 
     def rope_init(self):
-        inv_freq = 1.0 / (
-            self.theta ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.dim)
-        )
+        inv_freq = 1.0 / (self.theta ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     def forward(self, seqlen: int) -> torch.Tensor:
-        seq = torch.arange(
-            seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype
-        )
+        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
         freqs = torch.outer(seq, self.inv_freq)
         return freqs
-
-
 
 
 @dataclass
@@ -2392,8 +2268,6 @@ class KeyeCausalLMOutputWithPast(ModelOutput):
     rope_deltas: Optional[torch.LongTensor] = None
 
 
-
-
 class KeyeRotaryEmbedding(Qwen2VLRotaryEmbedding):
     def __init__(self, config: KeyeConfig, device=None):
         super().__init__(config, device=device)
@@ -2419,7 +2293,7 @@ class KeyeAttention(nn.Module):
         self.is_causal = True
         self.attention_dropout = config.attention_dropout
         self.rope_scaling = config.rope_scaling
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
         )
@@ -2508,7 +2382,7 @@ class KeyeAttention(nn.Module):
                     max_seqlen,
                     max_seqlen,
                     dropout_p=dropout_rate,
-                    causal=self.is_causal
+                    causal=self.is_causal,
                 )
             else:
                 attn_output = _flash_attention_forward(
@@ -2524,7 +2398,6 @@ class KeyeAttention(nn.Module):
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, None, past_key_value
-
 
 
 class KeyeMLP(Qwen3MLP):
@@ -2652,7 +2525,6 @@ class Qwen3Model(Qwen3PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-
     def get_input_embeddings(self):
         return self.embed_tokens
 
@@ -2721,6 +2593,7 @@ class Qwen3Model(Qwen3PreTrainedModel):
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
+                "position_ids": position_ids,
             }
             # Create the masks
             causal_mask_mapping = {
@@ -2883,9 +2756,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         video_token_id = self.config.video_token_id
         vision_start_token_id = self.config.vision_start_token_id
         mrope_position_deltas = []
-        if input_ids is not None and (
-            image_grid_thw is not None or video_grid_thw is not None
-        ):
+        if input_ids is not None and (image_grid_thw is not None or video_grid_thw is not None):
             total_input_ids = input_ids
             if attention_mask is None:
                 attention_mask = torch.ones_like(total_input_ids)
@@ -2901,9 +2772,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
             for i, input_ids in enumerate(total_input_ids):
                 input_ids = input_ids[attention_mask[i] == 1]
                 image_nums, video_nums = 0, 0
-                vision_start_indices = torch.argwhere(
-                    input_ids == vision_start_token_id
-                ).squeeze(1)
+                vision_start_indices = torch.argwhere(input_ids == vision_start_token_id).squeeze(1)
                 vision_tokens = input_ids[vision_start_indices + 1]
                 image_nums = (vision_tokens == image_token_id).sum()
                 video_nums = (vision_tokens == video_token_id).sum()
@@ -2951,80 +2820,40 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     )
                     text_len = ed - st
 
-                    st_idx = (
-                        llm_pos_ids_list[-1].max() + 1
-                        if len(llm_pos_ids_list) > 0
-                        else 0
-                    )
-                    llm_pos_ids_list.append(
-                        torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx
-                    )
+                    st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
+                    llm_pos_ids_list.append(torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx)
 
                     if torch.is_tensor(second_per_grid_t):
                         second_per_grid_t = second_per_grid_t.detach().item()
                     range_tensor = torch.arange(llm_grid_t).view(-1, 1)
                     expanded_range = range_tensor.expand(-1, llm_grid_h * llm_grid_w)
 
-                    time_tensor = (
-                        expanded_range
-                        * second_per_grid_t
-                        * self.config.vision_config.tokens_per_second
-                    )
+                    time_tensor = expanded_range * second_per_grid_t * self.config.vision_config.tokens_per_second
 
                     time_tensor_long = time_tensor.long()
                     t_index = time_tensor_long.flatten()
 
-                    h_index = (
-                        torch.arange(llm_grid_h)
-                        .view(1, -1, 1)
-                        .expand(llm_grid_t, -1, llm_grid_w)
-                        .flatten()
-                    )
-                    w_index = (
-                        torch.arange(llm_grid_w)
-                        .view(1, 1, -1)
-                        .expand(llm_grid_t, llm_grid_h, -1)
-                        .flatten()
-                    )
-                    llm_pos_ids_list.append(
-                        torch.stack([t_index, h_index, w_index]) + text_len + st_idx
-                    )
+                    h_index = torch.arange(llm_grid_h).view(1, -1, 1).expand(llm_grid_t, -1, llm_grid_w).flatten()
+                    w_index = torch.arange(llm_grid_w).view(1, 1, -1).expand(llm_grid_t, llm_grid_h, -1).flatten()
+                    llm_pos_ids_list.append(torch.stack([t_index, h_index, w_index]) + text_len + st_idx)
                     st = ed + llm_grid_t * llm_grid_h * llm_grid_w
 
                 if st < len(input_tokens):
-                    st_idx = (
-                        llm_pos_ids_list[-1].max() + 1
-                        if len(llm_pos_ids_list) > 0
-                        else 0
-                    )
+                    st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
                     text_len = len(input_tokens) - st
-                    llm_pos_ids_list.append(
-                        torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx
-                    )
+                    llm_pos_ids_list.append(torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx)
 
                 llm_positions = torch.cat(llm_pos_ids_list, dim=1).reshape(3, -1)
-                position_ids[..., i, attention_mask[i] == 1] = llm_positions.to(
-                    position_ids.device
-                )
-                mrope_position_deltas.append(
-                    llm_positions.max() + 1 - len(total_input_ids[i])
-                )
-            mrope_position_deltas = torch.tensor(
-                mrope_position_deltas, device=input_ids.device
-            ).unsqueeze(1)
+                position_ids[..., i, attention_mask[i] == 1] = llm_positions.to(position_ids.device)
+                mrope_position_deltas.append(llm_positions.max() + 1 - len(total_input_ids[i]))
+            mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
             return position_ids, mrope_position_deltas
         else:
             if attention_mask is not None:
                 position_ids = attention_mask.long().cumsum(-1) - 1
                 position_ids.masked_fill_(attention_mask == 0, 1)
-                position_ids = (
-                    position_ids.unsqueeze(0)
-                    .expand(3, -1, -1)
-                    .to(attention_mask.device)
-                )
-                max_position_ids = position_ids.max(0, keepdim=False)[0].max(
-                    -1, keepdim=True
-                )[0]
+                position_ids = position_ids.unsqueeze(0).expand(3, -1, -1).to(attention_mask.device)
+                max_position_ids = position_ids.max(0, keepdim=False)[0].max(-1, keepdim=True)[0]
                 mrope_position_deltas = max_position_ids + 1 - attention_mask.shape[-1]
             else:
                 position_ids = (
@@ -3040,9 +2869,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
 
             return position_ids, mrope_position_deltas
 
-    @replace_return_docstrings(
-        output_type=KeyeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC
-    )
+    @replace_return_docstrings(output_type=KeyeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -3103,19 +2930,11 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         "The image shows a street scene with a red stop sign in the foreground. In the background, there is a large red gate with Chinese characters ..."
         ```"""
 
-        output_attentions = (
-            output_attentions
-            if output_attentions is not None
-            else self.config.output_attentions
-        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if inputs_embeds is None:
             inputs_embeds = self.model.embed_tokens(input_ids)
@@ -3136,15 +2955,9 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     sample_indices.append(torch.full((numel,), idx, dtype=torch.int64))
                     cu_seqlens.append(cu_seqlens[-1] + numel)
 
-                siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(
-                    pixel_values.device
-                )
-                cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(
-                    pixel_values.device
-                )
-                sample_indices = torch.concat(sample_indices, dim=0).to(
-                    pixel_values.device
-                )
+                siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(pixel_values.device)
+                cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(pixel_values.device)
+                sample_indices = torch.concat(sample_indices, dim=0).to(pixel_values.device)
 
                 vision_outputs = self.visual(
                     pixel_values=pixel_values,
@@ -3176,9 +2989,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 mask_expanded = mask_unsqueezed.expand_as(inputs_embeds)
                 image_mask = mask_expanded.to(inputs_embeds.device)
 
-                image_embeds = image_embeds.to(
-                    inputs_embeds.device, inputs_embeds.dtype
-                )
+                image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
 
                 inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
@@ -3199,15 +3010,9 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     siglip_position_ids.append(video_position_ids)
                     sample_indices.append(torch.full((numel,), idx, dtype=torch.int64))
                     cu_seqlens.append(cu_seqlens[-1] + numel)
-                siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(
-                    pixel_values_videos.device
-                )
-                cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(
-                    pixel_values_videos.device
-                )
-                sample_indices = torch.concat(sample_indices, dim=0).to(
-                    pixel_values_videos.device
-                )
+                siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(pixel_values_videos.device)
+                cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(pixel_values_videos.device)
+                sample_indices = torch.concat(sample_indices, dim=0).to(pixel_values_videos.device)
 
                 vision_outputs = self.visual(
                     pixel_values=pixel_values_videos,
@@ -3236,18 +3041,14 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 mask_expanded = mask_unsqueezed.expand_as(inputs_embeds)
                 video_mask = mask_expanded.to(inputs_embeds.device)
 
-                video_embeds = video_embeds.to(
-                    inputs_embeds.device, inputs_embeds.dtype
-                )
+                video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
             if attention_mask is not None:
                 attention_mask = attention_mask.to(inputs_embeds.device)
 
         # if we get 4D attention mask we cannot calculate rope deltas anymore. TODO @raushan fixme
-        if position_ids is None and (
-            attention_mask is None or attention_mask.ndim == 2
-        ):
+        if position_ids is None and (attention_mask is None or attention_mask.ndim == 2):
             # calculate RoPE index once per generation in the pre-fill stage only
             if (
                 (cache_position is not None and cache_position[0] == 0)
@@ -3424,9 +3225,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
             def _repeat_interleave_samples(x, lengths, repeat_times):
                 samples = torch.split(x, lengths)
                 repeat_args = [repeat_times] + [1] * (x.dim() - 1)
-                result = torch.cat(
-                    [sample.repeat(*repeat_args) for sample in samples], dim=0
-                )
+                result = torch.cat([sample.repeat(*repeat_args) for sample in samples], dim=0)
                 return result
 
             for key in dict_to_expand:
@@ -3462,9 +3261,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                         )
                     tensor = torch.tensor(dict_to_expand[key])
                     lengths = list(video_nums)
-                    tensor = _repeat_interleave_samples(
-                        tensor, lengths=lengths, repeat_times=expand_size
-                    )
+                    tensor = _repeat_interleave_samples(tensor, lengths=lengths, repeat_times=expand_size)
                     dict_to_expand[key] = tensor.tolist()
             return dict_to_expand
 
@@ -3476,9 +3273,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     and isinstance(dict_to_expand[key], torch.Tensor)
                     and key not in visual_keys
                 ):
-                    dict_to_expand[key] = dict_to_expand[key].repeat_interleave(
-                        expand_size, dim=0
-                    )
+                    dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
             return dict_to_expand
 
         # input_ids is required for expanding visual inputs
@@ -3493,19 +3288,10 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
 
         if is_encoder_decoder:
             if model_kwargs.get("encoder_outputs") is None:
-                raise ValueError(
-                    "If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined."
-                )
-            model_kwargs["encoder_outputs"] = _expand_dict_for_generation(
-                model_kwargs["encoder_outputs"]
-            )
+                raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")
+            model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
 
         return input_ids, model_kwargs
 
 
-__all__ = [
-    "KeyeForConditionalGeneration",
-    "KeyeConfig",
-    "KeyeProcessor"
-]
-
+__all__ = ["KeyeForConditionalGeneration", "KeyeConfig", "KeyeProcessor"]

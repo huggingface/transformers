@@ -931,7 +931,6 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("instructblip", "InstructBlipForConditionalGeneration"),
         ("internvl", "InternVLForConditionalGeneration"),
         ("janus", "JanusForConditionalGeneration"),
-        ("keye", "KeyeForConditionalGeneration"),
         ("kosmos-2", "Kosmos2ForConditionalGeneration"),
         ("llama4", "Llama4ForConditionalGeneration"),
         ("llava", "LlavaForConditionalGeneration"),
@@ -950,6 +949,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("udop", "UdopForConditionalGeneration"),
         ("vipllava", "VipLlavaForConditionalGeneration"),
         ("vision-encoder-decoder", "VisionEncoderDecoderModel"),
+        ("keye", "KeyeForConditionalGeneration"),
     ]
 )
 
