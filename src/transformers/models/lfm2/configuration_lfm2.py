@@ -1,9 +1,6 @@
 from typing import ClassVar, Optional
 
-from transformers.configuration_utils import PretrainedConfig
-from transformers.utils import logging
-
-logger = logging.get_logger(__name__)
+from ...configuration_utils import PretrainedConfig
 
 
 class LFM2Config(PretrainedConfig):
@@ -73,9 +70,7 @@ class LFM2Config(PretrainedConfig):
 
     @property
     def layers_block_type(self):
-        return [
-            "attention" if i in self.full_attn_idxs else "conv"
-            for i in range(self.num_hidden_layers)
-        ]
+        return ["attention" if i in self.full_attn_idxs else "conv" for i in range(self.num_hidden_layers)]
+
 
 __all__ = ["LFM2Config"]
