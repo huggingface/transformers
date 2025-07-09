@@ -320,10 +320,14 @@ class Ernie4_5_MoESparseMoEBlock(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
+
+        # (Optional) shared experts
+        if self.shared_experts is not None:
+            shared_output = self.shared_experts(hidden_states)
+
         # router_logits: (batch * sequence_length, n_experts)
         router_logits = self.gate(hidden_states.float())
 
-        # temporarily forward in fp32 and then cast back to the input dtype
         # TODO: check below
         # See https://github.com/PaddlePaddle/ERNIE/blob/d4e1c371dfd089ef618ef378e8996049bd54da00/ernie/moe/moe_layer.py#L607 in combination with
         # https://github.com/PaddlePaddle/Paddle/blob/develop/python/paddle/incubate/nn/functional/moe_gate_dispatch.py#L104 == the "correction bias"
@@ -360,7 +364,7 @@ class Ernie4_5_MoESparseMoEBlock(nn.Module):
 
         # Add (optional) shared experts to the result
         if self.shared_experts is not None:
-            final_hidden_states += self.shared_experts(hidden_states)
+            final_hidden_states = final_hidden_states + shared_output
 
         final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return final_hidden_states, router_logits
