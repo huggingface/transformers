@@ -156,6 +156,14 @@ class MistralCommonTokenizer(PushToHubMixin):
     """
     Class to wrap `mistral-common` tokenizers.
 
+    `mistral-common` is the official tokenizer library for Mistral AI models. To use it, you need to install it with:
+
+    ```bash
+    pip install transformers[mistral-common]
+    ```
+
+    Otherwise the tokenizer falls back to the Transformers implementation of the tokenizer.
+
     For more info on `mistral-common`, see [mistral-common](https://github.com/mistralai/mistral-common).
 
     This class is a wrapper around a `mistral_common.tokens.tokenizers.mistral.MistralTokenizer`.
