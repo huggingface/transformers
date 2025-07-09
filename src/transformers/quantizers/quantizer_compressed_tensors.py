@@ -13,7 +13,6 @@
 # limitations under the License.
 
 
-
 from ..utils import is_compressed_tensors_available, is_torch_available, logging
 from ..utils.quantization_config import CompressedTensorsConfig
 from .base import HfQuantizer
@@ -75,14 +74,16 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
     def _process_model_before_weight_loading(self, model, **kwargs):
         from compressed_tensors.quantization import apply_quantization_config
+
         ct_quantization_config = self.compressor.quantization_config
 
         # Always initialize compressed wrappers to match the checkpoint
         apply_quantization_config(model, ct_quantization_config, self.run_compressed)
-        if (self.quantization_config.is_quantization_compressed or
-            self.quantization_config.is_sparsification_compressed):
+        if (
+            self.quantization_config.is_quantization_compressed
+            or self.quantization_config.is_sparsification_compressed
+        ):
             self.compressor.compress_model(model=model)
-
 
     def _process_model_after_weight_loading(self, model, **kwargs):
         """Decompress loaded model if necessary - need for qat"""
@@ -91,7 +92,6 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             self.quantization_config.is_quantization_compressed and not self.run_compressed
         ) or self.quantization_config.is_sparsification_compressed:
             self.compressor.decompress_model(model=model)
-
 
     def update_tp_plan(self, config):
         additional_plan = {
