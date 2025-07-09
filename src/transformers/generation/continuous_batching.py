@@ -999,9 +999,9 @@ class ContinuousBatchProcessor:
         input_ids,
         position_ids,
         read_index,
-        read_sliding_index,
+        read_sliding_index: Optional[list[int]],
         write_index,
-        write_sliding_index,
+        write_sliding_index: Optional[list[int]],
         cumulative_seqlens_q,
         cumulative_seqlens_k,
         logits_indices,
@@ -1010,9 +1010,10 @@ class ContinuousBatchProcessor:
         self.input_ids[:, : len(input_ids)] = to_tensor(input_ids)
         self.position_ids[:, : len(position_ids)] = to_tensor(position_ids)
         self.read_index[: len(read_index)] = to_tensor(read_index)
-        self.read_sliding_index[: len(read_sliding_index)] = to_tensor(read_sliding_index)
         self.write_index[: len(write_index)] = to_tensor(write_index)
-        self.write_sliding_index[: len(write_sliding_index)] = to_tensor(write_sliding_index)
+        if read_sliding_index is not None and write_sliding_index is not None:
+            self.read_sliding_index[: len(read_sliding_index)] = to_tensor(read_sliding_index)
+            self.write_sliding_index[: len(write_sliding_index)] = to_tensor(write_sliding_index)
         self.cache_index = {
             "full_attention": (self.read_index, self.write_index),
             "sliding_window": (self.read_sliding_index, self.write_sliding_index),
@@ -1485,7 +1486,7 @@ class ContinuousMixin:
         generation_config: Optional[GenerationConfig] = None,
         progress_bar: bool = True,
         **kwargs,
-    ) -> list[list[int]]:
+    ) -> dict[str, GenerationOutput]:
         """Generate sequences for a batch of prompts using continuous batching.
 
         Args:
@@ -1494,12 +1495,12 @@ class ContinuousMixin:
             **kwargs: Additional generation parameters
 
         Returns:
-            `list[list[int]]`: A list containing the generated sequences (including prompt tokens
-                                if not handled otherwise) for each input prompt, in the same order.
-                                Returns an empty list `[]` for requests that failed.
+            `dict[str, GenerationOutput]`: A dict containing the generated sequences (including prompt tokens
+                                        if not handled otherwise) for each input prompt, in the same order.
+                                        There is a `status` field to check wether a request failed or succeeded.
         """
         if not inputs:
-            return []
+            return {}
 
         # Initialize manager with the batch inputs
         manager = self.init_continuous_batching(generation_config=generation_config)

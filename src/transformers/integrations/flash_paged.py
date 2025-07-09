@@ -50,7 +50,7 @@ def paged_attention_forward(
     """
     k, v = cache.update(k, v, module.layer_idx, cumulative_seqlens_k=cumulative_seqlens_k, **kwargs)
     sliding_window = getattr(kwargs, "sliding_window", None)
-    if window_size is None:
+    if sliding_window is None:
         window_size = (-1, -1)  # -1 means infinite context window
     else:
         window_size = (sliding_window, 0)
