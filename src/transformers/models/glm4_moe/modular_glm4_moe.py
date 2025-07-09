@@ -340,8 +340,9 @@ class Glm4MoeMLP(Qwen2MoeMLP):
 
 
 class Glm4MoeTopkRouter(DeepseekV3TopkRouter):
-    pass
-
+    def __init__(self, config):
+        super().__init__(config)
+        self.register_buffer("e_score_correction_bias", torch.zeros((self.n_routed_experts), dtype=torch.float32))
 
 class Glm4MoeSparseMoeBlock(nn.Module):
     def __init__(self, config):
