@@ -555,9 +555,6 @@ class FastConformerEncoder(FastConformerPreTrainedModel):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
-
         return BaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
@@ -588,7 +585,7 @@ class FastConformerModel(FastConformerPreTrainedModel):
             input_lengths=input_lengths,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
 
@@ -637,10 +634,10 @@ class ParakeetCTC(FastConformerPreTrainedModel):
             input_lengths=input_lengths,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
-        hidden_states = encoder_outputs[0] if not return_dict else encoder_outputs.last_hidden_state
+        hidden_states = encoder_outputs.last_hidden_state
 
         # Apply CTC head
         logits = self.ctc_head(hidden_states)
@@ -694,10 +691,6 @@ class ParakeetCTC(FastConformerPreTrainedModel):
                 reduction=self.ctc_loss_reduction,
                 zero_infinity=self.ctc_zero_infinity,
             )
-
-        if not return_dict:
-            output = (logits,) + encoder_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutput(
             loss=loss,
