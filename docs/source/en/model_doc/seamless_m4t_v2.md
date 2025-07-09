@@ -16,6 +16,12 @@ specific language governing permissions and limitations under the License.
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
+*Paper published on 2020-10-12, updated on 2020-10-23*
+
+*Added to Hugging Face Transformers on 2023-11-30*
+
+
+
 ## Overview
 
 The SeamlessM4T-v2 model was proposed in [Seamless: Multilingual Expressive and Streaming Speech Translation](https://ai.meta.com/research/publications/seamless-multilingual-expressive-and-streaming-speech-translation/) by the Seamless Communication team from Meta AI.

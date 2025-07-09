@@ -20,6 +20,12 @@ rendered properly in your Markdown viewer.
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
+*Paper published on 2019-04-19, updated on 2019-04-19*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 ## Overview
 ERNIE is a series of powerful models proposed by baidu, especially in Chinese tasks,
 including [ERNIE1.0](https://huggingface.co/papers/1904.09223), [ERNIE2.0](https://ojs.aaai.org/index.php/AAAI/article/view/6428),

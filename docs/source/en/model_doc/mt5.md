@@ -23,6 +23,12 @@ rendered properly in your Markdown viewer.
 ">
 </div>
 
+*Paper published on 2020-10-22, updated on 2021-03-11*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 ## Overview
 
 The mT5 model was presented in [mT5: A massively multilingual pre-trained text-to-text transformer](https://huggingface.co/papers/2010.11934) by Linting Xue, Noah Constant, Adam Roberts, Mihir Kale, Rami Al-Rfou, Aditya

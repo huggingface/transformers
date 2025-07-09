@@ -22,6 +22,12 @@ rendered properly in your Markdown viewer.
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
+*Paper published on 2024-10-07, updated on 2025-04-07*
+
+*Added to Hugging Face Transformers on 2025-01-07*
+
+
+
 ## Overview
 
 The DiffLlama model was proposed in [Differential Transformer](https://huggingface.co/papers/2410.05258) by Kazuma Matsumoto and .

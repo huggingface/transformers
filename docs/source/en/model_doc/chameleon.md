@@ -22,6 +22,12 @@ rendered properly in your Markdown viewer.
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
+*Paper published on 2024-05-16, updated on 2025-03-21*
+
+*Added to Hugging Face Transformers on 2024-07-17*
+
+
+
 ## Overview
 
 The Chameleon model was proposed in [Chameleon: Mixed-Modal Early-Fusion Foundation Models

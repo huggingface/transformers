@@ -22,6 +22,12 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*Paper published on 2023-03-27, updated on 2023-09-27*
+
+*Added to Hugging Face Transformers on 2024-01-08*
+
+
+
 # SigLIP
 
 [SigLIP](https://huggingface.co/papers/2303.15343) is a multimodal image-text model similar to [CLIP](clip). It uses separate image and text encoders to generate representations for both modalities.

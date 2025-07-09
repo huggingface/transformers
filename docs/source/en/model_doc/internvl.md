@@ -23,6 +23,12 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*Paper published on 2025-04-14, updated on 2025-04-19*
+
+*Added to Hugging Face Transformers on 2025-04-18*
+
+
+
 # InternVL
 
 The InternVL3 family of Visual Language Models was introduced in [InternVL3: Exploring Advanced Training and Test-Time Recipes for Open-Source Multimodal Models](https://huggingface.co/papers/2504.10479).

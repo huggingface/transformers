@@ -16,6 +16,12 @@ specific language governing permissions and limitations under the License.
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
+*Paper published on 2021-06-25, updated on 2023-04-17*
+
+*Added to Hugging Face Transformers on 2024-03-13*
+
+
+
 ## Overview
 
 The PVTv2 model was proposed in

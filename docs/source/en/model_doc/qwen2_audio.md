@@ -22,6 +22,12 @@ rendered properly in your Markdown viewer.
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
+*Paper published on 2024-07-15, updated on 2024-07-15*
+
+*Added to Hugging Face Transformers on 2024-08-08*
+
+
+
 ## Overview
 
 The Qwen2-Audio is the new model series of large audio-language models from the Qwen team. Qwen2-Audio is capable of accepting various audio signal inputs and performing audio analysis or direct textual responses with regard to speech instructions. We introduce two distinct audio interaction modes:

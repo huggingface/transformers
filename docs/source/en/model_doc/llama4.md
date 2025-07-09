@@ -25,6 +25,12 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*Paper published on 2025-04-14, updated on 2025-04-19*
+
+*Added to Hugging Face Transformers on 2025-04-05*
+
+
+
 Llama 4, developed by Meta, introduces a new auto-regressive Mixture-of-Experts (MoE) architecture.
 This generation includes two models:
 - The highly capable Llama 4 Maverick with 17B active parameters out of ~400B total, with 128 experts.

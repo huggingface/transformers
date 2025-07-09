@@ -20,6 +20,12 @@ rendered properly in your Markdown viewer.
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
+*Paper published on 2020-12-29, updated on 2022-01-10*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 ## Overview
 
 The LayoutLMV2 model was proposed in [LayoutLMv2: Multi-modal Pre-training for Visually-Rich Document Understanding](https://huggingface.co/papers/2012.14740) by Yang Xu, Yiheng Xu, Tengchao Lv, Lei Cui, Furu Wei, Guoxin Wang, Yijuan Lu,

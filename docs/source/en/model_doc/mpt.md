@@ -20,6 +20,12 @@ rendered properly in your Markdown viewer.
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
+*Paper published on 2022-04-14, updated on 2022-04-14*
+
+*Added to Hugging Face Transformers on 2023-07-25*
+
+
+
 ## Overview
 
 The MPT model was proposed by the [MosaicML](https://www.mosaicml.com/) team and released with multiple sizes and finetuned variants. The MPT models are a series of open source and commercially usable LLMs pre-trained on 1T tokens. 

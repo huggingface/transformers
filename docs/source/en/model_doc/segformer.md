@@ -21,6 +21,12 @@ rendered properly in your Markdown viewer.
 <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
 </div>
 
+*Paper published on 2021-05-31, updated on 2021-10-28*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 ## Overview
 
 The SegFormer model was proposed in [SegFormer: Simple and Efficient Design for Semantic Segmentation with Transformers](https://huggingface.co/papers/2105.15203) by Enze Xie, Wenhai Wang, Zhiding Yu, Anima Anandkumar, Jose M. Alvarez, Ping

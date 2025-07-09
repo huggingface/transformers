@@ -23,6 +23,12 @@ rendered properly in your Markdown viewer.
 ">
 </div>
 
+*Paper published on 2024-09-03, updated on 2024-09-03*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 ## Overview
 
 The BERT models trained on Japanese text.

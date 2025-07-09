@@ -21,6 +21,12 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*Paper published on 2021-03-25, updated on 2021-08-17*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 # Swin Transformer
 
 [Swin Transformer](https://huggingface.co/papers/2103.14030) is a hierarchical vision transformer. Images are processed in patches and windowed self-attention is used to capture local information. These windows are shifted across the image to allow for cross-window connections, capturing global information more efficiently. This hierarchical approach with shifted windows allows the Swin Transformer to process images effectively at different scales and achieve linear computational complexity relative to image size, making it a versatile backbone for various vision tasks like image classification and object detection.

@@ -21,6 +21,12 @@ rendered properly in your Markdown viewer.
 <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
 </div>
 
+*Paper published on 2019-12-31, updated on 2020-06-16*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 <a id='Overview'></a>
 
 ## Overview

@@ -22,6 +22,12 @@ rendered properly in your Markdown viewer.
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
+*Paper published on 2019-11-10, updated on 2020-05-21*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 ## Overview
 
 The CamemBERT model was proposed in [CamemBERT: a Tasty French Language Model](https://huggingface.co/papers/1911.03894) by

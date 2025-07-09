@@ -20,6 +20,12 @@ specific language governing permissions and limitations under the License.
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
+*Paper published on 2024-02-26, updated on 2024-02-27*
+
+*Added to Hugging Face Transformers on 2024-08-06*
+
+
+
 ### License
 
 The use of this model is governed by the [NVIDIA AI Foundation Models Community License Agreement](https://developer.nvidia.com/downloads/nv-ai-foundation-models-license).

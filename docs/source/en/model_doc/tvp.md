@@ -16,6 +16,12 @@ specific language governing permissions and limitations under the License.
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
+*Paper published on 2023-03-09, updated on 2023-10-04*
+
+*Added to Hugging Face Transformers on 2023-11-22*
+
+
+
 ## Overview
 
 The text-visual prompting (TVP) framework was proposed in the paper [Text-Visual Prompting for Efficient 2D Temporal Video Grounding](https://huggingface.co/papers/2303.04995) by Yimeng Zhang, Xin Chen, Jinghan Jia, Sijia Liu, Ke Ding.

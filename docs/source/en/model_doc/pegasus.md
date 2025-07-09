@@ -25,6 +25,12 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*Paper published on 2019-12-18, updated on 2020-07-10*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 # Pegasus
 
 [Pegasus](https://huggingface.co/papers/1912.08777) is an encoder-decoder (sequence-to-sequence) transformer model pretrained on unlabeled text to perform abstractive summarization. Pegasus is trained jointly on two self-supervised objective functions, masked language modeling (MLM) and gap sentence generation (GSG). Whole sentences are masked and the model has to fill in the gaps in the document. It can be fine-tuned with good performance even on small datasets with only 1000 examples.

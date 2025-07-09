@@ -25,6 +25,12 @@ Kyutai STT is a speech-to-text model architecture based on the [Mimi codec](http
     <img src="https://huggingface.co/datasets/eustlb/documentation-images/resolve/main/kyutai_stt.png"/>
 </div>
 
+*Paper published on 2023-01-25, updated on 2023-10-13*
+
+*Added to Hugging Face Transformers on 2025-06-25*
+
+
+
 ## Usage Tips
 
 ### Inference

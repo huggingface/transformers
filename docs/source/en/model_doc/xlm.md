@@ -21,6 +21,12 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*Paper published on 2019-01-22, updated on 2019-01-22*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 # XLM
 
 [XLM](https://huggingface.co/papers/1901.07291) demonstrates cross-lingual pretraining with two approaches, unsupervised training on a single language and supervised training on more than one language with a cross-lingual language model objective. The XLM model supports the causal language modeling objective, masked language modeling, and translation language modeling (an extension of the [BERT](./bert)) masked language modeling objective to multiple language inputs).

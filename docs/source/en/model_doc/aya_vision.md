@@ -20,6 +20,12 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*Paper published on 2025-05-13, updated on 2025-05-13*
+
+*Added to Hugging Face Transformers on 2025-03-04*
+
+
+
 # Aya Vision
 
 [Aya Vision](https://huggingface.co/papers/2505.08751) is a family of open-weight multimodal vision-language models from Cohere Labs. It is trained with a synthetic annotation framework that generates high-quality multilingual image captions, improving Aya Vision's generated responses. In addition, a cross-modal model merging technique is used to prevent the model from losing its text capabilities after adding vision capabilities. The model combines a CommandR-7B language model with a SigLIP vision encoder.

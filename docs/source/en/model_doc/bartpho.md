@@ -23,6 +23,12 @@ rendered properly in your Markdown viewer.
 ">
 </div>
 
+*Paper published on 2021-09-20, updated on 2022-06-27*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 ## Overview
 
 The BARTpho model was proposed in [BARTpho: Pre-trained Sequence-to-Sequence Models for Vietnamese](https://huggingface.co/papers/2109.09701) by Nguyen Luong Tran, Duong Minh Le and Dat Quoc Nguyen.

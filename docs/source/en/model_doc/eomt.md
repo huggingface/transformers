@@ -38,6 +38,12 @@ Architecturally, EoMT introduces a small set of **learned queries** and a lightw
        alt="drawing" width="500"/>
 </div>
 
+*Paper published on 2021-01-02, updated on 2021-06-02*
+
+*Added to Hugging Face Transformers on 2025-06-27*
+
+
+
 
 The model supports semantic, instance, and panoptic segmentation using a unified architecture and task-specific post-processing.
 

@@ -22,6 +22,12 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*Paper published on 2019-09-17, updated on 2020-03-13*
+
+*Added to Hugging Face Transformers on 2025-06-26*
+
+
+
 # Gemma3n
 
 ## Overview

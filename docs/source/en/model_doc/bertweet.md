@@ -24,6 +24,12 @@ rendered properly in your Markdown viewer.
     ">
 </div>
 
+*Paper published on 2020-05-20, updated on 2020-10-05*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 ## BERTweet
 
 [BERTweet](https://huggingface.co/papers/2005.10200) shares the same architecture as [BERT-base](./bert), but it’s pretrained like [RoBERTa](./roberta) on English Tweets. It performs really well on Tweet-related tasks like part-of-speech tagging, named entity recognition, and text classification.

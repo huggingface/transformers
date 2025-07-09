@@ -121,6 +121,12 @@ visualizer("Plants create energy through a process known as")
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/llama-2-attn-mask.png"/>
 </div>
 
+*Paper published on 2023-07-18, updated on 2023-07-19*
+
+*Added to Hugging Face Transformers on 2023-07-18*
+
+
+
 ## Notes
 
 - Setting `config.pretraining_tp` to a value besides `1` activates a more accurate but slower computation of the linear layers. This matches the original logits better.

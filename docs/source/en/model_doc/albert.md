@@ -23,6 +23,12 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*Paper published on 2019-09-26, updated on 2020-02-09*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 # ALBERT
 
 [ALBERT](https://huggingface.co/papers/1909.11942) is designed to address memory limitations of scaling and training of [BERT](./bert). It adds two parameter reduction techniques. The first, factorized embedding parametrization, splits the larger vocabulary embedding matrix into two smaller matrices so you can grow the hidden size without adding a lot more parameters. The second, cross-layer parameter sharing, allows layer to share parameters which keeps the number of learnable parameters lower.

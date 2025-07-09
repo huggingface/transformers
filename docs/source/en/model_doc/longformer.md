@@ -19,6 +19,12 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*Paper published on 2020-04-10, updated on 2020-12-02*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 # Longformer
 
 [Longformer](https://huggingface.co/papers/2004.05150) is a transformer model designed for processing long documents. The self-attention operation usually scales quadratically with sequence length, preventing transformers from processing longer sequences. The Longformer attention mechanism overcomes this by scaling linearly with sequence length. It combines local windowed attention with task-specific global attention, enabling efficient processing of documents with thousands of tokens.

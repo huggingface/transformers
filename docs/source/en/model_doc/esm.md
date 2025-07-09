@@ -21,6 +21,12 @@ rendered properly in your Markdown viewer.
 <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
 </div>
 
+*Paper published on 2019-10-29, updated on 2019-10-29*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 ## Overview
 
 This page provides code and pre-trained weights for Transformer protein language models from Meta AI's Fundamental 

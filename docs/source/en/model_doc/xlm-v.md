@@ -23,6 +23,12 @@ rendered properly in your Markdown viewer.
 ">
 </div>
 
+*Paper published on 2023-01-25, updated on 2023-10-13*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 ## Overview
 
 XLM-V is multilingual language model with a one million token vocabulary trained on 2.5TB of data from Common Crawl (same as XLM-R).

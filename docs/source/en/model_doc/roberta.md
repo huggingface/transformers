@@ -24,6 +24,12 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*Paper published on 2019-07-26, updated on 2019-07-26*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 # RoBERTa
 
 [RoBERTa](https://huggingface.co/papers/1907.11692) improves BERT with new pretraining objectives, demonstrating [BERT](./bert) was undertrained and training design is important. The pretraining objectives include dynamic masking, sentence packing, larger batches and a byte-level BPE tokenizer.

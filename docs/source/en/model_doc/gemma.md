@@ -135,6 +135,12 @@ visualizer("LLMs generate text through a process known as")
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/gemma-attn-mask.png"/>
 </div>
 
+*Paper published on 2024-03-13, updated on 2024-04-16*
+
+*Added to Hugging Face Transformers on 2024-02-21*
+
+
+
 ## Notes
 
 - The original Gemma models support standard kv-caching used in many transformer-based language models. You can use use the default [`DynamicCache`] instance or a tuple of tensors for past key values during generation. This makes it compatible with typical autoregressive generation workflows.

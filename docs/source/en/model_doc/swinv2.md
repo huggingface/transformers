@@ -20,6 +20,12 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*Paper published on 2021-11-18, updated on 2022-04-11*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 # Swin Transformer V2
 
 [Swin Transformer V2](https://huggingface.co/papers/2111.09883) is a 3B parameter model that focuses on how to scale a vision model to billions of parameters. It introduces techniques like residual-post-norm combined with cosine attention for improved training stability, log-spaced continuous position bias to better handle varying image resolutions between pre-training and fine-tuning, and a new pre-training method (SimMIM) to reduce the need for large amounts of labeled data. These improvements enable efficiently training very large models (up to 3 billion parameters) capable of processing high-resolution images.

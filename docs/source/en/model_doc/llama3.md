@@ -23,6 +23,12 @@ rendered properly in your Markdown viewer.
 <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
 </div>
 
+*Paper published on 2015-12-10, updated on 2015-12-10*
+
+*Added to Hugging Face Transformers on 2024-04-24*
+
+
+
 ```py3
 import transformers
 import torch

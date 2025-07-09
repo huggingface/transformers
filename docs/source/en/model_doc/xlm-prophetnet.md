@@ -37,6 +37,12 @@ You can do so by running the following command: `pip install -U transformers==4.
 </a>
 </div>
 
+*Paper published on 2020-01-13, updated on 2020-10-21*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 **DISCLAIMER:** If you see something strange, file a [Github Issue](https://github.com/huggingface/transformers/issues/new?assignees=&labels=&template=bug-report.md&title) and assign
 @patrickvonplaten
 

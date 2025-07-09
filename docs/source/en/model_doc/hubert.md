@@ -87,6 +87,12 @@ Below is an expected speedup diagram comparing the pure inference time between t
 <img src="https://huggingface.co/datasets/kamilakesbi/transformers_image_doc/resolve/main/data/Hubert_speedup.png">
 </div>
 
+*Paper published on 2021-06-14, updated on 2021-06-14*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 
 ## Resources
 

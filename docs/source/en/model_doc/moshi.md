@@ -107,6 +107,12 @@ To follow the example of the following image, `"Hello, I'm Moshi"` could be tran
 <img src="https://huggingface.co/datasets/ylacombe/benchmark-comparison/resolve/main/moshi_text_sync.png">
 </div>
 
+*Paper published on 2024-08-23, updated on 2024-09-11*
+
+*Added to Hugging Face Transformers on 2024-10-16*
+
+
+
 
 [`MoshiForConditionalGeneration.generate`] then auto-regressively feeds to itself its own audio stream, but since it doesn't have access to the user input stream while using `transformers`, it will thus **assume that the user is producing blank audio**.
 

@@ -20,6 +20,12 @@ rendered properly in your Markdown viewer.
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
+*Paper published on 2022-12-20, updated on 2023-05-23*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 ## Overview 
 
 DePlot was proposed in the paper [DePlot: One-shot visual language reasoning by plot-to-table translation](https://huggingface.co/papers/2212.10505) from Fangyu Liu, Julian Martin Eisenschlos, Francesco Piccinno, Syrine Krichene, Chenxi Pang, Kenton Lee, Mandar Joshi, Wenhu Chen, Nigel Collier, Yasemin Altun.

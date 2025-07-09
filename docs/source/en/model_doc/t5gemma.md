@@ -22,6 +22,12 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*Paper published on 2022-01-28, updated on 2022-02-15*
+
+*Added to Hugging Face Transformers on 2025-06-25*
+
+
+
 # T5Gemma
 
 T5Gemma (aka encoder-decoder Gemma) was proposed in a [research paper](https://arxiv.org/abs/2504.06225) by Google. It is a family of encoder-decoder large langauge models, developed by adapting pretrained decoder-only models into encoder-decoder. T5Gemma includes pretrained and instruction-tuned variants. The architecture is based on transformer encoder-decoder design following T5, with improvements from Gemma 2: GQA, RoPE, GeGLU activation, RMSNorm, and interleaved local/global attention.

@@ -121,6 +121,12 @@ Below is an expected speedup diagram that compares pure inference time between t
 <img src="https://user-images.githubusercontent.com/49240599/281101682-d1144e90-0dbc-46f4-8fc8-c6206cb793c9.png">
 </div>
 
+*Paper published on 2022-05-02, updated on 2022-06-21*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 
 ### Using Scaled Dot Product Attention (SDPA)
 PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function

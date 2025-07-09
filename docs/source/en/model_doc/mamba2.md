@@ -19,6 +19,12 @@ rendered properly in your Markdown viewer.
     <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
   </div>
 
+*Paper published on 2024-05-31, updated on 2024-05-31*
+
+*Added to Hugging Face Transformers on 2024-08-06*
+
+
+
 # Mamba 2
 
 [Mamba 2](https://huggingface.co/papers/2405.21060) is based on the state space duality (SSD) framework which connects structured state space models (SSMs) and attention variants. It uses a more efficient SSD algorithm that is 2-8x faster than Mamba and modifies the architecture to enable tensor parallelism and a grouped-value attention (GVA) head structure.

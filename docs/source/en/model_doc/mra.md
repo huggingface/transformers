@@ -20,6 +20,12 @@ rendered properly in your Markdown viewer.
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
+*Paper published on 2022-07-21, updated on 2022-07-21*
+
+*Added to Hugging Face Transformers on 2023-07-10*
+
+
+
 ## Overview
 
 The MRA model was proposed in [Multi Resolution Analysis (MRA) for Approximate Self-Attention](https://huggingface.co/papers/2207.10284) by Zhanpeng Zeng, Sourav Pal, Jeffery Kline, Glenn M Fung, and Vikas Singh.

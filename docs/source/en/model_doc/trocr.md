@@ -19,6 +19,12 @@ specific language governing permissions and limitations under the License. -->
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
+*Paper published on 2021-09-21, updated on 2022-09-06*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 ## Overview
 
 The TrOCR model was proposed in [TrOCR: Transformer-based Optical Character Recognition with Pre-trained

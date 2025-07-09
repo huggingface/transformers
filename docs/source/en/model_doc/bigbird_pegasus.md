@@ -20,6 +20,12 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*Paper published on 2020-07-28, updated on 2021-01-08*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 # BigBirdPegasus
 
 [BigBirdPegasus](https://huggingface.co/papers/2007.14062) is an encoder-decoder (sequence-to-sequence) transformer model for long-input summarization. It extends the [BigBird](./big_bird) architecture with an additional pretraining objective borrowed from [Pegasus](./pegasus) called gap sequence generation (GSG). Whole sentences are masked and the model has to fill in the gaps in the document. BigBirdPegasus's ability to keep track of long contexts makes it effective at summarizing lengthy inputs, surpassing the performance of base Pegasus models.

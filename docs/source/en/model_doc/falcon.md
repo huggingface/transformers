@@ -22,6 +22,12 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*Paper published on 2023-11-28, updated on 2023-11-29*
+
+*Added to Hugging Face Transformers on 2023-07-11*
+
+
+
 # Falcon
 
 [Falcon](https://huggingface.co/papers/2311.16867) is a family of large language models, available in 7B, 40B, and 180B parameters, as pretrained and instruction tuned variants. This model focuses on scaling pretraining over three categories, performance, data, and hardware. Falcon uses multigroup attention to significantly reduce inference memory requirements and rotary positional embeddings (RoPE). These models are pretrained on [RefinedWeb](https://huggingface.co/datasets/tiiuae/falcon-refinedweb), a high-quality and deduplicated 5T token dataset.

@@ -118,6 +118,12 @@ processed_outputs = processor.post_process_keypoint_detection(outputs, [image_si
     <img src="https://cdn-uploads.huggingface.co/production/uploads/632885ba1558dac67c440aa8/ZtFmphEhx8tcbEQqOolyE.png">
 </div>
 
+*Paper published on 2017-12-20, updated on 2018-04-19*
+
+*Added to Hugging Face Transformers on 2024-03-19*
+
+
+
 ## Resources
 
 - Refer to this [noteboook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/SuperPoint/Inference_with_SuperPoint_to_detect_interest_points_in_an_image.ipynb) for an inference and visualization example.

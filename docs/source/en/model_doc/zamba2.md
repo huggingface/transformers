@@ -21,6 +21,12 @@ rendered properly in your Markdown viewer.
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
+*Paper published on 2022-02-22, updated on 2022-07-18*
+
+*Added to Hugging Face Transformers on 2025-01-27*
+
+
+
 Zamba2 is a large language model (LLM) trained by Zyphra, and made available under an Apache 2.0 license. Please see the [Zyphra Hugging Face](https://huggingface.co/collections/zyphra/) repository for model weights.
 
 This model was contributed by [pglo](https://huggingface.co/pglo).

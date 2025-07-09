@@ -87,6 +87,12 @@ Below is an expected speedup diagram comparing the pure inference time between t
 <img src="https://huggingface.co/datasets/kamilakesbi/transformers_image_doc/resolve/main/data/Wav2Vec2_speedup.png">
 </div>
 
+*Paper published on 2020-06-20, updated on 2020-10-22*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 
 
 ## Resources

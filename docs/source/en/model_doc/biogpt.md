@@ -22,6 +22,12 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*Paper published on 2022-10-19, updated on 2023-04-03*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 # BioGPT
 
 [BioGPT](https://huggingface.co/papers/2210.10341) is a generative Transformer model based on [GPT-2](./gpt2) and pretrained on 15 million PubMed abstracts. It is designed for biomedical language tasks.

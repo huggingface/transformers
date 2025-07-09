@@ -18,6 +18,12 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*Paper published on 2024-06-27, updated on 2025-02-28*
+
+*Added to Hugging Face Transformers on 2024-12-17*
+
+
+
 # ColPali
 
 [ColPali](https://huggingface.co/papers/2407.01449) is a model designed to retrieve documents by analyzing their visual features. Unlike traditional systems that rely heavily on text extraction and OCR, ColPali treats each page as an image. It uses [Paligemma-3B](./paligemma) to capture not only text, but also the layout, tables, charts, and other visual elements to create detailed multi-vector embeddings that can be used for retrieval by computing pairwise late interaction similarity scores. This offers a more comprehensive understanding of documents and enables more efficient and accurate retrieval.

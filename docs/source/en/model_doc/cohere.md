@@ -108,6 +108,12 @@ visualizer("Plants create energy through a process known as")
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/cohere-attn-mask.png"/>
 </div>
 
+*Paper published on 2021-11-18, updated on 2022-04-11*
+
+*Added to Hugging Face Transformers on 2024-03-15*
+
+
+
 
 ## Notes
 - Don’t use the torch_dtype parameter in [`~AutoModel.from_pretrained`] if you’re using FlashAttention-2 because it only supports fp16 or bf16. You should use [Automatic Mixed Precision](https://pytorch.org/tutorials/recipes/recipes/amp_recipe.html), set fp16 or bf16 to True if using [`Trainer`], or use [torch.autocast](https://pytorch.org/docs/stable/amp.html#torch.autocast).

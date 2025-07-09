@@ -22,6 +22,12 @@ rendered properly in your Markdown viewer.
   </div>
 </div>
 
+*Paper published on 2024-12-18, updated on 2024-12-19*
+
+*Added to Hugging Face Transformers on 2024-12-19*
+
+
+
 # ModernBERT
 
 [ModernBERT](https://huggingface.co/papers/2412.13663) is a modernized version of [`BERT`] trained on 2T tokens. It brings many improvements to the original architecture such as rotary positional embeddings to support sequences of up to 8192 tokens, unpadding to avoid wasting compute on padding tokens, GeGLU layers, and alternating attention.

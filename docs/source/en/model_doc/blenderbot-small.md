@@ -25,6 +25,12 @@ rendered properly in your Markdown viewer.
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
+*Paper published on 2020-04-28, updated on 2020-04-30*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 Note that [`BlenderbotSmallModel`] and
 [`BlenderbotSmallForConditionalGeneration`] are only used in combination with the checkpoint
 [facebook/blenderbot-90M](https://huggingface.co/facebook/blenderbot-90M). Larger Blenderbot checkpoints should

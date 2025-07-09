@@ -20,6 +20,12 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*Paper published on 2018-01-13, updated on 2019-03-21*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 # MobileNet V2
 
 [MobileNet V2](https://huggingface.co/papers/1801.04381) improves performance on mobile devices with a more efficient architecture. It uses inverted residual blocks and linear bottlenecks to start with a smaller representation of the data, expands it for processing, and shrinks it again to reduce the number of computations. The model also removes non-linearities to maintain accuracy despite its simplified design. Like [MobileNet V1](./mobilenet_v1), it uses depthwise separable convolutions for efficiency.

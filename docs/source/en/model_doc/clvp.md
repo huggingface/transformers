@@ -20,6 +20,12 @@ rendered properly in your Markdown viewer.
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
+*Paper published on 2023-05-12, updated on 2023-05-23*
+
+*Added to Hugging Face Transformers on 2023-11-10*
+
+
+
 ## Overview
 
 The CLVP (Contrastive Language-Voice Pretrained Transformer) model was proposed in [Better speech synthesis through scaling](https://huggingface.co/papers/2305.07243) by James Betker.

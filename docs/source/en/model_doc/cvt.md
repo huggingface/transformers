@@ -21,6 +21,12 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*Paper published on 2022-09-29, updated on 2023-01-16*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 # Convolutional Vision Transformer (CvT)
 
 Convolutional Vision Transformer (CvT) is a model that combines the strengths of convolutional neural networks (CNNs) and Vision transformers for the computer vision tasks. It introduces convolutional layers into the vision transformer architecture, allowing it to capture local patterns in images while maintaining the global context provided by self-attention mechanisms.

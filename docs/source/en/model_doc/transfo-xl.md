@@ -59,6 +59,12 @@ You can do so by running the following command: `pip install -U transformers==4.
 </a>
 </div>
 
+*Paper published on 2019-01-09, updated on 2019-06-02*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 ## Overview
 
 The Transformer-XL model was proposed in [Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context](https://huggingface.co/papers/1901.02860) by Zihang Dai, Zhilin Yang, Yiming Yang, Jaime Carbonell, Quoc V. Le, Ruslan

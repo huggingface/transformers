@@ -137,6 +137,12 @@ Below is a expected speedup diagram that compares pure inference time between th
 <img src="https://huggingface.co/datasets/ybelkada/documentation-images/resolve/main/mixtral-7b-inference-large-seqlen.png">
 </div>
 
+*Paper published on 2024-06-27, updated on 2025-02-28*
+
+*Added to Hugging Face Transformers on 2023-12-11*
+
+
+
 ### Sliding window Attention
 
 The current implementation supports the sliding window attention mechanism and memory efficient cache management. 

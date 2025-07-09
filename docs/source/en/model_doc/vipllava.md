@@ -22,6 +22,12 @@ rendered properly in your Markdown viewer.
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
+*Paper published on 2023-12-01, updated on 2024-04-27*
+
+*Added to Hugging Face Transformers on 2023-12-13*
+
+
+
 ## Overview
 
 The VipLlava model was proposed in [Making Large Multimodal Models Understand Arbitrary Visual Prompts](https://huggingface.co/papers/2312.00784) by Mu Cai, Haotian Liu, Siva Karthik Mustikovela, Gregory P. Meyer, Yuning Chai, Dennis Park, Yong Jae Lee.

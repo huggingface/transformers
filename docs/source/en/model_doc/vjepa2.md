@@ -31,6 +31,12 @@ V-JEPA 2 is a self-supervised approach to training video encoders developed by F
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/vjepa.gif" alt="drawing" width="600"/>
 </div>
 
+*Paper published on 2023-12-01, updated on 2024-04-27*
+
+*Added to Hugging Face Transformers on 2025-06-11*
+
+
+
 You can find all original V-JEPA2 checkpoints under the [V-JEPA 2](https://huggingface.co/collections/facebook/v-jepa-2-6841bad8413014e185b497a6) collection.
 
 

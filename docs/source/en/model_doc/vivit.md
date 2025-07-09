@@ -18,6 +18,12 @@ specific language governing permissions and limitations under the License.
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
+*Paper published on 2021-03-29, updated on 2021-11-01*
+
+*Added to Hugging Face Transformers on 2023-07-11*
+
+
+
 ## Overview
 
 The Vivit model was proposed in [ViViT: A Video Vision Transformer](https://huggingface.co/papers/2103.15691) by Anurag Arnab, Mostafa Dehghani, Georg Heigold, Chen Sun, Mario Lučić, Cordelia Schmid.

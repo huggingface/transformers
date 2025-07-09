@@ -121,6 +121,12 @@ visualizer("Plants create energy through a process known as")
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/llama-attn-mask.png"/>
 </div>
 
+*Paper published on 2023-02-27, updated on 2023-02-27*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 ## Notes
 
 - The tokenizer is a byte-pair encoding model based on [SentencePiece](https://github.com/google/sentencepiece). During decoding, if the first token is the start of the word (for example, "Banana"), the tokenizer doesn't prepend the prefix space to the string.

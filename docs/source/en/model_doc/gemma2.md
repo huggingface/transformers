@@ -126,6 +126,12 @@ visualizer("You are an assistant. Make sure you print me")
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/gemma-2-attn-mask.png"/>
 </div>
 
+*Paper published on 2024-07-31, updated on 2024-10-02*
+
+*Added to Hugging Face Transformers on 2024-06-27*
+
+
+
 ## Notes
 
 - Use a [`HybridCache`] instance to enable caching in Gemma 2. Gemma 2 doesn't support kv-caching strategies like [`DynamicCache`] or tuples of tensors because it uses sliding window attention every second layer.

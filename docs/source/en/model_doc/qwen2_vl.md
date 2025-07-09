@@ -22,6 +22,12 @@ rendered properly in your Markdown viewer.
 <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
 </div>
 
+*Paper published on 2023-08-24, updated on 2023-10-13*
+
+*Added to Hugging Face Transformers on 2024-08-26*
+
+
+
 ## Overview
 
 The [Qwen2-VL](https://qwenlm.github.io/blog/qwen2-vl/) model is a major update to [Qwen-VL](https://huggingface.co/papers/2308.12966) from the Qwen team at Alibaba Research. 

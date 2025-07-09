@@ -24,6 +24,12 @@ rendered properly in your Markdown viewer.
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
+*Paper published on 2021-04-14, updated on 2021-04-14*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 The [`SpeechEncoderDecoderModel`] can be used to initialize a speech-to-text model
 with any pretrained speech autoencoding model as the encoder (*e.g.* [Wav2Vec2](wav2vec2), [Hubert](hubert)) and any pretrained autoregressive model as the decoder.
 

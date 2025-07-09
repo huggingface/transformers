@@ -23,6 +23,12 @@ rendered properly in your Markdown viewer.
 ">
 </div>
 
+*Paper published on 2021-07-16, updated on 2022-03-14*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 <Tip warning={true}>
 
 This model is in maintenance mode only, we don't accept any new PRs changing its code.

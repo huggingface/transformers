@@ -21,6 +21,12 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*Paper published on 2021-05-02, updated on 2021-05-02*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 # XLM-RoBERTa-XL
 
 [XLM-RoBERTa-XL](https://huggingface.co/papers/2105.00572) is a 3.5B parameter multilingual masked language model pretrained on 100 languages. It shows that by scaling model capacity, multilingual models demonstrates strong performance on high-resource languages and can even zero-shot low-resource languages.

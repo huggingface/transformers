@@ -129,6 +129,12 @@ visualizer("<img> What is in this image?")
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/paligemma2-attn-mask.png"/>
 </div>
 
+*Paper published on 2024-07-10, updated on 2024-10-10*
+
+*Added to Hugging Face Transformers on 2024-05-14*
+
+
+
 ## Notes
 
 - PaliGemma is not a conversational model and works best when fine-tuned for specific downstream tasks such as image captioning, visual question answering (VQA), object detection, and document understanding.

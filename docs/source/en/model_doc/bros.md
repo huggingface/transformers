@@ -16,6 +16,12 @@ specific language governing permissions and limitations under the License.
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
+*Paper published on 2021-08-10, updated on 2022-04-05*
+
+*Added to Hugging Face Transformers on 2023-09-15*
+
+
+
 ## Overview
 
 The BROS model was proposed in [BROS: A Pre-trained Language Model Focusing on Text and Layout for Better Key Information Extraction from Documents](https://huggingface.co/papers/2108.04539) by Teakgyu Hong, Donghyun Kim, Mingi Ji, Wonseok Hwang, Daehyun Nam, Sungrae Park.

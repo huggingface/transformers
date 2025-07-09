@@ -106,6 +106,12 @@ annotated_frame
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/vitpose.png"/>
 </div>
 
+*Paper published on 2022-04-26, updated on 2022-10-13*
+
+*Added to Hugging Face Transformers on 2025-01-08*
+
+
+
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.

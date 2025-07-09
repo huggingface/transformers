@@ -25,6 +25,12 @@ rendered properly in your Markdown viewer.
     <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
+*Paper published on 2019-10-29, updated on 2019-10-29*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 # BART
 [BART](https://huggingface.co/papers/1910.13461) is a sequence-to-sequence model that combines the pretraining objectives from BERT and GPT. It’s pretrained by corrupting text in different ways like deleting words, shuffling sentences, or masking tokens and learning how to fix it. The encoder encodes the corrupted document and the corrupted text is fixed by the decoder. As it learns to recover the original text, BART gets really good at both understanding and generating language.
 

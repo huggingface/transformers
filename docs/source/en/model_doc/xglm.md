@@ -23,6 +23,12 @@ rendered properly in your Markdown viewer.
 ">
 </div>
 
+*Paper published on 2021-12-20, updated on 2022-11-10*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 ## Overview
 
 The XGLM model was proposed in [Few-shot Learning with Multilingual Language Models](https://huggingface.co/papers/2112.10668)

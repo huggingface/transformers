@@ -23,6 +23,12 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*Paper published on 2019-11-05, updated on 2020-04-08*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 # XLM-RoBERTa
 
 [XLM-RoBERTa](https://huggingface.co/papers/1911.02116) is a large multilingual masked language model trained on 2.5TB of filtered CommonCrawl data across 100 languages. It shows that scaling the model provides strong performance gains on high-resource and low-resource languages. The model uses the [RoBERTa](./roberta) pretraining objectives on the [XLM](./xlm) model.

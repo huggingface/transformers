@@ -16,6 +16,12 @@ specific language governing permissions and limitations under the License.
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
+*Paper published on 2022-11-02, updated on 2023-04-01*
+
+*Added to Hugging Face Transformers on 2023-08-21*
+
+
+
 ## Overview
 
 The Pop2Piano model was proposed in [Pop2Piano : Pop Audio-based Piano Cover Generation](https://huggingface.co/papers/2211.00895) by Jongho Choi and Kyogu Lee.

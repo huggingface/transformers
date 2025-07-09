@@ -25,6 +25,12 @@ rendered properly in your Markdown viewer.
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
+*Paper published on 2021-11-15, updated on 2022-06-22*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 ## Overview
 
 The [`VisionTextDualEncoderModel`] can be used to initialize a vision-text dual encoder model with

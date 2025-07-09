@@ -23,6 +23,12 @@ rendered properly in your Markdown viewer.
 ">
 </div>
 
+*Paper published on 2023-05-11, updated on 2023-06-15*
+
+*Added to Hugging Face Transformers on 2023-11-28*
+
+
+
 ## Overview
 
 MADLAD-400 models were released in the paper [MADLAD-400: A Multilingual And Document-Level Large Audited Dataset](MADLAD-400: A Multilingual And Document-Level Large Audited Dataset). 

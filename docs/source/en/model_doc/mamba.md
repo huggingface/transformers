@@ -20,6 +20,12 @@ rendered properly in your Markdown viewer.
   </div>
 </div>
 
+*Paper published on 2023-12-01, updated on 2024-05-31*
+
+*Added to Hugging Face Transformers on 2024-03-05*
+
+
+
 # Mamba
 
 [Mamba](https://huggingface.co/papers/2312.00752) is a selective structured state space model (SSMs) designed to work around Transformers computational inefficiency when dealing with long sequences.  It is a completely attention-free architecture, and comprised of a combination of H3 and gated MLP blocks (Mamba block). Mamba's "content-based reasoning" allows it to focus on specific parts of an input depending on the current token. Mamba also uses a new hardware-aware parallel algorithm to compensate for the lack of convolutional operations. As a result, Mamba has fast inference and can scale to very long sequences.

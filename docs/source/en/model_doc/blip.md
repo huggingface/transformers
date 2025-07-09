@@ -21,6 +21,12 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*Paper published on 2022-01-28, updated on 2022-02-15*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 # BLIP
 
 [BLIP](https://huggingface.co/papers/2201.12086) (Bootstrapped Language-Image Pretraining) is a vision-language pretraining (VLP) framework designed for *both* understanding and generation tasks. Most existing pretrained models are only good at one or the other. It uses a captioner to generate captions and a filter to remove the noisy captions. This increases training data quality and more effectively uses the messy web data.

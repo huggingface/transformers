@@ -22,6 +22,12 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*Paper published on 2025-02-20, updated on 2025-02-20*
+
+*Added to Hugging Face Transformers on 2025-02-21*
+
+
+
 # SigLIP2
 
 ## Overview

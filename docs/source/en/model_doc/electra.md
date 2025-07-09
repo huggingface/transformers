@@ -24,6 +24,12 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*Paper published on 2020-03-23, updated on 2020-03-23*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 # ELECTRA
 
 [ELECTRA](https://huggingface.co/papers/2003.10555) modifies the pretraining objective of traditional masked language models like BERT. Instead of just masking tokens and asking the model to predict them, ELECTRA trains two models, a generator and a discriminator. The generator replaces some tokens with plausible alternatives and the discriminator (the model you'll actually use) learns to detect which tokens are original and which were replaced. This training approach is very efficient and scales to larger models while using considerably less compute.

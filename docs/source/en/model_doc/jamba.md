@@ -22,6 +22,12 @@ rendered properly in your Markdown viewer.
   </div>
 </div>
 
+*Paper published on 2024-03-28, updated on 2024-07-03*
+
+*Added to Hugging Face Transformers on 2024-04-18*
+
+
+
 # Jamba
 
 [Jamba](https://huggingface.co/papers/2403.19887) is a hybrid Transformer-Mamba mixture-of-experts (MoE) language model ranging from 52B to 398B total parameters. This model aims to combine the advantages of both model families, the performance of transformer models and the efficiency and longer context (256K tokens) of state space models (SSMs) like Mamba.

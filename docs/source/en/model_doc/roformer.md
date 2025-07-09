@@ -23,6 +23,12 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*Paper published on 2021-04-20, updated on 2023-11-08*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 # RoFormer
 
 [RoFormer](https://huggingface.co/papers/2104.09864) introduces Rotary Position Embedding (RoPE) to encode token positions by rotating the inputs in 2D space. This allows a model to track absolute positions and model relative relationships. RoPE can scale to longer sequences, account for the natural decay of token dependencies, and works with the more efficient linear self-attention.

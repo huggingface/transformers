@@ -140,6 +140,12 @@ visualizer("""def func(a, b):
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/codellama-attn-mask.png"/>
 </div>
 
+*Paper published on 2023-08-24, updated on 2024-01-31*
+
+*Added to Hugging Face Transformers on 2023-08-25*
+
+
+
 ## Notes
 
 - Infilling is only available in the 7B and 13B base models, and not in the Python, Instruct, 34B, or 70B models.

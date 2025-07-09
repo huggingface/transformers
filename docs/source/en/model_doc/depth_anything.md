@@ -20,6 +20,12 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*Paper published on 2024-01-19, updated on 2024-04-07*
+
+*Added to Hugging Face Transformers on 2024-01-25*
+
+
+
 # Depth Anything
 
 [Depth Anything](https://huggingface.co/papers/2401.10891) is designed to be a foundation model for monocular depth estimation (MDE). It is jointly trained on labeled and ~62M unlabeled images to enhance the dataset. It uses a pretrained [DINOv2](./dinov2) model as an image encoder to inherit its existing rich semantic priors, and [DPT](./dpt) as the decoder. A teacher model is trained on unlabeled images to create pseudo-labels. The student model is trained on a combination of the pseudo-labels and labeled images. To improve the student model's performance, strong perturbations are added to the unlabeled images to challenge the student model to learn more visual knowledge from the image.

@@ -24,6 +24,12 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*Paper published on 2019-10-02, updated on 2020-03-01*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 # DistilBERT
 
 [DistilBERT](https://huggingface.co/papers/1910.01108) is pretrained by knowledge distillation to create a smaller model with faster inference and requires less compute to train. Through a triple loss objective during pretraining, language modeling loss, distillation loss, cosine-distance loss, DistilBERT demonstrates similar performance to a larger transformer language model.

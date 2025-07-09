@@ -22,6 +22,12 @@ rendered properly in your Markdown viewer.
 ">
 </div>
 
+*Paper published on 2021-12-15, updated on 2022-05-03*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 ## Overview
 
 The LongT5 model was proposed in [LongT5: Efficient Text-To-Text Transformer for Long Sequences](https://huggingface.co/papers/2112.07916)

@@ -21,6 +21,12 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*Paper published on 2020-06-05, updated on 2021-10-06*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 
 # DeBERTa-v2
 

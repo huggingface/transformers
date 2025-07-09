@@ -24,6 +24,12 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*Paper published on 2024-03-13, updated on 2024-04-16*
+
+*Added to Hugging Face Transformers on 2025-06-26*
+
+
+
 ## Overview
 
 Dia is an opensource text-to-speech (TTS) model (1.6B parameters) developed by [Nari Labs](https://huggingface.co/nari-labs).

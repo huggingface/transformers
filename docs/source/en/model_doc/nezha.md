@@ -20,6 +20,12 @@ rendered properly in your Markdown viewer.
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
+*Paper published on 2019-08-31, updated on 2021-11-19*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 <Tip warning={true}>
 
 This model is in maintenance mode only, we don't accept any new PRs changing its code.

@@ -22,6 +22,12 @@ rendered properly in your Markdown viewer.
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
+*Paper published on 2020-03-30, updated on 2020-03-30*
+
+*Added to Hugging Face Transformers on 2025-04-14*
+
+
+
 ## Overview
 
 The [Qwen2.5-Omni](https://qwenlm.github.io/blog/) model is a unified multiple modalities model proposed in [Qwen2.5-Omni Technical Report]() from Qwen team, Alibaba Group.

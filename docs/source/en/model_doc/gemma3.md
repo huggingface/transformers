@@ -168,6 +168,12 @@ visualizer("<img>What is shown in this image?")
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/gemma-3-attn-mask.png"/>
 </div>
 
+*Paper published on 2023-04-05, updated on 2023-04-05*
+
+*Added to Hugging Face Transformers on 2025-03-12*
+
+
+
 ## Notes
 
 - Use [`Gemma3ForConditionalGeneration`] for image-and-text and image-only inputs.

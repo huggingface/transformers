@@ -22,6 +22,12 @@ rendered properly in your Markdown viewer.
 ">
 </div>
 
+*Paper published on 2020-07-28, updated on 2021-01-08*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 ## Overview
 
 The BLOOM model has been proposed with its various versions through the [BigScience Workshop](https://bigscience.huggingface.co/). BigScience is inspired by other open science initiatives where researchers have pooled their time and resources to collectively achieve a higher impact.

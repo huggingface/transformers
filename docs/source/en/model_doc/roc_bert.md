@@ -20,6 +20,12 @@ rendered properly in your Markdown viewer.
    </div>
 </div>
 
+*Paper published on 2021-04-14, updated on 2021-04-14*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 # RoCBert
 
 [RoCBert](https://aclanthology.org/2022.acl-long.65.pdf) is a pretrained Chinese [BERT](./bert) model designed against adversarial attacks like typos and synonyms. It is pretrained with a contrastive learning objective to align normal and adversarial text examples. The examples include different semantic, phonetic, and visual features of Chinese. This makes RoCBert more robust against manipulation.

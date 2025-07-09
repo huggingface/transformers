@@ -15,6 +15,12 @@ specific language governing permissions and limitations under the License.-->
     </div>
 </div>
 
+*Paper published on 2021-05-09, updated on 2022-05-26*
+
+*Added to Hugging Face Transformers on 2023-09-01*
+
+
+
 # VITS
 
 [VITS (Variational Inference with adversarial learning for end-to-end Text-to-Speech)](https://hf.co/papers/2106.06103) is a end-to-end speech synthesis model, simplifying the traditional two-stage text-to-speech (TTS) systems. It's unique because it directly synthesizes speech from text using variational inference, adversarial learning, and normalizing flows to produce natural and expressive speech with diverse rhythms and intonations.

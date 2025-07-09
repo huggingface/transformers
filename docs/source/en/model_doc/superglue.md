@@ -19,6 +19,12 @@ rendered properly in your Markdown viewer.
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
+*Paper published on 2019-11-26, updated on 2020-03-28*
+
+*Added to Hugging Face Transformers on 2025-01-20*
+
+
+
 ## Overview
 
 The SuperGlue model was proposed in [SuperGlue: Learning Feature Matching with Graph Neural Networks](https://huggingface.co/papers/1911.11763) by Paul-Edouard Sarlin, Daniel DeTone, Tomasz Malisiewicz and Andrew Rabinovich.

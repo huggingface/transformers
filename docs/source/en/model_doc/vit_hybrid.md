@@ -21,6 +21,12 @@ rendered properly in your Markdown viewer.
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
+*Paper published on 2020-10-22, updated on 2021-06-03*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 <Tip warning={true}>
 
 This model is in maintenance mode only, we don't accept any new PRs changing its code.

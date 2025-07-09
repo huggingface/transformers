@@ -23,6 +23,12 @@ rendered properly in your Markdown viewer.
 <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
 </div>
 
+*Paper published on 2024-06-18, updated on 2024-07-30*
+
+*Added to Hugging Face Transformers on 2024-10-18*
+
+
+
 ## Overview
 
 The GLM Model was proposed

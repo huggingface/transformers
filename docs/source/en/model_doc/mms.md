@@ -23,6 +23,12 @@ rendered properly in your Markdown viewer.
 ">
 </div>
 
+*Paper published on 2023-05-22, updated on 2023-05-22*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 ## Overview
 
 The MMS model was proposed in [Scaling Speech Technology to 1,000+ Languages](https://huggingface.co/papers/2305.13516) 

@@ -22,6 +22,12 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*Paper published on 2022-09-28, updated on 2022-11-02*
+
+*Added to Hugging Face Transformers on 2024-12-19*
+
+
+
 # Bamba
 
 [Bamba](https://huggingface.co/blog/bamba) is a 9B parameter decoder-only language model built on the [Mamba-2](./mamba2) architecture. It is pretrained in two stages - it starts by training on 2T tokens from the [Dolma v1.7](https://huggingface.co/datasets/allenai/dolma) dataset and then trained on an additional 200B tokens from [FineWeb](https://huggingface.co/datasets/HuggingFaceFW/fineweb) and [Cosmopedia](https://huggingface.co/datasets/HuggingFaceTB/cosmopedia).

@@ -20,6 +20,12 @@ rendered properly in your Markdown viewer.
   </div>
 </div>
 
+*Paper published on 2021-02-11, updated on 2021-06-11*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 # ALIGN
 
 [ALIGN](https://huggingface.co/papers/2102.05918) is pretrained on a noisy 1.8 billion alt‑text and image pair dataset to show that scale can make up for the noise. It uses a dual‑encoder architecture, [EfficientNet](./efficientnet) for images and [BERT](./bert) for text, and a contrastive loss to align similar image–text embeddings together while pushing different embeddings apart. Once trained, ALIGN can encode any image and candidate captions into a shared vector space for zero‑shot retrieval or classification without requiring extra labels. This scale‑first approach reduces dataset curation costs and powers state‑of‑the‑art image–text retrieval and zero‑shot ImageNet classification.

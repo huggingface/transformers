@@ -24,6 +24,12 @@ rendered properly in your Markdown viewer.
   </div>
 </div>
 
+*Paper published on 2020-01-22, updated on 2020-01-23*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 # mBART
 
 [mBART](https://huggingface.co/papers/2001.08210) is a multilingual machine translation model that pretrains the entire translation model (encoder-decoder) unlike previous methods that only focused on parts of the model. The model is trained on a denoising objective which reconstructs the corrupted text. This allows mBART to handle the source language and the target text to translate to.

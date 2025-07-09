@@ -23,6 +23,12 @@ rendered properly in your Markdown viewer.
   </div>
 </div>
 
+*Paper published on 2021-05-09, updated on 2022-05-26*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 
 # GPT-2
 

@@ -23,6 +23,12 @@ rendered properly in your Markdown viewer.
 ">
 </div>
 
+*Paper published on 2022-10-20, updated on 2022-12-06*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 ## Overview
 
 FLAN-T5 was released in the paper [Scaling Instruction-Finetuned Language Models](https://huggingface.co/papers/2210.11416) - it is an enhanced version of T5 that has been finetuned in a mixture of tasks.

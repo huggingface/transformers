@@ -22,6 +22,12 @@ rendered properly in your Markdown viewer.
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
+*Paper published on 2024-08-06, updated on 2024-10-26*
+
+*Added to Hugging Face Transformers on 2024-09-05*
+
+
+
 ## Overview
 
 The LLaVA-OneVision model was proposed in [LLaVA-OneVision: Easy Visual Task Transfer](https://huggingface.co/papers/2408.03326) by <Bo Li, Yuanhan Zhang, Dong Guo, Renrui Zhang, Feng Li, Hao Zhang, Kaichen Zhang, Yanwei Li, Ziwei Liu, Chunyuan Li

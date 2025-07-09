@@ -360,6 +360,12 @@ The original code can be found [here](https://github.com/SesameAILabs/csm).
     <img src="https://huggingface.co/datasets/eustlb/documentation-images/resolve/main/fig1.jpg"/>
 </div>
 
+*Paper published on 2023-01-25, updated on 2023-10-13*
+
+*Added to Hugging Face Transformers on 2025-05-07*
+
+
+
 [[autodoc]] CsmProcessor
     - __call__
 

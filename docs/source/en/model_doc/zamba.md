@@ -19,6 +19,12 @@ rendered properly in your Markdown viewer.
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
+*Paper published on 2019-11-05, updated on 2020-04-08*
+
+*Added to Hugging Face Transformers on 2024-10-04*
+
+
+
 Zamba is a large language model (LLM) trained by Zyphra, and made available under an Apache 2.0 license. Please see the [Zyphra Hugging Face](https://huggingface.co/collections/zyphra/) repository for model weights.
 
 This model was contributed by [pglo](https://huggingface.co/pglo).

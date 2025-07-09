@@ -19,6 +19,12 @@ specific language governing permissions and limitations under the License.
     </div>
 </div>
 
+*Paper published on 2023-04-14, updated on 2024-02-02*
+
+*Added to Hugging Face Transformers on 2023-07-18*
+
+
+
 
 # DINOv2
 

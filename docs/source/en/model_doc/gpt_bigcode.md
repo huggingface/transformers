@@ -90,6 +90,12 @@ Below is a expected speedup diagram that compares pure inference time between th
 <img src="https://huggingface.co/datasets/ybelkada/documentation-images/resolve/main/starcoder-speedup.png">
 </div>
 
+*Paper published on 2023-01-09, updated on 2023-02-24*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 
 ## GPTBigCodeConfig
 

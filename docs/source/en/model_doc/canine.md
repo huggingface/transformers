@@ -20,6 +20,12 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*Paper published on 2021-03-11, updated on 2022-05-18*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 # CANINE
 
 [CANINE](https://huggingface.co/papers/2103.06874) is a tokenization-free Transformer. It skips the usual step of splitting text into subwords or wordpieces and processes text character by character. That means it works directly with raw Unicode, making it especially useful for languages with complex or inconsistent tokenization rules and even noisy inputs like typos. Since working with characters means handling longer sequences, CANINE uses a smart trick. The model compresses the input early on (called downsampling) so the transformer doesn’t have to process every character individually. This keeps things fast and efficient.

@@ -135,6 +135,12 @@ Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/bl
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/mistral-attn-mask.png"/>
 </div>
 
+*Paper published on 2023-10-10, updated on 2023-10-10*
+
+*Added to Hugging Face Transformers on 2023-09-27*
+
+
+
 ## MistralConfig
 
 [[autodoc]] MistralConfig

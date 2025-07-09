@@ -20,6 +20,12 @@ rendered properly in your Markdown viewer.
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
+*Paper published on 2023-05-12, updated on 2023-05-23*
+
+*Added to Hugging Face Transformers on 2024-12-11*
+
+
+
 ## Overview
 
 Helper class to enable loading timm models to be used with the transformers library and its autoclasses.

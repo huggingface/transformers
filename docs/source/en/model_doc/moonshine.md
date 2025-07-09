@@ -22,6 +22,12 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*Paper published on 2024-10-21, updated on 2024-10-22*
+
+*Added to Hugging Face Transformers on 2025-01-10*
+
+
+
 # Moonshine
 
 [Moonshine](https://huggingface.co/papers/2410.15608) is an encoder-decoder speech recognition model optimized for real-time transcription and recognizing voice command. Instead of using traditional absolute position embeddings, Moonshine uses Rotary Position Embedding (RoPE) to handle speech with varying lengths without using padding. This improves efficiency during inference, making it ideal for resource-constrained devices.

@@ -22,6 +22,12 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*Paper published on 2024-12-31, updated on 2025-01-15*
+
+*Added to Hugging Face Transformers on 2024-11-25*
+
+
+
 # OLMo2
 [OLMo2](https://huggingface.co/papers/2501.00656) improves on [OLMo](./olmo) by changing the architecture and training recipes of the original models. This includes excluding all biases to improve training stability, non-parametric layer norm, SwiGLU activation function, rotary positional embeddings, and a modified BPE-based tokenizer that masks personal identifiable information. It is pretrained on [Dolma](https://huggingface.co/datasets/allenai/dolma), a dataset of 3T tokens.
 

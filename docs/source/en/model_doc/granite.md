@@ -22,6 +22,12 @@ rendered properly in your Markdown viewer.
 <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
 </div>
 
+*Paper published on 2024-08-23, updated on 2024-09-11*
+
+*Added to Hugging Face Transformers on 2024-08-27*
+
+
+
 # Granite
 
 [Granite](https://huggingface.co/papers/2408.13359) is a 3B parameter language model trained with the Power scheduler. Discovering a good learning rate for pretraining large language models is difficult because it depends on so many variables (batch size, number of training tokens, etc.) and it is expensive to perform a hyperparameter search. The Power scheduler is based on a power-law relationship between the variables and their transferability to larger models. Combining the Power scheduler with Maximum Update Parameterization (MUP) allows a model to be pretrained with one set of hyperparameters regardless of all the variables.

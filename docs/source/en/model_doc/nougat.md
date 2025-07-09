@@ -22,6 +22,12 @@ specific language governing permissions and limitations under the License. -->
 ">
 </div>
 
+*Paper published on 2023-08-25, updated on 2023-08-25*
+
+*Added to Hugging Face Transformers on 2023-09-26*
+
+
+
 ## Overview
 
 The Nougat model was proposed in [Nougat: Neural Optical Understanding for Academic Documents](https://huggingface.co/papers/2308.13418) by

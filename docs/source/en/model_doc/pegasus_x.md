@@ -21,6 +21,12 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*Paper published on 2022-08-08, updated on 2022-08-08*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 # PEGASUS-X
 
 [PEGASUS-X](https://huggingface.co/papers/2208.04347) is an encoder-decoder (sequence-to-sequence) transformer model for long-input summarization. It extends the [Pegasus](./pegasus) model with staggered block-local attention, global encoder tokens, and additional pretraining on long text sequences, enabling it to handle inputs of up to 16,000 tokens. PEGASUS-X matches the performance of much larger models while using fewer parameters.

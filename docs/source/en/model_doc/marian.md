@@ -25,6 +25,12 @@ rendered properly in your Markdown viewer.
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
+*Paper published on 2022-05-10, updated on 2023-02-28*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 ## Overview
 
 A framework for translation models, using the same models as BART. Translations should be similar, but not identical to output in the test set linked to in each model card.

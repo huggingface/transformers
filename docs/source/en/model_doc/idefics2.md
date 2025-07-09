@@ -22,6 +22,12 @@ rendered properly in your Markdown viewer.
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
+*Paper published on 2024-05-03, updated on 2024-05-03*
+
+*Added to Hugging Face Transformers on 2024-04-15*
+
+
+
 ## Overview
 
 The Idefics2 model was proposed in [What matters when building vision-language models?](https://huggingface.co/papers/2405.02246) by Léo Tronchon, Hugo Laurencon, Victor Sanh. The accompanying blog post can be found [here](https://huggingface.co/blog/idefics2).

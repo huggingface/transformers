@@ -22,6 +22,12 @@ rendered properly in your Markdown viewer.
 ">
 </div>
 
+*Paper published on 2022-09-21, updated on 2023-01-28*
+
+*Added to Hugging Face Transformers on 2024-12-17*
+
+
+
 ## Overview
 
 Falcon3 represents a natural evolution from previous releases, emphasizing expanding the models' science, math, and code capabilities. This iteration includes five base models: Falcon3-1B-Base, Falcon3-3B-Base, Falcon3-Mamba-7B-Base, Falcon3-7B-Base, and Falcon3-10B-Base. In developing these models, we incorporated several key innovations aimed at improving the models' performances while reducing training costs:

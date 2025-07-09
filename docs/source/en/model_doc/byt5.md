@@ -21,6 +21,12 @@ rendered properly in your Markdown viewer.
   </div>
 </div>
 
+*Paper published on 2021-05-28, updated on 2022-03-08*
+
+*Added to Hugging Face Transformers on 2023-06-20*
+
+
+
 # ByT5
 
 [ByT5](https://huggingface.co/papers/2105.13626) is tokenizer-free version of the [T5](./t5) model designed to works directly on raw UTF-8 bytes. This means it can process any language, more robust to noise like typos, and simpler to use because it doesn't require a preprocessing pipeline.
