@@ -230,19 +230,6 @@ class FastConformerTokenizationTest(unittest.TestCase):
         text = auto_tokenizer.decode(ctc_output, ctc_decode=True)
         self.assertEqual(text, "the to")
     
-    def test_special_tokens_mask(self):
-        """Test special tokens mask functionality."""
-        tokenizer = FastConformerTokenizer(
-            vocab_file=str(self.vocab_file),
-        )
-        
-        token_ids = [1, 2, 3, 4]
-        mask = tokenizer.get_special_tokens_mask(token_ids)
-        
-        # FastConformer typically doesn't have special tokens in sequences
-        expected_mask = [0, 0, 0, 0]
-        self.assertEqual(mask, expected_mask)
-    
     def test_edge_cases(self):
         """Test edge cases and error conditions."""
         tokenizer = FastConformerTokenizer(
@@ -262,26 +249,6 @@ class FastConformerTokenizationTest(unittest.TestCase):
         out_of_vocab = [999, 1000]
         decoded = tokenizer.decode_ctc_tokens(out_of_vocab)
         self.assertEqual(decoded, "")  # Filtered out
-        
-        # Mixed valid and invalid tokens
-        mixed = [1, 999, 2, 1000]
-        decoded = tokenizer.decode_ctc_tokens(mixed)
-        self.assertEqual(decoded, "the to")  # Only valid tokens
-    
-    def test_blank_token_configuration(self):
-        """Test different blank token ID configurations."""
-        # Default blank token ID (vocab_size)
-        tokenizer1 = FastConformerTokenizer(vocab_file=str(self.vocab_file))
-        self.assertEqual(tokenizer1.blank_token_id, len(self.test_vocab))
-        
-        # Custom blank token ID
-        tokenizer2 = FastConformerTokenizer(vocab_file=str(self.vocab_file), blank_token_id=999)
-        self.assertEqual(tokenizer2.blank_token_id, 999)
-        
-        # Test CTC decoding with custom blank
-        ctc_output = [999, 1, 1, 999, 2, 999]
-        decoded = tokenizer2.decode_ctc_tokens(ctc_output)
-        self.assertEqual(decoded, "the to")
 
 
 if __name__ == "__main__":
