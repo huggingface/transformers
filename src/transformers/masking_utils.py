@@ -721,7 +721,7 @@ def create_causal_mask(
     attention_mask: Optional[torch.Tensor],
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
-    position_ids: Optional[torch.Tensor],
+    position_ids: Optional[torch.Tensor] = None,
     or_mask_function: Optional[Callable] = None,
     and_mask_function: Optional[Callable] = None,
 ) -> Optional[Union[torch.Tensor, BlockMask]]:
@@ -810,7 +810,7 @@ def create_sliding_window_causal_mask(
     attention_mask: Optional[torch.Tensor],
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
-    position_ids: Optional[torch.Tensor],
+    position_ids: Optional[torch.Tensor] = None,
     or_mask_function: Optional[Callable] = None,
     and_mask_function: Optional[Callable] = None,
 ) -> Optional[Union[torch.Tensor, BlockMask]]:
@@ -905,7 +905,7 @@ def create_chunked_causal_mask(
     attention_mask: Optional[torch.Tensor],
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
-    position_ids: Optional[torch.Tensor],
+    position_ids: Optional[torch.Tensor] = None,
     or_mask_function: Optional[Callable] = None,
     and_mask_function: Optional[Callable] = None,
 ) -> Optional[Union[torch.Tensor, BlockMask]]:
@@ -1014,7 +1014,7 @@ def create_masks_for_generate(
     attention_mask: Optional[torch.Tensor],
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
-    position_ids: Optional[torch.Tensor],
+    position_ids: Optional[torch.Tensor] = None,
     or_mask_function: Optional[Callable] = None,
     and_mask_function: Optional[Callable] = None,
     **kwargs,
