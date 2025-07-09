@@ -85,8 +85,6 @@ if is_pydantic_available() and is_fastapi_available() and is_uvicorn_available()
 
         generation_config: Optional[str]
 
-    TransformersRequest = Union[TransformersResponseCreateParamsStreaming, TransformersCompletionCreateParamsStreaming]
-
     # Contrarily to OpenAI's output types, input types are `TypedDict`, which don't have validation
     response_validator = TypeAdapter(TransformersResponseCreateParamsStreaming)
     completion_validator = TypeAdapter(TransformersCompletionCreateParamsStreaming)
@@ -178,8 +176,8 @@ def create_generation_config_from_req(
     """
     # If there is a generation config in the request, it is a json string serialization from a `GenerationConfig`
     # object. For simplicity, flags set here take precedence over all other flags.
-    if req.generation_config is not None:
-        generation_config = GenerationConfig(**json.loads(req.generation_config))
+    if req.get("generation_config") is not None:
+        generation_config = GenerationConfig(**json.loads(req["generation_config"]))
     else:
         generation_config = copy.deepcopy(model_generation_config)
 
@@ -192,20 +190,20 @@ def create_generation_config_from_req(
     if isinstance(req, TransformersResponseCreateParamsStreaming):
         return generation_config
 
-    if req.frequency_penalty is not None:
-        generation_config.repetition_penalty = float(req.frequency_penalty)
-    if req.logit_bias is not None:
-        generation_config.sequence_bias = req.logit_bias
-    if req.stop is not None:
-        generation_config.stop_strings = req.stop
-    if req.temperature is not None:
-        generation_config.temperature = float(req.temperature)
-        if float(req.temperature) == 0.0:
+    if req["frequency_penalty"] is not None:
+        generation_config.repetition_penalty = float(req["frequency_penalty"])
+    if req["logit_bias"] is not None:
+        generation_config.sequence_bias = req["logit_bias"]
+    if req["stop"] is not None:
+        generation_config.stop_strings = req["stop"]
+    if req["temperature"] is not None:
+        generation_config.temperature = float(req["temperature"])
+        if float(req["temperature"]) == 0.0:
             generation_config.do_sample = False
-    if req.top_p is not None:
-        generation_config.top_p = float(req.top_p)
-    if req.seed is not None:
-        torch.manual_seed(req.seed)
+    if req["top_p"] is not None:
+        generation_config.top_p = float(req["top_p"])
+    if req["seed"] is not None:
+        torch.manual_seed(req["seed"])
 
     return generation_config
 
@@ -324,7 +322,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
     def validate_request(
         self,
-        request: "TransformersRequest",
+        request: Union[TransformersCompletionCreateParamsStreaming, TransformersResponseCreateParamsStreaming],
         request_cls: _TypedDictMeta,
         validator: TypeAdapter,
         unused_fields: set,
@@ -333,7 +331,7 @@ class ServeCommand(BaseTransformersCLICommand):
         Validates the request against the schema, and checks for unexpected keys.
 
         Args:
-            request (`TransformersRequest`):
+            request (`TransformersCompletionCreateParamsStreaming` or `TransformersResponseCreateParamsStreaming`):
                 The request to validate.
             request_cls (`_TypedDictMeta`):
                 The class of the request to validate.
@@ -496,10 +494,10 @@ class ServeCommand(BaseTransformersCLICommand):
         ]
 
     def continuous_batching(self, req: TransformersCompletionCreateParamsStreaming) -> Generator:
-        update_model = self.canonicalized_model_name(req.model) != self.loaded_model
+        update_model = self.canonicalized_model_name(req["model"]) != self.loaded_model
 
         if update_model:
-            self.model, self.tokenizer = self.load_model_and_tokenizer(req.model, self.args)
+            self.model, self.tokenizer = self.load_model_and_tokenizer(req["model"], self.args)
 
         generation_config = create_generation_config_from_req(
             req,
@@ -524,15 +522,15 @@ class ServeCommand(BaseTransformersCLICommand):
             self.running_continuous_batching_manager.start()
 
         # TODO (Joao, Lysandre): this should also work with tool support
-        inputs = self.tokenizer.apply_chat_template(req.messages, return_tensors="pt", add_generation_prompt=True).to(
-            self.model.device
-        )
+        inputs = self.tokenizer.apply_chat_template(
+            req["messages"], return_tensors="pt", add_generation_prompt=True
+        ).to(self.model.device)
 
         def stream_response(_inputs):
             try:
-                max_new_tokens = req.max_tokens or generation_config.max_new_tokens or 1024
+                max_new_tokens = req["max_tokens"] or generation_config.max_new_tokens or 1024
                 request_id = self.running_continuous_batching_manager.add_request(
-                    _inputs, request_id=req.request_id, max_new_tokens=max_new_tokens
+                    _inputs, request_id=req["request_id"], max_new_tokens=max_new_tokens
                 )
 
                 queue_is_flushed = False
@@ -540,7 +538,7 @@ class ServeCommand(BaseTransformersCLICommand):
                 for result in self.running_continuous_batching_manager:
                     if result.request_id != request_id:
                         continue
-                    if req.request_id is not None and not queue_is_flushed:
+                    if req["request_id"] is not None and not queue_is_flushed:
                         if result.status == RequestStatus.FINISHED:
                             continue
                         else:
@@ -562,13 +560,13 @@ class ServeCommand(BaseTransformersCLICommand):
         return stream_response(inputs[0])
 
     def generate(self, req: TransformersCompletionCreateParamsStreaming) -> Generator:
-        update_model = req.model != self.loaded_model
+        update_model = req["model"] != self.loaded_model
         if update_model:
-            self.model, self.tokenizer = self.load_model_and_tokenizer(req.model, self.args)
+            self.model, self.tokenizer = self.load_model_and_tokenizer(req["model"], self.args)
 
         # HACK for tiny-agents: it sends a request after the assistant message (???). Let's assume we can't have a
         # request whose last message is from the assistant.
-        if req.messages[-1].role == "assistant":
+        if req["messages"][-1]["role"] == "assistant":
             return
 
         # ====== TOOL PREPROCESSING LOGIC ======
@@ -584,18 +582,18 @@ class ServeCommand(BaseTransformersCLICommand):
 
         if tool_model_family is not None:
             text = self.tokenizer.apply_chat_template(
-                req.messages, add_generation_prompt=True, tokenize=False, tools=req.tools
+                req["messages"], add_generation_prompt=True, tokenize=False, tools=req["tools"]
             )
         else:
-            text = self.tokenizer.apply_chat_template(req.messages, add_generation_prompt=True, tokenize=False)
+            text = self.tokenizer.apply_chat_template(req["messages"], add_generation_prompt=True, tokenize=False)
 
         inputs = self.tokenizer(text, return_tensors="pt").to(self.model.device)["input_ids"]
-        request_id = req.request_id if req.request_id is not None else "req_0"
+        request_id = req["request_id"] if req["request_id"] is not None else "req_0"
 
         generation_streamer = TextIteratorStreamer(self.tokenizer, skip_special_tokens=True, skip_prompt=True)
 
         generation_config = create_generation_config_from_req(req)
-        max_new_tokens = req.max_tokens or generation_config.max_new_tokens or 256
+        max_new_tokens = req["max_tokens"] or generation_config.max_new_tokens or 256
         generation_config.max_new_tokens = max_new_tokens
 
         last_kv_cache = None
@@ -718,19 +716,19 @@ class ServeCommand(BaseTransformersCLICommand):
         # Implement non-streaming mode
         # Implement different output_index and content_index than 0
 
-        update_model = req.model != self.loaded_model
+        update_model = req["model"] != self.loaded_model
         if update_model:
-            self.model, self.tokenizer = self.load_model_and_tokenizer(req.model, self.args)
+            self.model, self.tokenizer = self.load_model_and_tokenizer(req["model"], self.args)
 
-        text = self.tokenizer.apply_chat_template(req.input, add_generation_prompt=True, tokenize=False)
+        text = self.tokenizer.apply_chat_template(req["input"], add_generation_prompt=True, tokenize=False)
 
         inputs = self.tokenizer(text, return_tensors="pt").to(self.model.device)["input_ids"]
-        request_id = req.previous_response_id if req.previous_response_id is not None else "req_0"
+        request_id = req["previous_response_id"] if req["previous_response_id"] is not None else "req_0"
 
         generation_streamer = TextIteratorStreamer(self.tokenizer, skip_special_tokens=True, skip_prompt=True)
 
         generation_config = create_generation_config_from_req(req)
-        max_new_tokens = req.max_output_tokens or generation_config.max_new_tokens or 256
+        max_new_tokens = req["max_output_tokens"] or generation_config.max_new_tokens or 256
         generation_config.max_new_tokens = max_new_tokens
 
         generation_kwargs = {
@@ -756,7 +754,7 @@ class ServeCommand(BaseTransformersCLICommand):
                         created_at=created_at,
                         status="in_progress",
                         model=self.loaded_model,
-                        instructions=req.instructions,
+                        instructions=req["instructions"],
                         text={"format": {"type": "text"}},
                     ),
                 )
@@ -769,7 +767,7 @@ class ServeCommand(BaseTransformersCLICommand):
                         created_at=created_at,
                         status="in_progress",
                         model=self.loaded_model,
-                        instructions=req.instructions,
+                        instructions=req["instructions"],
                         text={"format": {"type": "text"}},
                     ),
                 )
@@ -843,7 +841,7 @@ class ServeCommand(BaseTransformersCLICommand):
                         created_at=created_at,
                         status="completed",
                         model=self.loaded_model,
-                        instructions=req.instructions,
+                        instructions=req["instructions"],
                         text={"format": {"type": "text"}},
                         output=response_output_item_done.item,
                     ),
@@ -877,16 +875,16 @@ class ServeCommand(BaseTransformersCLICommand):
         if self.last_messages is None:
             req_continues_last_messages = False
         # The new request has no new rounds of conversation: this is a new request
-        elif len(self.last_messages) >= len(req.messages):
+        elif len(self.last_messages) >= len(req["messages"]):
             req_continues_last_messages = False
         # Otherwise, check that the last messages are a subset of the new request
         else:
             for i in range(len(self.last_messages)):
-                if self.last_messages[i] != req.messages[i]:
+                if self.last_messages[i] != req["messages"][i]:
                     req_continues_last_messages = False
                     break
 
-        self.last_messages = req.messages
+        self.last_messages = req["messages"]
         return req_continues_last_messages
 
     @staticmethod
