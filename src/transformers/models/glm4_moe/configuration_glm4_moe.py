@@ -120,7 +120,7 @@ class Glm4MoeConfig(PretrainedConfig):
             Number of shared experts.
         n_routed_experts (`int`, *optional*, defaults to 128):
             Number of routed experts.
-        routed_scaling_factor (`float`, *optional*, defaults to 1):
+        routed_scaling_factor (`float`, *optional*, defaults to 1.0):
             Scaling factor or routed experts.
         n_group (`int`, *optional*, defaults to 1):
             Number of groups for routed experts.
