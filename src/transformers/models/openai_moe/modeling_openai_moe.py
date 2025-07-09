@@ -88,11 +88,11 @@ class OpenAIMoeExperts(nn.Module):
         """
         batch_size = hidden_states.shape[0]
         hidden_states = hidden_states.reshape(-1, self.hidden_size) # (num_tokens, hidden_size)
-        num_experts = routing_weights.shape[0]
+        num_experts = routing_weights.shape[1]
         if self.training:
             next_states = torch.zeros_like(hidden_states, dtype=hidden_states.dtype, device=hidden_states.device)
             with torch.no_grad():
-                expert_mask = torch.nn.functional.one_hot(router_indices, num_classes=num_experts).permute(
+                expert_mask = torch.nn.functional.one_hot(router_indices % num_experts, num_classes=num_experts).permute(
                     2, 1, 0
                 )
                 expert_hitted = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
@@ -124,7 +124,7 @@ class OpenAIMoeExperts(nn.Module):
             next_states = torch.bmm(((up + 1) * glu), self.down_proj)
             next_states = next_states + self.down_proj_bias[..., None, :]
             next_states = next_states.view(num_experts, batch_size, -1, self.hidden_size) # (num_experts, batch_size, seq_len, hidden_size)
-            next_states = next_states * routing_weights.view(num_experts, batch_size, -1)[...,None]
+            next_states = next_states * routing_weights.transpose(0,1).view(num_experts, batch_size, -1)[...,None]
             next_states = next_states.sum(dim=0)
         return next_states, routing_weights
 
@@ -311,7 +311,7 @@ class OpenAIMoeAttention(nn.Module):
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
+        
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -375,7 +375,7 @@ class OpenAIMoePreTrainedModel(PreTrainedModel):
     config_class = OpenAIMoeConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["OpenAIMoeDecoderLayer"]
+    _no_split_modules = ["OpenAIMoeDecoderLayer", "OpenAIMoeAttention"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
     _supports_sdpa = False
@@ -539,7 +539,7 @@ def load_balancing_loss_func(
 
     if isinstance(gate_logits, tuple):
         compute_device = gate_logits[0].device
-        concatenated_gate_logits = torch.cat([layer_gate.to(compute_device).transpose(0,1) for layer_gate in gate_logits], dim=0)
+        concatenated_gate_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0)
 
     routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
 
