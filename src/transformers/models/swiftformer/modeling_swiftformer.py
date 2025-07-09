@@ -396,11 +396,11 @@ class SwiftFormerPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
-        if isinstance(module, (nn.Conv2d, nn.Linear, nn.BatchNorm2d)):
+        if isinstance(module, (nn.Conv2d, nn.Linear)):
             nn.init.trunc_normal_(module.weight, std=0.02)
             if module.bias is not None:
                 nn.init.constant_(module.bias, 0)
-        elif isinstance(module, (nn.LayerNorm)):
+        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
             nn.init.constant_(module.bias, 0)
             nn.init.constant_(module.weight, 1.0)
         elif isinstance(module, (SwiftFormerConvEncoder, SwiftFormerLocalRepresentation)):
