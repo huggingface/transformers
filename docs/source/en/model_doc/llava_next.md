@@ -17,8 +17,8 @@ rendered properly in your Markdown viewer.
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
     <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    <img alt="SDPA" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20SDPA-eae0c8?style=flat">
-    <img alt="Multimodal" src="https://img.shields.io/badge/Multimodal-vision--language-blue">
+    <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20SDPA-eae0c8?style=flat">
+    <img alt="SDPA" src="https://img.shields.io/badge/Multimodal-vision--language-blue">
   </div>
 </div>
 
@@ -29,6 +29,8 @@ rendered properly in your Markdown viewer.
 You can find all the original LLaVA‑NeXT checkpoints under the [LLaVA-NeXT](https://huggingface.co/collections/llava-hf/llava-next-65f75c4afac77fd37dbbe6cf) collection.
 
 > [!TIP]
+> This model was contributed by [nielsr](https://huggingface.co/nielsr).
+>
 > Click on the LLaVA‑NeXT models in the right sidebar for more examples of how to apply Llava-NeXT to different multimodal tasks.
 
 The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
