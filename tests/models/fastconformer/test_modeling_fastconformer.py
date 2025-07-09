@@ -199,7 +199,7 @@ class FastConformerModelTest(ModelTesterMixin, unittest.TestCase):
         pass
     
     @slow
-    def test_1b_model_integration_generate_speech_recognition_outputs(self):
+    def test_ctc_model_integration_generate_speech_recognition_outputs(self):
         ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
         audio = ds[0]["audio"]["array"]
 
