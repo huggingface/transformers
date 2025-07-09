@@ -187,6 +187,7 @@ class Glm4MoeConfig(PretrainedConfig):
         num_experts=128,
         n_group=1,
         topk_group=1,
+        num_nextn_predict_layers=0,
         norm_topk_prob=True,
         output_router_logits=False,
         add_qk_norm=False,
@@ -209,6 +210,7 @@ class Glm4MoeConfig(PretrainedConfig):
         self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
+        self.num_nextn_predict_layers = num_nextn_predict_layers
         # Validate the correctness of rotary position embeddings parameters
         # BC: if there is a 'type' field, move it to 'rope_type'.
         if self.rope_scaling is not None and "type" in self.rope_scaling:
