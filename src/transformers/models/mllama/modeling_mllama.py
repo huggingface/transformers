@@ -859,6 +859,7 @@ class MllamaPreTrainedModel(PreTrainedModel):
     _supports_static_cache = False  # static cache cannot have different shapes for each layer
     _supports_sdpa = True
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_quantized_cache = True
     _supports_flex_attn = True
     _supports_attention_backend = True
