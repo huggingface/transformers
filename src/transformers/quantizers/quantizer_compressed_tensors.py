@@ -55,45 +55,6 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         self.run_compressed = quantization_config.run_compressed
         self.quantization_config = quantization_config
 
-    def update_missing_keys_after_loading(self, model, missing_keys: list[str], prefix: str) -> list[str]:
-        """
-        Update missing keys after loading the model. This is necessary for compressed tensors
-        to load the model correctly. We expect weights to be present in missing keys.
-        The weight's are re-constructed by ModelCompressor in _process_model_after_weight_loading
-
-        This function cleans up expected missing keys and returns the remaining missing keys
-        """
-
-        if self.run_compressed:
-            return missing_keys
-
-        # We expect some keys to be missing for
-        # compressed models
-        # This is fine as the weights are reconstructed by ModelCompressor
-        # in _process_model_after_weight_loading
-
-        expected_missing_keys = self.compressor.get_missing_module_keys(model)
-        return [
-            key for key in missing_keys if not any(re.match(f".*{pattern}", key) for pattern in expected_missing_keys)
-        ]
-
-    def update_unexpected_keys(self, model, unexpected_keys: list[str], prefix: str) -> list[str]:
-        """
-        Override this method if you want to adjust the `unexpected_keys`.
-
-        Args:
-            unexpected_keys (`list[str]`, *optional*):
-                The list of unexpected keys in the checkpoint compared to the state dict of the model
-        """
-
-        if self.run_compressed:
-            return unexpected_keys
-
-        # We expect some unexpected keys in model
-        # safetensors file for compressed models
-        keys_to_ignore = self.compressor.get_unexpected_file_keys(model)
-        return [key for key in unexpected_keys if not any(re.match(f".*{pattern}", key) for pattern in keys_to_ignore)]
-
     def validate_environment(self, *args, **kwargs):
         if not is_compressed_tensors_available():
             raise ImportError(
@@ -116,28 +77,14 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
     def _process_model_before_weight_loading(self, model, **kwargs):
         from compressed_tensors.quantization import apply_quantization_config
-
         ct_quantization_config = self.compressor.quantization_config
 
-        if self.run_compressed:
-            apply_quantization_config(model, ct_quantization_config, run_compressed=True)
-        elif not self.quantization_config.is_quantization_compressed:
-            apply_quantization_config(model, ct_quantization_config)
+        # Always initialize compressed wrappers to match the checkpoint
+        apply_quantization_config(model, ct_quantization_config, self.run_compressed)
+        if (self.quantization_config.is_quantization_compressed or 
+            self.quantization_config.is_sparsification_compressed):
+            self.compressor.compress_model(model=model)
 
-        # Identify quantized modules with integer weights/activations
-        quant_targets = set()
-        if ct_quantization_config:
-            for group in ct_quantization_config.config_groups.values():
-                if group.weights.type.startswith("int") or (
-                    group.input_activations and group.input_activations.type.startswith("int")
-                ):
-                    quant_targets.update(group.targets)
-
-        # Disable gradient computation for quantized int modules
-        for module in model.modules():
-            if type(module).__name__ in quant_targets:
-                for param in module.parameters():
-                    param.requires_grad = False
 
     def _process_model_after_weight_loading(self, model, **kwargs):
         """Decompress loaded model if necessary - need for qat"""
@@ -145,20 +92,8 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         if (
             self.quantization_config.is_quantization_compressed and not self.run_compressed
         ) or self.quantization_config.is_sparsification_compressed:
-            config = kwargs.get("config", None)
-            cache_path = config._name_or_path
-
-            if not os.path.exists(cache_path):
-                from transformers.utils import cached_file
-
-                config_file_path = cached_file(cache_path, "config.json")
-                cache_path = os.path.sep.join(config_file_path.split(os.path.sep)[:-1])
-
-            if self.quantization_config.is_quantization_compressed and not self.run_compressed:
-                from compressed_tensors.quantization import QuantizationStatus
-
-                self.compressor.quantization_config.quantization_status = QuantizationStatus.FROZEN
-            self.compressor.decompress(model_path=cache_path, model=model)
+            self.compressor.decompress_model(model=model)
+            
 
     def update_tp_plan(self, config):
         additional_plan = {
