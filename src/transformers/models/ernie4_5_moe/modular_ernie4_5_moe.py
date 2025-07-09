@@ -26,7 +26,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging
-from ..ernie4_5.modeling_ernie4_5 import Ernie4_5_MoERotaryEmbedding, apply_rotary_pos_emb, rotate_half  # noqa: F401
+from ..ernie4_5.modeling_ernie4_5 import Ernie4_5RotaryEmbedding, apply_rotary_pos_emb, rotate_half  # noqa: F401
 from ..llama.modeling_llama import LlamaAttention, LlamaRMSNorm
 from ..mixtral.modeling_mixtral import (
     MixtralForCausalLM,
@@ -57,7 +57,7 @@ class Ernie4_5_MoEMLP(Qwen3MoeMLP):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
 
 
-class Ernie4_5_MoERotaryEmbedding(Ernie4_5_MoERotaryEmbedding):
+class Ernie4_5_MoERotaryEmbedding(Ernie4_5RotaryEmbedding):
     pass
 
 

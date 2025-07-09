@@ -41,7 +41,8 @@ class Ernie4_5PreTrainedModel(LlamaPreTrainedModel):
 class Ernie4_5RMSNorm(LlamaRMSNorm):
     pass
 
-class Ernie4_5_MoERotaryEmbedding(LlamaRotaryEmbedding):
+
+class Ernie4_5RotaryEmbedding(LlamaRotaryEmbedding):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
@@ -105,10 +106,6 @@ class Ernie4_5MLP(LlamaMLP):
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
-
-
-class Ernie4_5RotaryEmbedding(LlamaRotaryEmbedding):
-    pass
 
 
 class Ernie4_5Attention(LlamaAttention):
