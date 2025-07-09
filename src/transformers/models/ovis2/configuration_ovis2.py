@@ -52,10 +52,6 @@ class Ovis2VisionConfig(PretrainedConfig):
             Vocabulary size of the Vision Transformer.
         hidden_stride (`int`, *optional*, defaults to 1):
             The stride of the hidden layer in the Vision Transformer.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"full"`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
-            If `"full"`, the full vision features are used.
         num_visual_indicator_tokens (`int`, *optional*, defaults to 5):
             Number of visual indicator tokens.
         tokenize_function (`str`, *optional*, defaults to `"softmax"`):
@@ -80,7 +76,6 @@ class Ovis2VisionConfig(PretrainedConfig):
         hidden_act="silu",
         vocab_size=16384,
         hidden_stride=1,
-        vision_feature_select_strategy="full",
         num_visual_indicator_tokens=5,
         tokenize_function="softmax",
         **kwargs,
@@ -102,7 +97,6 @@ class Ovis2VisionConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.vocab_size = vocab_size
         self.hidden_stride = hidden_stride
-        self.vision_feature_select_strategy = vision_feature_select_strategy
         self.num_visual_indicator_tokens = num_visual_indicator_tokens
         self.tokenize_function = tokenize_function
 

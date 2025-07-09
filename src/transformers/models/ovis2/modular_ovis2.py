@@ -155,34 +155,25 @@ class Ovis2VisionModel(nn.Module):
         )
         self.head_norm = nn.LayerNorm(self.vocab_size - self.num_visual_indicator_tokens)
 
-    def forward(
-        self, pixel_values: torch.FloatTensor, vision_feature_select_strategy: Optional[str] = None
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, pixel_values: torch.FloatTensor) -> tuple[torch.Tensor, torch.Tensor]:
         outputs = self.transformer(pixel_values)
         last_hidden_state = outputs.last_hidden_state
 
-        if self.config.vision_feature_select_strategy == "default":
-            selected_image_feature = last_hidden_state[:, 1:, :]
-        elif self.config.vision_feature_select_strategy == "full":
-            selected_image_feature = last_hidden_state
-
         if self.config.hidden_stride > 1:
-            n, seq_len, d = selected_image_feature.shape
+            n, seq_len, d = last_hidden_state.shape
             hs = self.config.hidden_stride
 
             sqrt_l = int(math.sqrt(seq_len))
             assert sqrt_l * sqrt_l == seq_len, "Token sequence length must be a perfect square"
             pad_size = (hs - (sqrt_l % hs)) % hs
-            selected_image_feature = nn.functional.pad(
-                selected_image_feature, (0, 0, 0, pad_size, 0, pad_size), "constant", 0
-            )
+            last_hidden_state = nn.functional.pad(last_hidden_state, (0, 0, 0, pad_size, 0, pad_size), "constant", 0)
             sqrt_l += pad_size
 
-            selected_image_feature = selected_image_feature.reshape(n, sqrt_l // hs, hs, sqrt_l // hs, hs, d)
-            selected_image_feature = selected_image_feature.permute(0, 1, 3, 2, 4, 5)
-            selected_image_feature = selected_image_feature.reshape(n, -1, hs * hs * d)  # (n, (sqrt_l//hs)^2, hs^2*d)
+            last_hidden_state = last_hidden_state.reshape(n, sqrt_l // hs, hs, sqrt_l // hs, hs, d)
+            last_hidden_state = last_hidden_state.permute(0, 1, 3, 2, 4, 5)
+            last_hidden_state = last_hidden_state.reshape(n, -1, hs * hs * d)  # (n, (sqrt_l//hs)^2, hs^2*d)
 
-        logits = self.head_linear(selected_image_feature)
+        logits = self.head_linear(last_hidden_state)
         logits = self.head_norm(logits)
 
         if self.config.tokenize_function == "gumbel_argmax":
@@ -243,9 +234,8 @@ class Ovis2Model(LlavaModel):
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        vision_feature_select_strategy: Optional[str] = None,
     ) -> torch.FloatTensor:
-        image_features = self.vision_tower(pixel_values, vision_feature_select_strategy=vision_feature_select_strategy)
+        image_features = self.vision_tower(pixel_values)
         batch_size, img_seq_len, _ = image_features.shape
         padding_tensor = torch.zeros(
             (batch_size, img_seq_len, self.vision_tower.num_visual_indicator_tokens),
@@ -363,17 +353,8 @@ class Ovis2ForConditionalGeneration(LlavaForConditionalGeneration, GenerationMix
     def multi_modal_projector(self):
         raise AttributeError("Not needed for Ovis2")
 
-    def get_image_features(
-        self,
-        pixel_values: torch.FloatTensor,
-        vision_feature_select_strategy: Optional[str] = None,
-        **kwargs,
-    ):
-        return self.model.get_image_features(
-            pixel_values=pixel_values,
-            vision_feature_select_strategy=vision_feature_select_strategy,
-            **kwargs,
-        )
+    def get_image_features(self, pixel_values: torch.FloatTensor):
+        return self.model.get_image_features(pixel_values=pixel_values)
 
     @can_return_tuple
     @auto_docstring
@@ -401,37 +382,25 @@ class Ovis2ForConditionalGeneration(LlavaForConditionalGeneration, GenerationMix
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
+
         ```python
-        >>> import torch
-        >>> from transformers import AutoProcessor, AutoModelForImageTextToText
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, Ovis2ForConditionalGeneration
 
-        >>> torch_device = "cuda"
-        >>> processor = AutoProcessor.from_pretrained("")
-        >>> model = AutoModelForImageTextToText.from_pretrained(
-        ...     "", torch_dtype=torch.bfloat16, device_map=torch_device
-        ... )
+        >>> model = Ovis2ForConditionalGeneration.from_pretrained("ovis2-hf/ovis2-1.5-7b-hf")
+        >>> processor = AutoProcessor.from_pretrained("ovis2-hf/ovis2-1.5-7b-hf")
 
-        >>> messages = [
-        ...     {
-        ...         "role": "user",
-        ...         "content": [
-        ...             {
-        ...                 "type": "image",
-        ...                 "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
-        ...             },
-        ...             {
-        ...                 "type": "image",
-        ...                 "url": "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg",
-        ...             },
-        ...             {"type": "text", "text": "These images depict two different landmarks. Can you identify them?"},
-        ...         ],
-        ...     },
-        ... ]
+        >>> prompt = "USER: <image>\nWhat's the content of the image? ASSISTANT:"
+        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(torch_device)
-        >>> generate_ids = model.generate(**inputs, max_new_tokens=200)
-        >>> print(processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True))
-        The images depict the Statue of Liberty and the Golden Gate Bridge.
+        >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(**inputs, max_new_tokens=15)
+        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "USER:  \nWhat's the content of the image? ASSISTANT: The image features a busy city street with a stop sign prominently displayed"
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -450,17 +419,19 @@ class Ovis2ForConditionalGeneration(LlavaForConditionalGeneration, GenerationMix
             output_hidden_states=output_hidden_states,
             return_dict=True,
             cache_position=cache_position,
-            logits_to_keep=logits_to_keep,
             **kwargs,
         )
 
         hidden_states = outputs[0]
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         return Ovis2CausalLMOutputWithPast(
             loss=loss,
