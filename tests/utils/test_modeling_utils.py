@@ -57,11 +57,9 @@ from transformers.testing_utils import (
     hub_retry,
     is_staging_test,
     require_accelerate,
-    require_flax,
     require_non_hpu,
     require_read_token,
     require_safetensors,
-    require_tf,
     require_torch,
     require_torch_accelerator,
     require_torch_multi_accelerator,
@@ -78,8 +76,6 @@ from transformers.utils import (
 from transformers.utils.import_utils import (
     is_flash_attn_2_available,
     is_flash_attn_3_available,
-    is_flax_available,
-    is_tf_available,
     is_torch_npu_available,
     is_torch_sdpa_available,
 )
@@ -317,13 +313,6 @@ class TestModelGammaBeta(PreTrainedModel):
 
     def forward(self):
         return self.LayerNorm()
-
-
-if is_flax_available():
-    from transformers import FlaxBertModel
-
-if is_tf_available():
-    from transformers import TFBertModel
 
 
 TINY_T5 = "patrickvonplaten/t5-tiny-random"
@@ -1521,40 +1510,6 @@ class ModelUtilsTest(TestCasePlus):
 
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
-
-    @require_safetensors
-    @require_flax
-    def test_safetensors_torch_from_flax(self):
-        hub_model = BertModel.from_pretrained("hf-internal-testing/tiny-bert-pt-only")
-        model = FlaxBertModel.from_pretrained("hf-internal-testing/tiny-bert-flax-only")
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, safe_serialization=True)
-            new_model = BertModel.from_pretrained(tmp_dir)
-
-        for p1, p2 in zip(hub_model.parameters(), new_model.parameters()):
-            self.assertTrue(torch.equal(p1, p2))
-
-    @require_tf
-    @require_safetensors
-    def test_safetensors_torch_from_tf(self):
-        hub_model = BertModel.from_pretrained("hf-internal-testing/tiny-bert-pt-only")
-        model = TFBertModel.from_pretrained("hf-internal-testing/tiny-bert-tf-only")
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, safe_serialization=True)
-            new_model = BertModel.from_pretrained(tmp_dir)
-
-        for p1, p2 in zip(hub_model.parameters(), new_model.parameters()):
-            self.assertTrue(torch.equal(p1, p2))
-
-    @require_tf
-    def test_torch_from_tf(self):
-        model = TFBertModel.from_pretrained("hf-internal-testing/tiny-bert-tf-only")
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir)
-            _ = BertModel.from_pretrained(tmp_dir, from_tf=True)
 
     @require_safetensors
     def test_safetensors_torch_from_torch_sharded(self):

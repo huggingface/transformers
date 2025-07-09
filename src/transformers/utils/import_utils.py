@@ -292,6 +292,30 @@ except importlib.metadata.PackageNotFoundError:
     _essentia_version = False
 
 
+_pydantic_available = importlib.util.find_spec("pydantic") is not None
+try:
+    _pydantic_version = importlib.metadata.version("pydantic")
+    logger.debug(f"Successfully imported pydantic version {_pydantic_version}")
+except importlib.metadata.PackageNotFoundError:
+    _pydantic_available = False
+
+
+_fastapi_available = importlib.util.find_spec("fastapi") is not None
+try:
+    _fastapi_version = importlib.metadata.version("fastapi")
+    logger.debug(f"Successfully imported pydantic version {_fastapi_version}")
+except importlib.metadata.PackageNotFoundError:
+    _fastapi_available = False
+
+
+_uvicorn_available = importlib.util.find_spec("uvicorn") is not None
+try:
+    _uvicorn_version = importlib.metadata.version("uvicorn")
+    logger.debug(f"Successfully imported pydantic version {_uvicorn_version}")
+except importlib.metadata.PackageNotFoundError:
+    _uvicorn_available = False
+
+
 _pretty_midi_available = importlib.util.find_spec("pretty_midi") is not None
 try:
     _pretty_midi_version = importlib.metadata.version("pretty_midi")
@@ -471,6 +495,18 @@ def is_librosa_available():
 
 def is_essentia_available():
     return _essentia_available
+
+
+def is_pydantic_available():
+    return _pydantic_available
+
+
+def is_fastapi_available():
+    return _fastapi_available
+
+
+def is_uvicorn_available():
+    return _uvicorn_available
 
 
 def is_pretty_midi_available():
@@ -829,49 +865,58 @@ def is_torch_hpu_available():
     if not hasattr(torch, "hpu") or not torch.hpu.is_available():
         return False
 
-    import habana_frameworks.torch.utils.experimental as htexp  # noqa: F401
-
-    # IlyasMoutawwakil: We patch masked_fill_ for int64 tensors to avoid a bug on Gaudi1
-    # synNodeCreateWithId failed for node: masked_fill_fwd_i64 with synStatus 26 [Generic failure]
-    # This can be removed once Gaudi1 support is discontinued but for now we need it to keep using
-    # dl1.24xlarge Gaudi1 instances on AWS for testing.
-    # check if the device is Gaudi1 (vs Gaudi2, Gaudi3).
-    if htexp._get_device_type() == htexp.synDeviceType.synDeviceGaudi:
-        original_masked_fill_ = torch.Tensor.masked_fill_
-
-        def patched_masked_fill_(self, mask, value):
-            if self.dtype == torch.int64:
-                logger.warning_once(
-                    "In-place tensor.masked_fill_(mask, value) is not supported for int64 tensors on Gaudi1. "
-                    "This operation will be performed out-of-place using tensor[mask] = value."
-                )
-                self[mask] = value
-            else:
-                original_masked_fill_(self, mask, value)
-
-        torch.Tensor.masked_fill_ = patched_masked_fill_
-
     # We patch torch.gather for int64 tensors to avoid a bug on Gaudi
     # Graph compile failed with synStatus 26 [Generic failure]
     # This can be removed once bug is fixed but for now we need it.
-    original_gather = torch.Tensor.gather
+    original_gather = torch.gather
 
     def patched_gather(input: torch.Tensor, dim: int, index: torch.LongTensor) -> torch.Tensor:
         if input.dtype == torch.int64 and input.device.type == "hpu":
-            logger.warning_once(
-                "torch.gather is not supported for int64 tensors on Gaudi. "
-                "This operation will be performed patched_gather using indexing."
-            )
-
-            idx = [torch.arange(size, device=input.device, dtype=input.dtype) for size in input.shape]
-            idx[dim] = index
-            idx = tuple(idx)
-            output = input[idx]
-            return output
+            return original_gather(input.to(torch.int32), dim, index).to(torch.int64)
         else:
             return original_gather(input, dim, index)
 
+    torch.gather = patched_gather
     torch.Tensor.gather = patched_gather
+
+    original_take_along_dim = torch.take_along_dim
+
+    def patched_take_along_dim(
+        input: torch.Tensor, indices: torch.LongTensor, dim: Optional[int] = None
+    ) -> torch.Tensor:
+        if input.dtype == torch.int64 and input.device.type == "hpu":
+            return original_take_along_dim(input.to(torch.int32), indices, dim).to(torch.int64)
+        else:
+            return original_take_along_dim(input, indices, dim)
+
+    torch.take_along_dim = patched_take_along_dim
+
+    original_cholesky = torch.linalg.cholesky
+
+    def safe_cholesky(A, *args, **kwargs):
+        output = original_cholesky(A, *args, **kwargs)
+
+        if torch.isnan(output).any():
+            jitter_value = 1e-9
+            diag_jitter = torch.eye(A.size(-1), dtype=A.dtype, device=A.device) * jitter_value
+            output = original_cholesky(A + diag_jitter, *args, **kwargs)
+
+        return output
+
+    torch.linalg.cholesky = safe_cholesky
+
+    original_scatter = torch.scatter
+
+    def patched_scatter(
+        input: torch.Tensor, dim: int, index: torch.Tensor, src: torch.Tensor, *args, **kwargs
+    ) -> torch.Tensor:
+        if input.device.type == "hpu" and input is src:
+            return original_scatter(input, dim, index, src.clone(), *args, **kwargs)
+        else:
+            return original_scatter(input, dim, index, src, *args, **kwargs)
+
+    torch.scatter = patched_scatter
+    torch.Tensor.scatter = patched_scatter
 
     # IlyasMoutawwakil: we patch torch.compile to use the HPU backend by default
     # https://github.com/huggingface/transformers/pull/38790#discussion_r2157043944
@@ -1120,7 +1165,7 @@ def is_flash_attn_2_available():
         return False
 
 
-@lru_cache()
+@lru_cache
 def is_flash_attn_3_available():
     if not is_torch_available():
         return False
@@ -1171,6 +1216,24 @@ def is_torch_greater_or_equal(library_version: str, accept_dev: bool = False):
         )
     else:
         return version.parse(importlib.metadata.version("torch")) >= version.parse(library_version)
+
+
+@lru_cache
+def is_torch_less_or_equal(library_version: str, accept_dev: bool = False):
+    """
+    Accepts a library version and returns True if the current version of the library is less than or equal to the
+    given version. If `accept_dev` is True, it will also accept development versions (e.g. 2.7.0.dev20250320 matches
+    2.7.0).
+    """
+    if not _is_package_available("torch"):
+        return False
+
+    if accept_dev:
+        return version.parse(version.parse(importlib.metadata.version("torch")).base_version) <= version.parse(
+            library_version
+        )
+    else:
+        return version.parse(importlib.metadata.version("torch")) <= version.parse(library_version)
 
 
 @lru_cache
@@ -1825,6 +1888,23 @@ VISION_IMPORT_ERROR = """
 `pip install pillow`. Please note that you may need to restart your runtime after installation.
 """
 
+# docstyle-ignore
+PYDANTIC_IMPORT_ERROR = """
+{0} requires the pydantic library but it was not found in your environment. You can install it with pip:
+`pip install pydantic`. Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
+FASTAPI_IMPORT_ERROR = """
+{0} requires the fastapi library but it was not found in your environment. You can install it with pip:
+`pip install fastapi`. Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
+UVICORN_IMPORT_ERROR = """
+{0} requires the uvicorn library but it was not found in your environment. You can install it with pip:
+`pip install uvicorn`. Please note that you may need to restart your runtime after installation.
+"""
 
 # docstyle-ignore
 PYTESSERACT_IMPORT_ERROR = """
@@ -1948,6 +2028,9 @@ BACKENDS_MAPPING = OrderedDict(
         ("yt_dlp", (is_yt_dlp_available, YT_DLP_IMPORT_ERROR)),
         ("rich", (is_rich_available, RICH_IMPORT_ERROR)),
         ("keras_nlp", (is_keras_nlp_available, KERAS_NLP_IMPORT_ERROR)),
+        ("pydantic", (is_pydantic_available, PYDANTIC_IMPORT_ERROR)),
+        ("fastapi", (is_fastapi_available, FASTAPI_IMPORT_ERROR)),
+        ("uvicorn", (is_uvicorn_available, UVICORN_IMPORT_ERROR)),
     ]
 )
 

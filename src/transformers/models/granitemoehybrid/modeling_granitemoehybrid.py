@@ -794,7 +794,6 @@ class GraniteMoeHybridMambaLayer(nn.Module):
             # Init cache
             if ssm_state is not None and cache_params is not None:
                 cache_params.ssm_states[self.layer_idx].copy_(ssm_state)
-                cache_params.has_previous_state = True
 
         scan_output = self.norm(y, gate)
 
@@ -1167,6 +1166,7 @@ class GraniteMoeHybridPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["GraniteMoeHybridDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
     _supports_cache_class = True
     _supports_quantized_cache = True
@@ -1203,7 +1203,7 @@ class GraniteMoeHybridRotaryEmbedding(nn.Module):
     def __init__(self, config: GraniteMoeHybridConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
             self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
         else:
             self.rope_type = "default"
@@ -1375,6 +1375,9 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
         # add hidden states from the last decoder layer
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
+
+        if past_key_values and not past_key_values.has_previous_state:
+            past_key_values.has_previous_state = True
 
         next_cache = next_decoder_cache if use_cache else None
 

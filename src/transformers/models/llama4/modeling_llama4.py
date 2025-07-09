@@ -34,7 +34,7 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, Causal
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from .configuration_llama4 import Llama4Config, Llama4TextConfig
 
 
@@ -510,7 +510,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -552,6 +552,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
+                "position_ids": position_ids,
             }
             # Create the masks
             causal_mask_mapping = {
@@ -581,7 +582,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
                 use_cache=use_cache,
                 cache_position=cache_position,
                 position_embeddings=freq_cis,
-                **flash_attn_kwargs,
+                **kwargs,
             )
 
             hidden_states = layer_outputs[0]
@@ -601,9 +602,6 @@ class Llama4TextModel(Llama4PreTrainedModel):
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
@@ -656,7 +654,7 @@ class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1294,7 +1292,7 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         image_sizes: torch.Tensor = None,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Llama4CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1358,27 +1356,28 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 image_sizes=image_sizes,
             )
-            original_inputs_embeds_shape = inputs_embeds.shape
 
             vision_flat = image_features.view(-1, image_features.size(-1))
             projected_vision_flat = self.multi_modal_projector(vision_flat)
 
-            special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
-            final_mask = special_image_mask.to(inputs_embeds.device)
-            inputs_embeds = inputs_embeds.view(-1, inputs_embeds.size(-1))
+            if input_ids is None:
+                special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+                special_image_mask = special_image_mask.all(-1)
+            else:
+                special_image_mask = input_ids == self.config.image_token_id
 
-            final_mask_1d = final_mask[..., 0].reshape(-1)
-            num_tokens_to_fill = final_mask_1d.sum()
+            n_image_tokens = (special_image_mask).sum()
+            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
 
-            if num_tokens_to_fill != projected_vision_flat.size(0):
+            if n_image_tokens != projected_vision_flat.size(0):
                 raise ValueError(
-                    f"Mismatch: final_mask wants {num_tokens_to_fill} embeddings, "
+                    f"Mismatch: final_mask wants {n_image_tokens} embeddings, "
                     f"but multi_modal_projector returned {projected_vision_flat.size(0)}"
                 )
-
-            expanded_mask = final_mask_1d.unsqueeze(-1).expand(-1, inputs_embeds.size(-1))
-            inputs_embeds = inputs_embeds.masked_scatter(expanded_mask, projected_vision_flat)
-            inputs_embeds = inputs_embeds.view(original_inputs_embeds_shape)
+            projected_vision_flat = projected_vision_flat.to(inputs_embeds.device, inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, projected_vision_flat)
 
         outputs = self.language_model(
             attention_mask=attention_mask,

@@ -34,10 +34,10 @@ from transformers.testing_utils import (
     is_torchaudio_available,
     require_flash_attn,
     require_pyctcdecode,
-    require_soundfile,
     require_torch,
     require_torch_gpu,
     require_torchaudio,
+    require_torchcodec,
     run_test_in_subprocess,
     slow,
     torch_device,
@@ -813,12 +813,6 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             # (Even with this call, there are still memory leak by ~0.04MB)
             self.clear_torch_jit_class_registry()
 
-    @unittest.skip(
-        "Need to investigate why config.do_stable_layer_norm is set to False here when it doesn't seem to be supported"
-    )
-    def test_flax_from_pt_safetensors(self):
-        return
-
 
 @require_torch
 class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
@@ -1450,7 +1444,7 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
 
 
 @require_torch
-@require_soundfile
+@require_torchcodec
 @slow
 class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     def tearDown(self):

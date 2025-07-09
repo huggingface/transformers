@@ -41,7 +41,7 @@ jobs:
   check_new_failures:
     name: " "
     runs-on:
-      group: aws-g4dn-4xlarge-cache
+      group: aws-g5-4xlarge-cache
     container:
       image: ${{ inputs.docker }}
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/

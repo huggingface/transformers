@@ -666,7 +666,6 @@ class BambaMixer(nn.Module):
             # Init cache
             if ssm_state is not None and cache_params is not None:
                 cache_params.ssm_states[self.layer_idx].copy_(ssm_state)
-                cache_params.has_previous_state = True
 
         scan_output = self.norm(y, gate)
 
@@ -812,6 +811,7 @@ class BambaPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["BambaDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
     _supports_cache_class = True  # Note: only supports HybridMambaAttentionDynamicCache
     _is_stateful = True

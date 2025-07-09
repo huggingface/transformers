@@ -57,6 +57,13 @@ logger = logging.get_logger(__name__)
 TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
     [
         (
+            "aimv2",
+            (
+                "CLIPTokenizer",
+                "CLIPTokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
+        (
             "albert",
             (
                 "AlbertTokenizer" if is_sentencepiece_available() else None,
@@ -171,12 +178,20 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
             ),
         ),
         (
+            "deepseek_v2",
+            (
+                "LlamaTokenizer" if is_sentencepiece_available() else None,
+                "LlamaTokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
+        (
             "deepseek_v3",
             (
                 "LlamaTokenizer" if is_sentencepiece_available() else None,
                 "LlamaTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
+        ("dia", ("DiaTokenizer", None)),
         (
             "diffllama",
             (
@@ -230,6 +245,20 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ),
         (
             "gemma3_text",
+            (
+                "GemmaTokenizer" if is_sentencepiece_available() else None,
+                "GemmaTokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
+        (
+            "gemma3n",
+            (
+                "GemmaTokenizer" if is_sentencepiece_available() else None,
+                "GemmaTokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
+        (
+            "gemma3n_text",
             (
                 "GemmaTokenizer" if is_sentencepiece_available() else None,
                 "GemmaTokenizerFast" if is_tokenizers_available() else None,
@@ -558,6 +587,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
                 "GemmaTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
+        ("smollm3", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("speech_to_text", ("Speech2TextTokenizer" if is_sentencepiece_available() else None, None)),
         ("speech_to_text_2", ("Speech2Text2Tokenizer", None)),
         ("speecht5", ("SpeechT5Tokenizer" if is_sentencepiece_available() else None, None)),
