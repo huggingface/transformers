@@ -330,7 +330,6 @@ def main():
         args.model_name_or_path,
         config=config,
         trust_remote_code=args.trust_remote_code,
-        do_reduce_labels=args.do_reduce_labels,
     )
 
     # Define transforms to be applied to each image and target.
