@@ -595,8 +595,10 @@ class Owlv2PreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=factor)
+            if module.bias is not None:
+                module.bias.data.zero_()
 
 
 # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTEncoder with OwlViT->Owlv2
@@ -1222,6 +1224,9 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         self.num_patches_height = self.config.vision_config.image_size // self.config.vision_config.patch_size
         self.num_patches_width = self.config.vision_config.image_size // self.config.vision_config.patch_size
         self.box_bias = self.compute_box_bias(self.num_patches_height, self.num_patches_width)
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @staticmethod
     # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.normalize_grid_corner_coordinates

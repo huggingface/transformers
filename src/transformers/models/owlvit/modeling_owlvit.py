@@ -582,8 +582,10 @@ class OwlViTPreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=factor)
+            if module.bias is not None:
+                module.bias.data.zero_()
 
 
 class OwlViTEncoder(nn.Module):
