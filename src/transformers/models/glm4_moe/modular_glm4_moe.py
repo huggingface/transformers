@@ -139,17 +139,24 @@ class Glm4MoeConfig(PretrainedConfig):
             Number of selected experts.
         num_experts (`int`, *optional*, defaults to 128):
             Number of routed experts.
+        n_routed_experts (`int`, *optional*, defaults to 128):
+            Number of routed experts.
         n_group (`int`, *optional*, defaults to 1):
             Number of groups for routed experts.
         topk_group (`int`, *optional*, defaults to 1):
             Number of selected groups for each token(for each token, ensuring the selected experts is only within `topk_group` groups).
         num_nextn_predict_layers (`int`, *optional*, defaults to 0):
             Number of next-n prediction layers in the MoE model. If set to 0, no next-n prediction layers are used.
+        first_k_dense_replace (`int`, *optional*, defaults to 3):
+            Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
+                                                            \--k dense layers--/
         norm_topk_prob (`bool`, *optional*, defaults to `True`):
             Whether to normalize the topk probabilities.
         output_router_logits (`bool`, *optional*, defaults to `False`):
             Whether or not the router logits should be returned by the model. Enabling this will also
             allow the model to output the auxiliary loss. See [here]() for more details.
+        router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
+            The aux loss factor for the total loss.
         add_qk_norm (`bool`, *optional*, defaults to `False`):
             Whether or not to add normalization to the query and key projections in the attention layer.
     ```python
@@ -212,8 +219,10 @@ class Glm4MoeConfig(PretrainedConfig):
         n_group=1,
         topk_group=1,
         num_nextn_predict_layers=0,
+        first_k_dense_replace=1,
         norm_topk_prob=True,
         output_router_logits=False,
+        router_aux_loss_coef=0.001,
         add_qk_norm=False,
         **kwargs,
     ):
@@ -247,8 +256,11 @@ class Glm4MoeConfig(PretrainedConfig):
         self.n_group = n_group
         self.topk_group = topk_group
         self.num_experts = num_experts
+        self.n_routed_experts = n_routed_experts
+        self.first_k_dense_replace = first_k_dense_replace
         self.norm_topk_prob = norm_topk_prob
         self.output_router_logits = output_router_logits
+        self.router_aux_loss_coef = router_aux_loss_coef
         self.add_qk_norm = add_qk_norm
 
         super().__init__(
