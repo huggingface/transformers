@@ -809,6 +809,7 @@ class MoshiPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["MoshiDecoderLayer", "MimiTransformerLayer"]
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
     _supports_cache_class = True
     main_input_name = "input_ids"
@@ -1658,6 +1659,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
 
     def __init__(self, config: MoshiConfig):
