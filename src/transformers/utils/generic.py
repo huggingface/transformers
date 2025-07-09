@@ -27,7 +27,6 @@ from dataclasses import dataclass, fields, is_dataclass
 from enum import Enum
 from functools import partial, wraps
 from typing import Any, Callable, ContextManager, Optional, TypedDict
-from weakref import WeakKeyDictionary
 
 import numpy as np
 from packaging import version
@@ -44,7 +43,7 @@ from .import_utils import (
 )
 
 
-_CAN_RECORD_REGISTRY = WeakKeyDictionary()
+_CAN_RECORD_REGISTRY = {}
 
 
 logger = logging.get_logger(__name__)
@@ -1008,7 +1007,7 @@ def check_model_inputs(func):
             for k, v in all_args["kwargs"].items():
                 all_args[k] = v
 
-        capture_flags = _CAN_RECORD_REGISTRY[self] or []  # there is a weak ref for executorch
+        capture_flags = _CAN_RECORD_REGISTRY.get(str(self.__class__), {})  # there is a weak ref for executorch
         recordable_keys = {
             f"output_{k}": all_args.get(
                 f"output_{k}",
