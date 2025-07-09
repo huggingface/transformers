@@ -2156,8 +2156,9 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel, GenerationMixin):
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
-            into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (*pip install
-            soundfile*). To prepare the array into `input_values`, the [`SpeechT5Processor`] should be used for padding
+            into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library
+            (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
+            To prepare the array into `input_values`, the [`SpeechT5Processor`] should be used for padding
             and conversion into a tensor of type `torch.FloatTensor`. See [`SpeechT5Processor.__call__`] for details.
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -2841,9 +2842,10 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
-            into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (*pip install
-            soundfile*). To prepare the array into `input_values`, the [`SpeechT5Processor`] should be used for padding
-            and conversion into a tensor of type `torch.FloatTensor`. See [`SpeechT5Processor.__call__`] for details.
+            into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library
+            (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
+            To prepare the array into `input_values`, the [`SpeechT5Processor`] should be used for padding and conversion into
+            a tensor of type `torch.FloatTensor`. See [`SpeechT5Processor.__call__`] for details.
         decoder_input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_mel_bins)`):
             Float values of input mel spectrogram.
 
@@ -2966,10 +2968,11 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
             input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
                 Float values of input raw speech waveform.
 
-                Values can be obtained by loading a *.flac* or *.wav* audio file into an array of type `list[float]` or
-                a `numpy.ndarray`, *e.g.* via the soundfile library (*pip install soundfile*). To prepare the array
-                into `input_values`, the [`SpeechT5Processor`] should be used for padding and conversion into a tensor
-                of type `torch.FloatTensor`. See [`SpeechT5Processor.__call__`] for details.
+                Values can be obtained by loading a *.flac* or *.wav* audio file into an array of type `list[float]`,
+                a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`)
+                or the soundfile library (`pip install soundfile`).
+                To prepare the array into `input_values`, the [`SpeechT5Processor`] should be used for padding and
+                conversion into a tensor of type `torch.FloatTensor`. See [`SpeechT5Processor.__call__`] for details.
             speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_dim)`, *optional*):
                 Tensor containing the speaker embeddings.
             attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
