@@ -1522,8 +1522,8 @@ class xLSTMModel(xLSTMPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Union[tuple, xLSTMOutput]:
-        r"""
-        cache_params: (`xLSTMCache`, *optional*):
+        """
+        cache_params (`xLSTMCache`, *optional*):
             The xLSTMCache that carries the RNN states.
         """
         output_hidden_states = (
@@ -1716,6 +1716,8 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
+        cache_params (`xLSTMCache`, *optional*):
+            The xLSTMCache that carries the RNN states.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
