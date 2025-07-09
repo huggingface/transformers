@@ -1,4 +1,4 @@
-<!--Copyright 2025 The Qwen Team and The HuggingFace Team. All rights reserved.
+<!--Copyright 2025 The ZhipuAI Inc. and The HuggingFace Inc. team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -18,20 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Glm4Moe model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
-
-The abstract from the paper is the following:
-
-*<INSERT PAPER ABSTRACT HERE>*
-
-Tips:
-
-<INSERT TIPS ABOUT MODEL HERE>
-
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
-
+This will update After model release.
 
 ## Glm4MoeConfig
 
