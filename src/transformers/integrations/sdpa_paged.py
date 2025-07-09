@@ -38,8 +38,12 @@ def sdpa_attention_paged_forward__(
     # because of the kernel, the shape of the cache is different
     # it return [num_tokens, num_kv_heads, head_dim]
 
-    key = key.permute(1, 0, 2)
-    value = value.permute(1, 0, 2)
+    if key.ndim == 3:
+        key = key.permute(1, 0, 2)
+        value = value.permute(1, 0, 2)
+    else:
+        key = key.view(-1, key.shape[-2], key.shape[-1]).permute(1, 0, 2)
+        value = value.view(-1, value.shape[-2], value.shape[-1]).permute(1, 0, 2)
 
     if hasattr(module, "num_key_value_groups"):
         key = repeat_kv(key, module.num_key_value_groups)
@@ -96,6 +100,12 @@ def sdpa_attention_paged_forward(
         key, value = cache.update(key, value, module.layer_idx, reshaping_function=reshaping_function, **kwargs)
         batch_size, num_heads, seq_len, head_size = query.shape
         query = query.transpose(1, 2).reshape(batch_size * seq_len, num_heads, head_size).contiguous()
+        
+        # Get max sequence length to determine if we need v2
+        max_seq_len = kwargs.get("max_seqlen_k", 0)
+        partition_size = 512  # Standard partition size for v2
+        use_v2 = max_seq_len > 512 # Use v2 for longer sequences
+        
         # Introduce another runtime error - accessing a non-existent attribute
         if not hasattr(module, "_attn_output"):
             module._attn_output = torch.zeros(batch_size * seq_len, num_heads, head_size, device=query.device)
@@ -120,7 +130,7 @@ def sdpa_attention_paged_forward(
             raise ValueError("block_tables is required for decoding mode")
         if seq_lens is None:
             raise ValueError("seq_lens is required for decoding mode")
-        block_size = kwargs.get("block_size", 32)
+        block_size = cache.block_size
 
         # Pre-create scale tensors to avoid CUDA graph capture issues
         if not hasattr(module, "_k_scale_tensor"):
@@ -141,22 +151,70 @@ def sdpa_attention_paged_forward(
                 torch.mps.synchronize()
             else:
                 raise RuntimeError("No CUDA or MPS available")
-            paged_attention_kernel.paged_attention_v1(
-                module._attn_output,
-                query,
-                key,  # → [num_blocks, num_kv_heads, head_dim // x, block_size, x], x depends on the dtype
-                value,  # # → [num_blocks, num_kv_heads, head_dim, block_size]
-                num_kv_heads=num_kv_heads,
-                block_tables=block_tables,
-                seq_lens=seq_lens,
-                block_size=block_size,
-                max_seq_len=kwargs.get("max_seqlen_k"),
-                kv_cache_dtype=kwargs.get("kv_cache_dtype", "auto"),
-                scale=scaling,
-                k_scale=module._k_scale_tensor,
-                v_scale=module._v_scale_tensor,
-                alibi_slopes=None,
-            )
+            
+            if use_v2:
+                # Calculate number of partitions for v2
+                max_num_partitions = (max_seq_len + partition_size - 1) // partition_size
+                
+                # Create v2-specific tensors
+                if not hasattr(module, "_exp_sums") or module._exp_sums.shape != (batch_size, num_heads, max_num_partitions):
+                    module._exp_sums = torch.empty(
+                        (batch_size, num_heads, max_num_partitions),
+                        dtype=torch.float32,
+                        device=key.device
+                    )
+                
+                if not hasattr(module, "_max_logits") or module._max_logits.shape != (batch_size, num_heads, max_num_partitions):
+                    module._max_logits = torch.empty(
+                        (batch_size, num_heads, max_num_partitions),
+                        dtype=torch.float32,
+                        device=key.device
+                    )
+                
+                if not hasattr(module, "_tmp_out") or module._tmp_out.shape != (batch_size, num_heads, max_num_partitions, head_size):
+                    module._tmp_out = torch.empty(
+                        (batch_size, num_heads, max_num_partitions, head_size),
+                        dtype=query.dtype,
+                        device=key.device
+                    )
+                
+                paged_attention_kernel.paged_attention_v2(
+                    module._attn_output,
+                    module._exp_sums,
+                    module._max_logits,
+                    module._tmp_out,
+                    query,
+                    key,  # → [num_blocks, num_kv_heads, head_dim // x, block_size, x], x depends on the dtype
+                    value,  # # → [num_blocks, num_kv_heads, head_dim, block_size]
+                    num_kv_heads=num_kv_heads,
+                    block_tables=block_tables,
+                    seq_lens=seq_lens,
+                    block_size=block_size,
+                    max_seq_len=max_seq_len,
+                    kv_cache_dtype=kwargs.get("kv_cache_dtype", "auto"),
+                    scale=scaling,
+                    k_scale=module._k_scale_tensor,
+                    v_scale=module._v_scale_tensor,
+                    alibi_slopes=None,
+                )
+            else:
+                paged_attention_kernel.paged_attention_v1(
+                    module._attn_output,
+                    query,
+                    key,  # → [num_blocks, num_kv_heads, head_dim // x, block_size, x], x depends on the dtype
+                    value,  # # → [num_blocks, num_kv_heads, head_dim, block_size]
+                    num_kv_heads=num_kv_heads,
+                    block_tables=block_tables,
+                    seq_lens=seq_lens,
+                    block_size=block_size,
+                    max_seq_len=max_seq_len,
+                    kv_cache_dtype=kwargs.get("kv_cache_dtype", "auto"),
+                    scale=scaling,
+                    k_scale=module._k_scale_tensor,
+                    v_scale=module._v_scale_tensor,
+                    alibi_slopes=None,
+                )
+            
             if torch.cuda.is_available():
                 torch.cuda.synchronize()
             elif torch.backends.mps.is_available():
@@ -164,11 +222,16 @@ def sdpa_attention_paged_forward(
             else:
                 raise RuntimeError("No CUDA or MPS available")
         except RuntimeError as e:
-            print(f"Error in paged_attention_v1: {e}")
+            print(f"Error in paged_attention_{'v2' if use_v2 else 'v1'}: {e}")
             print(f"Shapes - query: {query.shape}, key: {key.shape}, value: {value.shape}")
             print(f"Output shape: {module._attn_output.shape}")
             print(f"block_tables shape: {block_tables.shape if block_tables is not None else None}")
             print(f"seq_lens shape: {seq_lens.shape if seq_lens is not None else None}")
+            if use_v2:
+                print(f"max_num_partitions: {max_num_partitions}")
+                print(f"exp_sums shape: {module._exp_sums.shape}")
+                print(f"max_logits shape: {module._max_logits.shape}")
+                print(f"tmp_out shape: {module._tmp_out.shape}")
             raise
 
         module._attn_output = module._attn_output.to(torch.bfloat16)
