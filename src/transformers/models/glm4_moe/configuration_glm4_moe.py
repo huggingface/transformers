@@ -120,7 +120,7 @@ class Glm4MoeConfig(PretrainedConfig):
             Number of shared experts.
         n_routed_experts (`int`, *optional*, defaults to 128):
             Number of routed experts.
-        routed_scaling_factor (`float`, *optional*, defaults to 2.5):
+        routed_scaling_factor (`float`, *optional*, defaults to 1):
             Scaling factor or routed experts.
         n_group (`int`, *optional*, defaults to 1):
             Number of groups for routed experts.
@@ -128,7 +128,7 @@ class Glm4MoeConfig(PretrainedConfig):
             Number of selected groups for each token(for each token, ensuring the selected experts is only within `topk_group` groups).
         num_nextn_predict_layers (`int`, *optional*, defaults to 0):
             Number of next-n prediction layers in the MoE model. If set to 0, no next-n prediction layers are used.
-        first_k_dense_replace (`int`, *optional*, defaults to 3):
+        first_k_dense_replace (`int`, *optional*, defaults to 1):
             Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
                                                             \--k dense layers--/
         norm_topk_prob (`bool`, *optional*, defaults to `True`):
