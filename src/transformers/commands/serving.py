@@ -48,7 +48,7 @@ if is_torch_available():
 
 if is_pydantic_available() and is_fastapi_available() and is_uvicorn_available() and is_openai_available():
     import uvicorn
-    from fastapi import FastAPI
+    from fastapi import FastAPI, HTTPException
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import JSONResponse, StreamingResponse
     from openai.types.chat.completion_create_params import CompletionCreateParamsStreaming
@@ -67,7 +67,72 @@ if is_pydantic_available() and is_fastapi_available() and is_uvicorn_available()
         ResponseTextDoneEvent,
     )
     from openai.types.responses.response_create_params import ResponseCreateParamsStreaming
-    from pydantic import BaseModel
+    from pydantic import BaseModel, TypeAdapter, ValidationError
+    from typing_extensions import _TypedDictMeta
+
+    # Expand OpenAI's request input types with an optional `generation_config` field
+    class TransformersResponseCreateParamsStreaming(ResponseCreateParamsStreaming, total=False):
+        """
+        OpenAI's ResponseCreateParamsStreaming with an additional field for the generation config (as a json string).
+        """
+
+        generation_config: Optional[str]
+
+    class TransformersCompletionCreateParamsStreaming(CompletionCreateParamsStreaming, total=False):
+        """
+        OpenAI's CompletionCreateParamsStreaming with an additional field for the generation config (as a json string).
+        """
+
+        generation_config: Optional[str]
+
+    TransformersRequest = Union[TransformersResponseCreateParamsStreaming, TransformersCompletionCreateParamsStreaming]
+
+    # Contrarily to OpenAI's output types, input types are `TypedDict`, which don't have validation
+    response_validator = TypeAdapter(TransformersResponseCreateParamsStreaming)
+    completion_validator = TypeAdapter(TransformersCompletionCreateParamsStreaming)
+
+    # Define request fields that are not yet used in `transformers serve`. Receiving these fields will raise an
+    # HTTPException.
+    UNUSED_RESPONSE_FIELDS = {
+        "background",
+        "include",
+        "max_tool_calls",
+        "metadata",
+        "parallel_tool_calls",
+        "previous_response_id",
+        "prompt",
+        "reasoning",
+        "service_tier",
+        "store",
+        "text",
+        "tool_choice",
+        "top_logprobs",
+        "truncation",
+        "user",
+    }
+    UNUSED_COMPLETION_FIELDS = {
+        "audio",
+        "function_call",
+        "functions",
+        "logprobs",
+        "max_completion_tokens",
+        "metadata",
+        "modalities",
+        "n",
+        "parallel_tool_calls",
+        "prediction",
+        "presence_penalty",
+        "reasoning_effort",
+        "response_format",
+        "service_tier",
+        "stop",
+        "store",
+        "stream_options",
+        "tool_choice",
+        "top_logprobs",
+        "user",
+        "web_search_options",
+    }
 
 
 logger = logging.get_logger(__name__)
@@ -93,7 +158,9 @@ def serve_command_factory(args: Namespace):
 
 
 def create_generation_config_from_req(
-    req: Union[CompletionCreateParamsStreaming, ResponseCreateParamsStreaming], model_generation_config: "GenerationConfig", **kwargs
+    req: Union[TransformersCompletionCreateParamsStreaming, TransformersResponseCreateParamsStreaming],
+    model_generation_config: "GenerationConfig",
+    **kwargs
 ) -> "GenerationConfig":
     """
     Creates a generation config from the parameters of the request. If a generation config is passed in the request,
@@ -122,7 +189,7 @@ def create_generation_config_from_req(
         if v is not None:
             setattr(generation_config, k, v)
 
-    if isinstance(req, ResponseCreateParamsStreaming):
+    if isinstance(req, TransformersResponseCreateParamsStreaming):
         return generation_config
 
     if req.frequency_penalty is not None:
@@ -255,6 +322,47 @@ class ServeCommand(BaseTransformersCLICommand):
         cb_logger = logging.get_logger("transformers.generation.continuous_batching")
         cb_logger.setLevel(logging.log_levels[self.args.log_level.lower()])
 
+    def validate_request(
+        self,
+        request: "TransformersRequest",
+        request_cls: _TypedDictMeta,
+        validator: TypeAdapter,
+        unused_fields: set,
+    ):
+        """
+        Validates the request against the schema, and checks for unexpected keys.
+
+        Args:
+            request (`TransformersRequest`):
+                The request to validate.
+            request_cls (`_TypedDictMeta`):
+                The class of the request to validate.
+            validator (`TypeAdapter`):
+                The validator to use to validate the request. Built from the schema in `request_cls`.
+            unused_fields (`set`):
+                Fields accepted by `request_cls`, but not used in `transformers serve`.
+
+        Raises:
+            HTTPException: If the request is invalid or contains unexpected or unused fields.
+        """
+        # Validate expected keys
+        try:
+            validator.validate_python(request)
+        except ValidationError as e:
+            raise HTTPException(status_code=422, detail=e.errors())
+
+        # Validate unexpected keys -- Pydantic doesn't validate extra keys in the request.
+        input_keys = set(request.keys())
+        possible_keys = request_cls.__mutable_keys__
+        unexpected_keys = input_keys - possible_keys
+        if unexpected_keys:
+            raise HTTPException(status_code=422, detail=f"Unexpected keys in the request: {unexpected_keys}")
+
+        # Validate unused fields
+        unused_fields_in_request = input_keys & unused_fields
+        if unused_fields_in_request:
+            raise HTTPException(status_code=422, detail=f"Unused fields in the request: {unused_fields_in_request}")
+
     def build_chat_completions_chunk(
         self,
         request_id: Optional[str] = "",
@@ -321,20 +429,30 @@ class ServeCommand(BaseTransformersCLICommand):
             )
 
         @app.post("/v1/chat/completions")
-        def chat_completion(req: CompletionCreateParamsStreaming):
-            if not req.stream:
-                return {"error": "Only streaming mode is supported."}
+        def chat_completion(request: TransformersCompletionCreateParamsStreaming):
+            self.validate_request(
+                request=request,
+                request_cls=TransformersCompletionCreateParamsStreaming,
+                validator=completion_validator,
+                unused_fields=UNUSED_COMPLETION_FIELDS,
+            )
 
-            output = self.continuous_batching(req) if self.use_continuous_batching else self.generate(req)
-
+            if self.use_continuous_batching:
+                output = self.continuous_batching(request)
+            else:
+                output = self.generate(request)
             return StreamingResponse(output, media_type="text/event-stream")
 
         @app.post("/v1/responses")
-        def responses(req: ResponseCreateParamsStreaming):
-            if not req.stream:
-                return {"error": "Only streaming mode is supported."}
+        def responses(request: TransformersResponseCreateParamsStreaming):
+            self.validate_request(
+                request=request,
+                request_cls=TransformersResponseCreateParamsStreaming,
+                validator=response_validator,
+                unused_fields=UNUSED_RESPONSE_FIELDS,
+            )
 
-            output = self.generate_response(req)
+            output = self.generate_response(request)
             return StreamingResponse(output, media_type="text/event-stream")
 
         @app.get("/v1/models")
@@ -377,7 +495,7 @@ class ServeCommand(BaseTransformersCLICommand):
             model_info("meta-llama/Llama-3.3-70B-Instruct"),
         ]
 
-    def continuous_batching(self, req: CompletionCreateParamsStreaming) -> Generator:
+    def continuous_batching(self, req: TransformersCompletionCreateParamsStreaming) -> Generator:
         update_model = self.canonicalized_model_name(req.model) != self.loaded_model
 
         if update_model:
@@ -443,7 +561,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
         return stream_response(inputs[0])
 
-    def generate(self, req: CompletionCreateParamsStreaming) -> Generator:
+    def generate(self, req: TransformersCompletionCreateParamsStreaming) -> Generator:
         update_model = req.model != self.loaded_model
         if update_model:
             self.model, self.tokenizer = self.load_model_and_tokenizer(req.model, self.args)
@@ -592,7 +710,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
         return stream_response(generation_streamer, request_id)
 
-    def generate_response(self, req: ResponseCreateParamsStreaming) -> Generator:
+    def generate_response(self, req: TransformersResponseCreateParamsStreaming) -> Generator:
         # TODO
         # Check generation config parameters
         # Implement KV caching (with previous_request_id?)
@@ -742,13 +860,13 @@ class ServeCommand(BaseTransformersCLICommand):
 
         return stream_response(generation_streamer, request_id)
 
-    def is_continuation(self, req: CompletionCreateParamsStreaming) -> bool:
+    def is_continuation(self, req: TransformersCompletionCreateParamsStreaming) -> bool:
         """
         Determines whether the current request is a continuation of the last request. In other words, if it is the
         same chat session.
 
         Args:
-            req (`CompletionCreateParamsStreaming`): The request to check.
+            req (`TransformersCompletionCreateParamsStreaming`): The request to check.
 
         Returns:
             `True` if the request is a continuation of the last request, `False` otherwise.
