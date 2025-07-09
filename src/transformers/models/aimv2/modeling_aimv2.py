@@ -445,6 +445,7 @@ class Aimv2PreTrainedModel(PreTrainedModel):
     ]
     _supports_sdpa = True
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_flex_attn = True
 
     def _init_weights(self, module):
@@ -504,8 +505,6 @@ class Aimv2VisionModel(Aimv2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
     ) -> BaseModelOutputWithPooling:
         r"""
-        Returns:
-
         Examples:
 
         ```python
