@@ -178,6 +178,7 @@ else:
             ("xclip", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("yolos", ("YolosImageProcessor", "YolosImageProcessorFast")),
             ("zoedepth", ("ZoeDepthImageProcessor", "ZoeDepthImageProcessorFast")),
+            ("mobilenet_v5", "MobileNetV5ImageProcessor"),
         ]
     )
 
@@ -666,4 +667,7 @@ class AutoImageProcessor:
         )
 
 
-__all__ = ["IMAGE_PROCESSOR_MAPPING", "AutoImageProcessor"]
+__all__ = [
+    "IMAGE_PROCESSOR_MAPPING",
+    "AutoImageProcessor",
+]
