@@ -36,6 +36,8 @@ _CallableT = TypeVar("_CallableT", bound=Callable[..., Any])
 CONFIG_MAPPING_NAMES = OrderedDict[str, str](
     [
         # Add configs here
+        ("aimv2", "Aimv2Config"),
+        ("aimv2_vision_model", "Aimv2VisionConfig"),
         ("albert", "AlbertConfig"),
         ("align", "AlignConfig"),
         ("altclip", "AltCLIPConfig"),
@@ -112,6 +114,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("dinov2", "Dinov2Config"),
         ("dinov2_with_registers", "Dinov2WithRegistersConfig"),
         ("distilbert", "DistilBertConfig"),
+        ("doge", "DogeConfig"),
         ("donut-swin", "DonutSwinConfig"),
         ("dots1", "Dots1Config"),
         ("dpr", "DPRConfig"),
@@ -406,6 +409,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
 MODEL_NAMES_MAPPING = OrderedDict[str, str](
     [
         # Add full (and cased) model names here
+        ("aimv2", "AIMv2"),
+        ("aimv2_vision_model", "Aimv2VisionModel"),
         ("albert", "ALBERT"),
         ("align", "ALIGN"),
         ("altclip", "AltCLIP"),
@@ -493,6 +498,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("dinov2_with_registers", "DINOv2 with Registers"),
         ("distilbert", "DistilBERT"),
         ("dit", "DiT"),
+        ("doge", "Doge"),
         ("donut-swin", "DonutSwin"),
         ("dots1", "dots1"),
         ("dpr", "DPR"),
@@ -857,6 +863,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("glm4v_text", "glm4v"),
         ("idefics3_vision", "idefics3"),
         ("siglip_vision_model", "siglip"),
+        ("aimv2_vision_model", "aimv2"),
         ("smolvlm_vision", "smolvlm"),
         ("chinese_clip_vision_model", "chinese_clip"),
         ("rt_detr_resnet", "rt_detr"),
