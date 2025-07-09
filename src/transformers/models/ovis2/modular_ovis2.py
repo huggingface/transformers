@@ -164,7 +164,9 @@ class Ovis2VisionModel(nn.Module):
         )
         self.head_norm = nn.LayerNorm(self.vocab_size - self.num_visual_indicator_tokens)
 
-    def forward(self, pixel_values: torch.FloatTensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self, pixel_values: torch.FloatTensor, vision_feature_select_strategy: Optional[str] = None
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         outputs = self.transformer(pixel_values)
         last_hidden_state = outputs.last_hidden_state
 
@@ -219,10 +221,6 @@ class Ovis2PreTrainedModel(PreTrainedModel):
             if hasattr(self.config, "initializer_range")
             else self.config.text_config.initializer_range
         )
-
-        if hasattr(module, "class_embedding"):
-            module.class_embedding.data.normal_(mean=0.0, std=std)
-
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
@@ -254,8 +252,9 @@ class Ovis2Model(LlavaModel):
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
+        vision_feature_select_strategy: Optional[str] = None,
     ) -> torch.FloatTensor:
-        image_features = self.vision_tower(pixel_values)
+        image_features = self.vision_tower(pixel_values, vision_feature_select_strategy=vision_feature_select_strategy)
         batch_size, img_seq_len, _ = image_features.shape
         padding_tensor = torch.zeros(
             (batch_size, img_seq_len, self.vision_tower.num_visual_indicator_tokens),
@@ -372,6 +371,18 @@ class Ovis2ForConditionalGeneration(LlavaForConditionalGeneration, GenerationMix
     @property
     def multi_modal_projector(self):
         raise AttributeError("Not needed for Ovis2")
+
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        vision_feature_select_strategy: Optional[str] = None,
+        **kwargs,
+    ):
+        return self.model.get_image_features(
+            pixel_values=pixel_values,
+            vision_feature_select_strategy=vision_feature_select_strategy,
+            **kwargs,
+        )
 
     @can_return_tuple
     @auto_docstring

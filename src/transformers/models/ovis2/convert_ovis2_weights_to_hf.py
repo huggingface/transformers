@@ -27,6 +27,7 @@ from transformers import (
     AutoProcessor,
     AutoTokenizer,
 )
+from transformers.models.auto.configuration_auto import CONFIG_MAPPING_NAMES
 from transformers.models.ovis2.configuration_ovis2 import Ovis2Config, Ovis2VisionConfig
 from transformers.models.ovis2.image_processing_ovis2 import Ovis2ImageProcessor
 from transformers.models.ovis2.modeling_ovis2 import Ovis2ForConditionalGeneration
@@ -333,6 +334,10 @@ def main():
 
     # Execute conversion pipeline
     print(f"Converting model from {args.model_name_or_path} to {args.save_dir}")
+
+    # If already included in the transformers library, remove to avoid duplication.
+    if "aimv2" in CONFIG_MAPPING_NAMES:
+        CONFIG_MAPPING_NAMES.pop("aimv2")
 
     tokenizer = create_tokenizer(
         model_name_or_path=args.model_name_or_path,

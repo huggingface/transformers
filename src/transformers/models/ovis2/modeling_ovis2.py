@@ -446,7 +446,9 @@ class Ovis2VisionModel(nn.Module):
         )
         self.head_norm = nn.LayerNorm(self.vocab_size - self.num_visual_indicator_tokens)
 
-    def forward(self, pixel_values: torch.FloatTensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self, pixel_values: torch.FloatTensor, vision_feature_select_strategy: Optional[str] = None
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         outputs = self.transformer(pixel_values)
         last_hidden_state = outputs.last_hidden_state
 
@@ -501,10 +503,6 @@ class Ovis2PreTrainedModel(PreTrainedModel):
             if hasattr(self.config, "initializer_range")
             else self.config.text_config.initializer_range
         )
-
-        if hasattr(module, "class_embedding"):
-            module.class_embedding.data.normal_(mean=0.0, std=std)
-
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
@@ -553,6 +551,7 @@ class Ovis2Model(Ovis2PreTrainedModel):
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
+        vision_feature_select_strategy: Optional[str] = None,
     ) -> torch.FloatTensor:
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
@@ -570,7 +569,7 @@ class Ovis2Model(Ovis2PreTrainedModel):
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
-        image_features = self.vision_tower(pixel_values)
+        image_features = self.vision_tower(pixel_values, vision_feature_select_strategy=vision_feature_select_strategy)
         batch_size, img_seq_len, _ = image_features.shape
         padding_tensor = torch.zeros(
             (batch_size, img_seq_len, self.vision_tower.num_visual_indicator_tokens),
@@ -708,13 +707,11 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
         **kwargs,
     ):
         return self.model.get_image_features(
             pixel_values=pixel_values,
-            vision_feature_layer=vision_feature_layer,
             vision_feature_select_strategy=vision_feature_select_strategy,
             **kwargs,
         )
