@@ -976,7 +976,7 @@ def replace_class_node(
     original_modeling_methods = {}
     for node in original_modeling_node.body.body:
         if m.matches(node, m.FunctionDef()):
-            # Due to the @property and @name.setter decorators, methods can sometimes have the same name, but we need a way
+            # Due to the @property and @name.setter decorators, methods can sometimes have the same name, so we need a way
             # to separate them
             if node.name.value in original_modeling_methods:
                 # If it's already present, and the decorator is @property, it means the node already added was the setter
@@ -991,7 +991,7 @@ def replace_class_node(
     modular_methods = {}
     for node in modular_class_node.body.body:
         if m.matches(node, m.FunctionDef()):
-            # Due to the @property and @name.setter decorators, methods can sometimes have the same name, but we need a way
+            # Due to the @property and @name.setter decorators, methods can sometimes have the same name, so we need a way
             # to separate them
             if node.name.value in modular_methods:
                 # If it's already present, and the decorator is @property, it means the node already added was the setter
