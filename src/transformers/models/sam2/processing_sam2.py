@@ -46,10 +46,14 @@ class Sam2Processor(ProcessorMixin):
     [`~Sam2ImageProcessor.__call__`] and [`~Sam2VideoProcessor.__call__`] for more information.
 
     Args:
-        image_processor ([`Sam2ImageProcessor`], *optional*):
+        image_processor ([`Sam2ImageProcessor`]):
             An instance of [`Sam2ImageProcessor`]. The image processor is a required input.
-        video_processor ([`Sam2VideoProcessor`], *optional*):
+        video_processor ([`Sam2VideoProcessor`]):
             An instance of [`Sam2VideoProcessor`]. The video processor is a required input.
+        target_size (`int`, *optional*):
+            The target size (target_size, target_size) to which the image will be resized.
+        point_pad_value (`int`, *optional*, defaults to -10):
+            The value used for padding input points.
     """
 
     attributes = ["image_processor", "video_processor"]

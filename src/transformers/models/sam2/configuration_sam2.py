@@ -36,8 +36,8 @@ class Sam2VisionConfig(PretrainedConfig):
     Args:
         hidden_size (`int`, *optional*, defaults to 96):
             The hidden dimension of the image encoder.
-        num_heads (`int`, *optional*, defaults to 1):
-            Initial number of attention heads.
+        num_attention_heads (`int`, *optional*, defaults to 1):
+            Number of attention heads for each attention layer in the Transformer encoder.
         num_channels (`int`, *optional*, defaults to 3):
             The number of channels in the image.
         image_size (`int`, *optional*, defaults to 1024):
@@ -52,22 +52,24 @@ class Sam2VisionConfig(PretrainedConfig):
             The stochastic depth rate.
         q_pool (`int`, *optional*, defaults to 3):
             The number of q_pool stages.
-        q_stride (`Tuple[int, int]`, *optional*, defaults to `(2, 2)`):
+        q_stride (`Tuple[int, int]`, *optional*, defaults to `[2, 2]`):
             The downsample stride between stages.
-        stages (`Tuple[int, ...]`, *optional*, defaults to `(1, 2, 7, 2)`):
+        stages (`Tuple[int, ...]`, *optional*, defaults to `[1, 2, 7, 2]`):
             The number of blocks per stage.
         dim_mul (`float`, *optional*, defaults to 2.0):
             The dimension multiplier factor at stage shift.
         head_mul (`float`, *optional*, defaults to 2.0):
             The head multiplier factor at stage shift.
-        window_positional_embedding_background_size (`Tuple[int, int]`, *optional*, defaults to `(7, 7)`):
+        window_positional_embedding_background_size (`Tuple[int, int]`, *optional*, defaults to `[7, 7]`):
             The window size per stage when not using global attention.
-        window_spec (`Tuple[int, ...]`, *optional*, defaults to `(8, 4, 14, 7)`):
+        window_spec (`Tuple[int, ...]`, *optional*, defaults to `[8, 4, 14, 7]`):
             The window specifications for each stage.
-        global_attention_blocks (`Tuple[int, ...]`, *optional*, defaults to `(5, 7, 9)`):
+        global_attention_blocks (`Tuple[int, ...]`, *optional*, defaults to `[5, 7, 9]`):
             The blocks where global attention is used.
         backbone_channel_list (`List[int]`, *optional*, defaults to `[768, 384, 192, 96]`):
             The list of channel dimensions for the backbone.
+        backbone_feature_sizes (`List[List[int]]`, *optional*, defaults to `[[256, 256], [128, 128], [64, 64]]`):
+            The spatial sizes of the feature maps from the backbone.
         fpn_hidden_size (`int`, *optional*, defaults to 256):
             The hidden dimension of the FPN.
         fpn_kernel_size (`int`, *optional*, defaults to 1):
@@ -80,12 +82,16 @@ class Sam2VisionConfig(PretrainedConfig):
             The levels for the top-down FPN connections.
         fpn_interpolation_mode (`str`, *optional*, defaults to `"nearest"`):
             The interpolation model for the FPN.
+        num_feature_levels (`int`, *optional*, defaults to 3):
+            The number of feature levels from the FPN to use.
         fuse_type (`str`, *optional*, defaults to `"sum"`):
             The type of fusion to use in the neck.
         hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function in the neck.
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon for the layer normalization.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
     """
 
@@ -228,16 +234,22 @@ class Sam2MaskDecoderConfig(PretrainedConfig):
     Args:
         hidden_size (`int`, *optional*, defaults to 256):
             Dimensionality of the hidden states.
-        num_multimask_outputs (`int`, *optional*, defaults to 3):
-            The number of multimask outputs.
         hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function in the SAM mask decoder.
+        mlp_dim (`int`, *optional*, defaults to 2048):
+            The dimension of the MLP in the two-way transformer.
+        num_hidden_layers (`int`, *optional*, defaults to 2):
+            The number of hidden layers in the two-way transformer.
+        num_attention_heads (`int`, *optional*, defaults to 8):
+            The number of attention heads in the two-way transformer.
+        attention_downsample_rate (`int`, *optional*, defaults to 2):
+            The downsample rate for the attention layers.
+        num_multimask_outputs (`int`, *optional*, defaults to 3):
+            The number of multimask outputs.
         iou_head_depth (`int`, *optional*, defaults to 3):
             The depth of the IoU head.
         iou_head_hidden_dim (`int`, *optional*, defaults to 256):
             The hidden dimension of the IoU head.
-        iou_prediction_use_sigmoid (`bool`, *optional*, defaults to `True`):
-            Whether to use a sigmoid function for the IoU prediction.
         dynamic_multimask_via_stability (`bool`, *optional*, defaults to `True`):
             Whether to use dynamic multimask via stability.
         dynamic_multimask_stability_delta (`float`, *optional*, defaults to 0.05):
@@ -246,18 +258,8 @@ class Sam2MaskDecoderConfig(PretrainedConfig):
             The stability threshold for the dynamic multimask.
         feed_forward_hidden_act (`str`, *optional*, defaults to `"relu"`):
             The non-linear activation function in the feed-forward network.
-        two_way_transformer_depth (`int`, *optional*, defaults to 2):
-            The depth of the two-way transformer.
-        two_way_transformer_embedding_dim (`int`, *optional*, defaults to 256):
-            The embedding dimension of the two-way transformer.
-        two_way_transformer_num_heads (`int`, *optional*, defaults to 8):
-            The number of attention heads in the two-way transformer.
-        two_way_transformer_mlp_dim (`int`, *optional*, defaults to 2048):
-            The dimension of the feed-forward network in the two-way transformer.
         two_way_transformer_activation (`str`, *optional*, defaults to `"relu"`):
             The non-linear activation function in the two-way transformer.
-        two_way_transformer_attention_downsample_rate (`int`, *optional*, defaults to 2):
-            The downsample rate of the attention in the two-way transformer.
 
     """
 
@@ -325,12 +327,10 @@ class Sam2MemoryAttentionConfig(PretrainedConfig):
             The Rope theta parameter.
         rope_feat_sizes (`Tuple[int, int]`, *optional*, defaults to `[64, 64]`):
             The feature sizes for the Rope positional encoding.
-        rope_embedding_dim (`int`, *optional*, defaults to 256):
-            The dimension of the Rope positional encoding.
-        rope_num_heads (`int`, *optional*, defaults to 1):
-            The number of attention heads in the Rope positional encoding.
-        rope_downsample_rate (`int`, *optional*, defaults to 1):
-            The downsample rate for the Rope positional encoding.
+        num_attention_heads (`int`, *optional*, defaults to 1):
+            Number of attention heads for each attention layer in the memory attention.
+        attention_downsample_rate (`int`, *optional*, defaults to 1):
+            The downsample rate for the attention layers.
         rope_dropout (`float`, *optional*, defaults to 0.1):
             The dropout rate for the Rope positional encoding.
         apply_pe_at_self_attn (`bool`, *optional*, defaults to `False`):
@@ -487,6 +487,40 @@ class Sam2Config(PretrainedConfig):
             Dictionary of configuration options used to initialize [`Sam2MemoryEncoderConfig`].
 
         initializer_range (`float`, *optional*, defaults to 0.02): std for parameter initialization
+        num_maskmem (`int`, *optional*, defaults to 7):
+            The number of memory slots for the mask memory.
+        image_size (`int`, *optional*, defaults to 1024):
+            The size of the input images.
+        sigmoid_scale_for_mem_enc (`float`, *optional*, defaults to 20.0):
+            Scale factor for the sigmoid function in the memory encoder.
+        sigmoid_bias_for_mem_enc (`float`, *optional*, defaults to -10.0):
+            Bias for the sigmoid function in the memory encoder.
+        binarize_mask_from_pts_for_mem_enc (`bool`, *optional*, defaults to `True`):
+            Whether to binarize the mask from points for the memory encoder.
+        enable_occlusion_spatial_embedding (`bool`, *optional*, defaults to `True`):
+            Whether to enable spatial embedding for occlusions.
+        multimask_output_in_sam (`bool`, *optional*, defaults to `True`):
+            Whether to output multiple masks from the SAM head.
+        multimask_min_pt_num (`int`, *optional*, defaults to 0):
+            The minimum number of points to trigger multimask output.
+        multimask_max_pt_num (`int`, *optional*, defaults to 1):
+            The maximum number of points to trigger multimask output.
+        multimask_output_for_tracking (`bool`, *optional*, defaults to `True`):
+            Whether to use multimask output for tracking.
+        non_overlap_masks_for_mem_enc (`bool`, *optional*, defaults to `False`):
+            Whether to enforce non-overlapping masks for the memory encoder.
+        max_object_pointers_in_encoder (`int`, *optional*, defaults to 16):
+            The maximum number of object pointers in the encoder.
+        enable_temporal_pos_encoding_for_object_pointers (`bool`, *optional*, defaults to `True`):
+            Whether to enable temporal positional encoding for object pointers.
+        project_temporal_pos_encoding_in_object_pointers (`bool`, *optional*, defaults to `True`):
+            Whether to project temporal positional encoding in object pointers.
+        preserve_temporal_direction_in_object_pointers (`bool`, *optional*, defaults to `True`):
+            Whether to preserve temporal direction in object pointers.
+        fill_hole_area (`int`, *optional*, defaults to 8):
+            The maximum area of holes to fill in the masks.
+        non_overlap_masks (`bool`, *optional*, defaults to `False`):
+            Whether to enforce non-overlapping masks.
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
