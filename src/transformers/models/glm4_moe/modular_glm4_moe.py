@@ -38,7 +38,12 @@ from ..llama.modeling_llama import (
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
 )
-from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel, load_balancing_loss_func
+from ..mixtral.modeling_mixtral import (
+    MixtralForCausalLM,
+    MixtralModel,
+    MixtralPreTrainedModel,
+    load_balancing_loss_func,
+)
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP, Qwen2MoeRMSNorm
 
 
@@ -139,8 +144,12 @@ class Glm4MoeConfig(PretrainedConfig):
             Number of selected experts.
         num_experts (`int`, *optional*, defaults to 128):
             Number of routed experts.
+        n_shared_experts (`int`, *optional*, defaults to 1):
+            Number of shared experts.
         n_routed_experts (`int`, *optional*, defaults to 128):
             Number of routed experts.
+        routed_scaling_factor (`float`, *optional*, defaults to 2.5):
+            Scaling factor or routed experts.
         n_group (`int`, *optional*, defaults to 1):
             Number of groups for routed experts.
         topk_group (`int`, *optional*, defaults to 1):
@@ -172,7 +181,7 @@ class Glm4MoeConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "Glm4Moe"
+    model_type = "glm4_moe"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     # Default tensor parallel plan for base model `Glm4Moe`
@@ -216,6 +225,9 @@ class Glm4MoeConfig(PretrainedConfig):
         moe_intermediate_size=1408,
         num_experts_per_tok=8,
         num_experts=128,
+        n_shared_experts=1,
+        n_routed_experts=128,
+        routed_scaling_factor=1.0,
         n_group=1,
         topk_group=1,
         num_nextn_predict_layers=0,
@@ -256,7 +268,9 @@ class Glm4MoeConfig(PretrainedConfig):
         self.n_group = n_group
         self.topk_group = topk_group
         self.num_experts = num_experts
+        self.n_shared_experts = n_shared_experts
         self.n_routed_experts = n_routed_experts
+        self.routed_scaling_factor = routed_scaling_factor
         self.first_k_dense_replace = first_k_dense_replace
         self.norm_topk_prob = norm_topk_prob
         self.output_router_logits = output_router_logits
@@ -485,6 +499,23 @@ class Glm4MoeDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+class Glm4MoePreTrainedModel(MixtralPreTrainedModel):
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, Glm4MoeRMSNorm):
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, Glm4MoeTopkRouter):
+            module.weight.data.normal_(mean=0.0, std=std)
+
+
 class Glm4MoeModel(MixtralModel):
     def __init__(self, config: Glm4MoeConfig):
         super().__init__(config)
@@ -670,11 +701,11 @@ class Glm4MoeForQuestionAnswering(LlamaForQuestionAnswering):
 
 
 __all__ = [
-    "Glm4MoeForCausalLM",
-    "Glm4MoeModel",
+    "Glm4MoeConfig",
     "Glm4MoePreTrainedModel",  # noqa: F822
+    "Glm4MoeModel",
+    "Glm4MoeForCausalLM",
     "Glm4MoeForSequenceClassification",
     "Glm4MoeForTokenClassification",
     "Glm4MoeForQuestionAnswering",
-    "Glm4MoeConfig",
 ]

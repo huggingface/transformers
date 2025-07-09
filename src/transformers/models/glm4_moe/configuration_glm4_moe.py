@@ -116,8 +116,12 @@ class Glm4MoeConfig(PretrainedConfig):
             Number of selected experts.
         num_experts (`int`, *optional*, defaults to 128):
             Number of routed experts.
+        n_shared_experts (`int`, *optional*, defaults to 1):
+            Number of shared experts.
         n_routed_experts (`int`, *optional*, defaults to 128):
             Number of routed experts.
+        routed_scaling_factor (`float`, *optional*, defaults to 2.5):
+            Scaling factor or routed experts.
         n_group (`int`, *optional*, defaults to 1):
             Number of groups for routed experts.
         topk_group (`int`, *optional*, defaults to 1):
@@ -149,7 +153,7 @@ class Glm4MoeConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "Glm4Moe"
+    model_type = "glm4_moe"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     # Default tensor parallel plan for base model `Glm4Moe`
@@ -193,6 +197,9 @@ class Glm4MoeConfig(PretrainedConfig):
         moe_intermediate_size=1408,
         num_experts_per_tok=8,
         num_experts=128,
+        n_shared_experts=1,
+        n_routed_experts=128,
+        routed_scaling_factor=1.0,
         n_group=1,
         topk_group=1,
         num_nextn_predict_layers=0,
@@ -233,7 +240,9 @@ class Glm4MoeConfig(PretrainedConfig):
         self.n_group = n_group
         self.topk_group = topk_group
         self.num_experts = num_experts
+        self.n_shared_experts = n_shared_experts
         self.n_routed_experts = n_routed_experts
+        self.routed_scaling_factor = routed_scaling_factor
         self.first_k_dense_replace = first_k_dense_replace
         self.norm_topk_prob = norm_topk_prob
         self.output_router_logits = output_router_logits
