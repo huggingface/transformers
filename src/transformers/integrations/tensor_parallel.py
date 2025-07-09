@@ -795,9 +795,6 @@ class ParallelInterface(GeneralInterface):
             "replicate": ReplicateParallel(),
         }
 
-    def __init__(self):
-        self._local_mapping = {}
-
     def __getitem__(self, key):
         # First check if instance has a local override
         if key in self._local_mapping:
@@ -827,7 +824,11 @@ class ParallelInterface(GeneralInterface):
 
 
 # Global AttentionInterface shared by all models which do not need to overwrite any of the existing ones
-ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
+
+if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
+    ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
+else:
+    ALL_PARALLEL_STYLES = None
 
 
 def convert_local_tensor_to_dtensor(
