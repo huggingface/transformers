@@ -23,11 +23,12 @@ from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, can_return_tuple
+from ..aimv2.modeling_aimv2 import Aimv2Attention, Aimv2EncoderLayer
 from ..auto import AutoModel
 from ..llama.modeling_llama import LlamaMLP, LlamaRMSNorm
 from ..llava.modeling_llava import LlavaForConditionalGeneration, LlavaModel
 from ..llava_next.modeling_llava_next import LlavaNextCausalLMOutputWithPast, LlavaNextModelOutputWithPast
-from ..siglip.modeling_siglip import SiglipAttention, SiglipEncoder, SiglipEncoderLayer, SiglipVisionEmbeddings
+from ..siglip.modeling_siglip import SiglipEncoder, SiglipVisionEmbeddings
 from .configuration_ovis2 import Ovis2Config, Ovis2VisionConfig
 
 
@@ -76,22 +77,12 @@ class Ovis2VisionEmbeddings(SiglipVisionEmbeddings):
         return embeddings
 
 
-class Ovis2VisionAttention(SiglipAttention):
-    def __init__(self, config: Ovis2VisionConfig):
-        super().__init__()
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
-        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
+class Ovis2VisionAttention(Aimv2Attention):
+    pass
 
 
-class Ovis2VisionEncoderLayer(SiglipEncoderLayer):
-    def __init__(self, config: Ovis2VisionConfig):
-        super().__init__()
-        self.layer_norm1 = Ovis2RMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.mlp = Ovis2VisionMLP(config)
-        self.layer_norm2 = Ovis2RMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.self_attn = Ovis2VisionAttention(config)
+class Ovis2VisionEncoderLayer(Aimv2EncoderLayer):
+    pass
 
 
 class Ovis2VisionEncoder(SiglipEncoder):
