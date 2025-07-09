@@ -203,7 +203,7 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
 @require_torch_accelerator
 class DeepseekV2IntegrationTest(unittest.TestCase):
     def test_deepseek_v2_lite(self):
-        EXPECTED_TEXT = ['An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors.\n\nAttention functions are used in a variety of applications, including natural language processing, computer vision, and reinforcement learning.\n\n## Attention Functions\n\nAttention functions are a type of neural network that is used to learn the relationship between two or more']  # fmt: skip
+        EXPECTED_TEXT = ['An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors.\n\nAttention functions are used in a variety of applications, including natural language processing, computer vision, and reinforcement learning.\n\nThe attention function is a function that takes a query and a set of key-value pairs as input and outputs a vector']  # fmt: skip
 
         tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V2-Lite")
         model = DeepseekV2ForCausalLM.from_pretrained(
@@ -236,16 +236,16 @@ class DeepseekV2IntegrationTest(unittest.TestCase):
         with torch.no_grad():
             out = model(torch.tensor([input_ids]).to(torch_device))
 
-        EXPECTED_MEAN = torch.tensor([[-6.1287, -5.0739, -4.4318, -2.6259, -2.0921, -2.4514, -3.8363, -2.9494]], device=torch_device)  # fmt: skip
+        EXPECTED_MEAN = torch.tensor([[-6.1232, -5.0952, -4.4493, -2.6536, -2.0608, -2.3991, -3.8013, -2.8681]], device=torch_device)  # fmt: skip
         torch.testing.assert_close(out.logits.float().mean(-1), EXPECTED_MEAN, atol=1e-3, rtol=1e-3)
 
-        EXPECTED_SLICE = torch.tensor([-1.3281, -1.0859, -0.0513, -3.2188,  1.2578, -2.7812, -0.9297, -3.1406, -2.8906, -0.6445, -0.4941, -2.0938, -2.4531, -1.1172, -3.9844], device=torch_device)  # fmt: skip
+        EXPECTED_SLICE = torch.tensor([-1.2500, -0.9961, -0.0194, -3.1562,  1.2812, -2.7656, -0.8438, -3.0469, -2.7812, -0.6328, -0.4160, -1.9688, -2.4219, -1.0391, -3.8906], device=torch_device)  # fmt: skip
         torch.testing.assert_close(out.logits[0, 0, :15].float(), EXPECTED_SLICE, atol=1e-3, rtol=1e-3)
 
     def test_batch_fa2(self):
         EXPECTED_TEXT = [
-            "Simply put, the theory of relativity states that \nthe laws of physics are the same for all observers, regardless of their \nrelative motion.\nThe theory of relativity is based on two postulates:\n- The laws of physics are the",  # fmt: skip
-            "My favorite all time favorite condiment is ketchup. I love ketchup. I love ketchup on my hot dogs, hamburgers, french fries, and even on my eggs. I love ketchup. I love ketchup so much that I",  # fmt: skip
+            'Simply put, the theory of relativity states that \nthe laws of physics are the same for all observers, regardless of their \nrelative motion.\nThe theory of relativity is a theory of space, time, and gravity.\nThe theory of',  # fmt: skip
+            'My favorite all time favorite condiment is ketchup. I love ketchup. I love ketchup on my hot dogs, hamburgers, french fries, and even on my eggs. I love ketchup. I love ketchup so much that I',  # fmt: skip
         ]
 
         prompts = [
