@@ -90,9 +90,9 @@ def eager_attention_forward(
 
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
-    x1 = x[..., 0::2]
-    x2 = x[..., 1::2]
-    return torch.stack((-x2, x1), dim=-1).flatten(-2)
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
@@ -117,10 +117,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
-
-    # Interleave them instead of usual shape
-    cos = cos[..., : cos.shape[-1] // 2].repeat_interleave(2, dim=-1)
-    sin = sin[..., : sin.shape[-1] // 2].repeat_interleave(2, dim=-1)
 
     # Keep half or full tensor for later concatenation
     rotary_dim = cos.shape[-1]

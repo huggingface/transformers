@@ -31,7 +31,8 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3TopkRouter
-from ..glm4.modeling_glm4 import Glm4Attention, apply_rotary_pos_emb, eager_attention_forward
+from ..glm4.modeling_glm4 import Glm4Attention, eager_attention_forward
+from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb
 from ..llama.modeling_llama import (
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,

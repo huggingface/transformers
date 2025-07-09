@@ -1,7 +1,9 @@
 import argparse
 import os
+
 from tokenizers import processors
-from transformers import PreTrainedTokenizerFast, AutoTokenizer
+
+from transformers import PreTrainedTokenizerFast
 
 
 def convert_glm4_tokenizer(input_dir, output_dir, use_post_processor=False):
@@ -22,19 +24,19 @@ def convert_glm4_tokenizer(input_dir, output_dir, use_post_processor=False):
     # Configure post processor based on option
     if use_post_processor:
         # GLM4-specific template processing with special tokens
-        fast_tok._tokenizer.post_processor = processors.Sequence([
-            processors.ByteLevel(trim_offsets=False),
-            processors.TemplateProcessing(
-                single="[gMASK]:0 <sop>:0 $A:0",
-                pair="[gMASK]:0 <sop>:0 $A:0 $B:1",
-                special_tokens=[("[gMASK]", 151331), ("<sop>", 151333)],
-            ),
-        ])
+        fast_tok._tokenizer.post_processor = processors.Sequence(
+            [
+                processors.ByteLevel(trim_offsets=False),
+                processors.TemplateProcessing(
+                    single="[gMASK]:0 <sop>:0 $A:0",
+                    pair="[gMASK]:0 <sop>:0 $A:0 $B:1",
+                    special_tokens=[("[gMASK]", 151331), ("<sop>", 151333)],
+                ),
+            ]
+        )
     else:
         # Basic byte-level processing only
-        fast_tok._tokenizer.post_processor = processors.Sequence([
-            processors.ByteLevel(trim_offsets=False)
-        ])
+        fast_tok._tokenizer.post_processor = processors.Sequence([processors.ByteLevel(trim_offsets=False)])
 
     # Create output directory if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
@@ -53,17 +55,13 @@ def main():
     parser.add_argument(
         "input_dir",
         type=str,
-        help="Input directory containing tokenizer files (tokenizer.model, tokenizer_config.json, etc.)"
+        help="Input directory containing tokenizer files (tokenizer.model, tokenizer_config.json, etc.)",
     )
-    parser.add_argument(
-        "output_dir",
-        type=str,
-        help="Output directory to save converted tokenizer.json"
-    )
+    parser.add_argument("output_dir", type=str, help="Output directory to save converted tokenizer.json")
     parser.add_argument(
         "--use_post_processor",
         action="store_true",
-        help="Apply GLM4-specific post processing with [gMASK] and <sop> tokens"
+        help="Apply GLM4-specific post processing with [gMASK] and <sop> tokens",
     )
 
     args = parser.parse_args()
