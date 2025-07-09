@@ -391,14 +391,20 @@ def compute_rmse(arr1, arr2):
     arr2_normalized = normalize(arr2_np)
     return np.sqrt(((arr1_normalized - arr2_normalized) ** 2).mean())
 
-FIX_HOP_LENGTH = True
 
 @slow
 @require_torch
 class DacIntegrationTest(unittest.TestCase):
+    """
+    Integration tests for DAC.
+
+    Code for reproducing expected outputs can be found here:
+    - Single file: https://gist.github.com/ebezzam/bb315efa7a416db6336a6b2a2d424ffa#file-single-py
+    - Batched: https://gist.github.com/ebezzam/bb315efa7a416db6336a6b2a2d424ffa#file-batch-py
+    """
+
     def test_integration_16khz(self):
         expected_rmse = 0.004
-        # Code for reproducing expected outputs: https://gist.github.com/ebezzam/bb315efa7a416db6336a6b2a2d424ffa#file-single-py
         expected_encoder_means_dict = {
             "loss": 24.8491,
             "quantized_representation": -0.07544856518507004,
@@ -412,24 +418,13 @@ class DacIntegrationTest(unittest.TestCase):
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
         model_name = "dac_16khz"
-        sample_rate = 16000
 
         model_id = f"descript/{model_name}"
         model = DacModel.from_pretrained(model_id, force_download=True).to(torch_device).eval()
-        processor = AutoProcessor.from_pretrained(
-            model_id, 
-            hop_length=int(np.prod(model.config.downsampling_ratios)) if FIX_HOP_LENGTH else model.config.hop_length
-        )
+        processor = AutoProcessor.from_pretrained(model_id, hop_length=int(np.prod(model.config.downsampling_ratios)))
 
         librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
         audio_sample = librispeech_dummy[0]["audio"]["array"]
-        # Resample audio to 16kHz if necessary
-        if librispeech_dummy[0]["audio"]["sampling_rate"] != sample_rate:
-            import librosa
-
-            audio_sample = librosa.resample(
-                audio_sample, orig_sr=librispeech_dummy[0]["audio"]["sampling_rate"], target_sr=sample_rate
-            )
 
         inputs = processor(
             raw_audio=audio_sample,
@@ -451,7 +446,7 @@ class DacIntegrationTest(unittest.TestCase):
             # make sure encoded outputs are similar
             # TODO for all sampling rates, encoder error is relatively high compared to quantizer and decoder (but still minimal)
             # they may be a bug in encoder weight mapping:
-            # https://github.com/ebezzam/transformers/blob/main/src/transformers/models/dac/convert_dac_checkpoint.py#L63
+            # https://github.com/huggingface/transformers/blob/d61c0d087cedbfdbbee8c75b210d5837c35addb8/src/transformers/models/dac/convert_dac_checkpoint.py#L63
             # in any case, the error is small enough to not affect the codec performance
             expected_encoder_means = torch.tensor(list(expected_encoder_means_dict.values()), dtype=torch.float32)
             torch.testing.assert_close(hf_output_means, expected_encoder_means, rtol=1e-3, atol=1e-3)
@@ -484,7 +479,6 @@ class DacIntegrationTest(unittest.TestCase):
 
     def test_integration_24khz(self):
         expected_rmse = 0.0039
-        # Code for reproducing expected outputs: https://gist.github.com/ebezzam/bb315efa7a416db6336a6b2a2d424ffa#file-single-py
         expected_encoder_means_dict = {
             "loss": 28.1121,
             "quantized_representation": 0.016283338889479637,
@@ -498,24 +492,13 @@ class DacIntegrationTest(unittest.TestCase):
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
         model_name = "dac_24khz"
-        sample_rate = 24000
 
         model_id = f"descript/{model_name}"
         model = DacModel.from_pretrained(model_id, force_download=True).to(torch_device).eval()
-        processor = AutoProcessor.from_pretrained(
-            model_id, 
-            hop_length=int(np.prod(model.config.downsampling_ratios)) if FIX_HOP_LENGTH else model.config.hop_length
-        )
+        processor = AutoProcessor.from_pretrained(model_id, hop_length=int(np.prod(model.config.downsampling_ratios)))
 
         librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
         audio_sample = librispeech_dummy[0]["audio"]["array"]
-        # Resample audio to 24kHz if necessary
-        if librispeech_dummy[0]["audio"]["sampling_rate"] != sample_rate:
-            import librosa
-
-            audio_sample = librosa.resample(
-                audio_sample, orig_sr=librispeech_dummy[0]["audio"]["sampling_rate"], target_sr=sample_rate
-            )
 
         inputs = processor(
             raw_audio=audio_sample,
@@ -566,7 +549,6 @@ class DacIntegrationTest(unittest.TestCase):
 
     def test_integration_44khz(self):
         expected_rmse = 0.002
-        # Code for reproducing expected outputs: https://gist.github.com/ebezzam/bb315efa7a416db6336a6b2a2d424ffa#file-single-py
         expected_encoder_means_dict = {
             "loss": 23.7848,
             "quantized_representation": 0.017807748168706894,
@@ -580,25 +562,13 @@ class DacIntegrationTest(unittest.TestCase):
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
         model_name = "dac_44khz"
-        sample_rate = 44100
 
         model_id = f"descript/{model_name}"
         model = DacModel.from_pretrained(model_id, force_download=True).to(torch_device).eval()
-        processor = AutoProcessor.from_pretrained(
-            model_id, 
-            hop_length=int(np.prod(model.config.downsampling_ratios)) if FIX_HOP_LENGTH else model.config.hop_length
-        )
+        processor = AutoProcessor.from_pretrained(model_id, hop_length=int(np.prod(model.config.downsampling_ratios)))
 
         librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
         audio_sample = librispeech_dummy[0]["audio"]["array"]
-        # Resample audio to 24kHz if necessary
-        if librispeech_dummy[0]["audio"]["sampling_rate"] != sample_rate:
-            import librosa
-
-            audio_sample = librosa.resample(
-                audio_sample, orig_sr=librispeech_dummy[0]["audio"]["sampling_rate"], target_sr=sample_rate
-            )
-
         inputs = processor(
             raw_audio=audio_sample,
             sampling_rate=processor.sampling_rate,
@@ -648,7 +618,6 @@ class DacIntegrationTest(unittest.TestCase):
 
     def test_integration_batch_16khz(self):
         expected_rmse = 0.002
-        # Code for reproducing expected outputs: https://gist.github.com/ebezzam/bb315efa7a416db6336a6b2a2d424ffa#file-batch-py
         expected_encoder_means_dict = {
             "loss": 20.370271682739258,
             "quantized_representation": -0.05440079793334007,
@@ -662,28 +631,13 @@ class DacIntegrationTest(unittest.TestCase):
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
         model_name = "dac_16khz"
-        sample_rate = 16000
 
         model_id = f"descript/{model_name}"
         model = DacModel.from_pretrained(model_id).to(torch_device)
-        processor = AutoProcessor.from_pretrained(
-            model_id, 
-            hop_length=int(np.prod(model.config.downsampling_ratios)) if FIX_HOP_LENGTH else model.config.hop_length
-        )
+        processor = AutoProcessor.from_pretrained(model_id, hop_length=int(np.prod(model.config.downsampling_ratios)))
 
         librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
-
         audio_samples = [np.array([audio_sample["array"]])[0] for audio_sample in librispeech_dummy[-2:]["audio"]]
-        if sample_rate != librispeech_dummy[0]["audio"]["sampling_rate"]:
-            import librosa
-
-            # resample audio if necessary
-            audio_samples = [
-                librosa.resample(
-                    audio_sample, orig_sr=librispeech_dummy[0]["audio"]["sampling_rate"], target_sr=sample_rate
-                )
-                for audio_sample in audio_samples
-            ]
 
         inputs = processor(
             raw_audio=audio_samples,
@@ -734,7 +688,6 @@ class DacIntegrationTest(unittest.TestCase):
 
     def test_integration_batch_24khz(self):
         expected_rmse = 0.002
-        # Code for reproducing expected outputs: https://gist.github.com/ebezzam/bb315efa7a416db6336a6b2a2d424ffa#file-batch-py
         expected_encoder_means_dict = {
             "loss": 24.505210876464844,
             "quantized_representation": 0.03778776153922081,
@@ -748,28 +701,13 @@ class DacIntegrationTest(unittest.TestCase):
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
         model_name = "dac_24khz"
-        sample_rate = 24000
 
         model_id = f"descript/{model_name}"
         model = DacModel.from_pretrained(model_id).to(torch_device)
-        processor = AutoProcessor.from_pretrained(
-            model_id, 
-            hop_length=int(np.prod(model.config.downsampling_ratios)) if FIX_HOP_LENGTH else model.config.hop_length
-        )
+        processor = AutoProcessor.from_pretrained(model_id, hop_length=int(np.prod(model.config.downsampling_ratios)))
 
         librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
-
         audio_samples = [np.array([audio_sample["array"]])[0] for audio_sample in librispeech_dummy[-2:]["audio"]]
-        if sample_rate != librispeech_dummy[0]["audio"]["sampling_rate"]:
-            import librosa
-
-            # resample audio if necessary
-            audio_samples = [
-                librosa.resample(
-                    audio_sample, orig_sr=librispeech_dummy[0]["audio"]["sampling_rate"], target_sr=sample_rate
-                )
-                for audio_sample in audio_samples
-            ]
 
         inputs = processor(
             raw_audio=audio_samples,
@@ -820,7 +758,6 @@ class DacIntegrationTest(unittest.TestCase):
 
     def test_integration_batch_44khz(self):
         expected_rmse = 0.001
-        # Code for reproducing expected outputs: https://gist.github.com/ebezzam/bb315efa7a416db6336a6b2a2d424ffa#file-batch-py
         expected_encoder_means_dict = {
             "loss": 19.557754516601562,
             "quantized_representation": 0.004012184217572212,
@@ -834,28 +771,13 @@ class DacIntegrationTest(unittest.TestCase):
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
         model_name = "dac_44khz"
-        sample_rate = 44100
 
         model_id = f"descript/{model_name}"
         model = DacModel.from_pretrained(model_id).to(torch_device)
-        processor = AutoProcessor.from_pretrained(
-            model_id, 
-            hop_length=int(np.prod(model.config.downsampling_ratios)) if FIX_HOP_LENGTH else model.config.hop_length
-        )
+        processor = AutoProcessor.from_pretrained(model_id, hop_length=int(np.prod(model.config.downsampling_ratios)))
 
         librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
-
         audio_samples = [np.array([audio_sample["array"]])[0] for audio_sample in librispeech_dummy[-2:]["audio"]]
-        if sample_rate != librispeech_dummy[0]["audio"]["sampling_rate"]:
-            import librosa
-
-            # resample audio if necessary
-            audio_samples = [
-                librosa.resample(
-                    audio_sample, orig_sr=librispeech_dummy[0]["audio"]["sampling_rate"], target_sr=sample_rate
-                )
-                for audio_sample in audio_samples
-            ]
 
         inputs = processor(
             raw_audio=audio_samples,
