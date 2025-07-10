@@ -599,7 +599,6 @@ class SegGptDecoder(nn.Module):
 @auto_docstring
 class SegGptPreTrainedModel(PreTrainedModel):
     config: SegGptConfig
-    config_class = SegGptConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

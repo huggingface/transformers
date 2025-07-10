@@ -673,7 +673,6 @@ class GPTSanJapanesePreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = GPTSanJapaneseConfig
     base_model_prefix = "gptsan_japanese"
     supports_gradient_checkpointing = False
     _no_split_modules = ["GPTSanJapaneseBlock"]

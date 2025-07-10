@@ -838,7 +838,6 @@ class AltCLIPVisionEmbeddings(nn.Module):
 @auto_docstring
 class AltCLIPPreTrainedModel(PreTrainedModel):
     config: AltCLIPConfig
-    config_class = AltCLIPConfig
     base_model_prefix = "altclip"
     supports_gradient_checkpointing = True
     _no_split_module = []
@@ -943,7 +942,6 @@ class AltCLIPVisionTransformer(nn.Module):
 
 class AltCLIPVisionModel(AltCLIPPreTrainedModel):
     config: AltCLIPVisionConfig
-    config_class = AltCLIPVisionConfig
     main_input_name = "pixel_values"
 
     def __init__(self, config: AltCLIPVisionConfig):
@@ -1006,7 +1004,6 @@ class AltCLIPVisionModel(AltCLIPPreTrainedModel):
 )
 class AltRobertaModel(AltCLIPPreTrainedModel):
     config: AltCLIPTextConfig
-    config_class = AltCLIPTextConfig
 
     # Copied from transformers.models.clap.modeling_clap.ClapTextModel.__init__ with ClapText->AltRoberta
     def __init__(self, config, add_pooling_layer=True):
@@ -1125,7 +1122,6 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
 
 class AltCLIPTextModel(AltCLIPPreTrainedModel):
     config: AltCLIPTextConfig
-    config_class = AltCLIPTextConfig
 
     def __init__(self, config):
         super().__init__(config)
@@ -1213,7 +1209,6 @@ class AltCLIPTextModel(AltCLIPPreTrainedModel):
 
 class AltCLIPModel(AltCLIPPreTrainedModel):
     config: AltCLIPConfig
-    config_class = AltCLIPConfig
 
     def __init__(self, config: AltCLIPConfig):
         super().__init__(config)

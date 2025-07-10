@@ -506,7 +506,6 @@ class MLCDVisionTransformer(nn.Module):
 @auto_docstring
 class MLCDPreTrainedModel(PreTrainedModel):
     config: MLCDVisionConfig
-    config_class = MLCDVisionConfig
     base_model_prefix = "mlcd"
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True
@@ -551,7 +550,6 @@ class MLCDPreTrainedModel(PreTrainedModel):
 )
 class MLCDVisionModel(MLCDPreTrainedModel):
     config: MLCDVisionConfig
-    config_class = MLCDVisionConfig
     main_input_name = "pixel_values"
     _no_split_modules = ["MLCDEncoderLayer"]
 

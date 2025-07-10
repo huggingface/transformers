@@ -1184,7 +1184,6 @@ class SEWDEncoder(nn.Module):
 @auto_docstring
 class SEWDPreTrainedModel(PreTrainedModel):
     config: SEWDConfig
-    config_class = SEWDConfig
     base_model_prefix = "sew-d"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True

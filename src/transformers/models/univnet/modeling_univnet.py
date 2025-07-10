@@ -427,7 +427,6 @@ class UnivNetLvcBlock(nn.Module):
 @auto_docstring
 class UnivNetModel(PreTrainedModel):
     config: UnivNetConfig
-    config_class = UnivNetConfig
     main_input_name = "input_features"
 
     def __init__(self, config: UnivNetConfig):

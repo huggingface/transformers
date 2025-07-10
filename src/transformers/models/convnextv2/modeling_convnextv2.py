@@ -274,7 +274,6 @@ class ConvNextV2Encoder(nn.Module):
 @auto_docstring
 class ConvNextV2PreTrainedModel(PreTrainedModel):
     config: ConvNextV2Config
-    config_class = ConvNextV2Config
     base_model_prefix = "convnextv2"
     main_input_name = "pixel_values"
     _no_split_modules = ["ConvNextV2Layer"]

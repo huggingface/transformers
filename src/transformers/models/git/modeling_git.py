@@ -476,7 +476,6 @@ class GitEncoder(nn.Module):
 @auto_docstring
 class GitPreTrainedModel(PreTrainedModel):
     config: GitConfig
-    config_class = GitConfig
     base_model_prefix = "git"
     supports_gradient_checkpointing = True
     _supports_cache_class = True
@@ -905,7 +904,6 @@ class GitVisionTransformer(nn.Module):
 )
 class GitVisionModel(GitPreTrainedModel):
     config: GitVisionConfig
-    config_class = GitVisionConfig
     main_input_name = "pixel_values"
 
     # Copied from transformers.models.clip.modeling_clip.CLIPVisionModel.__init__ with CLIP->Git

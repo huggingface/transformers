@@ -481,7 +481,6 @@ class Dinov2Encoder(nn.Module):
 @auto_docstring
 class Dinov2PreTrainedModel(PreTrainedModel):
     config: Dinov2Config
-    config_class = Dinov2Config
     base_model_prefix = "dinov2"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

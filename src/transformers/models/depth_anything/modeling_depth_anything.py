@@ -212,7 +212,6 @@ class DepthAnythingFeatureFusionStage(nn.Module):
 @auto_docstring
 class DepthAnythingPreTrainedModel(PreTrainedModel):
     config: DepthAnythingConfig
-    config_class = DepthAnythingConfig
     base_model_prefix = "depth_anything"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

@@ -34,7 +34,6 @@ logger = logging.get_logger(__name__)
 @auto_docstring
 class FuyuPreTrainedModel(PreTrainedModel):
     config: FuyuConfig
-    config_class = FuyuConfig
     base_model_prefix = "fuyu"
     supports_gradient_checkpointing = True
     _supports_attention_backend = True

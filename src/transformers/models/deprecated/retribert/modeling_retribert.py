@@ -39,7 +39,6 @@ class RetriBertPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = RetriBertConfig
     load_tf_weights = None
     base_model_prefix = "retribert"
 

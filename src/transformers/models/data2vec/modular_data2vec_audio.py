@@ -136,7 +136,6 @@ class Data2VecAudioAdapter(Wav2Vec2Adapter):
 
 class Data2VecAudioPreTrainedModel(PreTrainedModel, Wav2Vec2PreTrainedModel):
     config: Data2VecAudioConfig
-    config_class = Data2VecAudioConfig
     base_model_prefix = "data2vec_audio"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True

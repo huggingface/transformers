@@ -1420,7 +1420,6 @@ class MaskFormerTransformerModule(nn.Module):
 @auto_docstring
 class MaskFormerPreTrainedModel(PreTrainedModel):
     config: MaskFormerConfig
-    config_class = MaskFormerConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
 

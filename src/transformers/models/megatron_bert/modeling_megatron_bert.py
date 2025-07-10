@@ -680,7 +680,6 @@ class MegatronBertPreTrainingHeads(nn.Module):
 @auto_docstring
 class MegatronBertPreTrainedModel(PreTrainedModel):
     config: MegatronBertConfig
-    config_class = MegatronBertConfig
     load_tf_weights = load_tf_weights_in_megatron_bert
     base_model_prefix = "bert"
     supports_gradient_checkpointing = True

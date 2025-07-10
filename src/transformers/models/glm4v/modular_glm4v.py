@@ -544,7 +544,6 @@ class Glm4vPreTrainedModel(Qwen2_5_VLPreTrainedModel):
 
 class Glm4vVisionModel(Glm4vPreTrainedModel):
     config: Glm4vVisionConfig
-    config_class = Glm4vVisionConfig
     _no_split_modules = ["Glm4vVisionBlock"]
 
     def __init__(self, config) -> None:

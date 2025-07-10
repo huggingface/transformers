@@ -247,7 +247,6 @@ class PoolFormerEncoder(nn.Module):
 @auto_docstring
 class PoolFormerPreTrainedModel(PreTrainedModel):
     config: PoolFormerConfig
-    config_class = PoolFormerConfig
     base_model_prefix = "poolformer"
     main_input_name = "pixel_values"
     _no_split_modules = ["PoolFormerLayer"]

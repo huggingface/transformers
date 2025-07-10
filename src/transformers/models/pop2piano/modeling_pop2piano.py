@@ -573,7 +573,6 @@ class Pop2PianoBlock(GradientCheckpointingLayer):
 @auto_docstring
 class Pop2PianoPreTrainedModel(PreTrainedModel):
     config: Pop2PianoConfig
-    config_class = Pop2PianoConfig
     base_model_prefix = "transformer"
     is_parallelizable = False
     supports_gradient_checkpointing = True

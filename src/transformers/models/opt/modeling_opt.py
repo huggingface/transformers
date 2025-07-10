@@ -308,7 +308,6 @@ class OPTDecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class OPTPreTrainedModel(PreTrainedModel):
     config: OPTConfig
-    config_class = OPTConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["OPTDecoderLayer"]

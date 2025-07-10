@@ -699,7 +699,6 @@ class NezhaPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = NezhaConfig
     load_tf_weights = load_tf_weights_in_nezha
     base_model_prefix = "nezha"
     supports_gradient_checkpointing = True

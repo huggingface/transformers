@@ -886,7 +886,6 @@ class PhimoeDecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class PhimoePreTrainedModel(PreTrainedModel):
     config: PhimoeConfig
-    config_class = PhimoeConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["PhimoeDecoderLayer"]

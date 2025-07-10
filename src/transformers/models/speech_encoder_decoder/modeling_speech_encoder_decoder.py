@@ -62,7 +62,6 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
     """
 
     config: SpeechEncoderDecoderConfig
-    config_class = SpeechEncoderDecoderConfig
     base_model_prefix = "speech_encoder_decoder"
     main_input_name = "inputs"
     supports_gradient_checkpointing = True

@@ -783,7 +783,6 @@ class UniSpeechGumbelVectorQuantizer(nn.Module):
 @auto_docstring
 class UniSpeechPreTrainedModel(PreTrainedModel):
     config: UniSpeechConfig
-    config_class = UniSpeechConfig
     base_model_prefix = "unispeech"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True

@@ -160,7 +160,6 @@ class PromptDepthAnythingDepthEstimationHead(DepthAnythingDepthEstimationHead):
 @auto_docstring
 class PromptDepthAnythingPreTrainedModel(PreTrainedModel):
     config: PromptDepthAnythingConfig
-    config_class = PromptDepthAnythingConfig
     base_model_prefix = "prompt_depth_anything"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

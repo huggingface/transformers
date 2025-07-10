@@ -285,7 +285,6 @@ class SmolLM3DecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class SmolLM3PreTrainedModel(PreTrainedModel):
     config: SmolLM3Config
-    config_class = SmolLM3Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["SmolLM3DecoderLayer"]

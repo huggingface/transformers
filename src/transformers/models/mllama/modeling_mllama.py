@@ -848,7 +848,6 @@ class MllamaRotaryEmbedding(nn.Module):
 @auto_docstring
 class MllamaPreTrainedModel(PreTrainedModel):
     config: MllamaConfig
-    config_class = MllamaConfig
     base_model_prefix = ""
     supports_gradient_checkpointing = True
     _no_split_modules = [
@@ -1028,7 +1027,6 @@ class MllamaPreTrainedModel(PreTrainedModel):
 )
 class MllamaVisionModel(MllamaPreTrainedModel):
     config: MllamaVisionConfig
-    config_class = MllamaVisionConfig
     base_model_prefix = "vision_model"
 
     def __init__(self, config: MllamaVisionConfig):
@@ -1260,7 +1258,6 @@ class MllamaVisionModel(MllamaPreTrainedModel):
 )
 class MllamaTextModel(MllamaPreTrainedModel):
     config: MllamaTextConfig
-    config_class = MllamaTextConfig
     base_model_prefix = "language_model.model"
 
     def __init__(self, config: MllamaTextConfig):
@@ -1469,7 +1466,6 @@ class MllamaTextModel(MllamaPreTrainedModel):
 )
 class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
     config: MllamaTextConfig
-    config_class = MllamaTextConfig
     _supports_static_cache = True  # only the LLM without cross attn can do compile
     base_model_prefix = "language_model"
     _tied_weights_keys = ["lm_head.weight"]

@@ -537,7 +537,6 @@ class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
 
 class Gemma3TextModel(Gemma2Model):
     config: Gemma3TextConfig
-    config_class = Gemma3TextConfig
 
     def __init__(self, config: Gemma3TextConfig):
         super().__init__(config)
@@ -664,7 +663,6 @@ class Gemma3TextModel(Gemma2Model):
 
 class Gemma3ForCausalLM(Gemma2ForCausalLM):
     config: Gemma3TextConfig
-    config_class = Gemma3TextConfig
     base_model_prefix = "language_model"
 
     def __init__(self, config: Gemma3TextConfig):

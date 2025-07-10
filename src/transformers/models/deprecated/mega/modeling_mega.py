@@ -1329,7 +1329,6 @@ class MegaPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = MegaConfig
     base_model_prefix = "mega"
     supports_gradient_checkpointing = False
     _no_split_modules = ["MegaMovingAverageGatedAttention"]

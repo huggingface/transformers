@@ -404,7 +404,6 @@ class Blip2EncoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class Blip2PreTrainedModel(PreTrainedModel):
     config: Blip2Config
-    config_class = Blip2Config
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
     _supports_attention_backend = True
@@ -536,7 +535,6 @@ class Blip2Encoder(nn.Module):
 class Blip2VisionModel(Blip2PreTrainedModel):
     main_input_name = "pixel_values"
     config: Blip2VisionConfig
-    config_class = Blip2VisionConfig
 
     def __init__(self, config: Blip2VisionConfig):
         super().__init__(config)
@@ -1259,7 +1257,6 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
 )
 class Blip2Model(Blip2PreTrainedModel):
     config: Blip2Config
-    config_class = Blip2Config
     main_input_name = "pixel_values"
     _keep_in_fp32_modules = ["query_tokens", "qformer"]
     _supports_flash_attn_2 = False  # because self.qformer does not support FA2
@@ -1854,7 +1851,6 @@ class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
 )
 class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
     config: Blip2Config
-    config_class = Blip2Config
     main_input_name = "pixel_values"
     _supports_cache_class = True
     _supports_static_cache = True

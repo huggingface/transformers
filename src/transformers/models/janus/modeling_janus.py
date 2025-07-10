@@ -56,7 +56,6 @@ logger = logging.get_logger(__name__)
 @auto_docstring
 class JanusPreTrainedModel(PreTrainedModel):
     config: JanusConfig
-    config_class = JanusConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlamaDecoderLayer", "JanusVisionEncoderLayer"]
@@ -516,7 +515,6 @@ class JanusVisionEncoder(nn.Module):
 class JanusVisionModel(JanusPreTrainedModel):
     main_input_name = "pixel_values"
     config: JanusVisionConfig
-    config_class = JanusVisionConfig
 
     def __init__(self, config: JanusVisionConfig):
         super().__init__(config)
@@ -936,7 +934,6 @@ class JanusVQVAEDecoder(nn.Module):
 )
 class JanusVQVAE(JanusPreTrainedModel):
     config: JanusVQVAEConfig
-    config_class = JanusVQVAEConfig
     _no_split_modules = [
         "JanusVQVAEAttnBlock",
         "JanusVQVAEResnetBlock",

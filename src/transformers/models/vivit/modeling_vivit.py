@@ -443,7 +443,6 @@ class VivitPooler(nn.Module):
 @auto_docstring
 class VivitPreTrainedModel(PreTrainedModel):
     config: VivitConfig
-    config_class = VivitConfig
     base_model_prefix = "vivit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

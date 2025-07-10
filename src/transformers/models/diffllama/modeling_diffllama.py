@@ -526,7 +526,6 @@ class DiffLlamaDecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class DiffLlamaPreTrainedModel(PreTrainedModel):
     config: DiffLlamaConfig
-    config_class = DiffLlamaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["DiffLlamaDecoderLayer"]

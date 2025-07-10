@@ -1370,7 +1370,6 @@ class GroundingDinoContrastiveEmbedding(nn.Module):
 @auto_docstring
 class GroundingDinoPreTrainedModel(PreTrainedModel):
     config: GroundingDinoConfig
-    config_class = GroundingDinoConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
 

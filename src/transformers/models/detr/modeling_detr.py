@@ -718,7 +718,6 @@ class DetrDecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class DetrPreTrainedModel(PreTrainedModel):
     config: DetrConfig
-    config_class = DetrConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     _no_split_modules = [r"DetrConvEncoder", r"DetrEncoderLayer", r"DetrDecoderLayer"]

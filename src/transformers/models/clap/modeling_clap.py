@@ -1401,7 +1401,6 @@ class ClapTextPooler(nn.Module):
 @auto_docstring
 class ClapPreTrainedModel(PreTrainedModel):
     config: ClapConfig
-    config_class = ClapConfig
     base_model_prefix = "clap"
     supports_gradient_checkpointing = False
 
@@ -1430,7 +1429,6 @@ class ClapPreTrainedModel(PreTrainedModel):
 
 class ClapAudioModel(ClapPreTrainedModel):
     config: ClapAudioConfig
-    config_class = ClapAudioConfig
     main_input_name = "input_features"
 
     def __init__(self, config: ClapAudioConfig):
@@ -1507,7 +1505,6 @@ class ClapAudioModel(ClapPreTrainedModel):
 )
 class ClapTextModel(ClapPreTrainedModel):
     config: ClapTextConfig
-    config_class = ClapTextConfig
 
     def __init__(self, config, add_pooling_layer=True):
         r"""
@@ -1618,7 +1615,6 @@ class ClapTextModel(ClapPreTrainedModel):
 @auto_docstring
 class ClapModel(ClapPreTrainedModel):
     config: ClapConfig
-    config_class = ClapConfig
 
     def __init__(self, config: ClapConfig):
         super().__init__(config)
@@ -1857,7 +1853,6 @@ class ClapModel(ClapPreTrainedModel):
 @auto_docstring
 class ClapTextModelWithProjection(ClapPreTrainedModel):
     config: ClapTextConfig
-    config_class = ClapTextConfig
 
     def __init__(self, config: ClapTextConfig):
         super().__init__(config)
@@ -1923,7 +1918,6 @@ class ClapTextModelWithProjection(ClapPreTrainedModel):
 @auto_docstring
 class ClapAudioModelWithProjection(ClapPreTrainedModel):
     config: ClapAudioConfig
-    config_class = ClapAudioConfig
     main_input_name = "input_features"
 
     def __init__(self, config: ClapAudioConfig):

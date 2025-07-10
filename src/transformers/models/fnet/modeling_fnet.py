@@ -387,7 +387,6 @@ class FNetPreTrainingHeads(nn.Module):
 @auto_docstring
 class FNetPreTrainedModel(PreTrainedModel):
     config: FNetConfig
-    config_class = FNetConfig
     base_model_prefix = "fnet"
     supports_gradient_checkpointing = True
 

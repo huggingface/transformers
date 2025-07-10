@@ -577,7 +577,6 @@ class T5GemmaAttention(nn.Module):
 @auto_docstring
 class T5GemmaPreTrainedModel(PreTrainedModel):
     config: T5GemmaConfig
-    config_class = T5GemmaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["T5GemmaBlock"]

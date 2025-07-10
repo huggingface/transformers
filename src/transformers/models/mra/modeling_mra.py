@@ -811,7 +811,6 @@ class MraOnlyMLMHead(nn.Module):
 # Copied from transformers.models.yoso.modeling_yoso.YosoPreTrainedModel with Yoso->Mra,yoso->mra
 class MraPreTrainedModel(PreTrainedModel):
     config: MraConfig
-    config_class = MraConfig
     base_model_prefix = "mra"
     supports_gradient_checkpointing = True
 

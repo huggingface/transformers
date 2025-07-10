@@ -689,7 +689,6 @@ class FlavaPooler(nn.Module):
 @auto_docstring
 class FlavaPreTrainedModel(PreTrainedModel):
     config: FlavaConfig
-    config_class = FlavaConfig
     base_model_prefix = "flava"
     supports_gradient_checkpointing = True
 
@@ -725,7 +724,6 @@ class FlavaPreTrainedModel(PreTrainedModel):
 @auto_docstring
 class FlavaImageModel(FlavaPreTrainedModel):
     config: FlavaImageConfig
-    config_class = FlavaImageConfig
     # This override allows us to load FlavaImageModel from FlavaModel/FlavaForPreTraining checkpoints.
     base_model_prefix = "flava.image_model"
     main_input_name = "pixel_values"
@@ -823,7 +821,6 @@ class FlavaImageModel(FlavaPreTrainedModel):
 @auto_docstring
 class FlavaTextModel(FlavaPreTrainedModel):
     config: FlavaTextConfig
-    config_class = FlavaTextConfig
     # This override allows us to load FlavaTextModel from FlavaModel/FlavaForPreTraining checkpoints.
     base_model_prefix = "flava.text_model"
 
@@ -937,7 +934,6 @@ class FlavaTextModel(FlavaPreTrainedModel):
 @auto_docstring
 class FlavaMultimodalModel(FlavaPreTrainedModel):
     config: FlavaMultimodalConfig
-    config_class = FlavaMultimodalConfig
     # This override allows us to load FlavaMultimodalModel from FlavaModel/FlavaForPreTraining checkpoints.
     base_model_prefix = "flava.multimodal_model"
     main_input_name = "hidden_states"
@@ -1034,7 +1030,6 @@ class FlavaMultimodalModel(FlavaPreTrainedModel):
 @auto_docstring
 class FlavaModel(FlavaPreTrainedModel):
     config: FlavaConfig
-    config_class = FlavaConfig
 
     def __init__(self, config: FlavaConfig):
         super().__init__(config)
@@ -1400,7 +1395,6 @@ class FlavaImageCodebookLayerGroup(nn.Module):
 class FlavaImageCodebook(FlavaPreTrainedModel):
     base_model_prefix = ""
     config: FlavaImageCodebookConfig
-    config_class = FlavaImageCodebookConfig
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
 

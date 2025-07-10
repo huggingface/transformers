@@ -608,7 +608,6 @@ class ChineseCLIPTextPooler(nn.Module):
 @auto_docstring
 class ChineseCLIPPreTrainedModel(PreTrainedModel):
     config: ChineseCLIPConfig
-    config_class = ChineseCLIPConfig
     base_model_prefix = "chinese_clip"
     supports_gradient_checkpointing = True
 
@@ -858,7 +857,6 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
     """
 
     config: ChineseCLIPTextConfig
-    config_class = ChineseCLIPTextConfig
     _no_split_modules = ["ChineseCLIPTextEmbeddings"]
 
     def __init__(self, config, add_pooling_layer=True):
@@ -978,7 +976,6 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
 )
 class ChineseCLIPVisionModel(ChineseCLIPPreTrainedModel):
     config: ChineseCLIPVisionConfig
-    config_class = ChineseCLIPVisionConfig
     main_input_name = "pixel_values"
     _no_split_modules = ["ChineseCLIPVisionEmbeddings", "ChineseCLIPVisionAttention"]
 
@@ -1034,7 +1031,6 @@ class ChineseCLIPVisionModel(ChineseCLIPPreTrainedModel):
 @auto_docstring
 class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
     config: ChineseCLIPConfig
-    config_class = ChineseCLIPConfig
 
     def __init__(self, config: ChineseCLIPConfig):
         super().__init__(config)

@@ -797,7 +797,6 @@ class XLNetSequenceSummary(nn.Module):
 @auto_docstring
 class XLNetPreTrainedModel(PreTrainedModel):
     config: XLNetConfig
-    config_class = XLNetConfig
     load_tf_weights = load_tf_weights_in_xlnet
     base_model_prefix = "transformer"
 

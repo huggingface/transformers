@@ -1203,7 +1203,6 @@ class ZoeDepthMetricDepthEstimationHead(nn.Module):
 @auto_docstring
 class ZoeDepthPreTrainedModel(PreTrainedModel):
     config: ZoeDepthConfig
-    config_class = ZoeDepthConfig
     base_model_prefix = "zoedepth"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

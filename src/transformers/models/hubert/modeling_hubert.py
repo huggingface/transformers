@@ -681,7 +681,6 @@ class HubertEncoderStableLayerNorm(nn.Module):
 @auto_docstring
 class HubertPreTrainedModel(PreTrainedModel):
     config: HubertConfig
-    config_class = HubertConfig
     base_model_prefix = "hubert"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True

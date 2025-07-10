@@ -178,7 +178,6 @@ class Mistral3ModelOutputWithPast(BaseModelOutputWithPast):
 @auto_docstring
 class Mistral3PreTrainedModel(PreTrainedModel):
     config: Mistral3Config
-    config_class = Mistral3Config
     base_model_prefix = ""
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"

@@ -1215,7 +1215,6 @@ def _get_clones(partial_module, N):
 @auto_docstring
 class RTDetrV2PreTrainedModel(PreTrainedModel):
     config: RTDetrV2Config
-    config_class = RTDetrV2Config
     base_model_prefix = "rt_detr_v2"
     main_input_name = "pixel_values"
     _no_split_modules = [r"RTDetrV2HybridEncoder", r"RTDetrV2DecoderLayer"]

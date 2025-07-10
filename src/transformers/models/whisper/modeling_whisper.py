@@ -555,7 +555,6 @@ class WhisperDecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class WhisperPreTrainedModel(PreTrainedModel):
     config: WhisperConfig
-    config_class = WhisperConfig
     base_model_prefix = "model"
     main_input_name = "input_features"
     supports_gradient_checkpointing = True

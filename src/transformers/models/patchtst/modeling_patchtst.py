@@ -555,7 +555,6 @@ class PatchTSTEncoderLayer(nn.Module):
 @auto_docstring
 class PatchTSTPreTrainedModel(PreTrainedModel):
     config: PatchTSTConfig
-    config_class = PatchTSTConfig
     base_model_prefix = "model"
     main_input_name = "past_values"
     supports_gradient_checkpointing = False

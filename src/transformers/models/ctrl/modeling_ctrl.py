@@ -209,7 +209,6 @@ class EncoderLayer(nn.Module):
 @auto_docstring
 class CTRLPreTrainedModel(PreTrainedModel):
     config: CTRLConfig
-    config_class = CTRLConfig
     base_model_prefix = "transformer"
 
     def _init_weights(self, module):

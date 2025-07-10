@@ -415,7 +415,6 @@ class TFAdaptiveEmbedding(keras.layers.Layer):
 
 @keras_serializable
 class TFTransfoXLMainLayer(keras.layers.Layer):
-    config_class = TransfoXLConfig
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -661,7 +660,6 @@ class TFTransfoXLPreTrainedModel(TFPreTrainedModel):
     models.
     """
 
-    config_class = TransfoXLConfig
     base_model_prefix = "transformer"
 
 

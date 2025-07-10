@@ -435,7 +435,6 @@ class ViTEncoder(nn.Module):
 @auto_docstring
 class ViTPreTrainedModel(PreTrainedModel):
     config: ViTConfig
-    config_class = ViTConfig
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

@@ -810,7 +810,6 @@ class DabDetrMLP(nn.Module):
 @auto_docstring
 class DabDetrPreTrainedModel(PreTrainedModel):
     config: DabDetrConfig
-    config_class = DabDetrConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     _no_split_modules = [r"DabDetrConvEncoder", r"DabDetrEncoderLayer", r"DabDetrDecoderLayer"]

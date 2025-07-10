@@ -708,7 +708,6 @@ class Wav2Vec2BertAdapterLayer(nn.Module):
 @auto_docstring
 class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
     config: Wav2Vec2BertConfig
-    config_class = Wav2Vec2BertConfig
     base_model_prefix = "wav2vec2_bert"
     main_input_name = "input_features"
     supports_gradient_checkpointing = True

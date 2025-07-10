@@ -314,7 +314,6 @@ class Cohere2DecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class Cohere2PreTrainedModel(PreTrainedModel):
     config: Cohere2Config
-    config_class = Cohere2Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Cohere2DecoderLayer"]

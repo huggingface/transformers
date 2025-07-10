@@ -523,7 +523,6 @@ class Speech2TextDecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class Speech2TextPreTrainedModel(PreTrainedModel):
     config: Speech2TextConfig
-    config_class = Speech2TextConfig
     base_model_prefix = "model"
     main_input_name = "input_features"
     supports_gradient_checkpointing = True

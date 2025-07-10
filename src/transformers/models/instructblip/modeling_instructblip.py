@@ -331,7 +331,6 @@ class InstructBlipEncoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class InstructBlipPreTrainedModel(PreTrainedModel):
     config: InstructBlipConfig
-    config_class = InstructBlipConfig
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
     _supports_attention_backend = True
@@ -453,7 +452,6 @@ class InstructBlipEncoder(nn.Module):
 class InstructBlipVisionModel(InstructBlipPreTrainedModel):
     main_input_name = "pixel_values"
     config: InstructBlipVisionConfig
-    config_class = InstructBlipVisionConfig
 
     def __init__(self, config: InstructBlipVisionConfig):
         super().__init__(config)
@@ -1384,7 +1382,6 @@ class InstructBlipModel(InstructBlipPreTrainedModel):
 )
 class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, GenerationMixin):
     config: InstructBlipConfig
-    config_class = InstructBlipConfig
     main_input_name = "pixel_values"
     _supports_cache_class = True
     _supports_static_cache = True

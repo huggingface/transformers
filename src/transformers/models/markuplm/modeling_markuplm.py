@@ -580,7 +580,6 @@ class MarkupLMEncoder(nn.Module):
 @auto_docstring
 class MarkupLMPreTrainedModel(PreTrainedModel):
     config: MarkupLMConfig
-    config_class = MarkupLMConfig
     base_model_prefix = "markuplm"
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights with Bert->MarkupLM

@@ -583,7 +583,6 @@ class FocalNetEncoder(nn.Module):
 @auto_docstring
 class FocalNetPreTrainedModel(PreTrainedModel):
     config: FocalNetConfig
-    config_class = FocalNetConfig
     base_model_prefix = "focalnet"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

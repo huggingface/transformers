@@ -1772,7 +1772,6 @@ class ReformerOnlyLMHead(nn.Module):
 @auto_docstring
 class ReformerPreTrainedModel(PreTrainedModel):
     config: ReformerConfig
-    config_class = ReformerConfig
     base_model_prefix = "reformer"
 
     @property

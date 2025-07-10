@@ -45,7 +45,6 @@ class ShieldGemma2ImageClassifierOutputWithNoAttention(ImageClassifierOutputWith
 @auto_docstring
 class ShieldGemma2ForImageClassification(PreTrainedModel):
     config: ShieldGemma2Config
-    config_class = ShieldGemma2Config
 
     def __init__(self, config: ShieldGemma2Config):
         super().__init__(config=config)

@@ -401,7 +401,6 @@ class PixtralTransformer(nn.Module):
 @auto_docstring
 class PixtralPreTrainedModel(PreTrainedModel):
     config: PixtralVisionConfig
-    config_class = PixtralVisionConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

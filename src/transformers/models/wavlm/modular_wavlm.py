@@ -505,7 +505,6 @@ class WavLMGumbelVectorQuantizer(nn.Module):
 
 class WavLMPreTrainedModel(PreTrainedModel, Wav2Vec2PreTrainedModel):
     config: WavLMConfig
-    config_class = WavLMConfig
     base_model_prefix = "wavlm"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True

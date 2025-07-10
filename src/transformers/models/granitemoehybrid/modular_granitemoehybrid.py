@@ -166,7 +166,6 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
 
 class GraniteMoeHybridPreTrainedModel(GraniteMoeSharedPreTrainedModel):
     config: GraniteMoeHybridConfig
-    config_class = GraniteMoeHybridConfig
     _no_split_modules = ["GraniteMoeHybridDecoderLayer"]
     _is_stateful = True
 

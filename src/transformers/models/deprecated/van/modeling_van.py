@@ -361,7 +361,6 @@ class VanPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = VanConfig
     base_model_prefix = "van"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

@@ -327,7 +327,6 @@ class Glm4RotaryEmbedding(nn.Module):
 @auto_docstring
 class Glm4PreTrainedModel(PreTrainedModel):
     config: Glm4Config
-    config_class = Glm4Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Glm4DecoderLayer"]

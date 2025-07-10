@@ -1260,7 +1260,6 @@ class SeamlessM4Tv2TextToUnitDecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class SeamlessM4Tv2PreTrainedModel(PreTrainedModel):
     config: SeamlessM4Tv2Config
-    config_class = SeamlessM4Tv2Config
     base_model_prefix = "seamless_m4t_v2"
     supports_gradient_checkpointing = True
     _no_split_modules = [
@@ -2508,7 +2507,6 @@ class SeamlessM4Tv2HifiGan(nn.Module):
 )
 class SeamlessM4Tv2CodeHifiGan(PreTrainedModel):
     config: SeamlessM4Tv2Config
-    config_class = SeamlessM4Tv2Config
     main_input_name = "input_embeds"
     _no_split_modules = []
 

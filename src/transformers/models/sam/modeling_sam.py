@@ -1027,7 +1027,6 @@ class SamVisionNeck(nn.Module):
 @auto_docstring
 class SamPreTrainedModel(PreTrainedModel):
     config: SamConfig
-    config_class = SamConfig
     base_model_prefix = "sam"
     main_input_name = "pixel_values"
     _no_split_modules = ["SamVisionAttention"]
@@ -1114,7 +1113,6 @@ class SamVisionEncoder(SamPreTrainedModel):
 )
 class SamVisionModel(SamPreTrainedModel):
     config: SamVisionConfig
-    config_class = SamVisionConfig
     main_input_name = "pixel_values"
 
     def __init__(self, config: SamVisionConfig):

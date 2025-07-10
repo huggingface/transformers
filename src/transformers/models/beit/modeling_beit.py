@@ -705,7 +705,6 @@ class BeitEncoder(nn.Module):
 @auto_docstring
 class BeitPreTrainedModel(PreTrainedModel):
     config: BeitConfig
-    config_class = BeitConfig
     base_model_prefix = "beit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

@@ -304,7 +304,6 @@ class BitNetRotaryEmbedding(nn.Module):
 @auto_docstring
 class BitNetPreTrainedModel(PreTrainedModel):
     config: BitNetConfig
-    config_class = BitNetConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["BitNetDecoderLayer"]

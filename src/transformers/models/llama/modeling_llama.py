@@ -307,7 +307,6 @@ class LlamaDecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class LlamaPreTrainedModel(PreTrainedModel):
     config: LlamaConfig
-    config_class = LlamaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlamaDecoderLayer"]

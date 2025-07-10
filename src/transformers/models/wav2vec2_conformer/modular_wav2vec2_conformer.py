@@ -547,7 +547,6 @@ class Wav2Vec2ConformerAdapterLayer(Wav2Vec2AdapterLayer):
 @auto_docstring
 class Wav2Vec2ConformerPreTrainedModel(PreTrainedModel):
     config: Wav2Vec2ConformerConfig
-    config_class = Wav2Vec2ConformerConfig
     base_model_prefix = "wav2vec2_conformer"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True

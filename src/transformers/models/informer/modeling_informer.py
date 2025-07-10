@@ -252,7 +252,6 @@ class InformerValueEmbedding(nn.Module):
 @auto_docstring
 class InformerPreTrainedModel(PreTrainedModel):
     config: InformerConfig
-    config_class = InformerConfig
     base_model_prefix = "model"
     main_input_name = "past_values"
     supports_gradient_checkpointing = True

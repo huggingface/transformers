@@ -1001,7 +1001,6 @@ class RTDetrDecoderLayer(nn.Module):
 @auto_docstring
 class RTDetrPreTrainedModel(PreTrainedModel):
     config: RTDetrConfig
-    config_class = RTDetrConfig
     base_model_prefix = "rt_detr"
     main_input_name = "pixel_values"
     _no_split_modules = [r"RTDetrHybridEncoder", r"RTDetrDecoderLayer"]

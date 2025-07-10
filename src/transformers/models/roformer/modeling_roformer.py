@@ -756,7 +756,6 @@ class RoFormerOnlyMLMHead(nn.Module):
 @auto_docstring
 class RoFormerPreTrainedModel(PreTrainedModel):
     config: RoFormerConfig
-    config_class = RoFormerConfig
     load_tf_weights = load_tf_weights_in_roformer
     base_model_prefix = "roformer"
     supports_gradient_checkpointing = True

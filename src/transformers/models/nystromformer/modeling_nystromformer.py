@@ -438,7 +438,6 @@ class NystromformerOnlyMLMHead(nn.Module):
 @auto_docstring
 class NystromformerPreTrainedModel(PreTrainedModel):
     config: NystromformerConfig
-    config_class = NystromformerConfig
     base_model_prefix = "nystromformer"
     supports_gradient_checkpointing = True
 

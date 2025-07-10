@@ -708,7 +708,6 @@ class QDQBertPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = QDQBertConfig
     load_tf_weights = load_tf_weights_in_qdqbert
     base_model_prefix = "bert"
     supports_gradient_checkpointing = True

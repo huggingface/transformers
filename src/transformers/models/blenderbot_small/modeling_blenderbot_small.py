@@ -449,7 +449,6 @@ class BlenderbotSmallDecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class BlenderbotSmallPreTrainedModel(PreTrainedModel):
     config: BlenderbotSmallConfig
-    config_class = BlenderbotSmallConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True

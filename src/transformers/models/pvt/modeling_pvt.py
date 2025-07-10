@@ -443,7 +443,6 @@ class PvtEncoder(nn.Module):
 @auto_docstring
 class PvtPreTrainedModel(PreTrainedModel):
     config: PvtConfig
-    config_class = PvtConfig
     base_model_prefix = "pvt"
     main_input_name = "pixel_values"
     _no_split_modules = []

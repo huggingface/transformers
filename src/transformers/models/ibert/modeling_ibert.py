@@ -627,7 +627,6 @@ class IBertPooler(nn.Module):
 @auto_docstring
 class IBertPreTrainedModel(PreTrainedModel):
     config: IBertConfig
-    config_class = IBertConfig
     base_model_prefix = "ibert"
 
     def _init_weights(self, module):

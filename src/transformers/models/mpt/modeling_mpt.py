@@ -228,7 +228,6 @@ class MptBlock(GradientCheckpointingLayer):
 @auto_docstring
 class MptPreTrainedModel(PreTrainedModel):
     config: MptConfig
-    config_class = MptConfig
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MptBlock"]

@@ -308,7 +308,6 @@ class HeliumDecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class HeliumPreTrainedModel(PreTrainedModel):
     config: HeliumConfig
-    config_class = HeliumConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["HeliumDecoderLayer"]

@@ -702,7 +702,6 @@ class OlmoeDecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class OlmoePreTrainedModel(PreTrainedModel):
     config: OlmoeConfig
-    config_class = OlmoeConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["OlmoeDecoderLayer"]

@@ -1568,7 +1568,6 @@ class BigBirdPegasusClassificationHead(nn.Module):
 @auto_docstring
 class BigBirdPegasusPreTrainedModel(PreTrainedModel):
     config: BigBirdPegasusConfig
-    config_class = BigBirdPegasusConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["BigBirdPegasusEncoderLayer", "BigBirdPegasusDecoderLayer"]

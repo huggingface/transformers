@@ -420,7 +420,6 @@ class LightGluePreTrainedModel(PreTrainedModel):
     """
 
     config: LightGlueConfig
-    config_class = LightGlueConfig
     base_model_prefix = "lightglue"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False

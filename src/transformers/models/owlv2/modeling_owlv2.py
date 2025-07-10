@@ -556,7 +556,6 @@ class Owlv2EncoderLayer(GradientCheckpointingLayer):
 # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTPreTrainedModel with OwlViT->Owlv2,owlvit->owlv2
 class Owlv2PreTrainedModel(PreTrainedModel):
     config: Owlv2Config
-    config_class = Owlv2Config
     base_model_prefix = "owlv2"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Owlv2EncoderLayer"]
@@ -763,7 +762,6 @@ class Owlv2TextTransformer(nn.Module):
 # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTTextModel with google/owlvit-base-patch32->google/owlv2-base-patch16, OWLVIT->OWLV2,OwlViT->Owlv2
 class Owlv2TextModel(Owlv2PreTrainedModel):
     config: Owlv2TextConfig
-    config_class = Owlv2TextConfig
 
     def __init__(self, config: Owlv2TextConfig):
         super().__init__(config)
@@ -875,7 +873,6 @@ class Owlv2VisionTransformer(nn.Module):
 # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTVisionModel with OWLVIT->OWLV2,OwlViT->Owlv2,google/owlvit-base-patch32->google/owlv2-base-patch16
 class Owlv2VisionModel(Owlv2PreTrainedModel):
     config: Owlv2VisionConfig
-    config_class = Owlv2VisionConfig
     main_input_name = "pixel_values"
 
     def __init__(self, config: Owlv2VisionConfig):
@@ -927,7 +924,6 @@ class Owlv2VisionModel(Owlv2PreTrainedModel):
 # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTModel with google/owlvit-base-patch32->google/owlv2-base-patch16-ensemble, OWLVIT->OWLV2,OwlViT->Owlv2,owlvit->owlv2,OWL-ViT->OWLv2
 class Owlv2Model(Owlv2PreTrainedModel):
     config: Owlv2Config
-    config_class = Owlv2Config
 
     def __init__(self, config: Owlv2Config):
         super().__init__(config)
@@ -1213,7 +1209,6 @@ class Owlv2ClassPredictionHead(nn.Module):
 
 class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
     config: Owlv2Config
-    config_class = Owlv2Config
 
     def __init__(self, config: Owlv2Config):
         super().__init__(config)

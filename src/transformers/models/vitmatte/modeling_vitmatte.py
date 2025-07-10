@@ -53,7 +53,6 @@ class ImageMattingOutput(ModelOutput):
 @auto_docstring
 class VitMattePreTrainedModel(PreTrainedModel):
     config: VitMatteConfig
-    config_class = VitMatteConfig
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = []

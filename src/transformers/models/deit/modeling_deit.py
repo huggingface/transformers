@@ -437,7 +437,6 @@ class DeiTEncoder(nn.Module):
 @auto_docstring
 class DeiTPreTrainedModel(PreTrainedModel):
     config: DeiTConfig
-    config_class = DeiTConfig
     base_model_prefix = "deit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

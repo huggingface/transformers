@@ -523,7 +523,6 @@ class CpmAntOutput(nn.Module):
 @auto_docstring
 class CpmAntPreTrainedModel(PreTrainedModel):
     config: CpmAntConfig
-    config_class = CpmAntConfig
     base_model_prefix = "cpmant"
 
     def _init_weights(self, module):

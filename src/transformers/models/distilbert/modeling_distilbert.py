@@ -572,7 +572,6 @@ class Transformer(nn.Module):
 @auto_docstring
 class DistilBertPreTrainedModel(PreTrainedModel):
     config: DistilBertConfig
-    config_class = DistilBertConfig
     load_tf_weights = None
     base_model_prefix = "distilbert"
     supports_gradient_checkpointing = True

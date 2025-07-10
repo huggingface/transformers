@@ -1350,7 +1350,6 @@ class SeamlessM4TDecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class SeamlessM4TPreTrainedModel(PreTrainedModel):
     config: SeamlessM4TConfig
-    config_class = SeamlessM4TConfig
     base_model_prefix = "seamless_m4t"
     supports_gradient_checkpointing = True
     _no_split_modules = ["SeamlessM4TEncoderLayer", "SeamlessM4TDecoderLayer", "SeamlessM4TConformerEncoderLayer"]
@@ -2314,7 +2313,6 @@ class SeamlessM4THifiGan(nn.Module):
 )
 class SeamlessM4TCodeHifiGan(PreTrainedModel):
     config: SeamlessM4TConfig
-    config_class = SeamlessM4TConfig
     main_input_name = "input_embeds"
     _no_split_modules = []
 

@@ -1032,7 +1032,6 @@ class Wav2Vec2AttnAdapterLayer(nn.Module):
 @auto_docstring
 class Wav2Vec2PreTrainedModel(PreTrainedModel):
     config: Wav2Vec2Config
-    config_class = Wav2Vec2Config
     base_model_prefix = "wav2vec2"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True

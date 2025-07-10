@@ -572,7 +572,6 @@ class MobileViTV2Encoder(nn.Module):
 # Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTPreTrainedModel with MobileViT->MobileViTV2,mobilevit->mobilevitv2
 class MobileViTV2PreTrainedModel(PreTrainedModel):
     config: MobileViTV2Config
-    config_class = MobileViTV2Config
     base_model_prefix = "mobilevitv2"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

@@ -923,7 +923,6 @@ class Emu3VQVAEDecoder(nn.Module):
 )
 class Emu3VQVAE(PreTrainedModel):
     config: Emu3VQVAEConfig
-    config_class = Emu3VQVAEConfig
     base_model_prefix = "emuvideovq"
     main_input_name = "pixel_values"
     _supports_sdpa = True
@@ -1090,7 +1089,6 @@ class Emu3ImageVocabularyMapping:
 @auto_docstring
 class Emu3PreTrainedModel(PreTrainedModel):
     config: Emu3Config
-    config_class = Emu3Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = [
@@ -1250,7 +1248,6 @@ class Emu3ForCausalLM(Emu3PreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     config: Emu3TextConfig
-    config_class = Emu3TextConfig
 
     def __init__(self, config):
         super().__init__(config)

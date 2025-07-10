@@ -805,7 +805,6 @@ class MoshiDecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class MoshiPreTrainedModel(PreTrainedModel):
     config: MoshiConfig
-    config_class = MoshiConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MoshiDecoderLayer", "MimiTransformerLayer"]
@@ -840,7 +839,6 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
     """
 
     config: MoshiDepthConfig
-    config_class = MoshiDepthConfig
 
     def __init__(self, config: MoshiDepthConfig):
         super().__init__(config)
@@ -1657,7 +1655,6 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
 class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["decoder.model.embed_tokens.weight", "decoder.lm_head.weight"]
     config: MoshiConfig
-    config_class = MoshiConfig
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True

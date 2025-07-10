@@ -41,7 +41,6 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
     config: TimmBackboneConfig
-    config_class = TimmBackboneConfig
 
     def __init__(self, config, **kwargs):
         requires_backends(self, "timm")

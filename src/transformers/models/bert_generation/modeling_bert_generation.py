@@ -569,7 +569,6 @@ class BertGenerationEmbeddings(nn.Module):
 @auto_docstring
 class BertGenerationPreTrainedModel(PreTrainedModel):
     config: BertGenerationConfig
-    config_class = BertGenerationConfig
     base_model_prefix = "bert"
     supports_gradient_checkpointing = True
 

@@ -483,7 +483,6 @@ class GPTJBlock(GradientCheckpointingLayer):
 @auto_docstring
 class GPTJPreTrainedModel(PreTrainedModel):
     config: GPTJConfig
-    config_class = GPTJConfig
     base_model_prefix = "transformer"
     is_parallelizable = True
     supports_gradient_checkpointing = True

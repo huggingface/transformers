@@ -487,7 +487,6 @@ class DogeDecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class DogePreTrainedModel(PreTrainedModel):
     config: DogeConfig
-    config_class = DogeConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["DogeDecoderLayer"]
