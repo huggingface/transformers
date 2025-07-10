@@ -598,7 +598,7 @@ class Florence2VisionProjector(nn.Module):
         super().__init__()
         self.vision_embedding_dim = config.embed_dim[-1]
         self.vision_projection_dim = config.projection_dim
-        self.image_projection = nn.Linear(self.vision_embedding_dim, self.vision_projection_dim, bias=False)
+        self.image_projection = nn.Linear(self.vision_projection_dim, self.vision_embedding_dim, bias=False)
         self.image_proj_norm = nn.LayerNorm(self.vision_projection_dim)
         self.image_position_embed = Florence2VisionLearnedAbsolutePositionEmbedding2D(
             embedding_dim=self.vision_embedding_dim, num_pos=config.max_position_embeddings
