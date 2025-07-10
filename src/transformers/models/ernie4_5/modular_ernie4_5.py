@@ -126,6 +126,6 @@ class Ernie4_5ForCausalLM(LlamaForCausalLM):
 
 __all__ = [
     "Ernie4_5ForCausalLM",
-    "Ernie4_5Model",            # noqa: F822
+    "Ernie4_5Model",  # noqa: F822
     "Ernie4_5PreTrainedModel",  # noqa: F822
 ]
