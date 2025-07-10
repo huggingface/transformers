@@ -133,7 +133,11 @@ def create_generation_config_from_req(
     else:
         generation_config = copy.deepcopy(model_generation_config)
 
-    generation_config.update(**kwargs)
+    non_standard_kwargs = generation_config.update(**kwargs)
+    # Set extra kwargs that are not in the `GenerationConfig` class (e.g. continuous batching flags)
+    for k, v in non_standard_kwargs.items():
+        if v is not None:
+            setattr(generation_config, k, v)
 
     if req.frequency_penalty is not None:
         generation_config.repetition_penalty = float(req.frequency_penalty)
@@ -418,6 +422,10 @@ class ServeCommand(BaseTransformersCLICommand):
                     )
                     queue_is_flushed = False
 
+                    # Emit the assistant role to start the stream. Other chunks won't have a role, as it is implicit
+                    # they come from the assistant.
+                    yield self.build_chunk(request_id, role="assistant")
+
                     for result in self.running_continuous_batching_manager:
                         if result.request_id != request_id:
                             continue
@@ -429,14 +437,12 @@ class ServeCommand(BaseTransformersCLICommand):
                                 queue_is_flushed = True
 
                         finish_reason = "stop" if result.status == RequestStatus.FINISHED else None
-                        yield self.build_chunk(
-                            request_id=request_id, content=result.next_token, finish_reason=finish_reason
-                        )
-
                         if result.status == RequestStatus.FINISHED:
+                            yield self.build_chunk(request_id, finish_reason=finish_reason)
                             break
+                        else:
+                            yield self.build_chunk(request_id=request_id, content=result.next_token)
 
-                    yield "data: [DONE]\n\n"
                 except Exception as e:
                     logger.error(str(e))
                     yield f'data: {{"error": "{str(e)}"}}'
