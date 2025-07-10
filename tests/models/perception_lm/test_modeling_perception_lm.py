@@ -343,7 +343,7 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
     def test_flash_attn_2_from_config(self):
         pass
 
-    @unittest.skip("Flash attn test is not configured correctly as we need to configure vision/timm model to 'eager'.")
+    @unittest.skip("SDPA test is not configured correctly as we need to configure vision/timm model to 'eager'.")
     def test_eager_matches_sdpa_generate_with_dynamic_cache(self):
         pass
 
@@ -351,12 +351,16 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
-    @unittest.skip("Flash attn test is not configured correctly as we need to configure vision/timm model to 'eager'.")
+    @unittest.skip("SDPA test is not configured correctly as we need to configure vision/timm model to 'eager'.")
     def test_eager_matches_sdpa_generate(self):
         pass
 
     @unittest.skip("Flash attn test is not configured correctly as we need to configure vision/timm model to 'eager'.")
     def test_flash_attn_2_inference_equivalence(self):
+        pass
+
+    @unittest.skip("PerceptionLMForConditionalGeneration does not have language_model, vision_tower, multi_modal_projector.")
+    def test_sdpa_can_dispatch_composite_models(self):
         pass
 
 
