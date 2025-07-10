@@ -807,7 +807,7 @@ class AlignTextLayer(GradientCheckpointingLayer):
 
 
 class AlignTextEncoder(nn.Module):
-    def __init__(self, config, layer_idx=None):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([AlignTextLayer(config) for i in range(config.num_hidden_layers)])

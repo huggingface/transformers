@@ -521,7 +521,7 @@ class MarkupLMLayer(GradientCheckpointingLayer):
 
 # Copied from transformers.models.align.modeling_align.AlignTextEncoder with AlignText->MarkupLM
 class MarkupLMEncoder(nn.Module):
-    def __init__(self, config, layer_idx=None):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([MarkupLMLayer(config) for i in range(config.num_hidden_layers)])

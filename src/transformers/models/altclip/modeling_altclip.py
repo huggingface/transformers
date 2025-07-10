@@ -181,7 +181,7 @@ class AltRobertaEmbeddings(nn.Module):
 
 
 class AltRobertaSelfAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None, layer_idx=None):
+    def __init__(self, config, position_embedding_type=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -293,13 +293,9 @@ ALT_ROBERTA_SELF_ATTENTION_CLASSES = {
 
 
 class AltRobertaAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None, layer_idx=None):
+    def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = ALT_ROBERTA_SELF_ATTENTION_CLASSES[config._attn_implementation](
-            config,
-            position_embedding_type=position_embedding_type,
-            layer_idx=layer_idx,
-        )
+        self.self = ALT_ROBERTA_SELF_ATTENTION_CLASSES[config._attn_implementation](config, position_embedding_type=position_embedding_type)
         self.output = AltRobertaSelfOutput(config)
         self.pruned_heads = set()
 
@@ -425,7 +421,7 @@ class AltRobertaLayer(GradientCheckpointingLayer):
 
 # Copied from transformers.models.align.modeling_align.AlignTextEncoder with AlignText->AltRoberta
 class AltRobertaEncoder(nn.Module):
-    def __init__(self, config, layer_idx=None):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([AltRobertaLayer(config) for i in range(config.num_hidden_layers)])
