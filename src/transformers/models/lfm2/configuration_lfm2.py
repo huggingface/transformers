@@ -28,18 +28,18 @@ class Lfm2Config(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 32000):
+        vocab_size (`int`, *optional*, defaults to 65536):
             Vocabulary size of the LLaMA model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`Lfm2Model`]
-        hidden_size (`int`, *optional*, defaults to 4096):
+        hidden_size (`int`, *optional*, defaults to 2560):
             Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 11008):
+        intermediate_size (`int`, *optional*, defaults to 12288):
             Dimension of the MLP representations.
         num_hidden_layers (`int`, *optional*, defaults to 32):
             Number of hidden layers in the Transformer decoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`int`, *optional*):
+        num_key_value_heads (`int`, *optional*, defaults to 8):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
@@ -47,17 +47,17 @@ class Lfm2Config(PretrainedConfig):
             by meanpooling all the original heads within that group. For more details, check out [this
             paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
             `num_attention_heads`.
-        max_position_embeddings (`int`, *optional*, defaults to 2048):
+        max_position_embeddings (`int`, *optional*, defaults to 128000):
             The maximum sequence length that this model might ever be used with. Lfm2 1 supports up to 2048 tokens,
             Lfm2 2 up to 4096, CodeLfm2 up to 16384.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
+        norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        pad_token_id (`int`, *optional*):
+        pad_token_id (`int`, *optional*, defaults to 0):
             Padding token id.
         bos_token_id (`int`, *optional*, defaults to 1):
             Beginning of stream token id.
@@ -65,8 +65,22 @@ class Lfm2Config(PretrainedConfig):
             End of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 10000.0):
+        rope_theta (`float`, *optional*, defaults to 1000000.0):
             The base period of the RoPE embeddings.
+        conv_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use bias in the conv layers.
+        conv_L_cache (`int`, *optional*, defaults to 3):
+            L_cache dim in the conv layers.
+        block_multiple_of (`int`, *optional*, defaults to 256):
+            Multiple for the `intermediate_size`.
+        block_ffn_dim_multiplier (`float`, *optional*, defaults to 1.0):
+            Multiplier for the `intermediate_size`.
+        block_auto_adjust_ff_dim (`bool`, *optional*, defaults to `True`):
+            Whether to adjust the dim of the `intermediate_size`.
+        full_attn_idxs (`Optional`, *optional*):
+            Index of the layers which use attention.
+        layer_types (`Optional`, *optional*):
+            Type of each layers.
 
     ```python
     >>> from transformers import Lfm2Model, Lfm2Config
