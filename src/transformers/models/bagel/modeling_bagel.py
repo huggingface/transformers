@@ -404,6 +404,40 @@ class BagelTextRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
+class BagelTextRotaryEmbedding(nn.Module):
+    def __init__(self, config, device=None):
+        super().__init__()
+        # BC: "rope_type" was originally "type"
+        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
+            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+        else:
+            self.rope_type = "default"
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = self.inv_freq
+
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
 class BagelTextMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -534,13 +568,44 @@ class BagelTextAttention(nn.Module):
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
-        query_states = self.q_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = (
-            self.k_proj(hidden_states).view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        )
-        value_states = (
-            self.v_proj(hidden_states).view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        )
+        if mode == "und":
+            query_states = self.q_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+            key_states = (
+                self.k_proj(hidden_states).view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+            )
+            value_states = (
+                self.v_proj(hidden_states).view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+            )
+            query_states = self.q_norm(query_states)
+            key_states = self.k_norm(key_states)
+        elif mode == "gen":
+            # Lets assume indices are there.
+            text_indices = vae_indices = [1, 2]
+            query_states = hidden_states.new_zeros((hidden_states.shape[0], self.num_heads * self.head_dim))
+            key_states = hidden_states.new_zeros((hidden_states.shape[0], self.num_key_value_heads * self.head_dim))
+            value_states = hidden_states.new_zeros((hidden_states.shape[0], self.num_key_value_heads * self.head_dim))
+
+            text_query_sequence = hidden_states(text_indices)
+            vae_query_sequence = hidden_states[vae_indices]
+
+            query_states[text_indices] = self.q_proj(text_query_sequence)
+            query_states[vae_indices] = self.q_proj_generation(vae_query_sequence)
+
+            key_states[text_indices] = self.k_proj(text_query_sequence)
+            key_states[vae_indices] = self.k_proj_generation(vae_query_sequence)
+
+            value_states[text_indices] = self.v_proj(text_query_sequence)
+            value_states[vae_indices] = self.v_proj_generation(vae_query_sequence)
+
+            query_states = query_states.view(-1, self.num_heads, self.head_dim)
+            key_states = key_states.view(-1, self.num_key_value_heads, self.head_dim)
+            value_states = value_states.view(-1, self.num_key_value_heads, self.head_dim)
+
+            query_states[text_indices] = self.q_norm(query_states[text_indices])
+            query_states[vae_indices] = self.q_norm_generation(query_states[vae_indices])
+
+            key_states[text_indices] = self.k_norm(key_states[text_indices])
+            key_states[vae_indices] = self.k_norm_generation(key_states[vae_indices])
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -601,7 +666,13 @@ class BagelTextDecoderLayer(GradientCheckpointingLayer):
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
-        hidden_states = self.input_layernorm(hidden_states)
+
+        if mode == "und":
+            hidden_states = self.input_layernorm(hidden_states)
+        elif mode == "gen":
+            text_indices = vae_indices = [1, 2]
+            hidden_states[text_indices] = self.input_layernorm(hidden_states[text_indices])
+            hidden_states[vae_indices] = self.input_layernorm_generation(hidden_states[vae_indices])
 
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
@@ -619,8 +690,21 @@ class BagelTextDecoderLayer(GradientCheckpointingLayer):
 
         # Fully Connected
         residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
+
+        if mode == "und":
+            hidden_states = self.post_attention_layernorm(hidden_states)
+            hidden_states = self.mlp(hidden_states)
+        else:
+            text_query_sequence = hidden_states[text_indices]
+            vae_query_sequence = hidden_states[vae_indices]
+            text_query_sequence = self.post_attention_layernorm(text_query_sequence)
+            vae_query_sequence = self.post_attention_layernorm_generation(vae_query_sequence)
+
+            packed_query_sequence_ = torch.zeros_like(hidden_states)
+            packed_query_sequence_[text_indices] = self.mlp(text_query_sequence)
+            packed_query_sequence_[vae_indices] = self.mlp_generation(vae_query_sequence)
+            hidden_states = packed_query_sequence_
+
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
@@ -628,40 +712,6 @@ class BagelTextDecoderLayer(GradientCheckpointingLayer):
             outputs += (self_attn_weights,)
 
         return outputs
-
-
-class BagelTextRotaryEmbedding(nn.Module):
-    def __init__(self, config, device=None):
-        super().__init__()
-        # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 @auto_docstring
@@ -775,7 +825,15 @@ class BagelTextModel(BagelPreTrainedModel):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
-        hidden_states = self.norm(hidden_states)
+        if mode == "und":
+            hidden_states = self.norm(hidden_states)
+
+        else:
+            text_indices = vae_indices = [1, 2]
+            hidden_states_ = torch.zeros_like(hidden_states)
+            hidden_states_[text_indices] = self.norm(hidden_states[text_indices])
+            hidden_states_[vae_indices] = self.norm_generation(hidden_states[vae_indices])
+            hidden_states = hidden_states_
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
@@ -1296,9 +1354,8 @@ class BagelModel(BagelPreTrainedModel):
         if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values=pixel_values)
             # boi+image_tokens+eoi+bos+text_tokens+eos
-            print("image and text embeds shape:", image_embeds.shape, inputs_embeds.shape)
             inputs_embeds = torch.cat([inputs_embeds, image_embeds], dim=1)
-            print("final_inputs_embeds shape:", inputs_embeds.shape)
+            # Correctly place the image embeds once proc is ready.
 
         outputs = self.language_model(
             inputs_embeds=inputs_embeds,
@@ -1307,6 +1364,7 @@ class BagelModel(BagelPreTrainedModel):
             past_key_values=past_key_values,
             use_cache=use_cache,
             cache_position=cache_position,
+            mode="und",
             **kwargs,
         )
         return outputs

@@ -39,7 +39,6 @@ from transformers.models.janus.processing_janus import JanusProcessor
 MAPPINGS = {
     # Vision model
     r"vit_model.vision_model": r"model.vision_tower",
-
     # Connector and time embedder
     r"connector.fc1": r"model.vision_connecter.fc1",
     r"connector.fc2": r"model.vision_connecter.fc2",
@@ -49,7 +48,6 @@ MAPPINGS = {
     r"llm2vae": r"model.llm2vae_connector",
     r"latent_pos_embed.pos_embed": r"model.latent_pos_embed",
     r"vit_pos_embed.pos_embed": r"model.vit_pos_embed",
-
     # Language model
     r"language_model.lm_head": r"lm_head",
     r"language_model.model.embed_tokens": r"model.language_model.embed_tokens",
