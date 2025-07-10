@@ -314,11 +314,7 @@ extras["hub-kernels"] = deps_list("kernels")
 
 extras["integrations"] = extras["hub-kernels"] + extras["optuna"] + extras["ray"] + extras["sigopt"]
 
-<<<<<<< HEAD
-extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette") + extras["torch"]
-=======
-extras["serving"] = deps_list("openai", "pydantic", "uvicorn", "fastapi", "starlette")
->>>>>>> 5bda2a085c (use openai)
+extras["serving"] = deps_list("openai", "pydantic", "uvicorn", "fastapi", "starlette") + extras["torch"]
 extras["audio"] = deps_list(
     "librosa",
     "pyctcdecode",

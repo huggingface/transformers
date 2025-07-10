@@ -11,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+import copy
 import functools
 import json
 import re
@@ -51,6 +53,7 @@ if is_pydantic_available() and is_fastapi_available() and is_uvicorn_available()
     from fastapi import FastAPI, HTTPException
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import JSONResponse, StreamingResponse
+    from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall, ChoiceDeltaToolCallFunction
     from openai.types.chat.completion_create_params import CompletionCreateParamsStreaming
     from openai.types.responses import (
         Response,
@@ -158,7 +161,7 @@ def serve_command_factory(args: Namespace):
 def create_generation_config_from_req(
     req: Union[TransformersCompletionCreateParamsStreaming, TransformersResponseCreateParamsStreaming],
     model_generation_config: "GenerationConfig",
-    **kwargs
+    **kwargs,
 ) -> "GenerationConfig":
     """
     Creates a generation config from the parameters of the request. If a generation config is passed in the request,
@@ -650,11 +653,8 @@ class ServeCommand(BaseTransformersCLICommand):
                                 else:
                                     tool_name = tool_name.group(1)
                                 tool_state.has_tool_name_defined = True
-                                tool = ChatCompletionStreamOutputDeltaToolCall(
-                                    function=ChatCompletionStreamOutputFunction(
-                                        name=tool_name,
-                                        arguments=None,
-                                    ),
+                                tool = ChoiceDeltaToolCall(
+                                    function=ChoiceDeltaToolCallFunction(name=tool_name),
                                     index=0,
                                     type="function",
                                     id=_request_id + "_tool_call",  # Only the first tool call delta has an id
@@ -678,13 +678,10 @@ class ServeCommand(BaseTransformersCLICommand):
                                 if tool_state.arg_nesting_level < 0:
                                     result = "".join(result.split("}")[:-2]) + "}"  # e.g. "4}}\n" -> "4}"
 
-                                tool = ChatCompletionStreamOutputDeltaToolCall(
-                                    function=ChatCompletionStreamOutputFunction(
-                                        arguments=result,
-                                    ),
+                                tool = ChoiceDeltaToolCall(
+                                    function=ChoiceDeltaToolCallFunction(arguments=result),
                                     index=0,
                                     type="function",
-                                    id=None,
                                 )
 
                             yield self.build_chat_completions_chunk(

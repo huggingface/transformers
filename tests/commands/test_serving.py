@@ -55,7 +55,7 @@ class ServeCLITest(unittest.TestCase):
         dummy.args = type("Args", (), {})()
 
         # Case 1: most fields are provided
-        chunk = ServeCommand.build_chunk(dummy, request_id="req0", content="hello", finish_reason="stop", role="user")
+        chunk = ServeCommand.build_chat_completions_chunk(dummy, request_id="req0", content="hello", finish_reason="stop", role="user")
         self.assertIn("chat.completion.chunk", chunk)
         self.assertIn("data:", chunk)
         self.assertIn(
@@ -63,19 +63,19 @@ class ServeCLITest(unittest.TestCase):
         )
 
         # Case 2: only the role is provided -- other fields in 'choices' are omitted
-        chunk = ServeCommand.build_chunk(dummy, request_id="req0", role="user")
+        chunk = ServeCommand.build_chat_completions_chunk(dummy, request_id="req0", role="user")
         self.assertIn("chat.completion.chunk", chunk)
         self.assertIn("data:", chunk)
         self.assertIn('"choices": [{"delta": {"role": "user"}, "index": 0}]', chunk)
 
         # Case 3: only the content is provided -- other fields in 'choices' are omitted
-        chunk = ServeCommand.build_chunk(dummy, request_id="req0", content="hello")
+        chunk = ServeCommand.build_chat_completions_chunk(dummy, request_id="req0", content="hello")
         self.assertIn("chat.completion.chunk", chunk)
         self.assertIn("data:", chunk)
         self.assertIn('"choices": [{"delta": {"content": "hello"}, "index": 0}]', chunk)
 
         # Case 4: tool calls support a list of nested dictionaries
-        chunk = ServeCommand.build_chunk(dummy, request_id="req0", tool_calls=[{"foo1": "bar1", "foo2": "bar2"}])
+        chunk = ServeCommand.build_chat_completions_chunk(dummy, request_id="req0", tool_calls=[{"foo1": "bar1", "foo2": "bar2"}])
         self.assertIn("chat.completion.chunk", chunk)
         self.assertIn("data:", chunk)
         self.assertIn('"choices": [{"delta": {"tool_calls": [{"foo1": "bar1", "foo2": "bar2"}]}, "index": 0}]', chunk)
