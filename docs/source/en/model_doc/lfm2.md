@@ -68,3 +68,17 @@ output = model.generate(
 
 print(tokenizer.decode(output[0], skip_special_tokens=False))
 ```
+
+## Lfm2Config
+
+[[autodoc]] Lfm2Config
+
+## Lfm2Model
+
+[[autodoc]] Lfm2Model
+    - forward
+
+## Lfm2ForCausalLM
+
+[[autodoc]] Lfm2ForCausalLM
+    - forward
