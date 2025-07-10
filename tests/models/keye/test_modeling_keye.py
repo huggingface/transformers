@@ -243,4 +243,3 @@ class KeyeIntegrationTest(unittest.TestCase):
             self.processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
-
