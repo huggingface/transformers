@@ -27,22 +27,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint
 
-from transformers.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig, Qwen2VLTextConfig
-from transformers.models.qwen2_vl.modeling_qwen2_vl import (
-    PatchEmbed,
-    PatchMerger,
-    Qwen2RMSNorm,
-    Qwen2VLCausalLMOutputWithPast,
-    Qwen2VLForConditionalGeneration,
-    Qwen2VLModel,
-    Qwen2VLModelOutputWithPast,
-    Qwen2VLPreTrainedModel,
-    TransformersKwargs,
-    VisionAttention,
-    VisionRotaryEmbedding,
-)
-from transformers.models.qwen2_vl.processing_qwen2_vl import Qwen2VLImagesKwargs, Qwen2VLProcessor
-
 from ...activations import ACT2FN
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
@@ -51,8 +35,22 @@ from ...modeling_flash_attention_utils import is_flash_attn_available
 from ...modeling_layers import GradientCheckpointingLayer
 from ...processing_utils import MultiModalData, ProcessingKwargs, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_torchdynamo_compiling, logging
+from ...utils import TransformersKwargs, is_torchdynamo_compiling, logging
 from ...video_utils import VideoInput
+from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig, Qwen2VLTextConfig
+from ..qwen2_vl.modeling_qwen2_vl import (
+    PatchEmbed,
+    PatchMerger,
+    Qwen2RMSNorm,
+    Qwen2VLCausalLMOutputWithPast,
+    Qwen2VLForConditionalGeneration,
+    Qwen2VLModel,
+    Qwen2VLModelOutputWithPast,
+    Qwen2VLPreTrainedModel,
+    VisionAttention,
+    VisionRotaryEmbedding,
+)
+from ..qwen2_vl.processing_qwen2_vl import Qwen2VLImagesKwargs, Qwen2VLProcessor
 
 
 if is_flash_attn_available():

@@ -19,27 +19,25 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
-from transformers.models.llava.modeling_llava import (
+from ...configuration_utils import PretrainedConfig
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ..auto import CONFIG_MAPPING, AutoConfig
+from ..llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
     LlavaModel,
     LlavaModelOutputWithPast,
     LlavaPreTrainedModel,
-    TransformersKwargs,
 )
-from transformers.models.sam.modeling_sam import (
+from ..sam.modeling_sam import (
     SamMLPBlock,
     SamPreTrainedModel,
     SamVisionAttention,
     SamVisionEncoder,
     SamVisionLayer,
 )
-
-from ...configuration_utils import PretrainedConfig
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, logging
-from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)

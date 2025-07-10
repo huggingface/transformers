@@ -57,6 +57,7 @@ from transformers.utils.args_doc import (
     parse_docstring,
     set_min_indent,
 )
+from transformers.utils.import_utils import _LazyModule, fetch__all__
 
 
 PATH_TO_REPO = Path(__file__).parent.parent.resolve()
@@ -1030,6 +1031,8 @@ def find_matching_model_files(check_all: bool = False):
     potential_files = glob.glob(modeling_glob_pattern)
     image_processing_glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**/image_processing_*_fast.py")
     potential_files += glob.glob(image_processing_glob_pattern)
+    modular_glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**/modular_**")
+    potential_files += glob.glob(modular_glob_pattern)
     exclude_substrings = ["modeling_tf_", "modeling_flax_"]
     matching_files = []
     for file_path in potential_files:
@@ -1483,6 +1486,38 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
                 print(warning)
 
 
+def lazily_import_modular_public_objects():
+    """
+    Return lazily imported modular public classes (to avoid importing dependencies such as torch, torchvision etc...).
+    Doing it this way alllows to easily check the `__doc__` attribute of the imported classes.
+    """
+    modular_glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**/modular_**")
+    modular_files = glob.glob(modular_glob_pattern)
+
+    all_modular_public_classses = []
+    for file in modular_files:
+        with open(file, encoding="utf-8") as f:
+            file_content = f.read()
+        module_name = re.search(rf"(models{os.sep}.*)\.py", file).group(1).replace(os.sep, ".")
+
+        # They may be in __all__, but not in the modular itself (if they are implicitly inherited)
+        public_classes = [
+            obj
+            for obj in fetch__all__(file_content)
+            if f"class {obj}" in file_content and obj not in OBJECTS_TO_IGNORE
+        ]
+
+        # Lazily import them (to avoid importing dependencies such as torch etc)
+        requirements = frozenset({"torch", "vision", "torch", "torchvision"})
+        import_structure = {requirements: {module_name: set(public_classes)}}
+        lazy_module = _LazyModule("transformers", file, import_structure)
+        public_class_objects = [getattr(lazy_module, public_class) for public_class in public_classes]
+
+        all_modular_public_classses.extend(public_class_objects)
+
+    return all_modular_public_classses
+
+
 def check_docstrings(overwrite: bool = False, check_all: bool = False):
     """
     Check docstrings of all public objects that are callables and are documented. By default, only checks the diff.
@@ -1510,21 +1545,24 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
             return
         print("    Checking docstrings in the following files:" + "\n    - " + "\n    - ".join(module_diff_files))
 
+    # Skip objects that are private or not documented.
+    all_main_objects = [
+        getattr(transformers, name)
+        for name in dir(transformers)
+        if not (name.startswith("_") or ignore_undocumented(name) or name in OBJECTS_TO_IGNORE)
+    ]
+
     failures = []
     hard_failures = []
     to_clean = []
-    for name in dir(transformers):
-        # Skip objects that are private or not documented.
-        if name.startswith("_") or ignore_undocumented(name) or name in OBJECTS_TO_IGNORE:
-            continue
-
-        obj = getattr(transformers, name)
+    all_objects = all_main_objects + lazily_import_modular_public_objects()
+    for obj in all_objects:
         if not callable(obj) or not isinstance(obj, type) or getattr(obj, "__doc__", None) is None:
             continue
 
         # If we are checking against the diff, we skip objects that are not part of the diff.
         if module_diff_files is not None:
-            object_file = find_source_file(getattr(transformers, name))
+            object_file = find_source_file(obj)
             object_file_relative_path = "src/" + str(object_file).split("/src/")[1]
             if object_file_relative_path not in module_diff_files:
                 continue
@@ -1538,15 +1576,15 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
                 old_doc, new_doc = None, None
         except Exception as e:
             print(e)
-            hard_failures.append(name)
+            hard_failures.append(obj.__name__)
             continue
         if old_doc != new_doc:
             if overwrite:
                 fix_docstring(obj, old_doc, new_doc)
             else:
-                failures.append(name)
+                failures.append(obj.__name__)
         elif not overwrite and new_doc is not None and ("<fill_type>" in new_doc or "<fill_docstring>" in new_doc):
-            to_clean.append(name)
+            to_clean.append(obj.__name__)
 
     # Deal with errors
     error_message = ""

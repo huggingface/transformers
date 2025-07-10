@@ -23,7 +23,6 @@ import torch.nn as nn
 from ...cache_utils import Cache
 from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationConfig, GenerationMixin
-from ...modeling_utils import PreTrainedModel
 from ...utils import PaddingStrategy, TensorType, logging
 from ..auto import AutoModel
 from ..encodec.feature_extraction_encodec import EncodecFeatureExtractor
@@ -43,17 +42,6 @@ class KyutaiSpeechToTextFeatureExtractor(EncodecFeatureExtractor):
     most of the main methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
-        feature_size (`int`, *optional*, defaults to 1):
-            The feature dimension of the extracted features. Use 1 for mono, 2 for stereo.
-        sampling_rate (`int`, *optional*, defaults to 24000):
-            The sampling rate at which the audio waveform should be digitalized expressed in hertz (Hz).
-        padding_value (`float`, *optional*, defaults to 0.0):
-            The value that is used to fill the padding values.
-        chunk_length_s (`float`, *optional*):
-            If defined the audio is pre-processed into chunks of lengths `chunk_length_s` and then encoded.
-        overlap (`float`, *optional*):
-            Defines the overlap between each chunk. It is used to compute the `chunk_stride` using the following
-            formulae : `int((1.0 - self.overlap) * self.chunk_length)`.
         audio_delay_seconds (`float`, *optional*, defaults to 0.0):
             The delay in seconds to add after the audio (right padding).
         audio_silence_prefix_seconds (`float`, *optional*, defaults to 0.0):
@@ -251,7 +239,7 @@ class KyutaiSpeechToTextModel(MoshiModel):
         self.embed_tokens = KyutaiSpeechToTextEmbeddings(config)
 
 
-class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMixin, PreTrainedModel):
+class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMixin):
     _keep_in_fp32_modules_strict = ["codec_model"]
 
     def __init__(self, config):
@@ -265,11 +253,6 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
 
     def forward(self, **super_kwargs):
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
@@ -442,9 +425,9 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         if kwargs.get("output_loading_info", False):
-            model, loading_info = PreTrainedModel.from_pretrained(*args, **kwargs)
+            model, loading_info = LlamaForCausalLM.from_pretrained(*args, **kwargs)
         else:
-            model = PreTrainedModel.from_pretrained(*args, **kwargs)
+            model = LlamaForCausalLM.from_pretrained(*args, **kwargs)
 
         # copy depth decoder generation conf attr to the depth decoder generation config
         prefix = "codec_"
@@ -474,7 +457,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
         for attr, value in codec_model_attrs.items():
             setattr(self.generation_config, prefix + attr, value)
 
-        PreTrainedModel.save_pretrained(self, *args, **kwargs)
+        LlamaForCausalLM.save_pretrained(self, *args, **kwargs)
 
     def generate(self, *args, **kwargs):
         r"""

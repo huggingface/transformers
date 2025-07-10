@@ -1,8 +1,6 @@
 import pathlib
 from typing import Optional, Union
 
-from transformers.models.detr.image_processing_detr_fast import DetrFastImageProcessorKwargs, DetrImageProcessorFast
-
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict, get_max_height_width
 from ...image_transforms import center_to_corners_format
@@ -26,6 +24,7 @@ from ...utils import (
     logging,
     requires_backends,
 )
+from ..detr.image_processing_detr_fast import DetrFastImageProcessorKwargs, DetrImageProcessorFast
 
 
 if is_torch_available():

@@ -40,7 +40,7 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     is_torch_flex_attn_available,
-    logger,
+    logging,
 )
 from ..bart.modeling_bart import (
     BartAttention,
@@ -53,6 +53,9 @@ from .configuration_biogpt import BioGptConfig
 
 if is_torch_flex_attn_available():
     from ...integrations.flex_attention import BlockMask, make_flex_block_causal_mask
+
+
+logger = logging.get_logger(__name__)
 
 
 class BioGptLearnedPositionalEmbedding(OPTLearnedPositionalEmbedding):
