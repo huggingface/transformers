@@ -277,24 +277,29 @@ class Glm4MoeTopkRouter(nn.Module):
 
 
 class Glm4MoeSparseMoeBlock(nn.Module):
+    """
+    A mixed expert module containing shared experts.
+    """
+
     def __init__(self, config):
         super().__init__()
-        self.top_k = config.num_experts_per_tok
-        self.norm_topk_prob = config.norm_topk_prob
-
-        # gating
-        self.gate = Glm4MoeTopkRouter(config)
+        self.config = config
         self.experts = nn.ModuleList(
             [
                 Glm4MoeMLP(config, intermediate_size=config.moe_intermediate_size)
                 for _ in range(config.n_routed_experts)
             ]
         )
+        self.gate = Glm4MoeTopkRouter(config)
         self.shared_experts = Glm4MoeMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
 
     def moe(self, hidden_states: torch.Tensor, topk_indices: torch.Tensor, topk_weights: torch.Tensor):
+        r"""
+        CALL FOR CONTRIBUTION! I don't have time to optimise this right now, but expert weights need to be fused
+        to not have to do a loop here (deepseek has 256 experts soooo yeah).
+        """
         final_hidden_states = torch.zeros_like(hidden_states, dtype=topk_weights.dtype)
         expert_mask = torch.nn.functional.one_hot(topk_indices, num_classes=len(self.experts))
         expert_mask = expert_mask.permute(2, 0, 1)
@@ -311,16 +316,18 @@ class Glm4MoeSparseMoeBlock(nn.Module):
                 weighted_output = expert_output * expert_weights.unsqueeze(-1)
                 final_hidden_states.index_add_(0, token_indices, weighted_output)
 
+        # in original deepseek, the output of the experts are gathered once we leave this module
+        # thus the moe module is itelsf an IsolatedParallel module
+        # and all expert are "local" meaning we shard but we don't gather
         return final_hidden_states.type(hidden_states.dtype)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states):
         residuals = hidden_states
         orig_shape = hidden_states.shape
         topk_indices, topk_weights = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         hidden_states = self.moe(hidden_states, topk_indices, topk_weights).view(*orig_shape)
-        shared_output = self.shared_experts(residuals)
-        hidden_states = hidden_states + shared_output
+        hidden_states = hidden_states + self.shared_experts(residuals)
         return hidden_states
 
 

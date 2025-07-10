@@ -31,6 +31,7 @@ from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
+from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE
 from ..glm4.modeling_glm4 import Glm4Attention, eager_attention_forward
 from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb
 from ..llama.modeling_llama import (
@@ -404,52 +405,19 @@ class Glm4MoeTopkRouter(nn.Module):
         return topk_indices, topk_weights
 
 
-class Glm4MoeSparseMoeBlock(nn.Module):
+class Glm4MoeSparseMoeBlock(DeepseekV3MoE):
     def __init__(self, config):
-        super().__init__()
-        self.top_k = config.num_experts_per_tok
-        self.norm_topk_prob = config.norm_topk_prob
-
-        # gating
-        self.gate = Glm4MoeTopkRouter(config)
+        super().__init__(config)
         self.experts = nn.ModuleList(
             [
                 Glm4MoeMLP(config, intermediate_size=config.moe_intermediate_size)
                 for _ in range(config.n_routed_experts)
             ]
         )
+        self.gate = Glm4MoeTopkRouter(config)
         self.shared_experts = Glm4MoeMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
-
-    def moe(self, hidden_states: torch.Tensor, topk_indices: torch.Tensor, topk_weights: torch.Tensor):
-        final_hidden_states = torch.zeros_like(hidden_states, dtype=topk_weights.dtype)
-        expert_mask = torch.nn.functional.one_hot(topk_indices, num_classes=len(self.experts))
-        expert_mask = expert_mask.permute(2, 0, 1)
-
-        for expert_idx in range(len(self.experts)):
-            expert = self.experts[expert_idx]
-            mask = expert_mask[expert_idx]
-            token_indices, weight_indices = torch.where(mask)
-
-            if token_indices.numel() > 0:
-                expert_weights = topk_weights[token_indices, weight_indices]
-                expert_input = hidden_states[token_indices]
-                expert_output = expert(expert_input)
-                weighted_output = expert_output * expert_weights.unsqueeze(-1)
-                final_hidden_states.index_add_(0, token_indices, weighted_output)
-
-        return final_hidden_states.type(hidden_states.dtype)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        residuals = hidden_states
-        orig_shape = hidden_states.shape
-        topk_indices, topk_weights = self.gate(hidden_states)
-        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.moe(hidden_states, topk_indices, topk_weights).view(*orig_shape)
-        shared_output = self.shared_experts(residuals)
-        hidden_states = hidden_states + shared_output
-        return hidden_states
 
 
 class Glm4MoeRMSNorm(Qwen2MoeRMSNorm):
