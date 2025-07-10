@@ -39,13 +39,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    TransformersKwargs,
-    auto_docstring,
-    can_return_tuple,
-    is_torchdynamo_compiling,
-    logging,
-)
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from .configuration_glm4v import Glm4vConfig, Glm4vTextConfig, Glm4vVisionConfig
 
 
@@ -84,9 +78,7 @@ class Glm4VisionMlp(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_state):
-        return self.down_proj(
-            self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state)
-        )
+        return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
 
 
 class Glm4vVisionPatchEmbed(nn.Module):
@@ -98,25 +90,14 @@ class Glm4vVisionPatchEmbed(nn.Module):
         self.embed_dim = config.hidden_size
 
         kernel_size = [self.temporal_patch_size, self.patch_size, self.patch_size]
-        self.proj = nn.Conv3d(
-            self.in_channels,
-            self.embed_dim,
-            kernel_size=kernel_size,
-            stride=kernel_size,
-        )
+        self.proj = nn.Conv3d(self.in_channels, self.embed_dim, kernel_size=kernel_size, stride=kernel_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         target_dtype = self.proj.weight.dtype
         hidden_states = hidden_states.view(
-            -1,
-            self.in_channels,
-            self.temporal_patch_size,
-            self.patch_size,
-            self.patch_size,
+            -1, self.in_channels, self.temporal_patch_size, self.patch_size, self.patch_size
         )
-        hidden_states = self.proj(hidden_states.to(dtype=target_dtype)).view(
-            -1, self.embed_dim
-        )
+        hidden_states = self.proj(hidden_states.to(dtype=target_dtype)).view(-1, self.embed_dim)
         return hidden_states
 
 
@@ -127,17 +108,13 @@ class Glm4vVisionRotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     def forward(self, seqlen: int) -> torch.Tensor:
-        seq = torch.arange(
-            seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype
-        )
+        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
         freqs = torch.outer(seq, self.inv_freq)
         return freqs
 
 
 class Glm4vVisionPatchMerger(nn.Module):
-    def __init__(
-        self, dim: int, context_dim: int, hidden_act: str, bias: bool = False
-    ) -> None:
+    def __init__(self, dim: int, context_dim: int, hidden_act: str, bias: bool = False) -> None:
         super().__init__()
         self.proj = nn.Linear(dim, dim, bias=bias)
         self.post_projection_norm = LayerNorm(dim)
@@ -150,9 +127,7 @@ class Glm4vVisionPatchMerger(nn.Module):
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         hidden_state = self.proj(hidden_state)
         hidden_state = self.act1(self.post_projection_norm(hidden_state))
-        return self.down_proj(
-            self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state)
-        )
+        return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
 
 
 class Glm4vVisionEmbeddings(nn.Module):
@@ -166,15 +141,9 @@ class Glm4vVisionEmbeddings(nn.Module):
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.register_buffer(
-            "position_ids",
-            torch.arange(self.num_positions).expand((1, -1)),
-            persistent=False,
-        )
+        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
-    def forward(
-        self, embeddings, lengths, image_shapes, h_coords, w_coords
-    ) -> torch.Tensor:
+    def forward(self, embeddings, lengths, image_shapes, h_coords, w_coords) -> torch.Tensor:
         """
         Forward pass with integrated position encoding adaptation using 2D interpolation.
 
@@ -199,17 +168,13 @@ class Glm4vVisionEmbeddings(nn.Module):
 
         # Handle empty sequence case
         if total_seq == 0:
-            adapted_pos_embed = torch.empty(
-                0, hidden_size, device=device, dtype=pos_embed_weight.dtype
-            )
+            adapted_pos_embed = torch.empty(0, hidden_size, device=device, dtype=pos_embed_weight.dtype)
         else:
             # Convert inputs to tensors if needed
             if isinstance(lengths, list):
                 lengths = torch.tensor(lengths, device=device, dtype=torch.long)
             if not isinstance(image_shapes, torch.Tensor):
-                image_shapes = torch.tensor(
-                    image_shapes, device=device, dtype=torch.long
-                )
+                image_shapes = torch.tensor(image_shapes, device=device, dtype=torch.long)
 
             # Prepare 2D position embedding
             orig_size_sq = pos_embed_weight.shape[0]
@@ -222,12 +187,12 @@ class Glm4vVisionEmbeddings(nn.Module):
             )
 
             # Calculate target dimensions for each patch
-            target_h = torch.cat(
-                [image_shapes[i, 1].repeat(lengths[i]) for i in range(len(lengths))]
-            ).to(device=device, dtype=torch.float32)
-            target_w = torch.cat(
-                [image_shapes[i, 2].repeat(lengths[i]) for i in range(len(lengths))]
-            ).to(device=device, dtype=torch.float32)
+            target_h = torch.cat([image_shapes[i, 1].repeat(lengths[i]) for i in range(len(lengths))]).to(
+                device=device, dtype=torch.float32
+            )
+            target_w = torch.cat([image_shapes[i, 2].repeat(lengths[i]) for i in range(len(lengths))]).to(
+                device=device, dtype=torch.float32
+            )
 
             # Normalize coordinates to [-1, 1] range for grid_sample
             h_coords = h_coords.to(device=device, dtype=torch.float32)
@@ -240,20 +205,12 @@ class Glm4vVisionEmbeddings(nn.Module):
 
             # Perform bicubic interpolation
             interpolated_embed_fp32 = F.grid_sample(
-                pos_embed_2d,
-                grid,
-                mode="bicubic",
-                align_corners=False,
-                padding_mode="border",
+                pos_embed_2d, grid, mode="bicubic", align_corners=False, padding_mode="border"
             )
 
             # Reshape and convert back to original dtype
-            adapted_pos_embed_fp32 = (
-                interpolated_embed_fp32.squeeze(0).squeeze(-1).permute(1, 0)
-            )
-            adapted_pos_embed = adapted_pos_embed_fp32.to(pos_embed_weight.dtype).to(
-                embeddings.device
-            )
+            adapted_pos_embed_fp32 = interpolated_embed_fp32.squeeze(0).squeeze(-1).permute(1, 0)
+            adapted_pos_embed = adapted_pos_embed_fp32.to(pos_embed_weight.dtype).to(embeddings.device)
 
         # Add adapted position encoding to embeddings
         embeddings = embeddings + adapted_pos_embed
@@ -289,9 +246,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     batch, num_key_value_heads, slen, head_dim = hidden_states.shape
     if n_rep == 1:
         return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(
-        batch, num_key_value_heads, n_rep, slen, head_dim
-    )
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
@@ -313,12 +268,8 @@ def eager_attention_forward(
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(
-        query.dtype
-    )
-    attn_weights = nn.functional.dropout(
-        attn_weights, p=dropout, training=module.training
-    )
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
@@ -332,9 +283,7 @@ class Glm4vVisionAttention(nn.Module):
         self.num_heads = config.num_heads
         self.head_dim = self.dim // self.num_heads
         self.num_key_value_groups = 1  # needed for eager attention
-        self.qkv = nn.Linear(
-            config.hidden_size, config.hidden_size * 3, bias=config.attention_bias
-        )
+        self.qkv = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=config.attention_bias)
         self.proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
         self.scaling = self.head_dim**-0.5
         self.config = config
@@ -351,10 +300,7 @@ class Glm4vVisionAttention(nn.Module):
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
         query_states, key_states, value_states = (
-            self.qkv(hidden_states)
-            .reshape(seq_length, 3, self.num_heads, -1)
-            .permute(1, 0, 2, 3)
-            .unbind(0)
+            self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
         )
         if position_embeddings is None:
             logger.warning_once(
@@ -368,9 +314,7 @@ class Glm4vVisionAttention(nn.Module):
             sin = emb.sin()
         else:
             cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb_vision(
-            query_states, key_states, cos, sin
-        )
+        query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
 
         query_states = query_states.transpose(0, 1).unsqueeze(0)
         key_states = key_states.transpose(0, 1).unsqueeze(0)
@@ -378,9 +322,7 @@ class Glm4vVisionAttention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[
-                self.config._attn_implementation
-            ]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         if self.config._attn_implementation == "flash_attention_2":
             # Flash Attention 2: Use cu_seqlens for variable length attention
@@ -404,8 +346,7 @@ class Glm4vVisionAttention(nn.Module):
             # Other implementations: Process each chunk separately
             lengths = cu_seqlens[1:] - cu_seqlens[:-1]
             splits = [
-                torch.split(tensor, lengths.tolist(), dim=2)
-                for tensor in (query_states, key_states, value_states)
+                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
             ]
 
             attn_outputs = [
@@ -502,18 +443,12 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         head_dim = config.hidden_size // config.num_heads
         self.rotary_pos_emb = Glm4vVisionRotaryEmbedding(head_dim // 2)
 
-        self.blocks = nn.ModuleList(
-            [Glm4vVisionBlock(config) for _ in range(config.depth)]
-        )
+        self.blocks = nn.ModuleList([Glm4vVisionBlock(config) for _ in range(config.depth)])
         self.merger = Glm4vVisionPatchMerger(
-            dim=config.out_hidden_size,
-            context_dim=config.intermediate_size,
-            hidden_act=config.hidden_act,
+            dim=config.out_hidden_size, context_dim=config.intermediate_size, hidden_act=config.hidden_act
         )
 
-        self.post_conv_layernorm = Glm4vRMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
+        self.post_conv_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.downsample = nn.Conv2d(
             in_channels=config.hidden_size,
             out_channels=config.out_hidden_size,
@@ -554,9 +489,7 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
         return rotary_pos_emb, pos_ids
 
-    def forward(
-        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor
-    ) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
@@ -574,9 +507,7 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
         position_embeddings = (emb.cos(), emb.sin())
 
-        cu_seqlens = torch.repeat_interleave(
-            grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]
-        ).cumsum(
+        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
             dim=0,
             # Select dtype based on the following factors:
             #  - FA2 requires that cu_seqlens_q must have dtype int32
@@ -586,9 +517,7 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         )
         cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
         seqlens = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
-        hidden_states = self.embeddings(
-            hidden_states, seqlens, grid_thw, image_type_ids[:, 0], image_type_ids[:, 1]
-        )
+        hidden_states = self.embeddings(hidden_states, seqlens, grid_thw, image_type_ids[:, 0], image_type_ids[:, 1])
 
         for blk in self.blocks:
             hidden_states = blk(
@@ -600,15 +529,10 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         hidden_states = self.post_layernorm(hidden_states)
 
         hidden_states = hidden_states.view(
-            -1,
-            self.spatial_merge_size,
-            self.spatial_merge_size,
-            hidden_states.shape[-1],
+            -1, self.spatial_merge_size, self.spatial_merge_size, hidden_states.shape[-1]
         )
         hidden_states = hidden_states.permute(0, 3, 1, 2)
-        hidden_states = self.downsample(hidden_states).view(
-            -1, self.config.out_hidden_size
-        )
+        hidden_states = self.downsample(hidden_states).view(-1, self.config.out_hidden_size)
 
         hidden_states = self.merger(hidden_states)
         return hidden_states
@@ -619,9 +543,7 @@ class Glm4vTextRotaryEmbedding(nn.Module):
         super().__init__()
         # BC: "rope_type" was originally "type"
         if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
-            self.rope_type = config.rope_scaling.get(
-                "rope_type", config.rope_scaling.get("type")
-            )
+            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
         else:
             self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
@@ -639,24 +561,12 @@ class Glm4vTextRotaryEmbedding(nn.Module):
     def forward(self, x, position_ids):
         # In contrast to other models, Glm4vText has different position ids for the grids
         # So we expand the inv_freq to shape (3, ...)
-        inv_freq_expanded = (
-            self.inv_freq[None, None, :, None]
-            .float()
-            .expand(3, position_ids.shape[1], -1, 1)
-        )
-        position_ids_expanded = position_ids[
-            :, :, None, :
-        ].float()  # shape (3, bs, 1, positions)
+        inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
+        position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
 
-        device_type = (
-            x.device.type
-            if isinstance(x.device.type, str) and x.device.type != "mps"
-            else "cpu"
-        )
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (
-                inv_freq_expanded.float() @ position_ids_expanded.float()
-            ).transpose(2, 3)
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
             sin = emb.sin() * self.attention_scaling
@@ -701,12 +611,12 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim
         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
     mrope_section = mrope_section * 2
-    cos = torch.cat(
-        [m[i % 3] for i, m in enumerate(cos.split(mrope_section, dim=-1))], dim=-1
-    ).unsqueeze(unsqueeze_dim)
-    sin = torch.cat(
-        [m[i % 3] for i, m in enumerate(sin.split(mrope_section, dim=-1))], dim=-1
-    ).unsqueeze(unsqueeze_dim)
+    cos = torch.cat([m[i % 3] for i, m in enumerate(cos.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
+        unsqueeze_dim
+    )
+    sin = torch.cat([m[i % 3] for i, m in enumerate(sin.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
+        unsqueeze_dim
+    )
 
     # Interleave them instead of usual shape
     cos = cos[..., : cos.shape[-1] // 2].repeat_interleave(2, dim=-1)
@@ -749,18 +659,10 @@ class Glm4vTextAttention(nn.Module):
         self.rope_scaling = config.rope_scaling
         self.scaling = self.head_dim**-0.5
 
-        self.q_proj = nn.Linear(
-            self.hidden_size, self.num_heads * self.head_dim, bias=True
-        )
-        self.k_proj = nn.Linear(
-            self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True
-        )
-        self.v_proj = nn.Linear(
-            self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True
-        )
-        self.o_proj = nn.Linear(
-            self.num_heads * self.head_dim, self.hidden_size, bias=False
-        )
+        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=True)
+        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
+        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
     def forward(
         self,
@@ -790,20 +692,12 @@ class Glm4vTextAttention(nn.Module):
         )
 
         if past_key_value is not None:
-            cache_kwargs = {
-                "sin": sin,
-                "cos": cos,
-                "cache_position": cache_position,
-            }  # Specific to RoPE models
-            key_states, value_states = past_key_value.update(
-                key_states, value_states, self.layer_idx, cache_kwargs
-            )
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[
-                self.config._attn_implementation
-            ]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -826,12 +720,8 @@ class Glm4vTextMLP(nn.Module):
         super().__init__()
 
         self.config = config
-        self.gate_up_proj = nn.Linear(
-            config.hidden_size, 2 * config.intermediate_size, bias=False
-        )
-        self.down_proj = nn.Linear(
-            config.intermediate_size, config.hidden_size, bias=False
-        )
+        self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
         self.activation_fn = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
@@ -850,15 +740,9 @@ class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
         self.self_attn = Glm4vTextAttention(config, layer_idx)
         self.mlp = Glm4vTextMLP(config)
         self.input_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Glm4vRMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
-        self.post_self_attn_layernorm = Glm4vRMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
-        self.post_mlp_layernorm = Glm4vRMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
+        self.post_attention_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_self_attn_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_mlp_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -871,9 +755,7 @@ class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
-    ) -> tuple[
-        torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]
-    ]:
+    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
@@ -945,14 +827,9 @@ class Glm4vTextModel(Glm4vPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        self.embed_tokens = nn.Embedding(
-            config.vocab_size, config.hidden_size, self.padding_idx
-        )
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [
-                Glm4vTextDecoderLayer(config, layer_idx)
-                for layer_idx in range(config.num_hidden_layers)
-            ]
+            [Glm4vTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Glm4vTextRotaryEmbedding(config=config)
@@ -982,22 +859,14 @@ class Glm4vTextModel(Glm4vPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[tuple, BaseModelOutputWithPast]:
-        output_attentions = (
-            output_attentions
-            if output_attentions is not None
-            else self.config.output_attentions
-        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You must specify exactly one of input_ids or inputs_embeds"
-            )
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
@@ -1014,20 +883,14 @@ class Glm4vTextModel(Glm4vPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if cache_position is None:
-            past_seen_tokens = (
-                past_key_values.get_seq_length() if past_key_values is not None else 0
-            )
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
-                past_seen_tokens,
-                past_seen_tokens + inputs_embeds.shape[1],
-                device=inputs_embeds.device,
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
 
         # the hard coded `3` is for temporal, height and width.
         if position_ids is None:
-            position_ids = cache_position.view(1, 1, -1).expand(
-                3, inputs_embeds.shape[0], -1
-            )
+            position_ids = cache_position.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
         elif position_ids.dim() == 2:
             position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
 
@@ -1177,9 +1040,7 @@ class Glm4vModel(Glm4vPreTrainedModel):
         video_end_token_id = self.config.video_end_token_id
 
         mrope_position_deltas = []
-        if input_ids is not None and (
-            image_grid_thw is not None or video_grid_thw is not None
-        ):
+        if input_ids is not None and (image_grid_thw is not None or video_grid_thw is not None):
             total_input_ids = input_ids
             if attention_mask is None:
                 attention_mask = torch.ones_like(total_input_ids)
@@ -1213,9 +1074,7 @@ class Glm4vModel(Glm4vPreTrainedModel):
                         input_token_type.append("text")
 
                 input_type_group = []
-                for key, group in itertools.groupby(
-                    enumerate(input_token_type), lambda x: x[1]
-                ):
+                for key, group in itertools.groupby(enumerate(input_token_type), lambda x: x[1]):
                     group = list(group)
                     start_index = group[0][0]
                     end_index = group[-1][0] + 1
@@ -1224,11 +1083,7 @@ class Glm4vModel(Glm4vPreTrainedModel):
                 llm_pos_ids_list = []
                 video_frame_num = 1
                 for modality_type, start_idx, end_idx in input_type_group:
-                    st_idx = (
-                        llm_pos_ids_list[-1].max() + 1
-                        if len(llm_pos_ids_list) > 0
-                        else 0
-                    )
+                    st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
 
                     if modality_type == "image":
                         t, h, w = (
@@ -1242,27 +1097,10 @@ class Glm4vModel(Glm4vPreTrainedModel):
                             w.item() // spatial_merge_size,
                         )
 
-                        t_index = (
-                            torch.arange(llm_grid_t)
-                            .view(-1, 1)
-                            .expand(-1, llm_grid_h * llm_grid_w)
-                            .flatten()
-                        )
-                        h_index = (
-                            torch.arange(llm_grid_h)
-                            .view(1, -1, 1)
-                            .expand(llm_grid_t, -1, llm_grid_w)
-                            .flatten()
-                        )
-                        w_index = (
-                            torch.arange(llm_grid_w)
-                            .view(1, 1, -1)
-                            .expand(llm_grid_t, llm_grid_h, -1)
-                            .flatten()
-                        )
-                        llm_pos_ids_list.append(
-                            torch.stack([t_index, h_index, w_index]) + st_idx
-                        )
+                        t_index = torch.arange(llm_grid_t).view(-1, 1).expand(-1, llm_grid_h * llm_grid_w).flatten()
+                        h_index = torch.arange(llm_grid_h).view(1, -1, 1).expand(llm_grid_t, -1, llm_grid_w).flatten()
+                        w_index = torch.arange(llm_grid_w).view(1, 1, -1).expand(llm_grid_t, llm_grid_h, -1).flatten()
+                        llm_pos_ids_list.append(torch.stack([t_index, h_index, w_index]) + st_idx)
 
                         image_index += 1
                         video_frame_num = 1
@@ -1281,28 +1119,11 @@ class Glm4vModel(Glm4vPreTrainedModel):
                         )
 
                         for t_idx in range(llm_grid_t):
-                            t_index = (
-                                torch.tensor(t_idx)
-                                .view(-1, 1)
-                                .expand(-1, llm_grid_h * llm_grid_w)
-                                .flatten()
-                            )
+                            t_index = torch.tensor(t_idx).view(-1, 1).expand(-1, llm_grid_h * llm_grid_w).flatten()
 
-                            h_index = (
-                                torch.arange(llm_grid_h)
-                                .view(1, -1, 1)
-                                .expand(1, -1, llm_grid_w)
-                                .flatten()
-                            )
-                            w_index = (
-                                torch.arange(llm_grid_w)
-                                .view(1, 1, -1)
-                                .expand(1, llm_grid_h, -1)
-                                .flatten()
-                            )
-                            llm_pos_ids_list.append(
-                                torch.stack([t_index, h_index, w_index]) + st_idx
-                            )
+                            h_index = torch.arange(llm_grid_h).view(1, -1, 1).expand(1, -1, llm_grid_w).flatten()
+                            w_index = torch.arange(llm_grid_w).view(1, 1, -1).expand(1, llm_grid_h, -1).flatten()
+                            llm_pos_ids_list.append(torch.stack([t_index, h_index, w_index]) + st_idx)
 
                         video_group_index += 1
 
@@ -1314,35 +1135,21 @@ class Glm4vModel(Glm4vPreTrainedModel):
 
                     else:
                         text_len = end_idx - start_idx
-                        llm_pos_ids_list.append(
-                            torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx
-                        )
+                        llm_pos_ids_list.append(torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx)
 
                         video_frame_num = 1
 
                 llm_positions = torch.cat(llm_pos_ids_list, dim=1).reshape(3, -1)
-                position_ids[..., i, attention_mask[i] == 1] = llm_positions.to(
-                    position_ids.device
-                )
-                mrope_position_deltas.append(
-                    llm_positions.max() + 1 - len(total_input_ids[i])
-                )
-            mrope_position_deltas = torch.tensor(
-                mrope_position_deltas, device=input_ids.device
-            ).unsqueeze(1)
+                position_ids[..., i, attention_mask[i] == 1] = llm_positions.to(position_ids.device)
+                mrope_position_deltas.append(llm_positions.max() + 1 - len(total_input_ids[i]))
+            mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
             return position_ids, mrope_position_deltas
         else:
             if attention_mask is not None:
                 position_ids = attention_mask.long().cumsum(-1) - 1
                 position_ids.masked_fill_(attention_mask == 0, 1)
-                position_ids = (
-                    position_ids.unsqueeze(0)
-                    .expand(3, -1, -1)
-                    .to(attention_mask.device)
-                )
-                max_position_ids = position_ids.max(0, keepdim=False)[0].max(
-                    -1, keepdim=True
-                )[0]
+                position_ids = position_ids.unsqueeze(0).expand(3, -1, -1).to(attention_mask.device)
+                max_position_ids = position_ids.max(0, keepdim=False)[0].max(-1, keepdim=True)[0]
                 mrope_position_deltas = max_position_ids + 1 - attention_mask.shape[-1]
             else:
                 position_ids = (
@@ -1359,9 +1166,7 @@ class Glm4vModel(Glm4vPreTrainedModel):
             return position_ids, mrope_position_deltas
 
     def get_video_features(
-        self,
-        pixel_values_videos: torch.FloatTensor,
-        video_grid_thw: Optional[torch.LongTensor] = None,
+        self, pixel_values_videos: torch.FloatTensor, video_grid_thw: Optional[torch.LongTensor] = None
     ):
         """
         Encodes videos into continuous embeddings that can be forwarded to the language model.
@@ -1376,25 +1181,15 @@ class Glm4vModel(Glm4vPreTrainedModel):
         # reshape video_grid_thw -> [b, 3] -> [1, h, w] * frames
         temp_frames_hw = []
         for t, h, w in video_grid_thw:
-            repeated_row = (
-                torch.tensor([1, h.item(), w.item()]).unsqueeze(0).repeat(t, 1)
-            )
+            repeated_row = torch.tensor([1, h.item(), w.item()]).unsqueeze(0).repeat(t, 1)
             temp_frames_hw.append(repeated_row)
         flattened_video_grid_thw = torch.cat(temp_frames_hw, dim=0)
-        video_embeds = self.visual(
-            pixel_values_videos, grid_thw=flattened_video_grid_thw
-        )
-        split_sizes = (
-            video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
-        ).tolist()
+        video_embeds = self.visual(pixel_values_videos, grid_thw=flattened_video_grid_thw)
+        split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         video_embeds = torch.split(video_embeds, split_sizes)
         return video_embeds
 
-    def get_image_features(
-        self,
-        pixel_values: torch.FloatTensor,
-        image_grid_thw: Optional[torch.LongTensor] = None,
-    ):
+    def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
         """
         Encodes images into continuous embeddings that can be forwarded to the language model.
 
@@ -1406,9 +1201,7 @@ class Glm4vModel(Glm4vPreTrainedModel):
         """
         pixel_values = pixel_values.type(self.visual.dtype)
         image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
-        split_sizes = (
-            image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
-        ).tolist()
+        split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         image_embeds = torch.split(image_embeds, split_sizes)
         return image_embeds
 
@@ -1445,21 +1238,13 @@ class Glm4vModel(Glm4vPreTrainedModel):
             The rope index difference between sequence length and multimodal rope.
         """
 
-        output_attentions = (
-            output_attentions
-            if output_attentions is not None
-            else self.config.output_attentions
-        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You must specify exactly one of input_ids or inputs_embeds"
-            )
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -1470,22 +1255,14 @@ class Glm4vModel(Glm4vPreTrainedModel):
 
             if input_ids is None:
                 image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(
-                        self.config.image_token_id,
-                        dtype=torch.long,
-                        device=inputs_embeds.device,
-                    )
+                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
                 image_mask = image_mask.all(-1)
             else:
                 image_mask = input_ids == self.config.image_token_id
 
             n_image_tokens = image_mask.sum()
-            image_mask = (
-                image_mask.unsqueeze(-1)
-                .expand_as(inputs_embeds)
-                .to(inputs_embeds.device)
-            )
+            image_mask = image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
             n_image_features = image_embeds.shape[0]
             if not is_torchdynamo_compiling() and n_image_tokens != n_image_features:
                 raise ValueError(
@@ -1501,11 +1278,7 @@ class Glm4vModel(Glm4vPreTrainedModel):
 
             if input_ids is None:
                 video_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(
-                        self.config.image_token_id,
-                        dtype=torch.long,
-                        device=inputs_embeds.device,
-                    )
+                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
                 video_mask = video_mask.all(-1)
             else:
@@ -1513,11 +1286,7 @@ class Glm4vModel(Glm4vPreTrainedModel):
 
             n_video_tokens = video_mask.sum()
             n_video_features = video_embeds.shape[0]
-            video_mask = (
-                video_mask.unsqueeze(-1)
-                .expand_as(inputs_embeds)
-                .to(inputs_embeds.device)
-            )
+            video_mask = video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
             if not is_torchdynamo_compiling() and n_video_tokens != n_video_features:
                 raise ValueError(
                     f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
@@ -1528,20 +1297,13 @@ class Glm4vModel(Glm4vPreTrainedModel):
 
         if position_ids is None:
             attention_mask_tensor = (
-                attention_mask
-                if not isinstance(attention_mask, dict)
-                else attention_mask["full_attention"]
+                attention_mask if not isinstance(attention_mask, dict) else attention_mask["full_attention"]
             )
             if attention_mask_tensor is not None and attention_mask_tensor.ndim == 4:
-                attention_mask_tensor = torch.diagonal(
-                    attention_mask_tensor[:, 0], dim1=1, dim2=2
-                )
-                # Only apply conversion for floating point tensors (inverted masks)
+                attention_mask_tensor = torch.diagonal(attention_mask_tensor[:, 0], dim1=1, dim2=2)
+                 # Only apply conversion for floating point tensors (inverted masks)
                 if attention_mask_tensor.dtype.is_floating_point:
-                    attention_mask_tensor = (
-                        attention_mask_tensor
-                        / torch.finfo(attention_mask_tensor.dtype).min
-                    )
+                    attention_mask_tensor = attention_mask_tensor / torch.finfo(attention_mask_tensor.dtype).min
                     attention_mask_tensor = (1.0 - attention_mask_tensor).int()
 
             # Calculate RoPE index once per generation in the pre-fill stage only.
@@ -1556,9 +1318,7 @@ class Glm4vModel(Glm4vPreTrainedModel):
                 (cache_position is not None and cache_position[0] == 0)
                 or (past_key_values is None or past_key_values.get_seq_length() == 0)
             )
-            if (
-                prefill_compiled_stage or prefill_noncompiled_stage
-            ) or self.rope_deltas is None:
+            if (prefill_compiled_stage or prefill_noncompiled_stage) or self.rope_deltas is None:
                 position_ids, rope_deltas = self.get_rope_index(
                     input_ids,
                     image_grid_thw,
@@ -1641,9 +1401,7 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
     def __init__(self, config):
         super().__init__(config)
         self.model = Glm4vModel(config)
-        self.lm_head = nn.Linear(
-            config.text_config.hidden_size, config.text_config.vocab_size, bias=False
-        )
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
 
         self.post_init()
 
@@ -1666,17 +1424,11 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
         return self.model.get_decoder()
 
     def get_video_features(
-        self,
-        pixel_values_videos: torch.FloatTensor,
-        video_grid_thw: Optional[torch.LongTensor] = None,
+        self, pixel_values_videos: torch.FloatTensor, video_grid_thw: Optional[torch.LongTensor] = None
     ):
         return self.model.get_video_features(pixel_values_videos, video_grid_thw)
 
-    def get_image_features(
-        self,
-        pixel_values: torch.FloatTensor,
-        image_grid_thw: Optional[torch.LongTensor] = None,
-    ):
+    def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
         return self.model.get_image_features(pixel_values, image_grid_thw)
 
     # Make modules available throught conditional class for BC
@@ -1757,15 +1509,9 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
         "The image shows a street scene with a red stop sign in the foreground. In the background, there is a large red gate with Chinese characters ..."
         ```"""
 
-        output_attentions = (
-            output_attentions
-            if output_attentions is not None
-            else self.config.output_attentions
-        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
         outputs = self.model(
@@ -1790,11 +1536,7 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(
-                logits=logits,
-                labels=labels,
-                vocab_size=self.config.text_config.vocab_size,
-            )
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
 
         return Glm4vCausalLMOutputWithPast(
             loss=loss,
@@ -1868,31 +1610,19 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
             is_image = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(
-                        self.config.image_start_token_id,
-                        dtype=torch.long,
-                        device=inputs_embeds.device,
-                    )
+                    torch.tensor(self.config.image_start_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             )[..., 0]
             is_video_start = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(
-                        self.config.video_start_token_id,
-                        dtype=torch.long,
-                        device=inputs_embeds.device,
-                    )
+                    torch.tensor(self.config.video_start_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             )[..., 0]
             is_video_end = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(
-                        self.config.video_end_token_id,
-                        dtype=torch.long,
-                        device=inputs_embeds.device,
-                    )
+                    torch.tensor(self.config.video_end_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             )[..., 0]
         else:
@@ -1929,13 +1659,7 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
         if expand_size == 1:
             return input_ids, model_kwargs
 
-        visual_keys = [
-            "pixel_values",
-            "image_grid_thw",
-            "pixel_values_videos",
-            "video_grid_thw",
-            "second_per_grid_ts",
-        ]
+        visual_keys = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw", "second_per_grid_ts"]
 
         def _expand_dict_for_generation_visual(dict_to_expand):
             image_grid_thw = model_kwargs.get("image_grid_thw", None)
@@ -1947,9 +1671,7 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
             def _repeat_interleave_samples(x, lengths, repeat_times):
                 samples = torch.split(x, lengths)
                 repeat_args = [repeat_times] + [1] * (x.dim() - 1)
-                result = torch.cat(
-                    [sample.repeat(*repeat_args) for sample in samples], dim=0
-                )
+                result = torch.cat([sample.repeat(*repeat_args) for sample in samples], dim=0)
                 return result
 
             for key in dict_to_expand:
@@ -1985,9 +1707,7 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
                         )
                     tensor = torch.tensor(dict_to_expand[key])
                     lengths = list(video_nums)
-                    tensor = _repeat_interleave_samples(
-                        tensor, lengths=lengths, repeat_times=expand_size
-                    )
+                    tensor = _repeat_interleave_samples(tensor, lengths=lengths, repeat_times=expand_size)
                     dict_to_expand[key] = tensor.tolist()
             return dict_to_expand
 
@@ -1999,9 +1719,7 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
                     and isinstance(dict_to_expand[key], torch.Tensor)
                     and key not in visual_keys
                 ):
-                    dict_to_expand[key] = dict_to_expand[key].repeat_interleave(
-                        expand_size, dim=0
-                    )
+                    dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
             return dict_to_expand
 
         model_kwargs = _expand_dict_for_generation_visual(model_kwargs)
@@ -2013,19 +1731,10 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
 
         if is_encoder_decoder:
             if model_kwargs.get("encoder_outputs") is None:
-                raise ValueError(
-                    "If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined."
-                )
-            model_kwargs["encoder_outputs"] = _expand_dict_for_generation(
-                model_kwargs["encoder_outputs"]
-            )
+                raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")
+            model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
 
         return input_ids, model_kwargs
 
 
-__all__ = [
-    "Glm4vForConditionalGeneration",
-    "Glm4vModel",
-    "Glm4vPreTrainedModel",
-    "Glm4vTextModel",
-]
+__all__ = ["Glm4vForConditionalGeneration", "Glm4vModel", "Glm4vPreTrainedModel", "Glm4vTextModel"]
