@@ -249,11 +249,12 @@ class DeepseekVLHybridModel(DeepseekVLModel):
         output = self.high_res_vision_model(
             pixel_values=pixel_values,
             output_hidden_states=True,
+            return_dict=True,
         )
-        last_hidden_state = output[0]
+        last_hidden_state = output.last_hidden_state
         last_hidden_state = self.high_res_vision_proj(last_hidden_state)
 
-        hidden_states = output[1]
+        hidden_states = output.hidden_states
         global_hidden_state = hidden_states[self.global_attn_index + 1]  # +1 for embedding layer
         global_hidden_state = self.high_res_vision_neck(global_hidden_state)
         global_hidden_state = self.high_res_vision_proj(global_hidden_state)
