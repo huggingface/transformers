@@ -121,7 +121,7 @@ echo -e "Plants create energy through a process known as" | transformers run --t
 ## Notes
 
 -   Use [`Gemma3nForConditionalGeneration`] for image-audio-and-text, image-and-text, image-and-audio, audio-and-text,
-    image-only and aduio-only inputs.
+    image-only and audio-only inputs.
 -   Gemma 3n supports multiple images per input, but make sure the images are correctly batched before passing them to
     the processor. Each batch should be a list of one or more images.
 

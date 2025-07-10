@@ -156,6 +156,7 @@ class ModernBertConfig(PretrainedConfig):
     ```"""
 
     model_type = "modernbert"
+    attribute_map = {"rope_theta": "global_rope_theta"}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
@@ -504,9 +505,7 @@ class ModernBertMLP(nn.Module):
 
 
 class ModernBertRotaryEmbedding(GemmaRotaryEmbedding):
-    def __init__(self, config: ModernBertConfig, dim: int, base: float, device: Optional[torch.device] = None):
-        super().__init__(self, config=config, device=device)
-        inv_freq, self.attention_scaling = self.rope_init_fn(None, device, dim=dim, base=base)
+    pass
 
 
 def eager_attention_forward(
@@ -663,11 +662,9 @@ class ModernBertAttention(nn.Module):
         else:
             self.local_attention = (-1, -1)
 
-        rope_theta = config.global_rope_theta
         max_position_embeddings = config.max_position_embeddings
         if self.local_attention != (-1, -1):
-            if config.local_rope_theta is not None:
-                rope_theta = config.local_rope_theta
+            rope_theta = config.global_rope_theta if config.local_rope_theta is None else config.local_rope_theta
             max_position_embeddings = config.local_attention
 
         if config._attn_implementation == "flash_attention_2":
@@ -675,7 +672,7 @@ class ModernBertAttention(nn.Module):
                 dim=self.head_dim, max_seqlen=max_position_embeddings, base=rope_theta
             )
         else:
-            self.rotary_emb = ModernBertRotaryEmbedding(config=config, dim=self.head_dim, base=rope_theta)
+            self.rotary_emb = ModernBertRotaryEmbedding(config=config)
 
         self.Wo = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
         self.out_drop = nn.Dropout(config.attention_dropout) if config.attention_dropout > 0.0 else nn.Identity()
@@ -764,6 +761,7 @@ class ModernBertPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["ModernBertEmbeddings", "ModernBertEncoderLayer"]
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
     _supports_flex_attn = False
 

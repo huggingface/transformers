@@ -44,6 +44,7 @@ from transformers.models.qwen2_vl.modeling_qwen2_vl import (
 from transformers.models.qwen2_vl.processing_qwen2_vl import Qwen2VLImagesKwargs, Qwen2VLProcessor
 
 from ...activations import ACT2FN
+from ...cache_utils import Cache
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
@@ -159,7 +160,6 @@ class Qwen2_5_VLVisionBlock(GradientCheckpointingLayer):
         cu_seqlens: torch.Tensor,
         rotary_pos_emb: Optional[torch.Tensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> torch.Tensor:
         hidden_states = hidden_states + self.attn(
@@ -167,7 +167,6 @@ class Qwen2_5_VLVisionBlock(GradientCheckpointingLayer):
             cu_seqlens=cu_seqlens,
             rotary_pos_emb=rotary_pos_emb,
             position_embeddings=position_embeddings,
-            attention_mask=attention_mask,
             **kwargs,
         )
         hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
@@ -289,25 +288,6 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
 
         return window_index, cu_window_seqlens
 
-    def _prepare_attention_mask(self, inputs_tensor: torch.Tensor, cu_seqlens: torch.Tensor) -> torch.Tensor:
-        # Flash Attention 2 doesn't need a 4D mask and relies on `cu_seqlens/max_seqlen`
-        # NOTE: the created attention masl only approximates the ragged FA2 attention by
-        # allowing bidirectional attention within `cu_seqlens` blocks, and not attending between
-        # blocks. Though it will not be a 100% match for FA2's `varlen` path
-        if self.config._attn_implementation == "flash_attention_2":
-            return None
-
-        seq_length = inputs_tensor.shape[0]
-        attention_mask = torch.full(
-            [1, 1, seq_length, seq_length],
-            torch.finfo(inputs_tensor.dtype).min,
-            device=inputs_tensor.device,
-            dtype=inputs_tensor.dtype,
-        )
-        for i in range(1, len(cu_seqlens)):
-            attention_mask[..., cu_seqlens[i - 1] : cu_seqlens[i], cu_seqlens[i - 1] : cu_seqlens[i]] = 0
-        return attention_mask
-
     def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
         """
         Args:
@@ -355,12 +335,10 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
             else:
                 cu_seqlens_now = cu_window_seqlens
 
-            attention_mask = self._prepare_attention_mask(hidden_states, cu_seqlens_now)
             hidden_states = blk(
                 hidden_states,
                 cu_seqlens=cu_seqlens_now,
                 position_embeddings=position_embeddings,
-                attention_mask=attention_mask,
                 **kwargs,
             )
 
@@ -571,7 +549,7 @@ class Qwen2_5_VLModel(Qwen2VLModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -736,7 +714,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
