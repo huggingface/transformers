@@ -206,6 +206,7 @@ class Lfm2Attention(LlamaAttention):
         self.q_layernorm = Lfm2RMSNorm(self.head_dim, eps=config.norm_eps)
         self.k_layernorm = Lfm2RMSNorm(self.head_dim, eps=config.norm_eps)
         del self.o_proj
+        del self.attention_dropout
 
     def forward(
         self,

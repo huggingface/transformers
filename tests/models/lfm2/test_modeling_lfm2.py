@@ -42,11 +42,13 @@ class Lfm2ModelTester(CausalLMModelTester):
         conv_dim=32,
         block_dim: int = 24,
         block_ff_dim: int = 36,
+        layer_types=["full_attention", "conv"],
     ):
         super().__init__(parent)
         self.conv_dim = conv_dim
         self.block_dim = block_dim
         self.block_ff_dim = block_ff_dim
+        self.layer_types = layer_types
 
 
 @require_torch
