@@ -814,6 +814,7 @@ class TFEfficientFormerEncoder(keras.layers.Layer):
 
 @keras_serializable
 class TFEfficientFormerMainLayer(keras.layers.Layer):
+    config_class = EfficientFormerConfig
 
     def __init__(self, config: EfficientFormerConfig, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -901,6 +902,7 @@ class TFEfficientFormerPreTrainedModel(TFPreTrainedModel):
     models.
     """
 
+    config_class = EfficientFormerConfig
     base_model_prefix = "efficientformer"
     main_input_name = "pixel_values"
 

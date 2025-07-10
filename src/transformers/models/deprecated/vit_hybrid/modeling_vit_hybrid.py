@@ -483,6 +483,7 @@ class ViTHybridPreTrainedModel(PreTrainedModel):
     models.
     """
 
+    config: ViTHybridConfig
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

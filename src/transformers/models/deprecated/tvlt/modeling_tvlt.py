@@ -572,6 +572,7 @@ class TvltPreTrainedModel(PreTrainedModel):
     models.
     """
 
+    config: TvltConfig
     base_model_prefix = "tvlt"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

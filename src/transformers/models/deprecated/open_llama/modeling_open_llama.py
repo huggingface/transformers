@@ -431,6 +431,7 @@ OPEN_LLAMA_START_DOCSTRING = r"""
     OPEN_LLAMA_START_DOCSTRING,
 )
 class OpenLlamaPreTrainedModel(PreTrainedModel):
+    config: OpenLlamaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["OpenLlamaDecoderLayer"]

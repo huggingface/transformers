@@ -598,6 +598,7 @@ Ringer, Tom Ash, John Hughes, David MacLeod, Jamie Dougherty](https://huggingfac
     JUKEBOX_START_DOCSTRING,
 )
 class JukeboxVQVAE(PreTrainedModel):
+    config: JukeboxVQVAEConfig
     base_model_prefix = "vqvae"
 
     def _init_weights(self, module):
@@ -1787,6 +1788,7 @@ class JukeboxPrior(PreTrainedModel):
             the vqvae module to avoid getting the parameters.
     """
 
+    config: JukeboxPriorConfig
 
     def _init_weights(self, module):
         init_scale = self.config.init_scale
@@ -2262,6 +2264,7 @@ class JukeboxPreTrainedModel(PreTrainedModel):
     models.
     """
 
+    config: JukeboxConfig
     base_model_prefix = "jukebox"
     supports_gradient_checkpointing = False
 

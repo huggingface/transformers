@@ -400,6 +400,7 @@ class ErnieMPreTrainedModel(PreTrainedModel):
     models.
     """
 
+    config: ErnieMConfig
     base_model_prefix = "ernie_m"
 
     def _init_weights(self, module):

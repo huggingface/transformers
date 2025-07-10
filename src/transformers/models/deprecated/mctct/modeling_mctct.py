@@ -423,6 +423,7 @@ class MCTCTPreTrainedModel(PreTrainedModel):
     models.
     """
 
+    config: MCTCTConfig
     base_model_prefix = "mctct"
     main_input_name = "input_features"
     supports_gradient_checkpointing = True
