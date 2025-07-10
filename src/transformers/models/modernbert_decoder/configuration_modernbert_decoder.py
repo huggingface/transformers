@@ -95,11 +95,11 @@ class ModernBertDecoderConfig(PretrainedConfig):
             the decoder to match ModernBERT this is actually half of the sliding window size, so 128 => 64.
         global_attn_every_n_layers (`int`, *optional*, defaults to 3):
             Every `global_attn_every_n_layers` layers will use global attention instead of local attention.
-        local_rope_theta (`float`, *optional*):
-            The base period of the local RoPE embeddings. If not specified, uses the same value as `global_rope_theta`.
+        local_rope_theta (`float`, *optional*, defaults to 160000.0):
+            The base period of the local RoPE embeddings. If not specified, defaults to 160000.0
         layer_types (`list`, *optional*):
             List of layer types, one for each layer. If not specified, will be automatically generated based on
-            `global_attn_every_n_layers`. Should contain "full_attention" or "sliding_window".
+            `global_attn_every_n_layers`. Should contain "full_attention" or "sliding_attention".
 
     Examples:
 
