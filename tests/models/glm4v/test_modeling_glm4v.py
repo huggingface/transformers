@@ -372,7 +372,7 @@ class Glm4vIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_with_video(self):
-        processor = AutoProcessor.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
+        processor = AutoProcessor.from_pretrained("THUDM/GLM-4.1V-9B-Thinking", max_image_size={"longest_edge": 50176})
         model = Glm4vForConditionalGeneration.from_pretrained(
             "THUDM/GLM-4.1V-9B-Thinking", torch_dtype=torch.float16, device_map="auto"
         )
@@ -395,7 +395,6 @@ class Glm4vIntegrationTest(unittest.TestCase):
             ]
             for question, video_url in zip(questions, video_urls)
         ]
-        processor.video_processor.max_image_size["longest_edge"] = 50176
         inputs = processor.apply_chat_template(
             messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt", padding=True
         ).to(torch_device)
