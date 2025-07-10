@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 # Encoder Decoder Models
 
-[`EncoderDecoderModel`](https://huggingface.co/papers/1706.03762) has two main parts:
+[`EncoderDecoderModel`](https://huggingface.co/papers/1706.03762) initializes a sequence-to-sequence model with any pretrained autoencoder and pretrained autoregressive model. It is effective for sequence generation tasks as demonstrated in [Text Summarization with Pretrained Encoders](https://huggingface.co/papers/1908.08345) which uses [`BertModel`] as the encoder and decoder.
 
 
 
