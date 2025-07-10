@@ -475,8 +475,8 @@ class Aimv2PreTrainedModel(PreTrainedModel):
     """
 )
 class Aimv2VisionModel(Aimv2PreTrainedModel):
-    main_input_name = "pixel_values"
     config: Aimv2VisionConfig
+    main_input_name = "pixel_values"
 
     def __init__(self, config: Aimv2VisionConfig):
         super().__init__(config)
