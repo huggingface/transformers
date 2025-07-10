@@ -1167,12 +1167,6 @@ class VitsTextEncoder(nn.Module):
         self.encoder = VitsEncoder(config)
         self.project = nn.Conv1d(config.hidden_size, config.flow_size * 2, kernel_size=1)
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
     def forward(
         self,
         input_ids: torch.Tensor,

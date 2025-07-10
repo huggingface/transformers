@@ -780,12 +780,6 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, embeddings):
         self.cpmant.input_embedding = embeddings
 
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
     def _reorder_cache(self, past_key_values, beam_idx):
         past_key_values = [list(each) if each is not None else each for each in past_key_values]
         for key_value_layer in past_key_values:

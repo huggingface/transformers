@@ -772,12 +772,6 @@ class SpeechT5TextEncoderPrenet(nn.Module):
             config.max_text_positions,
         )
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
     def forward(self, input_ids: torch.Tensor):
         inputs_embeds = self.embed_tokens(input_ids)
         inputs_embeds = self.encode_positions(inputs_embeds)
@@ -798,12 +792,6 @@ class SpeechT5TextDecoderPrenet(nn.Module):
             config.hidden_size,
             config.pad_token_id,
         )
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     def forward(
         self,
@@ -835,12 +823,6 @@ class SpeechT5TextDecoderPostnet(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor):
         return self.lm_head(hidden_states)
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
 
 class SpeechT5Attention(nn.Module):
