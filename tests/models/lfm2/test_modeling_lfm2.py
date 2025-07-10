@@ -52,11 +52,6 @@ class Lfm2ModelTest(CausalLMModelTest, unittest.TestCase):
     test_pruning = False
     fx_compatible = False
     model_tester_class = Lfm2ModelTester
-
-    # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
-    # This is because we are hitting edge cases with the causal_mask buffer
-    model_split_percents = [0.5, 0.7, 0.8]
-
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = Lfm2ForCausalLM if is_torch_available() else None
 
