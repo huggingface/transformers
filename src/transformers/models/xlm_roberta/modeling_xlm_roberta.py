@@ -167,11 +167,6 @@ class XLMRobertaSelfAttention(nn.Module):
         self.is_decoder = config.is_decoder
         self.layer_idx = layer_idx
 
-    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -182,7 +177,11 @@ class XLMRobertaSelfAttention(nn.Module):
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.Tensor] = None,
     ) -> tuple[torch.Tensor]:
-        mixed_query_layer = self.query(hidden_states)
+        batch_size, seq_length, _ = hidden_states.shape
+        query_layer = self.query(hidden_states)
+        query_layer = query_layer.view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(
+            1, 2
+        )
 
         # If this is instantiated as a cross-attention module, the keys
         # and values come from an encoder; the attention mask needs to be
@@ -206,8 +205,14 @@ class XLMRobertaSelfAttention(nn.Module):
             key_layer = curr_past_key_value.key_cache[self.layer_idx]
             value_layer = curr_past_key_value.value_cache[self.layer_idx]
         else:
-            key_layer = self.transpose_for_scores(self.key(current_states))
-            value_layer = self.transpose_for_scores(self.value(current_states))
+            key_layer = self.key(current_states)
+            key_layer = key_layer.view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(
+                1, 2
+            )
+            value_layer = self.value(current_states)
+            value_layer = value_layer.view(
+                batch_size, -1, self.num_attention_heads, self.attention_head_size
+            ).transpose(1, 2)
 
             if past_key_value is not None:
                 # save all key/value_layer to cache to be re-used for fast auto-regressive generation
@@ -218,8 +223,6 @@ class XLMRobertaSelfAttention(nn.Module):
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if is_cross_attention:
                     past_key_value.is_updated[self.layer_idx] = True
-
-        query_layer = self.transpose_for_scores(mixed_query_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -296,7 +299,7 @@ class XLMRobertaSdpaSelfAttention(XLMRobertaSelfAttention):
         if self.position_embedding_type != "absolute" or output_attentions or head_mask is not None:
             # TODO: Improve this warning with e.g. `model.config._attn_implementation = "manual"` once implemented.
             logger.warning_once(
-                "XLMXLMRobertaSdpaSelfAttention is used but `torch.nn.functional.scaled_dot_product_attention` does not support "
+                "XLMRobertaSdpaSelfAttention is used but `torch.nn.functional.scaled_dot_product_attention` does not support "
                 "non-absolute `position_embedding_type` or `output_attentions=True` or `head_mask`. Falling back to "
                 "the manual attention implementation, but specifying the manual implementation will be required from "
                 "Transformers version v5.0.0 onwards. This warning can be removed using the argument "
@@ -321,7 +324,6 @@ class XLMRobertaSdpaSelfAttention(XLMRobertaSelfAttention):
         is_cross_attention = encoder_hidden_states is not None
 
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
-
         if past_key_value is not None:
             if isinstance(past_key_value, EncoderDecoderCache):
                 is_updated = past_key_value.is_updated.get(self.layer_idx)
@@ -605,7 +607,7 @@ class XLMRobertaEncoder(nn.Module):
                 use_cache = False
 
         return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
+        if use_cache and self.config.is_decoder and not isinstance(past_key_values, Cache):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
                 "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
