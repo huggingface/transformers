@@ -206,11 +206,7 @@ class Zamba2HybridDynamicCache(DynamicCache):
 
 
 class Zamba2RotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        config: Zamba2Config,
-        device=None,
-    ):
+    def __init__(self, config: Zamba2Config, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
         if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
@@ -222,10 +218,8 @@ class Zamba2RotaryEmbedding(nn.Module):
 
         self.config = config
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        # we cannot use the config here to parameterize because of a factor 2 for the head_dim
-        inv_freq, self.attention_scaling = self.rope_init_fn(
-            device=device, base=config.rope_theta, dim=config.attention_head_dim
-        )
+
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 
@@ -1183,6 +1177,7 @@ class Zamba2PreTrainedModel(PreTrainedModel):
     _no_split_modules = ["Zamba2AttentionDecoderLayer", "Zamba2MambaDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_flex_attn = True
     _supports_sdpa = True
     _supports_cache_class = True  # Note: only supports Zamba2HybridDynamicCache

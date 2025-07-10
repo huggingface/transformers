@@ -147,7 +147,7 @@ class InstructBlipVideoProcessor(ProcessorMixin):
                     logger.warning_once(
                         "Expanding inputs for video tokens in InstructBLIPVideo should be done in processing. "
                         "Please follow instruction here (https://gist.github.com/zucchini-nlp/65f22892b054dc0d68228af56fbeaac2) to update your InstructBLIPVideo model. "
-                        "Using processors without these attributes in the config is deprecated and will throw an error in v4.47."
+                        "Using processors without these attributes in the config is deprecated and will throw an error in v4.54."
                     )
 
             # cast to desired return tensors type after concatenating
