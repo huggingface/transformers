@@ -197,6 +197,7 @@ def recursively_load_weights(orig_dict, hf_model, model_name):
 
     logger.warning(f"Unused weights: {unused_weights}")
 
+
 def apply_weight_norm(model):
     weight_norm = nn.utils.weight_norm
 
@@ -227,6 +228,7 @@ def apply_weight_norm(model):
         weight_norm(layer.res_unit2.conv2)
         weight_norm(layer.res_unit3.conv1)
         weight_norm(layer.res_unit3.conv2)
+
 
 @torch.no_grad()
 def convert_checkpoint(
