@@ -4,13 +4,24 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_lfm2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# Copyright 2025 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 from typing import Any, Callable, Optional, Union
 
 import torch
 import torch.nn.functional as F
 from torch import nn
-
-from transformers.utils.generic import check_model_inputs
 
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -22,6 +33,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.generic import check_model_inputs
 from ...utils.import_utils import is_causal_conv1d_available
 from .configuration_lfm2 import Lfm2Config
 
@@ -90,11 +102,11 @@ class Lfm2RotaryEmbedding(nn.Module):
 class Lfm2MLP(nn.Module):
     def __init__(self, config: Lfm2Config):
         super().__init__()
-        dim = (config.block_dim,)
-        ff_dim = (config.block_ff_dim,)
-        multiple_of = (config.block_multiple_of,)
-        auto_adjust_ff_dim = (config.block_auto_adjust_ff_dim,)
-        ffn_dim_multiplier = (config.block_ffn_dim_multiplier,)
+        dim = config.block_dim
+        ff_dim = config.block_ff_dim
+        multiple_of = config.block_multiple_of
+        auto_adjust_ff_dim = config.block_auto_adjust_ff_dim
+        ffn_dim_multiplier = config.block_ffn_dim_multiplier
         if auto_adjust_ff_dim:
             ff_dim = int(2 * ff_dim / 3)
             # custom dim factor multiplier
