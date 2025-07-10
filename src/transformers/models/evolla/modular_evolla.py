@@ -32,11 +32,10 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ModuleUtilsMixin, get_parameter_dtype
 from ...utils import (
+    auto_docstring,
     can_return_tuple,
-    is_torch_flex_attn_available,
     logging,
 )
-from ...utils.import_utils import is_torch_fx_proxy, is_torchdynamo_compiling
 from ..esm.modeling_esm import (
     EsmAttention,
     EsmEmbeddings,
@@ -257,7 +256,7 @@ class EvollaSaProtProteinEncoder(nn.Module):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         batch_size, seq_length = input_shape
-        
+
         # past_key_values_length
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
 
@@ -272,7 +271,7 @@ class EvollaSaProtProteinEncoder(nn.Module):
                 attention_mask=attention_mask,
                 past_key_values_length=past_key_values_length,
             )
-        
+
         extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
 
         # Prepare head mask if needed
@@ -916,6 +915,7 @@ class EvollaDecoderLayer(LlamaDecoderLayer):
 
 class EvollaPreTrainedModel(LlamaPreTrainedModel):
     _supports_sdpa = False
+
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):

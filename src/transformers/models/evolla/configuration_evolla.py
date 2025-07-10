@@ -60,6 +60,7 @@ class SaProtConfig(PretrainedConfig):
             Whether to apply layer normalization before the position embedding in the protein sequence model.
         token_dropout (`bool`, *optional*, defaults to `True`):
             Whether to apply dropout to the tokens in the protein sequence model."""
+
     def __init__(
         self,
         vocab_size=446,
@@ -235,7 +236,6 @@ class EvollaConfig(PretrainedConfig):
         tie_word_embeddings=False,
         **kwargs,
     ):
-        
         if protein_encoder_config is None:
             protein_encoder_config = {}
             logger.info("`protein_encoder_config` is `None`. Initializing the `SaProtConfig` with default values.")

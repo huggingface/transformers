@@ -20,7 +20,7 @@ import unittest
 
 from parameterized import parameterized
 
-from transformers import BitsAndBytesConfig, EvollaConfig, is_torch_available, is_vision_available
+from transformers import BitsAndBytesConfig, EvollaConfig, is_torch_available
 from transformers.testing_utils import (
     TestCasePlus,
     require_bitsandbytes,
@@ -31,7 +31,6 @@ from transformers.testing_utils import (
 )
 from transformers.utils import (
     cached_property,
-    is_accelerate_available,
 )
 
 from ...test_configuration_common import ConfigTester
@@ -45,12 +44,10 @@ from ...test_modeling_common import (
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
-
 if is_torch_available():
     import torch
 
     from transformers import EvollaForProteinText2Text, EvollaModel, EvollaProcessor
-
 
 
 class EvollaModelTester:
@@ -422,8 +419,8 @@ class EvollaModelIntegrationTest(TestCasePlus):
         hf_logits = outputs.logits.to("cpu")
         hf_hidden_states = [h.to("cpu") for h in outputs.hidden_states]
 
-        print(hf_logits-raw_outputs["logits"])
-        print((hf_logits-raw_outputs["logits"]).abs().max())
+        print(hf_logits - raw_outputs["logits"])
+        print((hf_logits - raw_outputs["logits"]).abs().max())
         # check for logits
         self.assertTrue(
             torch.allclose(

@@ -23,7 +23,6 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import (
     ProcessorMixin,
 )
-from ...utils import is_tf_available, is_torch_available
 from ..auto import AutoTokenizer
 
 

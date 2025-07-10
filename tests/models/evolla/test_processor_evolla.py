@@ -22,14 +22,13 @@ from transformers import (
     EvollaProcessor,
 )
 from transformers.testing_utils import require_torch
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_torch_available():
     import torch
-
 
 
 EVOLLA_VALID_AA = list("ACDEFGHIKLMNPQRSTVWY#")
