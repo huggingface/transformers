@@ -142,8 +142,6 @@ class Glm4MoeConfig(PretrainedConfig):
             Intermediate size of the routed expert.
         num_experts_per_tok (`int`, *optional*, defaults to 8):
             Number of selected experts.
-        num_experts (`int`, *optional*, defaults to 128):
-            Number of routed experts.
         n_shared_experts (`int`, *optional*, defaults to 1):
             Number of shared experts.
         n_routed_experts (`int`, *optional*, defaults to 128):
@@ -222,7 +220,6 @@ class Glm4MoeConfig(PretrainedConfig):
         attention_dropout=0.0,
         moe_intermediate_size=1408,
         num_experts_per_tok=8,
-        num_experts=128,
         n_shared_experts=1,
         n_routed_experts=128,
         routed_scaling_factor=1.0,
@@ -263,7 +260,6 @@ class Glm4MoeConfig(PretrainedConfig):
         self.num_experts_per_tok = num_experts_per_tok
         self.n_group = n_group
         self.topk_group = topk_group
-        self.num_experts = num_experts
         self.n_shared_experts = n_shared_experts
         self.n_routed_experts = n_routed_experts
         self.routed_scaling_factor = routed_scaling_factor
@@ -413,14 +409,16 @@ class Glm4MoeTopkRouter(nn.Module):
 class Glm4MoeSparseMoeBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.num_experts = config.num_experts
         self.top_k = config.num_experts_per_tok
         self.norm_topk_prob = config.norm_topk_prob
 
         # gating
         self.gate = Glm4MoeTopkRouter(config)
         self.experts = nn.ModuleList(
-            [Glm4MoeMLP(config, intermediate_size=config.moe_intermediate_size) for _ in range(self.num_experts)]
+            [
+                Glm4MoeMLP(config, intermediate_size=config.moe_intermediate_size)
+                for _ in range(config.n_routed_experts)
+            ]
         )
         self.shared_experts = Glm4MoeMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
@@ -626,7 +624,7 @@ class Glm4MoeForCausalLM(MixtralForCausalLM):
     def __init__(self, config):
         super().__init__(config)
         self.model = Glm4MoeModel(config)
-        self.num_experts = config.num_experts
+        self.num_experts = config.n_routed_experts
 
     def forward(
         self,
